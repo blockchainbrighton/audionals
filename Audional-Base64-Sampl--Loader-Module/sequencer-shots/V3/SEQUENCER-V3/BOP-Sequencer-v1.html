@@ -29,7 +29,8 @@
       box-sizing: border-box; justify-content: flex-start; margin: 0 auto; transition: max-width 0.2s;
     }
     .channel-label { width: 150px; text-align: left; font-weight: bold; color: #0f0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 5px; }
-    .sample-select { width: 220px; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; }
+    .instrument-select { width: 220px; padding: 6px; background: #333; color: #fff; border: 1px solid #555; border-radius: 4px; }
+    .edit-synth-btn { width: 90px; padding: 6px; background: #007acc; color: #fff; border: none; border-radius: 4px; font-size: 12px; }
     .steps { flex-grow: 1; display: flex; flex-direction: column; gap: 4px; justify-content: center; align-items: flex-start; width: 100%; transition: grid-template-columns 0.2s; }
     .step-row { display: grid; grid-template-columns: repeat(var(--steps-per-row), 1fr); gap: 3px; width: 100%; box-sizing: border-box; }
     .step { width: var(--step-size); height: var(--step-size); background: #333; border: 1px solid #555; border-radius: 4px; cursor: pointer; transition: background .08s, border .08s, box-shadow .09s; box-sizing: border-box; }
@@ -39,13 +40,25 @@
     .playback-controls { margin-top: 10px; }
     .save-load { margin: 18px 0 0 0; display: flex; justify-content: center; gap: 8px; }
     .save-load input[type="text"] { width: 410px; max-width: 60vw; padding: 6px; font-size: 15px; border-radius: 5px; border: 1px solid #555; background: #292929; color: #fff; text-align: left; }
+    .bop-modal {
+      position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); z-index: 1000; display: flex; justify-content: center; align-items: center;
+    }
+    .bop-modal-content {
+      width: 95vw; height: 85vh; background: #111; border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;
+    }
+    .bop-header {
+      background: #222; padding: 10px; display: flex; justify-content: space-between; color: #0f0;
+    }
+    .bop-frame {
+      flex-grow: 1; border: none; background: #000;
+    }
     @media (max-width: 1300px) {
       .channel { max-width: 98vw; }
-      .channel-label, .sample-select { width: 110px; font-size: 13px; }
+      .channel-label, .instrument-select { width: 110px; font-size: 13px; }
       .save-load input[type="text"] { width: 270px; }
     }
     @media (max-width: 850px) {
-      .channel-label, .sample-select { width: 70px; font-size: 11px; }
+      .channel-label, .instrument-select { width: 70px; font-size: 11px; }
       .channel { max-width: 99vw; }
       .save-load input[type="text"] { width: 120px; }
     }
@@ -80,8 +93,10 @@
     <button id="addChannelsBtn">Add 8 Channels</button>
   </div>
   <div class="sequencer" id="sequencer"></div>
+
   <script type="module">
     import { SimpleSampleLoader } from './audional-base64-sample-loader.js';
+
     // --- Responsive step row config ---
     const ROWS_LAYOUTS = [
       { maxWidth: 9999, rows: 1, stepsPerRow: 64 },
@@ -105,10 +120,10 @@
     const STEPS_PER_BAR = 16, BARS_PER_SEQUENCE = 4;
     const CHANNELS_PER_ADDITION = 8, INITIAL_SEQUENCES = 1, INITIAL_CHANNELS_PER_SEQUENCE = 8;
     const MAX_SEQUENCES = 32, MAX_CHANNELS_PER_SEQUENCE = 32;
-
     let projectData = { sequences: [], currentSequenceIndex: 0, bpm: 120.00, isPlaying: false, playMode: null };
     let isToneStarted = false, sequence, currentStepIndex = 0, currentPlaybackSequenceIndex = 0;
     let sampleNames = [], sampleBPMs = [], isLoopSample = [], allBuffers = {};
+    let bopSynths = {}; // Cache of { synth: Tone.PolySynth, notes: [...] }
 
     const sequencerEl = document.getElementById('sequencer');
     const playSequenceBtn = document.getElementById('playSequenceBtn');
@@ -120,7 +135,6 @@
     const sequenceListEl = document.getElementById('sequenceList');
     const addSequenceBtn = document.getElementById('addSequenceBtn');
     const addChannelsBtn = document.getElementById('addChannelsBtn');
-    // Save/Load controls
     const saveBtn = document.getElementById('saveBtn');
     const loadBtn = document.getElementById('loadBtn');
     const saveLoadField = document.getElementById('saveLoadField');
@@ -167,29 +181,42 @@
     function createEmptySequence(numChannels = INITIAL_CHANNELS_PER_SEQUENCE) {
       const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
       return { channels: Array(numChannels).fill(null).map(() => ({
-        selectedSampleIndex: 0, steps: Array(totalSteps).fill(false)
+        type: 'sample',
+        selectedSampleIndex: 0,
+        synthState: null,
+        steps: Array(totalSteps).fill(false)
       }))};
     }
+
     function addSequence() {
       if (projectData.sequences.length >= MAX_SEQUENCES) { loaderStatus.textContent = `Max sequences (${MAX_SEQUENCES}) reached.`; return; }
       const newSeq = createEmptySequence(getCurrentSequence().channels.length);
       projectData.sequences.push(newSeq);
       updateSequenceListUI();
     }
+
     function switchToSequence(index, { updateUI = true } = {}) {
       if (index >= 0 && index < projectData.sequences.length) {
         projectData.currentSequenceIndex = index;
         if (updateUI) { updateSequenceListUI(); renderSequencer(); }
       }
     }
+
     function getCurrentSequence() { return projectData.sequences[projectData.currentSequenceIndex]; }
+
     function addChannelsToCurrentSequence(count) {
       const currentSeq = getCurrentSequence();
       const newChannelCount = currentSeq.channels.length + count;
       if (newChannelCount > MAX_CHANNELS_PER_SEQUENCE) { loaderStatus.textContent = `Max channels per sequence (${MAX_CHANNELS_PER_SEQUENCE}) reached.`; return; }
-      for (let i = 0; i < count; i++) currentSeq.channels.push({ selectedSampleIndex: 0, steps: Array(STEPS_PER_BAR * BARS_PER_SEQUENCE).fill(false) });
+      for (let i = 0; i < count; i++) currentSeq.channels.push({
+        type: 'sample',
+        selectedSampleIndex: 0,
+        synthState: null,
+        steps: Array(STEPS_PER_BAR * BARS_PER_SEQUENCE).fill(false)
+      });
       renderSequencer();
     }
+
     function updateSequenceListUI() {
       sequenceListEl.innerHTML = '';
       projectData.sequences.forEach((seq, index) => {
@@ -201,6 +228,71 @@
         sequenceListEl.appendChild(btn);
       });
     }
+
+    // --- BOP Synth Integration ---
+    function createSynthFromState(stateJson) {
+      try {
+        const data = JSON.parse(stateJson);
+        const synth = new Tone.PolySynth(Tone.Synth, {
+          oscillator: { type: data.oscType || 'sine' },
+          envelope: data.envelope || { attack: 0.1, decay: 0.1, sustain: 0.8, release: 0.5 }
+        }).toDestination();
+
+        const notes = (data.seq || []).map(n => ({
+          note: n.midi || 60,
+          time: n.time || 0,
+          duration: n.dur || 0.2
+        }));
+
+        return { synth, notes };
+      } catch (e) {
+        console.error("Failed to parse synth state", e);
+        return null;
+      }
+    }
+
+    async function openBOPModal(channelIndex) {
+      const channel = getCurrentSequence().channels[channelIndex];
+      const modal = document.createElement('div');
+      modal.className = 'bop-modal';
+      modal.innerHTML = `
+        <div class="bop-modal-content">
+          <div class="bop-header">
+            <span>Edit Synth: Channel ${channelIndex + 1}</span>
+            <div>
+              <button id="saveBOP">Save & Close</button>
+              <button id="cancelBOP">Cancel</button>
+            </div>
+          </div>
+          <iframe class="bop-frame" src="bop-embed.html"></iframe>
+        </div>
+      `;
+      document.body.appendChild(modal);
+
+      const iframe = modal.querySelector('iframe');
+      await new Promise(r => iframe.onload = r);
+
+      // Load current state
+      if (channel.synthState) {
+        try {
+          const decoded = decodeURIComponent(atob(channel.synthState));
+          iframe.contentWindow.SaveLoad.loadState(decoded);
+        } catch (e) {
+          console.warn("Failed to load synth state into BOP");
+        }
+      }
+
+      modal.querySelector('#saveBOP').onclick = () => {
+        const stateStr = iframe.contentWindow.SaveLoad.saveStateToString();
+        const encoded = btoa(encodeURIComponent(stateStr));
+        getCurrentSequence().channels[channelIndex].synthState = encoded;
+        bopSynths[channelIndex] = createSynthFromState(stateStr); // cache
+        modal.remove();
+      };
+
+      modal.querySelector('#cancelBOP').onclick = () => modal.remove();
+    }
+
     // --- CORE: Render steps as auto-wrapped grid
     function renderSequencer() {
       sequencerEl.innerHTML = '';
@@ -208,37 +300,53 @@
       if (!currentSeq) return;
       const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
       sequencerEl.className = "sequencer";
+
       currentSeq.channels.forEach((channelData, ch) => {
         const channel = document.createElement('div');
         channel.className = 'channel';
+
         const label = document.createElement('div');
         label.className = 'channel-label';
-        label.textContent = sampleNames[channelData.selectedSampleIndex] || `Sample ${channelData.selectedSampleIndex}`;
+        if (channelData.type === 'sample') {
+          label.textContent = sampleNames[channelData.selectedSampleIndex] || `Sample ${channelData.selectedSampleIndex}`;
+        } else {
+          label.textContent = 'SYNTH';
+          label.style.color = '#0af';
+        }
         channel.appendChild(label);
+
         const select = document.createElement('select');
-        select.className = 'sample-select';
+        select.className = 'instrument-select';
         select.dataset.channel = ch;
-        sampleNames.forEach((name, j) => {
+        ['sample', 'bop-synth'].forEach(type => {
           const opt = document.createElement('option');
-          opt.value = j;
-          opt.textContent = isLoopSample[j] ? `${name} (${sampleBPMs[j]} BPM)` : name;
+          opt.value = type;
+          opt.textContent = type === 'sample' ? 'Sample' : 'BOP Synth';
+          if (type === channelData.type) opt.selected = true;
           select.appendChild(opt);
         });
-        select.value = channelData.selectedSampleIndex;
-        select.onchange = async () => {
-          const chIndex = parseInt(select.dataset.channel, 10);
-          const idx = parseInt(select.value, 10);
-          getCurrentSequence().channels[chIndex].selectedSampleIndex = idx;
-          label.textContent = sampleNames[idx];
-          isLoopSample[idx] ? checkBPMCompatibility(idx) : checkAllSelectedLoopsBPM();
-          if(!allBuffers[idx]) {
-            loaderStatus.textContent = `Loading: ${sampleNames[idx]}...`;
-            try { allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx); loaderStatus.textContent = 'Ready!'; } catch {
-              loaderStatus.textContent = `Failed to load: ${sampleNames[idx]}`; setTimeout(()=>loaderStatus.textContent='Ready!',2000);
-            }
+        select.onchange = () => {
+          const chIdx = parseInt(select.dataset.channel, 10);
+          const type = select.value;
+          getCurrentSequence().channels[chIdx].type = type;
+          if (type === 'sample') {
+            label.textContent = sampleNames[getCurrentSequence().channels[chIdx].selectedSampleIndex];
+            label.style.color = '#0f0';
+          } else {
+            label.textContent = 'SYNTH';
+            label.style.color = '#0af';
           }
         };
         channel.appendChild(select);
+
+        if (channelData.type === 'bop-synth') {
+          const editBtn = document.createElement('button');
+          editBtn.className = 'edit-synth-btn';
+          editBtn.textContent = 'Edit';
+          editBtn.onclick = () => openBOPModal(ch);
+          channel.appendChild(editBtn);
+        }
+
         // --- Step grid (rows/columns) ---
         const stepsContainer = document.createElement('div');
         stepsContainer.className = 'steps';
@@ -271,27 +379,53 @@
         sequencerEl.appendChild(channel);
       });
     }
+
     function highlightPlayhead(stepIndex) {
       document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
       document.querySelectorAll(`.step[data-step="${stepIndex}"]`).forEach(el => el.classList.add('playing'));
     }
+
     function scheduleStep(time, stepIndex) {
       highlightPlayhead(stepIndex);
       const seqData = projectData.playMode === 'all'
         ? projectData.sequences[currentPlaybackSequenceIndex]
         : getCurrentSequence();
+
       seqData.channels.forEach((channel, ch) => {
         if (channel.steps[stepIndex]) {
-          const idx = channel.selectedSampleIndex;
-          const buffer = allBuffers[idx];
-          if (buffer) {
-            const player = new Tone.Player(buffer).toDestination();
-            player.start(time);
+          if (channel.type === 'sample') {
+            const idx = channel.selectedSampleIndex;
+            const buffer = allBuffers[idx];
+            if (buffer) {
+              const player = new Tone.Player(buffer).toDestination();
+              player.start(time);
+            }
+          } else if (channel.type === 'bop-synth' && channel.synthState) {
+            if (!bopSynths[ch]) {
+              try {
+                const decoded = decodeURIComponent(atob(channel.synthState));
+                bopSynths[ch] = createSynthFromState(decoded);
+              } catch (e) {
+                console.error("Failed to load synth", e);
+              }
+            }
+            const synthData = bopSynths[ch];
+            if (synthData) {
+              const startTime = Tone.Transport.time;
+              synthData.notes.forEach(n => {
+                synthData.synth.triggerAttackRelease(
+                  n.note,
+                  n.duration,
+                  startTime + n.time
+                );
+              });
+            }
           }
         }
       });
       currentStepIndex = stepIndex;
     }
+
     function createSequence() {
       const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
       const sequenceSteps = Array.from({ length: totalSteps }, (_, i) => i);
@@ -311,6 +445,7 @@
       }, sequenceSteps, "16n");
       sequence.start(0);
     }
+
     function startSequencerWithTone(mode) {
       projectData.playMode = mode;
       if (mode === 'all') {
@@ -338,6 +473,7 @@
         Tone.Transport.start();
       }
     }
+
     function stopSequencerWithTone() {
       Tone.Transport.stop();
       if (sequence) sequence.dispose();
@@ -351,6 +487,7 @@
       playAllBtn.disabled = false;
       stopBtn.disabled = true;
     }
+
     async function initSequencer() {
       try {
         loaderStatus.textContent = 'Fetching sample list...';
@@ -366,9 +503,11 @@
         playSequenceBtn.disabled = false;
         playAllBtn.disabled = false;
         stopBtn.disabled = false;
-        const initialSamples = getCurrentSequence().channels.map(ch => ch.selectedSampleIndex);
-        await Promise.all(initialSamples.map(async idx=>{
-          if(!allBuffers[idx]) allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
+        const initialSamples = getCurrentSequence().channels
+          .filter(ch => ch.type === 'sample')
+          .map(ch => ch.selectedSampleIndex);
+        await Promise.all(initialSamples.map(async idx => {
+          if (!allBuffers[idx]) allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
         }));
       } catch (err) {
         loaderStatus.textContent = 'Error: ' + err.message;
@@ -377,6 +516,7 @@
       }
       checkAllSelectedLoopsBPM();
     }
+
     async function loadSampleMetadata() {
       const urls = SimpleSampleLoader.ogSampleUrls;
       if (!urls.length) throw new Error("No samples found in ogSampleUrls");
@@ -389,6 +529,7 @@
         sampleBPMs[i] = isLoopSample[i] ? (item.bpm!==undefined ? item.bpm : 120) : null;
       });
     }
+
     function checkBPMCompatibility(idx) {
       const loopBPM = sampleBPMs[idx];
       if (Math.abs(loopBPM - projectData.bpm) > 1) {
@@ -396,10 +537,14 @@
         bpmWarning.textContent = `⚠️ BPM mismatch: Selected loop is ${loopBPM} BPM, but sequencer is ${projectData.bpm} BPM. Consider adjusting BPM to avoid sync issues.`;
       } else { checkAllSelectedLoopsBPM(); }
     }
+
     function checkAllSelectedLoopsBPM() {
       const currentSeq = getCurrentSequence();
       if (!currentSeq) return;
-      const loopIndices = currentSeq.channels.map(ch => ch.selectedSampleIndex).filter(idx => isLoopSample[idx]);
+      const loopIndices = currentSeq.channels
+        .filter(ch => ch.type === 'sample')
+        .map(ch => ch.selectedSampleIndex)
+        .filter(idx => isLoopSample[idx]);
       const mismatches = loopIndices.filter(idx => Math.abs(sampleBPMs[idx] - projectData.bpm) > 1);
       if (mismatches.length) {
         const uniqueBPMs = [...new Set(mismatches.map(idx => sampleBPMs[idx]))].join(', ');
@@ -407,64 +552,75 @@
         bpmWarning.textContent = `⚠️ BPM mismatch: Selected loops are ${uniqueBPMs} BPM, but sequencer is ${projectData.bpm} BPM. Sync may be affected.`;
       } else { bpmWarning.style.display = 'none'; }
     }
-    renderBPM(projectData.bpm);
-    updateStepRows();
-    initSequencer();
 
     // --- SAVE/LOAD SETTINGS LOGIC ---
-    // Format: bpm|curSeq|seq1-ch1:idx,steps|ch2:idx,steps|..._seq2-ch1:...
+    // Format: bpm|curSeq|seq1-ch1:type:idx/steps|ch2:type:state/steps|..._seq2-ch1:...
     function bitfieldToBase36(bits) {
-        // 64 steps => always output 12 chars (6 bits per char)
-        let out = '';
-        for (let i = 0; i < 64; i += 6) {
-            let chunk = 0;
-            for (let j = 0; j < 6; ++j) {
-            if (bits[i + j]) chunk |= (1 << j);
-            }
-            out += chunk.toString(36);
+      let out = '';
+      for (let i = 0; i < 64; i += 6) {
+        let chunk = 0;
+        for (let j = 0; j < 6; ++j) {
+          if (bits[i + j]) chunk |= (1 << j);
         }
-        return out;
+        out += chunk.toString(36);
+      }
+      return out;
+    }
+    function base36ToBitfield(str, total) {
+      let bits = [];
+      for (let i = 0; i < str.length; ++i) {
+        let val = parseInt(str[i], 36);
+        for (let j = 0; j < 6; ++j) {
+          bits.push((val >> j) & 1 ? true : false);
+          if (bits.length === total) return bits;
         }
-
-        function base36ToBitfield(str, total) {
-        // total should be 64
-        let bits = [];
-        for (let i = 0; i < str.length; ++i) {
-            let val = parseInt(str[i], 36);
-            for (let j = 0; j < 6; ++j) {
-            bits.push((val >> j) & 1 ? true : false);
-            if (bits.length === total) return bits;
-            }
-        }
-        while (bits.length < total) bits.push(false);
-        return bits;
-        }
+      }
+      while (bits.length < total) bits.push(false);
+      return bits;
+    }
 
     function encodeSettings() {
-      // Compose a very condensed settings string
       const { sequences, bpm, currentSequenceIndex } = projectData;
       let main = [bpm, currentSequenceIndex].join('|');
       let seqs = sequences.map(seq =>
         seq.channels.map(ch => {
-          let idx = ch.selectedSampleIndex.toString(36).padStart(2,'0');
           let steps = bitfieldToBase36(ch.steps);
-          return `${idx},${steps}`;
+          if (ch.type === 'sample') {
+            let idx = ch.selectedSampleIndex.toString(36).padStart(2,'0');
+            return `s:${idx},${steps}`;
+          } else {
+            let state = ch.synthState || '';
+            return `b:${encodeURIComponent(state)},${steps}`;
+          }
         }).join('|')
       ).join('_');
       return `${main}:${seqs}`;
     }
+
     function decodeSettings(str) {
-      // In-place update to projectData
       if (!str.includes(':')) throw new Error('Invalid settings');
       let [main, ...seqsRaw] = str.split(':');
       let [bpm, curIdx] = main.split('|').map(Number);
       let seqs = seqsRaw.join(':').split('_');
       let sequences = seqs.map(seqStr => {
         let chs = seqStr.split('|').map(chStr => {
-          let [idx, steps] = chStr.split(',');
-          return {
-            selectedSampleIndex: parseInt(idx, 36),
-            steps: base36ToBitfield(steps, STEPS_PER_BAR * BARS_PER_SEQUENCE)
+          let [typeData, steps] = chStr.split(',', 2);
+          let type = typeData[0];
+          let data = typeData.slice(2);
+          if (type === 's') {
+            return {
+              type: 'sample',
+              selectedSampleIndex: parseInt(data, 36),
+              synthState: null,
+              steps: base36ToBitfield(steps, STEPS_PER_BAR * BARS_PER_SEQUENCE)
+            };
+          } else {
+            return {
+              type: 'bop-synth',
+              selectedSampleIndex: 0,
+              synthState: decodeURIComponent(data),
+              steps: base36ToBitfield(steps, STEPS_PER_BAR * BARS_PER_SEQUENCE)
+            };
           }
         });
         return { channels: chs };
@@ -474,6 +630,7 @@
       projectData.bpm = bpm;
       projectData.currentSequenceIndex = Math.max(0, Math.min(sequences.length-1, curIdx));
     }
+
     saveBtn.onclick = () => {
       try {
         saveLoadField.value = encodeSettings();
@@ -486,37 +643,41 @@
         setTimeout(()=>{saveBtn.textContent="Save"}, 1000);
       }
     };
-    loadBtn.onclick = async () => {
-        try {
-            decodeSettings(saveLoadField.value.trim());
-            renderBPM(projectData.bpm);
-            updateSequenceListUI();
-            updateStepRows();
-            renderSequencer();
 
-            // ---- NEW: Ensure all samples for all channels are loaded
-            let neededSampleIndices = new Set();
-            for (let seq of projectData.sequences) {
-            for (let ch of seq.channels) {
-                neededSampleIndices.add(ch.selectedSampleIndex);
-            }
-            }
-            loaderStatus.textContent = 'Loading samples...';
-            await Promise.all([...neededSampleIndices].map(async idx => {
-            if (!allBuffers[idx]) {
-                allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
-            }
-            }));
-            loaderStatus.textContent = 'Loaded!';
-            loaderStatus.style.color = '#0f0';
-            setTimeout(()=>{loaderStatus.textContent = 'Ready!';}, 900);
-        } catch (e) {
-            loaderStatus.textContent = 'Load failed';
-            loaderStatus.style.color = '#f00';
+    loadBtn.onclick = async () => {
+      try {
+        decodeSettings(saveLoadField.value.trim());
+        renderBPM(projectData.bpm);
+        updateSequenceListUI();
+        updateStepRows();
+        renderSequencer();
+
+        let neededSampleIndices = new Set();
+        for (let seq of projectData.sequences) {
+          for (let ch of seq.channels) {
+            if (ch.type === 'sample') neededSampleIndices.add(ch.selectedSampleIndex);
+          }
         }
-        };
+        loaderStatus.textContent = 'Loading samples...';
+        await Promise.all([...neededSampleIndices].map(async idx => {
+          if (!allBuffers[idx]) {
+            allBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
+          }
+        }));
+        loaderStatus.textContent = 'Loaded!';
+        loaderStatus.style.color = '#0f0';
+        setTimeout(()=>{loaderStatus.textContent = 'Ready!';}, 900);
+      } catch (e) {
+        loaderStatus.textContent = 'Load failed';
+        loaderStatus.style.color = '#f00';
+      }
+    };
 
     saveLoadField.onfocus = function(){this.select();};
+
+    renderBPM(projectData.bpm);
+    updateStepRows();
+    initSequencer();
   </script>
 </body>
 </html>

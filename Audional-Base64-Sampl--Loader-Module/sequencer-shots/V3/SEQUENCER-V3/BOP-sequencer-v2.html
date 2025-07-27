@@ -165,11 +165,17 @@
     addChannelsBtn.onclick = () => addChannelsToCurrentSequence(CHANNELS_PER_ADDITION);
 
     function createEmptySequence(numChannels = INITIAL_CHANNELS_PER_SEQUENCE) {
-      const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
-      return { channels: Array(numChannels).fill(null).map(() => ({
-        selectedSampleIndex: 0, steps: Array(totalSteps).fill(false)
-      }))};
-    }
+        const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
+        return {
+            channels: Array(numChannels).fill(null).map(() => ({
+            channelType: 'sample', // Default type
+            selectedSampleIndex: 0,
+            steps: Array(totalSteps).fill(false),
+            // Placeholder for synth state (patch, sequence)
+            synthState: null // This will hold the .synthstate-v2.json data
+            }))
+        };
+        }
     function addSequence() {
       if (projectData.sequences.length >= MAX_SEQUENCES) { loaderStatus.textContent = `Max sequences (${MAX_SEQUENCES}) reached.`; return; }
       const newSeq = createEmptySequence(getCurrentSequence().channels.length);
@@ -201,20 +207,52 @@
         sequenceListEl.appendChild(btn);
       });
     }
-    // --- CORE: Render steps as auto-wrapped grid
-    function renderSequencer() {
-      sequencerEl.innerHTML = '';
-      const currentSeq = getCurrentSequence();
-      if (!currentSeq) return;
-      const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
-      sequencerEl.className = "sequencer";
-      currentSeq.channels.forEach((channelData, ch) => {
-        const channel = document.createElement('div');
-        channel.className = 'channel';
+    // --- CORE: Render steps as auto-wrapped grid ---
+function renderSequencer() {
+  sequencerEl.innerHTML = '';
+  const currentSeq = getCurrentSequence();
+  if (!currentSeq) return;
+  const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
+  sequencerEl.className = "sequencer";
+  currentSeq.channels.forEach((channelData, ch) => {
+    const channel = document.createElement('div');
+    channel.className = 'channel';
+
+    // Add Channel Type Selector FIRST
+    const typeSelect = document.createElement('select');
+    typeSelect.className = 'channel-type-select';
+    typeSelect.dataset.channel = ch;
+
+    const sampleOpt = document.createElement('option');
+    sampleOpt.value = 'sample';
+    sampleOpt.textContent = 'Sample';
+    const synthOpt = document.createElement('option');
+    synthOpt.value = 'synth';
+    synthOpt.textContent = 'Synth';
+    typeSelect.appendChild(sampleOpt);
+    typeSelect.appendChild(synthOpt);
+
+    // Ensure channelData.channelType exists (needs change in createEmptySequence)
+    typeSelect.value = channelData.channelType || 'sample';
+    typeSelect.onchange = () => {
+        const chIndex = parseInt(typeSelect.dataset.channel, 10);
+        const newType = typeSelect.value;
+        const currentSeq = getCurrentSequence();
+        // Ensure the property exists and is set
+        if (!currentSeq.channels[chIndex]) currentSeq.channels[chIndex] = {};
+        currentSeq.channels[chIndex].channelType = newType;
+        // Trigger re-render to show/hide appropriate controls
+        renderSequencer();
+    };
+    channel.appendChild(typeSelect);
+
+    // --- Conditionally render controls based on type ---
+    if (channelData.channelType === 'sample' || !channelData.channelType) { // Default to sample
+         // Use the initial label and select for sample channels
         const label = document.createElement('div');
         label.className = 'channel-label';
         label.textContent = sampleNames[channelData.selectedSampleIndex] || `Sample ${channelData.selectedSampleIndex}`;
-        channel.appendChild(label);
+
         const select = document.createElement('select');
         select.className = 'sample-select';
         select.dataset.channel = ch;
@@ -238,60 +276,117 @@
             }
           }
         };
+
+        channel.appendChild(label);
         channel.appendChild(select);
-        // --- Step grid (rows/columns) ---
-        const stepsContainer = document.createElement('div');
-        stepsContainer.className = 'steps';
-        for (let row = 0; row < STEP_ROWS; row++) {
-          const rowDiv = document.createElement('div');
-          rowDiv.className = 'step-row';
-          for (let col = 0; col < STEPS_PER_ROW; col++) {
-            const step = row * STEPS_PER_ROW + col;
-            if (step >= totalSteps) break;
-            const stepEl = document.createElement('div');
-            stepEl.className = 'step';
-            if (channelData.steps[step]) stepEl.classList.add('active');
-            if (step === currentStepIndex && projectData.isPlaying &&
-              ((projectData.playMode === 'sequence' && ch < currentSeq.channels.length) ||
-              (projectData.playMode === 'all' && ch < projectData.sequences[currentPlaybackSequenceIndex]?.channels.length))) {
-              stepEl.classList.add('playing');
-            }
-            stepEl.dataset.channel = ch;
-            stepEl.dataset.step = step;
-            stepEl.onclick = () => {
-              stepEl.classList.toggle('active');
-              const currentSeqData = getCurrentSequence();
-              currentSeqData.channels[ch].steps[step] = !currentSeqData.channels[ch].steps[step];
-            };
-            rowDiv.appendChild(stepEl);
-          }
-          stepsContainer.appendChild(rowDiv);
-        }
-        channel.appendChild(stepsContainer);
-        sequencerEl.appendChild(channel);
-      });
+
+    } else if (channelData.channelType === 'synth') {
+        // Render synth-specific controls
+        const synthLabel = document.createElement('div');
+        synthLabel.className = 'channel-label';
+        synthLabel.textContent = `Synth Channel ${ch + 1}`;
+        channel.appendChild(synthLabel);
+
+        // Add Edit Synth Button
+        const editBtn = document.createElement('button');
+        editBtn.textContent = 'Edit Synth';
+        editBtn.onclick = () => openSynthEditor(ch); // Implement this function
+        channel.appendChild(editBtn);
+
+        // Note: No sample select for synth channels
     }
+    // --- DO NOT append 'select' again here ---
+
+    // --- Step grid (rows/columns) ---
+    const stepsContainer = document.createElement('div');
+    stepsContainer.className = 'steps';
+    for (let row = 0; row < STEP_ROWS; row++) {
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'step-row';
+      for (let col = 0; col < STEPS_PER_ROW; col++) {
+        const step = row * STEPS_PER_ROW + col;
+        if (step >= totalSteps) break;
+        const stepEl = document.createElement('div');
+        stepEl.className = 'step';
+        if (channelData.steps[step]) stepEl.classList.add('active');
+        if (step === currentStepIndex && projectData.isPlaying &&
+          ((projectData.playMode === 'sequence' && ch < currentSeq.channels.length) ||
+          (projectData.playMode === 'all' && ch < projectData.sequences[currentPlaybackSequenceIndex]?.channels.length))) {
+          stepEl.classList.add('playing');
+        }
+        stepEl.dataset.channel = ch;
+        stepEl.dataset.step = step;
+        stepEl.onclick = () => {
+          stepEl.classList.toggle('active');
+          const currentSeqData = getCurrentSequence();
+          // Ensure channelData.steps[step] exists
+          if (currentSeqData.channels[ch] && currentSeqData.channels[ch].steps) {
+              currentSeqData.channels[ch].steps[step] = !currentSeqData.channels[ch].steps[step];
+          }
+        };
+        rowDiv.appendChild(stepEl);
+      }
+      stepsContainer.appendChild(rowDiv);
+    }
+    channel.appendChild(stepsContainer);
+    sequencerEl.appendChild(channel);
+  });
+}
     function highlightPlayhead(stepIndex) {
       document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
       document.querySelectorAll(`.step[data-step="${stepIndex}"]`).forEach(el => el.classList.add('playing'));
     }
     function scheduleStep(time, stepIndex) {
-      highlightPlayhead(stepIndex);
-      const seqData = projectData.playMode === 'all'
+    highlightPlayhead(stepIndex);
+    const seqData = projectData.playMode === 'all'
         ? projectData.sequences[currentPlaybackSequenceIndex]
         : getCurrentSequence();
-      seqData.channels.forEach((channel, ch) => {
+
+    seqData.channels.forEach((channel, ch) => {
         if (channel.steps[stepIndex]) {
-          const idx = channel.selectedSampleIndex;
-          const buffer = allBuffers[idx];
-          if (buffer) {
-            const player = new Tone.Player(buffer).toDestination();
-            player.start(time);
-          }
+            if (channel.channelType === 'sample') {
+                // Existing sample playback logic
+                const idx = channel.selectedSampleIndex;
+                const buffer = allBuffers[idx];
+                if (buffer) {
+                    const player = new Tone.Player(buffer).toDestination();
+                    player.start(time);
+                }
+            } else if (channel.channelType === 'synth') {
+                // Synth playback logic
+                const synthState = channel.synthState;
+                if (synthState && synthState.sequence && synthState.sequence.length > 0) {
+                    // Option 1: Play notes that should sound at this step
+                    const stepDuration = Tone.Time("16n").toSeconds(); // Duration of one sequencer step
+                    const bopStepDuration = Tone.Time("16n").toSeconds(); // Assuming BOP uses 16n steps
+
+                    synthState.sequence.forEach(noteEvent => {
+                        const noteStartTime = Tone.Time(noteEvent.time).toSeconds();
+                        // Check if the note starts within the duration of *this* sequencer step
+                        if (noteStartTime >= 0 && noteStartTime < stepDuration) {
+                            // Trigger the note using a temporary synth instance
+                            try {
+                                const synthSettings = synthState.synth;
+                                const tempSynth = new Tone.PolySynth(Tone.Synth, synthSettings).toDestination();
+                                // Schedule the note relative to the *current* sequencer time
+                                tempSynth.triggerAttackRelease(
+                                    noteEvent.note,
+                                    noteEvent.duration,
+                                    time,
+                                    noteEvent.velocity
+                                );
+                            } catch (e) {
+                                console.error("Error playing synth note for channel", ch, e);
+                            }
+                        }
+                    });
+                }
+            }
         }
-      });
-      currentStepIndex = stepIndex;
-    }
+    });
+    currentStepIndex = stepIndex;
+}
+
     function createSequence() {
       const totalSteps = STEPS_PER_BAR * BARS_PER_SEQUENCE;
       const sequenceSteps = Array.from({ length: totalSteps }, (_, i) => i);
@@ -516,7 +611,110 @@
         }
         };
 
+        function openSynthEditor(channelIndex) {
+    const currentSeq = getCurrentSequence();
+    const channelData = currentSeq.channels[channelIndex];
+
+    // Create Modal Structure (or use window.open)
+    const modal = document.createElement('div');
+    modal.style.position = 'fixed'; modal.style.top = '0'; modal.style.left = '0';
+    modal.style.width = '100%'; modal.style.height = '100%';
+    modal.style.backgroundColor = 'rgba(0,0,0,0.7)'; modal.style.zIndex = '1000';
+    modal.style.display = 'flex'; modal.style.justifyContent = 'center'; modal.style.alignItems = 'center';
+
+    const iframeContainer = document.createElement('div');
+    iframeContainer.style.width = '95%'; iframeContainer.style.height = '90%';
+    iframeContainer.style.backgroundColor = '#222'; iframeContainer.style.border = '2px solid #0f0';
+    iframeContainer.style.borderRadius = '8px'; iframeContainer.style.overflow = 'hidden';
+
+    const iframe = document.createElement('iframe');
+    iframe.src = './bop-embed.html'; // Adjust path
+    iframe.style.width = '100%'; iframe.style.height = '100%'; iframe.style.border = 'none';
+    iframe.sandbox = 'allow-scripts allow-same-origin'; // Crucial for communication
+
+    const closeButton = document.createElement('button');
+    closeButton.textContent = 'X';
+    closeButton.style.position = 'absolute'; closeButton.style.top = '15px'; closeButton.style.right = '20px';
+    closeButton.style.background = '#f00'; closeButton.style.color = '#fff';
+    closeButton.onclick = () => document.body.removeChild(modal);
+
+    iframeContainer.appendChild(iframe);
+    modal.appendChild(iframeContainer);
+    modal.appendChild(closeButton);
+    document.body.appendChild(modal);
+
+     // --- Communication with BOP iframe ---
+     let bopAPI = null; // Will hold the iframe's window object
+
+     iframe.onload = () => {
+         bopAPI = iframe.contentWindow;
+
+         // 1. Load existing synth state into BOP (if any)
+         if (channelData.synthState) {
+             try {
+                 // Use BOP's exposed API to load the state
+                 // Assuming backwards compatibility or handling v2 specifically
+                 bopAPI.SaveLoad.loadState(JSON.stringify(channelData.synthState));
+                 console.log("Synth state loaded into editor for channel", channelIndex);
+             } catch (e) {
+                 console.error("Failed to load synth state into BOP:", e);
+                 // Maybe show an error in the modal?
+             }
+         } else {
+             // Optionally initialize with a default patch for new synths
+             // e.g., set a basic bass sound
+             // bopAPI.synthApp.synth.set({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.3 } });
+         }
+     };
+
+     // 2. Listen for messages FROM BOP (e.g., when saving within the editor)
+     window.addEventListener('message', (event) => {
+         // Security: Ensure the message is from the BOP iframe
+         if (event.source !== iframe.contentWindow) return;
+
+         if (event.data && event.data.type === 'SYNTH_STATE_UPDATE') {
+            // BOP sends its state when it changes (could be triggered by its own save, or a custom "Apply" button)
+            // We'll use this to update our internal state *without* closing the window
+            try {
+                const newState = JSON.parse(event.data.payload); // Assuming payload is JSON string
+                currentSeq.channels[channelIndex].synthState = newState;
+                console.log("Synth state updated for channel", channelIndex);
+                // Maybe update a status indicator in the modal?
+            } catch (e) {
+                console.error("Error parsing synth state from BOP:", e);
+            }
+         }
+         // Add other message types if needed (e.g., 'SYNTH_EDITOR_CLOSED')
+     });
+
+     // 3. When closing the modal, save the final state back to the channel
+     // (Either intercept the modal close, or have BOP send a final state on unload/close request)
+     // For simplicity, let's assume the state is kept updated via messages, and closing just closes the view.
+     // If you need a specific "Save & Close" button in the modal, add it and handle it similarly.
+
+     // Optional: Add an "Apply" or "Save to Channel" button inside the modal footer
+     // This would trigger BOP to send its current state via postMessage
+}
+
     saveLoadField.onfocus = function(){this.select();};
+
+    
+  </script>
+  <script>
+    window.addEventListener('message', (event) => {
+    if (event.source !== iframe.contentWindow) return;
+
+    if (event.data && event.data.type === 'SYNTH_STATE_UPDATE') {
+        try {
+            const newState = JSON.parse(event.data.payload);
+            const chIndex = 1;
+            getCurrentSequence().channels[chIndex].synthState = newState;
+            console.log("Synth state updated for channel", chIndex);
+        } catch (e) {
+            console.error("Error parsing synth state from BOP:", e);
+        }
+    }
+});
   </script>
 </body>
 </html>
