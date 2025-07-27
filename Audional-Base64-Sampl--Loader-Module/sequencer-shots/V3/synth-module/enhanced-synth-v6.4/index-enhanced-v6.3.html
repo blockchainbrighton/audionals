@@ -1,0 +1,259 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audionauts: Enhanced Web Synthesizer with Advanced Effects</title>
+<link rel="stylesheet" href="style.css">
+<!-- No CDN Tone.js -->
+</head>
+<body>
+<div class="container">
+    <h1>Audionauts: Enhanced On-Chain Synth</h1>
+    <p class="subtitle">Advanced Polyphonic Synthesizer with Enhanced Effects, LFOs & Enable Switches</p>
+    <div class="tabs">
+        <button class="tab-button active" data-tab="synth">Synthesizer</button>
+        <button class="tab-button" data-tab="midi">MIDI Editor</button>
+    </div>
+    <div id="synth" class="tab-content active">
+        <div id="control-panel"></div>
+        <div class="transport-controls" id="transport-controls"></div>
+        <div class="loop-controls" id="loop-controls"></div>
+        <div class="keyboard-container">
+            <div class="octave-controls">
+                <button id="octaveDown" class="octave-button">Octave -</button>
+                <span id="octaveLabel">Octave: 4</span>
+                <button id="octaveUp" class="octave-button">Octave +</button>
+            </div>
+            <div class="keyboard-outer">
+                <div class="keyboard" id="keyboard"></div>
+            </div>
+        </div>
+        <div class="status-bar">
+            <div><span class="status-indicator" id="midiInd"></span> <span id="midiStat">MIDI: Not supported</span></div>
+            <div><span class="status-indicator" id="recInd"></span> <span id="recStat">Status: Inactive</span></div>
+        </div>
+    </div>
+    <div id="midi" class="tab-content">
+        <h3>Piano Roll Editor</h3>
+        <div class="piano-roll"><div class="roll-grid" id="rollGrid"></div></div>
+    </div>
+    <footer>Enhanced On-Chain Polyphonic Synthesizer with Advanced Effects System</footer>
+</div>
+
+<script type="module">
+const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+
+console.log('[Audionauts Enhanced] Starting enhanced app...');
+let Tone;
+import(TONE_ORDINALS_URL)
+    .then(() => {
+        Tone = window.Tone;
+        console.log('[Audionauts Enhanced] Tone.js loaded:', Tone ? Tone.version : Tone);
+        boot();
+    })
+    .catch(err => {
+        console.error('[Audionauts Enhanced] Failed to load Tone.js:', err);
+    });
+
+// Main initialization after Tone.js is loaded
+function boot() {
+    console.log('[Audionauts Enhanced] Booting enhanced app after Tone.js load...');
+
+    // Import enhanced modules
+    import('./modules/enhanced-controls.js').then(({ EnhancedControls }) => {
+    console.log('[Audionauts Enhanced] Enhanced Controls module loaded');
+    import('./modules/keyboard.js').then(({ Keyboard }) => {
+    console.log('[Audionauts Enhanced] Keyboard module loaded');
+    import('./modules/enhanced-recorder.js').then(({ EnhancedRecorder }) => {
+    console.log('[Audionauts Enhanced] Enhanced Recorder module loaded');
+    import('./modules/transport.js').then(({ Transport }) => {
+    console.log('[Audionauts Enhanced] Transport module loaded');
+    import('./modules/midi.js').then(({ MidiControl }) => {
+    console.log('[Audionauts Enhanced] MidiControl module loaded');
+    import('./modules/piano-roll.js').then(({ PianoRoll }) => {
+    console.log('[Audionauts Enhanced] PianoRoll module loaded');
+    import('./modules/save-load.js').then(({ SaveLoad }) => {
+    console.log('[Audionauts Enhanced] SaveLoad module loaded');
+    import('./modules/loop-ui.js').then(({ LoopUI }) => {
+    console.log('[Audionauts Enhanced] LoopUI module loaded');
+
+    window.synthApp = {
+        seq: [],
+        curOct: 4,
+        activeNotes: new Set(),
+        activeNoteIds: new Map(),
+        isRec: false,
+        isArmed: false,
+        isPlaying: false,
+        recStart: 0,
+        events: [],
+        selNote: null,
+        synth: null, 
+        reverb: null, 
+        delay: null, 
+        filter: null,
+        enhancedEffects: null,
+    };
+
+    // Store module references globally for save-load access
+    window.Keyboard = Keyboard;
+    window.PianoRoll = PianoRoll;
+    window.EnhancedRecorder = EnhancedRecorder;
+    window.EnhancedControls = EnhancedControls;
+
+    // Robust DOMContentLoaded handling
+    function appInit() {
+        console.log('[Audionauts Enhanced] DOMContentLoaded, initializing enhanced modules...');
+        try {
+            // Initialize enhanced controls first (includes effects initialization)
+            EnhancedControls.init(); 
+            console.log('[Audionauts Enhanced] Enhanced Controls initialized');
+            
+            Keyboard.init(); 
+            console.log('[Audionauts Enhanced] Keyboard initialized');
+            
+            Transport.init(); 
+            console.log('[Audionauts Enhanced] Transport initialized');
+            
+            // Use enhanced recorder instead of original
+            EnhancedRecorder.init(); 
+            console.log('[Audionauts Enhanced] Enhanced Recorder initialized');
+            
+            MidiControl.init(); 
+            console.log('[Audionauts Enhanced] MIDI Control initialized');
+            
+            PianoRoll.init(); 
+            console.log('[Audionauts Enhanced] Piano Roll initialized');
+            
+            SaveLoad.init(); 
+            console.log('[Audionauts Enhanced] Save/Load initialized');
+            
+            LoopUI.init(); 
+            console.log('[Audionauts Enhanced] Loop UI initialized');
+            
+            console.log('[Audionauts Enhanced] All enhanced modules initialized successfully!');
+            
+        } catch(e) {
+            console.error('[Audionauts Enhanced] Error during enhanced module init:', e);
+        }
+
+        // Tab switching functionality
+        document.querySelectorAll('.tab-button').forEach(btn => btn.onclick = () => {
+            document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+            btn.classList.add('active');
+            document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            let tabId = btn.dataset.tab;
+            document.getElementById(tabId).classList.add('active');
+            if (tabId === 'midi') {
+                try { 
+                    PianoRoll.draw(); 
+                    console.log('[Audionauts Enhanced] PianoRoll.draw() called'); 
+                } catch(e) { 
+                    console.error('[Audionauts Enhanced] Error in PianoRoll.draw:', e); 
+                }
+            }
+        });
+
+        // Window event handlers
+        window.onresize = () => { 
+            try { 
+                Keyboard.draw(); 
+                console.log('[Audionauts Enhanced] Keyboard.draw() called on resize'); 
+            } catch(e) { 
+                console.error('[Audionauts Enhanced] Error in Keyboard.draw (resize):', e); 
+            }
+        };
+        
+        window.onclick = () => { 
+            if (Tone && Tone.context && Tone.context.state !== 'running') {
+                Tone.context.resume();
+                console.log('[Audionauts Enhanced] Tone.context.resume() called');
+            }
+        };
+
+        // Add keyboard shortcuts for effects
+        document.addEventListener('keydown', (e) => {
+            if (e.ctrlKey || e.metaKey) {
+                switch(e.key) {
+                    case '1':
+                        e.preventDefault();
+                        toggleEffectByKey('reverb');
+                        break;
+                    case '2':
+                        e.preventDefault();
+                        toggleEffectByKey('delay');
+                        break;
+                    case '3':
+                        e.preventDefault();
+                        toggleEffectByKey('chorus');
+                        break;
+                    case '4':
+                        e.preventDefault();
+                        toggleEffectByKey('distortion');
+                        break;
+                    case '5':
+                        e.preventDefault();
+                        toggleEffectByKey('filter');
+                        break;
+                }
+            }
+        });
+
+        function toggleEffectByKey(effectName) {
+            const toggle = document.getElementById(effectName + 'Enable');
+            if (toggle) {
+                toggle.checked = !toggle.checked;
+                toggle.dispatchEvent(new Event('change'));
+                console.log(`[Audionauts Enhanced] Toggled ${effectName} via keyboard shortcut`);
+            }
+        }
+
+        // Add visual feedback for enhanced effects
+        setInterval(() => {
+            updateEffectsVisualFeedback();
+        }, 100);
+
+        function updateEffectsVisualFeedback() {
+            // Update LFO indicators
+            const lfoEffects = ['filterLFO', 'tremoloLFO', 'vibratoLFO', 'phaserLFO'];
+            lfoEffects.forEach(lfoName => {
+                const toggle = document.getElementById(lfoName.replace('LFO', '') + 'LFOEnable');
+                const label = document.querySelector(`label[for="${lfoName.replace('LFO', '') + 'LFOEnable'}"]`);
+                if (toggle && label && toggle.checked) {
+                    label.classList.add('lfo-active');
+                } else if (label) {
+                    label.classList.remove('lfo-active');
+                }
+            });
+        }
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', appInit);
+    } else {
+        appInit();
+    }
+
+    });});});});});});});});
+}
+
+// Global error handler for enhanced features
+window.addEventListener('error', (e) => {
+    console.error('[Audionauts Enhanced] Global error:', e.error);
+});
+
+// Performance monitoring
+if (window.performance && window.performance.mark) {
+    window.performance.mark('audionauts-enhanced-start');
+    window.addEventListener('load', () => {
+        window.performance.mark('audionauts-enhanced-loaded');
+        window.performance.measure('audionauts-enhanced-load-time', 'audionauts-enhanced-start', 'audionauts-enhanced-loaded');
+        const measure = window.performance.getEntriesByName('audionauts-enhanced-load-time')[0];
+        console.log(`[Audionauts Enhanced] Load time: ${measure.duration.toFixed(2)}ms`);
+    });
+}
+</script>
+</body>
+</html>
+
