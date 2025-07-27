@@ -2,34 +2,100 @@
 // Save and Load functionality for Audionauts Synth
 // Captures and restores complete synth state including settings, sequences, and UI state
 
+/**
+ * Configuration for capturing and restoring settings.
+ * Maps UI element IDs to state object paths.
+ * @type {Object.<string, {section: string, key: string, type: 'value'|'float'}>}
+ */
+const SETTINGS_CONFIG = {
+    // Oscillator
+    waveform: { section: 'oscillator', key: 'waveform', type: 'value' },
+    detune: { section: 'oscillator', key: 'detune', type: 'float' },
+    // Filter
+    filterType: { section: 'filter', key: 'type', type: 'value' },
+    filterFreq: { section: 'filter', key: 'frequency', type: 'float' },
+    filterQ: { section: 'filter', key: 'resonance', type: 'float' },
+    // Effects
+    reverb: { section: 'effects', key: 'reverb', type: 'float' },
+    delay: { section: 'effects', key: 'delay', type: 'float' },
+    // Transport
+    bpm: { section: 'transport', key: 'bpm', type: 'float' },
+};
+
 export const SaveLoad = {
     version: '1.0',
-    
+
+    // --- Private Helpers ---
+
+    /**
+     * Safely gets the value of an element by ID.
+     * @param {string} id - The element ID.
+     * @returns {string|number|null} The value, or null if element not found.
+     */
+    _getElementValue(id) {
+        const el = document.getElementById(id);
+        return el ? el.value : null;
+    },
+
+    /**
+     * Safely sets the value of an element by ID and dispatches an event.
+     * @param {string} id - The element ID.
+     * @param {any} value - The value to set.
+     * @param {string} eventType - The type of event to dispatch (default 'input').
+     */
+    _setElementValue(id, value, eventType = 'input') {
+        const el = document.getElementById(id);
+        if (el && value != null) {
+            el.value = value;
+            this._dispatchEvent(el, eventType);
+        }
+    },
+
+    /**
+     * Dispatches a standard event on an element.
+     * @param {Element} el - The DOM element.
+     * @param {string} type - The event type.
+     */
+    _dispatchEvent(el, type) {
+        el?.dispatchEvent(new Event(type));
+    },
+
+    /**
+     * Safely calls a function, logging warnings on error.
+     * @param {Function} fn - The function to call.
+     * @param {string} context - Context for error logging.
+     */
+    _safeCall(fn, context) {
+        try {
+            if (typeof fn === 'function') fn();
+        } catch (error) {
+            console.warn(`[SaveLoad] Error in ${context}:`, error);
+        }
+    },
+
+    // --- Lifecycle ---
+
+    /** Initializes the SaveLoad module. */
     init() {
         console.log('[SaveLoad] Initializing save-load module...');
         this.addUI();
         this.bindEvents();
     },
 
+    /** Adds the Save/Load UI elements to the DOM. */
     addUI() {
-        // Add save/load buttons to the transport controls
         const transportEl = document.getElementById('transport-controls');
         if (!transportEl) {
             console.error('[SaveLoad] Transport controls not found');
             return;
         }
 
-        // Create save/load button container
         const saveLoadContainer = document.createElement('div');
         saveLoadContainer.className = 'save-load-controls';
         saveLoadContainer.style.cssText = `
-            display: flex;
-            gap: 8px;
-            margin-top: 10px;
-            padding-top: 10px;
-            border-top: 1px solid #333;
+            display: flex; gap: 8px; margin-top: 10px;
+            padding-top: 10px; border-top: 1px solid #333;
         `;
-
         saveLoadContainer.innerHTML = `
             <button id="saveBtn" class="transport-button save-button">
                 <span>💾</span>Save State
@@ -38,98 +104,61 @@ export const SaveLoad = {
                 <span>📁</span>Load State
             </button>
             <input type="file" id="loadFileInput" accept=".synthstate,.json" style="display: none;">
-            <div id="saveLoadStatus" class="save-load-status" style="
-                margin-left: 10px;
-                padding: 4px 8px;
-                border-radius: 4px;
-                font-size: 12px;
-                display: none;
-            "></div>
+            <div id="saveLoadStatus" class="save-load-status" style="display: none;"></div>
         `;
-
         transportEl.appendChild(saveLoadContainer);
     },
 
+    /** Binds event listeners for UI and keyboard shortcuts. */
     bindEvents() {
-        const saveBtn = document.getElementById('saveBtn');
-        const loadBtn = document.getElementById('loadBtn');
-        const fileInput = document.getElementById('loadFileInput');
+        document.getElementById('saveBtn')?.addEventListener('click', () => this.saveState());
+        document.getElementById('loadBtn')?.addEventListener('click', () => this.triggerLoad());
+        document.getElementById('loadFileInput')?.addEventListener('change', (e) => this.handleFileLoad(e));
 
-        if (saveBtn) {
-            saveBtn.onclick = () => this.saveState();
-        }
-
-        if (loadBtn) {
-            loadBtn.onclick = () => this.triggerLoad();
-        }
-
-        if (fileInput) {
-            fileInput.onchange = (e) => this.handleFileLoad(e);
-        }
-
-        // Keyboard shortcuts
         document.addEventListener('keydown', (e) => {
-            if (e.ctrlKey || e.metaKey) {
-                if (e.key === 's') {
-                    e.preventDefault();
-                    this.saveState();
-                } else if (e.key === 'o') {
-                    e.preventDefault();
-                    this.triggerLoad();
-                }
+            if ((e.ctrlKey || e.metaKey) && !e.repeat) {
+                if (e.key === 's') { e.preventDefault(); this.saveState(); }
+                else if (e.key === 'o') { e.preventDefault(); this.triggerLoad(); }
             }
         });
     },
 
+    // --- Public API (Preserved) ---
+
+    /** Displays a temporary status message. */
     showStatus(message, type = 'info') {
         const statusEl = document.getElementById('saveLoadStatus');
         if (!statusEl) return;
 
         statusEl.textContent = message;
         statusEl.style.display = 'block';
-        
-        // Set color based on type
-        const colors = {
-            success: '#4caf50',
-            error: '#f44336',
-            info: '#2196f3',
-            warning: '#ff9800'
-        };
-        statusEl.style.backgroundColor = colors[type] || colors.info;
+        statusEl.style.backgroundColor = {
+            success: '#4caf50', error: '#f44336', info: '#2196f3', warning: '#ff9800'
+        }[type] ?? '#2196f3';
         statusEl.style.color = 'white';
 
-        // Auto-hide after 3 seconds
-        setTimeout(() => {
+        clearTimeout(this._statusTimeout);
+        this._statusTimeout = setTimeout(() => {
             statusEl.style.display = 'none';
         }, 3000);
     },
 
+    /** Initiates the save process. */
     saveState() {
         try {
             console.log('[SaveLoad] Starting save operation...');
-            
-            // Capture current state
-            const state = this.captureState();
-            
-            // Convert to JSON
-            const jsonString = JSON.stringify(state, null, 2);
-            
-            // Generate filename with timestamp
+            const jsonString = JSON.stringify(this.captureState(), null, 2);
             const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-            const filename = `synth-state-${timestamp}.synthstate`;
-            
-            // Trigger download
-            this.downloadFile(jsonString, filename);
-            
+            this.downloadFile(jsonString, `synth-state-${timestamp}.synthstate`);
             this.showStatus('State saved successfully!', 'success');
             console.log('[SaveLoad] Save completed successfully');
-            
         } catch (error) {
             console.error('[SaveLoad] Save error:', error);
-            this.showStatus('Save failed: ' + error.message, 'error');
+            this.showStatus(`Save failed: ${error.message}`, 'error');
         }
     },
 
+    /** Captures the complete synth state. */
     captureState() {
         const state = {
             version: this.version,
@@ -140,330 +169,177 @@ export const SaveLoad = {
                 ui: this.captureUIState()
             }
         };
-
         console.log('[SaveLoad] Captured state:', state);
         return state;
     },
 
+    /** Captures synth settings from the UI. */
     captureSettings() {
-        const settings = {
-            oscillator: {
-                waveform: 'sine',
-                detune: 0
-            },
-            filter: {
-                type: 'lowpass',
-                frequency: 5000,
-                resonance: 1
-            },
-            effects: {
-                reverb: 30,
-                delay: 20
-            },
-            transport: {
-                bpm: 120
-            }
-        };
-
+        const settings = {};
         try {
-            // Capture oscillator settings
-            const waveformEl = document.getElementById('waveform');
-            const detuneEl = document.getElementById('detune');
-            
-            if (waveformEl) settings.oscillator.waveform = waveformEl.value;
-            if (detuneEl) settings.oscillator.detune = parseFloat(detuneEl.value);
-
-            // Capture filter settings
-            const filterTypeEl = document.getElementById('filterType');
-            const filterFreqEl = document.getElementById('filterFreq');
-            const filterQEl = document.getElementById('filterQ');
-            
-            if (filterTypeEl) settings.filter.type = filterTypeEl.value;
-            if (filterFreqEl) settings.filter.frequency = parseFloat(filterFreqEl.value);
-            if (filterQEl) settings.filter.resonance = parseFloat(filterQEl.value);
-
-            // Capture effects settings
-            const reverbEl = document.getElementById('reverb');
-            const delayEl = document.getElementById('delay');
-            
-            if (reverbEl) settings.effects.reverb = parseFloat(reverbEl.value);
-            if (delayEl) settings.effects.delay = parseFloat(delayEl.value);
-
-            // Capture transport settings
-            const bpmEl = document.getElementById('bpm');
-            if (bpmEl) settings.transport.bpm = parseFloat(bpmEl.value);
-
+            for (const [id, config] of Object.entries(SETTINGS_CONFIG)) {
+                if (!settings[config.section]) settings[config.section] = {};
+                let value = this._getElementValue(id);
+                if (value != null && config.type === 'float') {
+                    value = parseFloat(value);
+                }
+                settings[config.section][config.key] = value;
+            }
         } catch (error) {
             console.warn('[SaveLoad] Error capturing settings:', error);
         }
-
         return settings;
     },
 
+    /** Captures the current sequence. */
     captureSequence() {
-        // Deep copy the sequence to avoid references
-        if (window.synthApp && window.synthApp.seq) {
-            return JSON.parse(JSON.stringify(window.synthApp.seq));
-        }
-        return [];
+        return window.synthApp?.seq ? JSON.parse(JSON.stringify(window.synthApp.seq)) : [];
     },
 
+    /** Captures relevant UI state. */
     captureUIState() {
-        const ui = {
-            currentOctave: 4,
-            selectedNote: null
-        };
-
+        const ui = { currentOctave: 4, selectedNote: null };
         try {
             if (window.synthApp) {
-                ui.currentOctave = window.synthApp.curOct || 4;
+                ui.currentOctave = window.synthApp.curOct ?? ui.currentOctave;
                 ui.selectedNote = window.synthApp.selNote;
             }
         } catch (error) {
             console.warn('[SaveLoad] Error capturing UI state:', error);
         }
-
         return ui;
     },
 
+    /** Triggers a file download. */
     downloadFile(content, filename) {
         const blob = new Blob([content], { type: 'application/json' });
         const url = URL.createObjectURL(blob);
-        
         const a = document.createElement('a');
         a.href = url;
         a.download = filename;
         a.style.display = 'none';
-        
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
-        
-        URL.revokeObjectURL(url);
+        setTimeout(() => URL.revokeObjectURL(url), 500);
     },
 
+    /** Triggers the file input dialog. */
     triggerLoad() {
-        const fileInput = document.getElementById('loadFileInput');
-        if (fileInput) {
-            fileInput.click();
-        }
+        document.getElementById('loadFileInput')?.click();
     },
 
+    /** Handles the file input change event. */
     handleFileLoad(event) {
-        const file = event.target.files[0];
+        const file = event.target.files?.[0];
         if (!file) return;
 
         const reader = new FileReader();
         reader.onload = (e) => {
             try {
-                const jsonString = e.target.result;
-                this.loadState(jsonString);
+                this.loadState(e.target.result);
             } catch (error) {
                 console.error('[SaveLoad] File read error:', error);
-                this.showStatus('Failed to read file: ' + error.message, 'error');
+                this.showStatus(`Failed to read file: ${error.message}`, 'error');
             }
         };
-
-        reader.onerror = () => {
-            this.showStatus('Failed to read file', 'error');
-        };
-
+        reader.onerror = () => this.showStatus('Failed to read file', 'error');
         reader.readAsText(file);
-        
-        // Clear the input so the same file can be loaded again
-        event.target.value = '';
+        event.target.value = ''; // Reset input for re-loading same file
     },
 
+    /** Loads the synth state from a JSON string. */
     loadState(jsonString) {
         try {
             console.log('[SaveLoad] Starting load operation...');
-            
-            // Parse JSON
             const state = JSON.parse(jsonString);
-            
-            // Validate format
             if (!this.validateState(state)) {
                 throw new Error('Invalid state file format');
             }
-            
-            // Restore state
             this.restoreSettings(state.synthState.settings);
             this.restoreSequence(state.synthState.sequence);
             this.restoreUIState(state.synthState.ui);
-            
-            // Refresh displays
             this.refreshDisplays();
-            
             this.showStatus('State loaded successfully!', 'success');
             console.log('[SaveLoad] Load completed successfully');
-            
         } catch (error) {
             console.error('[SaveLoad] Load error:', error);
-            this.showStatus('Load failed: ' + error.message, 'error');
+            this.showStatus(`Load failed: ${error.message}`, 'error');
         }
     },
 
+    /** Validates the structure of a loaded state object. */
     validateState(state) {
-        if (!state || typeof state !== 'object') return false;
-        if (!state.version || !state.synthState) return false;
-        if (!state.synthState.settings || !Array.isArray(state.synthState.sequence)) return false;
-        return true;
+        return state?.version && state?.synthState?.settings && Array.isArray(state?.synthState?.sequence);
     },
 
+    /** Restores synth settings to the UI. */
     restoreSettings(settings) {
         if (!settings) return;
-
         try {
-            // Restore oscillator settings
-            if (settings.oscillator) {
-                const waveformEl = document.getElementById('waveform');
-                const detuneEl = document.getElementById('detune');
-                
-                if (waveformEl && settings.oscillator.waveform) {
-                    waveformEl.value = settings.oscillator.waveform;
-                    waveformEl.dispatchEvent(new Event('change'));
-                }
-                
-                if (detuneEl && typeof settings.oscillator.detune === 'number') {
-                    detuneEl.value = settings.oscillator.detune;
-                    detuneEl.dispatchEvent(new Event('input'));
+            for (const [id, config] of Object.entries(SETTINGS_CONFIG)) {
+                const sectionData = settings[config.section];
+                if (sectionData) {
+                    const value = sectionData[config.key];
+                    if (value != null) {
+                        this._setElementValue(id, value, config.section === 'oscillator' || config.section === 'transport' ? 'change' : 'input');
+                    }
                 }
             }
-
-            // Restore filter settings
-            if (settings.filter) {
-                const filterTypeEl = document.getElementById('filterType');
-                const filterFreqEl = document.getElementById('filterFreq');
-                const filterQEl = document.getElementById('filterQ');
-                
-                if (filterTypeEl && settings.filter.type) {
-                    filterTypeEl.value = settings.filter.type;
-                    filterTypeEl.dispatchEvent(new Event('input'));
-                }
-                
-                if (filterFreqEl && typeof settings.filter.frequency === 'number') {
-                    filterFreqEl.value = settings.filter.frequency;
-                    filterFreqEl.dispatchEvent(new Event('input'));
-                }
-                
-                if (filterQEl && typeof settings.filter.resonance === 'number') {
-                    filterQEl.value = settings.filter.resonance;
-                    filterQEl.dispatchEvent(new Event('input'));
-                }
-            }
-
-            // Restore effects settings
-            if (settings.effects) {
-                const reverbEl = document.getElementById('reverb');
-                const delayEl = document.getElementById('delay');
-                
-                if (reverbEl && typeof settings.effects.reverb === 'number') {
-                    reverbEl.value = settings.effects.reverb;
-                    reverbEl.dispatchEvent(new Event('input'));
-                }
-                
-                if (delayEl && typeof settings.effects.delay === 'number') {
-                    delayEl.value = settings.effects.delay;
-                    delayEl.dispatchEvent(new Event('input'));
-                }
-            }
-
-            // Restore transport settings
-            if (settings.transport) {
-                const bpmEl = document.getElementById('bpm');
-                
-                if (bpmEl && typeof settings.transport.bpm === 'number') {
-                    bpmEl.value = settings.transport.bpm;
-                    bpmEl.dispatchEvent(new Event('change'));
-                }
-            }
-
         } catch (error) {
             console.warn('[SaveLoad] Error restoring settings:', error);
         }
     },
 
+    /** Restores the sequence data. */
     restoreSequence(sequence) {
-        if (!Array.isArray(sequence)) return;
-
+        if (!Array.isArray(sequence) || !window.synthApp) return;
         try {
-            if (window.synthApp) {
-                // Stop any current playback
-                if (window.synthApp.isPlaying) {
-                    const stopBtn = document.getElementById('stopBtn');
-                    if (stopBtn) stopBtn.click();
-                }
-
-                // Replace sequence data
-                window.synthApp.seq = JSON.parse(JSON.stringify(sequence));
-                
-                // Update play button state
-                const playBtn = document.getElementById('playBtn');
-                if (playBtn) {
-                    playBtn.disabled = sequence.length === 0;
-                }
-
-                console.log(`[SaveLoad] Restored ${sequence.length} notes`);
+            if (window.synthApp.isPlaying) {
+                document.getElementById('stopBtn')?.click();
             }
+            window.synthApp.seq = JSON.parse(JSON.stringify(sequence));
+            const playBtn = document.getElementById('playBtn');
+            if (playBtn) playBtn.disabled = sequence.length === 0;
+            console.log(`[SaveLoad] Restored ${sequence.length} notes`);
         } catch (error) {
             console.warn('[SaveLoad] Error restoring sequence:', error);
         }
     },
 
+    /** Restores UI state like octave and selected note. */
     restoreUIState(ui) {
-        if (!ui) return;
-
+        if (!ui || !window.synthApp) return;
         try {
-            // Restore octave
-            if (typeof ui.currentOctave === 'number' && window.synthApp) {
+            if (typeof ui.currentOctave === 'number') {
                 window.synthApp.curOct = Math.max(0, Math.min(7, ui.currentOctave));
-                
                 const octaveLabel = document.getElementById('octaveLabel');
-                if (octaveLabel) {
-                    octaveLabel.textContent = `Octave: ${window.synthApp.curOct}`;
-                }
+                if (octaveLabel) octaveLabel.textContent = `Octave: ${window.synthApp.curOct}`;
             }
-
-            // Restore selected note
-            if (window.synthApp) {
-                window.synthApp.selNote = ui.selectedNote;
-            }
-
+            window.synthApp.selNote = ui.selectedNote;
         } catch (error) {
             console.warn('[SaveLoad] Error restoring UI state:', error);
         }
     },
 
+    /** Refreshes visual displays. */
     refreshDisplays() {
-        try {
-            // Refresh keyboard display
-            if (window.Keyboard && typeof window.Keyboard.draw === 'function') {
-                window.Keyboard.draw();
-            }
-
-            // Refresh piano roll display
-            if (window.PianoRoll && typeof window.PianoRoll.draw === 'function') {
-                window.PianoRoll.draw();
-            }
-
-            console.log('[SaveLoad] Displays refreshed');
-        } catch (error) {
-            console.warn('[SaveLoad] Error refreshing displays:', error);
-        }
+        this._safeCall(window.Keyboard?.draw, 'keyboard draw');
+        this._safeCall(window.PianoRoll?.draw, 'piano roll draw');
+        console.log('[SaveLoad] Displays refreshed');
     },
 
-    // Utility method to export current state as JSON string (for debugging)
+    /** Utility to export state as JSON string (for debugging). */
     exportStateJSON() {
         try {
-            const state = this.captureState();
-            return JSON.stringify(state, null, 2);
+            return JSON.stringify(this.captureState(), null, 2);
         } catch (error) {
             console.error('[SaveLoad] Export error:', error);
             return null;
         }
     },
 
-    // Utility method to import state from JSON string (for debugging)
+    /** Utility to import state from JSON string (for debugging). */
     importStateJSON(jsonString) {
         try {
             this.loadState(jsonString);
@@ -474,4 +350,3 @@ export const SaveLoad = {
         }
     }
 };
-
