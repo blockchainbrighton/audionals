@@ -4,6 +4,8 @@ import SaveLoad from './save-load.js';
 import EnvelopeManager from './envelope-manager.js'; // Only import what's in this file
 import AudioSafety from './audio-safety.js';       // Import this from its own file
 import LoopManager from './loop-manager.js'; 
+import PianoRoll from './piano-roll.js'; 
+
 
 const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
 
@@ -21,284 +23,6 @@ import(TONE_ORDINALS_URL)
 
 function boot() {
     console.log('[Audionauts Enhanced] Booting enhanced app after Tone.js load...');
-
-    // // =================================================================
-    // // START: COMBINED JAVASCRIPT MODULES
-    // // =================================================================
-
-    // // --- from loop.js ---
-    // const LoopManager = {
-    //     isLoopEnabled: false,
-    //     isLooping: false,
-    //     loopStart: 0,
-    //     loopEnd: 0,
-    //     loopCount: 0,
-    //     maxLoops: -1,
-    //     currentLoopIteration: 0,
-    //     quantizeEnabled: false,
-    //     quantizeGrid: 0.125,
-    //     swingAmount: 0,
-    //     originalTempo: 120,
-    //     targetTempo: 120,
-    //     tempoRatio: 1,
-    //     crossfadeEnabled: true,
-    //     crossfadeDuration: 0.1,
-    //     maxLoopDuration: 30,
-    //     fadeInDuration: 0.05,
-    //     fadeOutDuration: 0.1,
-    //     scheduledEvents: [],
-    //     loopTimeoutId: null,
-    //     crossfadeGain: null,
-    //     isStoppingLoop: false,
-
-    //     init() {
-    //         console.log('[LoopManager] Initializing enhanced loop system...');
-    //         this.crossfadeGain = typeof Tone !== 'undefined' ? new Tone.Gain(1) : null;
-    //         window.synthApp && (window.synthApp.loop = { enabled: false, start: 0, end: 0, quantized: false, grid: 0.25, tempo: 120, crossfade: true });
-    //         console.log('[LoopManager] Bound to synthApp');
-    //     },
-
-    //     autoDetectLoopBounds(seq = null) {
-    //         const s = seq ?? window.synthApp?.seq ?? [];
-    //         if (!s.length) return this._setLoopBounds(0, 0, true);
-    //         const beat = 60 / (this.targetTempo || 120);
-    //         let min = Math.floor(Math.min(...s.map(n => n.start)) / beat) * beat;
-    //         let max = Math.ceil(Math.max(...s.map(n => n.start + n.dur)) / beat) * beat;
-    //         const minDur = beat * 2;
-    //         if (max - min < minDur) max = min + minDur;
-    //         if (max - min > this.maxLoopDuration) max = min + this.maxLoopDuration;
-    //         return this._setLoopBounds(Math.max(0, min), max);
-    //     },
-
-    //     setLoopBounds(start, end) { this._setLoopBounds(start, end); },
-    //     _setLoopBounds(start, end, silent) {
-    //         this.loopStart = Math.max(0, start);
-    //         this.loopEnd = Math.max(this.loopStart, end);
-    //         const dur = this.loopEnd - this.loopStart;
-    //         if (dur > this.maxLoopDuration) this.loopEnd = this.loopStart + this.maxLoopDuration;
-    //         !silent && console.log(`[LoopManager] Loop bounds set: ${this.loopStart}s - ${this.loopEnd}s`);
-    //         return { start: this.loopStart, end: this.loopEnd };
-    //     },
-    //     getLoopDuration() { return this.loopEnd - this.loopStart; },
-    //     setLoopEnabled(e) {
-    //         this.isLoopEnabled = e;
-    //         window.synthApp?.loop && (window.synthApp.loop.enabled = e);
-    //         console.log(`[LoopManager] Loop ${e ? 'enabled' : 'disabled'}`);
-    //     },
-    //     setMaxLoops(c) {
-    //         this.maxLoops = c;
-    //         console.log(`[LoopManager] Max loops set to: ${c === -1 ? 'infinite' : c}`);
-    //     },
-    //     setCrossfadeEnabled(e) {
-    //         this.crossfadeEnabled = e;
-    //         window.synthApp?.loop && (window.synthApp.loop.crossfade = e);
-    //         console.log(`[LoopManager] Crossfade ${e ? 'enabled' : 'disabled'}`);
-    //     },
-
-    //     prepareLoopedSequence(seq = null) {
-    //         const s = seq ?? window.synthApp?.seq ?? [];
-    //         if (!s.length) return [];
-    //         if (this.loopEnd <= this.loopStart) this.autoDetectLoopBounds(s);
-    //         let adjusted = s
-    //             .filter(n => n.start < this.loopEnd && n.start + n.dur > this.loopStart)
-    //             .map(n => {
-    //                 const start = Math.max(0, n.start - this.loopStart);
-    //                 const end = Math.min(n.start + n.dur, this.loopEnd - this.loopStart);
-    //                 return { ...n, start, dur: Math.max(0.01, end - start) };
-    //             });
-
-    //         adjusted = this.processSequence(adjusted)
-    //             .filter(n => n.dur > 0.01);
-    //         if (this.swingAmount) adjusted = this.applySwing(adjusted);
-    //         if (this.crossfadeEnabled) adjusted = this.applyCrossfadeAdjustments(adjusted);
-    //         return adjusted;
-    //     },
-
-    //     applyCrossfadeAdjustments(seq) {
-    //         const crossfadeStart = this.getLoopDuration() - this.crossfadeDuration;
-    //         return seq.map(n => (n.start + n.dur > crossfadeStart)
-    //             ? { ...n, dur: Math.max(0.01, crossfadeStart - n.start) }
-    //             : n
-    //         );
-    //     },
-
-    //     scheduleLoopIteration(seq, loopNum = 0) {
-    //         if (!window.synthApp?.synth) return [];
-    //         seq = seq.filter(n => n.dur > 0.01);
-    //         if (!seq.length) return [];
-    //         const loopDur = this.getLoopDuration(), offset = loopNum * loopDur, ids = [];
-    //         loopNum === 0 && this.fadeInDuration > 0 && this._scheduleFadeIn(offset);
-    //         seq.forEach(n => {
-    //             const safeVel = Math.min(0.8, Math.max(0.1, n.vel ?? 0.8));
-    //             ids.push(Tone.Transport.schedule(t => {
-    //                 if (!this.isStoppingLoop) {
-    //                     try { window.synthApp.synth.triggerAttackRelease(n.note, n.dur, t, safeVel); }
-    //                     catch (err) { console.warn(`[LoopManager] Error playing note ${n.note}:`, err); }
-    //                 }
-    //             }, offset + n.start));
-    //         });
-    //         this.crossfadeEnabled && this.maxLoops !== 1 && this._scheduleCrossfade(offset, loopDur);
-    //         return ids;
-    //     },
-
-    //     _scheduleFadeIn(startTime) {
-    //         this.crossfadeGain && this.scheduledEvents.push(
-    //             Tone.Transport.schedule(time => {
-    //                 this.crossfadeGain.gain.setValueAtTime(0, time);
-    //                 this.crossfadeGain.gain.rampTo(1, this.fadeInDuration, time);
-    //             }, startTime)
-    //         );
-    //     },
-
-    //     _scheduleCrossfade(loopStart, loopDur) {
-    //         if (!this.crossfadeGain) return;
-    //         const t = loopStart + loopDur - this.crossfadeDuration;
-    //         this.scheduledEvents.push(Tone.Transport.schedule(time => {
-    //             if (!this.isStoppingLoop) {
-    //                 this.crossfadeGain.gain.setValueAtTime(1, time);
-    //                 this.crossfadeGain.gain.rampTo(0.3, this.crossfadeDuration, time);
-    //                 setTimeout(() => !this.isStoppingLoop && this.crossfadeGain.gain.rampTo(1, this.crossfadeDuration / 2), this.crossfadeDuration * 500);
-    //             }
-    //         }, t));
-    //     },
-
-    //     startLoop(seq = null) {
-    //         if (this.isLooping) return;
-    //         const s = this.prepareLoopedSequence(seq);
-    //         if (!s.length) return;
-    //         const dur = this.getLoopDuration();
-    //         if (dur > this.maxLoopDuration) return;
-    //         this.isLooping = true; this.isStoppingLoop = false; this.currentLoopIteration = 0; this.scheduledEvents = [];
-    //         Tone.Transport.cancel();
-    //         const initial = this.maxLoops === -1 ? 4 : Math.min(4, this.maxLoops);
-    //         for (let i = 0; i < initial; i++) this.scheduledEvents.push(...this.scheduleLoopIteration(s, i));
-    //         this.maxLoops === -1 && this.scheduleNextLoops(s, initial);
-    //         Tone.Transport.start();
-    //         if (this.maxLoops > 0) {
-    //             this.loopTimeoutId = setTimeout(() => this.stopLoop(), this.maxLoops * dur * 1000);
-    //         }
-    //     },
-
-    //     scheduleNextLoops(seq, startFromLoop) {
-    //         if (!this.isLooping || this.maxLoops !== -1 || this.isStoppingLoop) return;
-    //         const dur = this.getLoopDuration(), ahead = 2;
-    //         for (let i = 0; i < ahead; i++)
-    //             this.scheduledEvents.push(...this.scheduleLoopIteration(seq, startFromLoop + i));
-    //         setTimeout(() => this.isLooping && !this.isStoppingLoop && this.scheduleNextLoops(seq, startFromLoop + ahead), dur * 1000);
-    //     },
-
-    //     stopLoop() {
-    //         if (!this.isLooping) return;
-    //         this.isStoppingLoop = true;
-    //         if (this.crossfadeGain && this.fadeOutDuration > 0) {
-    //             this.crossfadeGain.gain.rampTo(0, this.fadeOutDuration);
-    //             setTimeout(() => this.completeLoopStop(), this.fadeOutDuration * 1000);
-    //         } else this.completeLoopStop();
-    //     },
-
-    //     completeLoopStop() {
-    //         this.isLooping = this.isStoppingLoop = false;
-    //         this.currentLoopIteration = 0;
-    //         this.scheduledEvents.forEach(id => { try { Tone.Transport.clear(id); } catch {} });
-    //         this.scheduledEvents = [];
-    //         this.loopTimeoutId && clearTimeout(this.loopTimeoutId);
-    //         this.loopTimeoutId = null;
-    //         this.crossfadeGain?.gain.setValueAtTime(1, Tone.now());
-    //         Tone.Transport.stop(); Tone.Transport.cancel();
-    //         console.log('[LoopManager] Enhanced loop stopped and all events cleared');
-    //     },
-
-    //     isCurrentlyLooping() { return this.isLooping; },
-
-    //     getLoopStatus() {
-    //         return {
-    //             enabled: this.isLoopEnabled,
-    //             active: this.isLooping,
-    //             start: this.loopStart, end: this.loopEnd,
-    //             duration: this.getLoopDuration(),
-    //             iteration: this.currentLoopIteration,
-    //             maxLoops: this.maxLoops,
-    //             crossfadeEnabled: this.crossfadeEnabled
-    //         };
-    //     },
-
-    //     setQuantization(enabled, grid = 0.25) {
-    //         this.quantizeEnabled = enabled;
-    //         this.quantizeGrid = grid;
-    //         console.log(`[LoopManager] Quantization ${enabled ? 'enabled' : 'disabled'}, grid: ${grid}`);
-    //     },
-
-    //     quantizeTime(t, grid = null) {
-    //         const g = grid ?? this.quantizeGrid, beat = 60 / (this.targetTempo || 120), step = beat * g;
-    //         const q = Math.round(t / step) * step;
-    //         Math.abs(t - q) > 0.001 && console.log(`[LoopManager] Quantized time from ${t} to ${q} (grid: ${g})`);
-    //         return q;
-    //     },
-
-    //     quantizeSequence(seq) {
-    //         if (!this.quantizeEnabled) return seq;
-    //         return seq.map(n => ({
-    //             ...n,
-    //             start: this.quantizeTime(n.start),
-    //             dur: Math.max(0.01, this.quantizeTime(n.dur, this.quantizeGrid / 2))
-    //         }));
-    //     },
-
-    //     setTempoConversion(orig, target) {
-    //         this.originalTempo = orig; this.targetTempo = target;
-    //         this.tempoRatio = target / orig;
-    //         console.log(`[LoopManager] Tempo conversion: ${orig} -> ${target} BPM (ratio: ${this.tempoRatio})`);
-    //     },
-
-    //     convertSequenceTempo(seq) {
-    //         if (this.tempoRatio === 1) return seq;
-    //         return seq.map(n => ({ ...n, start: n.start / this.tempoRatio, dur: Math.max(0.01, n.dur / this.tempoRatio) }));
-    //     },
-
-    //     processSequence(seq) {
-    //         let s = [...seq];
-    //         if (this.tempoRatio !== 1) s = this.convertSequenceTempo(s);
-    //         if (this.quantizeEnabled) s = this.quantizeSequence(s);
-    //         return s;
-    //     },
-
-    //     setQuantizationGrid(subdiv) {
-    //         const grids = { whole: 4, half: 2, quarter: 1, eighth: 0.5, sixteenth: 0.25, thirtysecond: 0.125 };
-    //         grids[subdiv] && (this.quantizeGrid = grids[subdiv], console.log(`[LoopManager] Quantization grid set to ${subdiv} note (${this.quantizeGrid})`));
-    //     },
-
-    //     getQuantizeGridKey() {
-    //         const grids = { 4: 'whole', 2: 'half', 1: 'quarter', 0.5: 'eighth', 0.25: 'sixteenth', 0.125: 'thirtysecond' };
-    //         return grids[this.quantizeGrid?.toString()] || 'thirtysecond';
-    //     },
-
-    //     getQuantizationOptions() {
-    //         return [
-    //             { value: 4.0, label: 'Whole Note', key: 'whole' },
-    //             { value: 2.0, label: 'Half Note', key: 'half' },
-    //             { value: 1.0, label: 'Quarter Note', key: 'quarter' },
-    //             { value: 0.5, label: 'Eighth Note', key: 'eighth' },
-    //             { value: 0.25, label: 'Sixteenth Note', key: 'sixteenth' },
-    //             { value: 0.125, label: 'Thirty-second Note', key: 'thirtysecond' }
-    //         ];
-    //     },
-
-    //     setSwing(amount = 0) {
-    //         this.swingAmount = Math.max(0, Math.min(1, amount));
-    //         console.log(`[LoopManager] Swing set to ${this.swingAmount * 100}%`);
-    //     },
-
-    //     applySwing(seq) {
-    //         if (!this.swingAmount) return seq;
-    //         const beat = 60 / (this.targetTempo || 120), swing = beat * this.quantizeGrid * this.swingAmount * 0.1;
-    //         return seq.map(n => {
-    //             const pos = Math.floor(n.start / (beat * this.quantizeGrid));
-    //             return pos % 2 === 1 && swing > 0 ? { ...n, start: n.start + swing } : n;
-    //         });
-    //     }
-    // };
-
-
 
     // --- from enhanced-effects.js ---
 const EnhancedEffects = {
@@ -634,247 +358,247 @@ const Keyboard = {
     }
 };
 
-// --- from piano-roll.js ---
-const PianoRoll = {
-    MIDI_LOW: 21,
-    MIDI_HIGH: 108,
-    zoomX: 1,
-    zoomY: 1,
-    minZoomX: 0.25,
-    maxZoomX: 4,
-    minZoomY: 0.5,
-    maxZoomY: 2.5,
-    CELL_H: 18,
-    transportInterval: null,
-    dragData: null,
-    dragNoteIndex: null,
-    lastPreviewMidi: null,
+// // --- from piano-roll.js ---
+// const PianoRoll = {
+//     MIDI_LOW: 21,
+//     MIDI_HIGH: 108,
+//     zoomX: 1,
+//     zoomY: 1,
+//     minZoomX: 0.25,
+//     maxZoomX: 4,
+//     minZoomY: 0.5,
+//     maxZoomY: 2.5,
+//     CELL_H: 18,
+//     transportInterval: null,
+//     dragData: null,
+//     dragNoteIndex: null,
+//     lastPreviewMidi: null,
 
-    init() {
-        const grid = this.rollGrid = document.getElementById('rollGrid');
-        if (!grid) return;
+//     init() {
+//         const grid = this.rollGrid = document.getElementById('rollGrid');
+//         if (!grid) return;
 
-        grid.innerHTML = '';
-        Object.assign(grid.style, {
-            position: 'relative',
-            background: '#181a1b',
-            width: '100%',
-            height: '60vh',
-            display: 'flex',
-            flexDirection: 'column',
-            fontFamily: 'Segoe UI, Arial, sans-serif',
-            fontSize: '14px',
-            userSelect: 'none',
-            overflow: 'hidden'
-        });
+//         grid.innerHTML = '';
+//         Object.assign(grid.style, {
+//             position: 'relative',
+//             background: '#181a1b',
+//             width: '100%',
+//             height: '60vh',
+//             display: 'flex',
+//             flexDirection: 'column',
+//             fontFamily: 'Segoe UI, Arial, sans-serif',
+//             fontSize: '14px',
+//             userSelect: 'none',
+//             overflow: 'hidden'
+//         });
 
-        // Controls Bar
-        const bar = this._div({
-            display: 'flex',
-            gap: '10px',
-            alignItems: 'center',
-            background: '#212126',
-            borderBottom: '2px solid #29292d',
-            padding: '7px 10px',
-            position: 'sticky',
-            top: 0,
-            zIndex: 30,
-            minHeight: '32px'
-        });
-        bar.append(
-            this._label('Zoom X:'),
-            this._btn('-', () => this.setZoomX(this.zoomX / 1.3)),
-            this._btn('+', () => this.setZoomX(this.zoomX * 1.3)),
-            this._label('Zoom Y:'),
-            this._btn('–', () => this.setZoomY(this.zoomY / 1.15)),
-            this._btn('∣∣', () => this.setZoomY(this.zoomY * 1.15))
-        );
-        grid.appendChild(bar);
+//         // Controls Bar
+//         const bar = this._div({
+//             display: 'flex',
+//             gap: '10px',
+//             alignItems: 'center',
+//             background: '#212126',
+//             borderBottom: '2px solid #29292d',
+//             padding: '7px 10px',
+//             position: 'sticky',
+//             top: 0,
+//             zIndex: 30,
+//             minHeight: '32px'
+//         });
+//         bar.append(
+//             this._label('Zoom X:'),
+//             this._btn('-', () => this.setZoomX(this.zoomX / 1.3)),
+//             this._btn('+', () => this.setZoomX(this.zoomX * 1.3)),
+//             this._label('Zoom Y:'),
+//             this._btn('–', () => this.setZoomY(this.zoomY / 1.15)),
+//             this._btn('∣∣', () => this.setZoomY(this.zoomY * 1.15))
+//         );
+//         grid.appendChild(bar);
 
-        this.pitchCount = this.MIDI_HIGH - this.MIDI_LOW + 1;
+//         this.pitchCount = this.MIDI_HIGH - this.MIDI_LOW + 1;
 
-        // Scrollable Container
-        this.scrollContainer = this._div({
-            display: 'flex',
-            flexGrow: 1,
-            overflowX: 'auto',
-            overflowY: 'auto',
-            minWidth: 0,
-            minHeight: 0,
-            position: 'relative',
-            background: 'transparent'
-        });
-        grid.appendChild(this.scrollContainer);
+//         // Scrollable Container
+//         this.scrollContainer = this._div({
+//             display: 'flex',
+//             flexGrow: 1,
+//             overflowX: 'auto',
+//             overflowY: 'auto',
+//             minWidth: 0,
+//             minHeight: 0,
+//             position: 'relative',
+//             background: 'transparent'
+//         });
+//         grid.appendChild(this.scrollContainer);
 
-        // Main Content Area
-        this.innerContent = this._div({
-            display: 'flex',
-            flexDirection: 'column',
-            width: '100%',
-            minHeight: '100%',
-            position: 'relative'
-        });
-        this.scrollContainer.appendChild(this.innerContent);
+//         // Main Content Area
+//         this.innerContent = this._div({
+//             display: 'flex',
+//             flexDirection: 'column',
+//             width: '100%',
+//             minHeight: '100%',
+//             position: 'relative'
+//         });
+//         this.scrollContainer.appendChild(this.innerContent);
 
-        // Keyboard Shortcut Listener
-        if (!this._keyListener) {
-            this._keyListener = (e) => {
-                if ((e.key === "Delete" || e.key === "Backspace") &&
-                    typeof synthApp.selNote === "number" && synthApp.selNote >= 0) {
-                    synthApp.seq.splice(synthApp.selNote, 1);
-                    synthApp.selNote = null;
-                    this.draw();
-                }
-            };
-            document.addEventListener("keydown", this._keyListener);
-        }
-        this.draw();
-    },
-
-
-  // *** END OF CHUNK 2***
+//         // Keyboard Shortcut Listener
+//         if (!this._keyListener) {
+//             this._keyListener = (e) => {
+//                 if ((e.key === "Delete" || e.key === "Backspace") &&
+//                     typeof synthApp.selNote === "number" && synthApp.selNote >= 0) {
+//                     synthApp.seq.splice(synthApp.selNote, 1);
+//                     synthApp.selNote = null;
+//                     this.draw();
+//                 }
+//             };
+//             document.addEventListener("keydown", this._keyListener);
+//         }
+//         this.draw();
+//     },
 
 
+//   // *** END OF CHUNK 2***
 
 
-  // *** START OF CHUNK 3***
-  draw() {
-    const seq = synthApp.seq || [];
-    const quantGrid = LoopManager.quantizeEnabled ? LoopManager.quantizeGrid : null;
-    const timeMax = Math.max(16, ...seq.map(o => o.start + o.dur));
-    const gridTimeCount = quantGrid
-        ? Math.ceil(timeMax / quantGrid) * quantGrid
-        : Math.ceil(timeMax / 0.25) * 0.25;
-    const cellW = 40 * this.zoomX;
-    const cellH = this.CELL_H * this.zoomY;
-    this.innerContent.innerHTML = '';
-    const gridWidth = cellW * gridTimeCount;
-    let firstNoteElement = null, c4Element = null, firstNoteMidi = null;
 
-    if (seq.length > 0 && seq[0]?.note) {
-        try { firstNoteMidi = Tone.Frequency(seq[0].note).toMidi(); }
-        catch (e) {
-            console.warn("Error parsing first note for scroll:", seq[0].note, e);
-            firstNoteMidi = null;
-        }
-    }
 
-    for (let midi = this.MIDI_HIGH; midi >= this.MIDI_LOW; midi--) {
-        const isC4 = midi === 60, isCurrentFirstNote = midi === firstNoteMidi, row = this.MIDI_HIGH - midi;
+//   // *** START OF CHUNK 3***
+//   draw() {
+//     const seq = synthApp.seq || [];
+//     const quantGrid = LoopManager.quantizeEnabled ? LoopManager.quantizeGrid : null;
+//     const timeMax = Math.max(16, ...seq.map(o => o.start + o.dur));
+//     const gridTimeCount = quantGrid
+//         ? Math.ceil(timeMax / quantGrid) * quantGrid
+//         : Math.ceil(timeMax / 0.25) * 0.25;
+//     const cellW = 40 * this.zoomX;
+//     const cellH = this.CELL_H * this.zoomY;
+//     this.innerContent.innerHTML = '';
+//     const gridWidth = cellW * gridTimeCount;
+//     let firstNoteElement = null, c4Element = null, firstNoteMidi = null;
 
-        const rowDiv = this._div({
-            display: 'flex',
-            height: cellH + 'px',
-            minHeight: cellH + 'px',
-            position: 'relative'
-        });
+//     if (seq.length > 0 && seq[0]?.note) {
+//         try { firstNoteMidi = Tone.Frequency(seq[0].note).toMidi(); }
+//         catch (e) {
+//             console.warn("Error parsing first note for scroll:", seq[0].note, e);
+//             firstNoteMidi = null;
+//         }
+//     }
 
-        const labelCell = this._div({
-            width: '48px', minWidth: '48px', height: '100%',
-            display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '8px',
-            fontWeight: (midi % 12 === 0) ? 'bold' : 'normal',
-            color: (midi % 12 === 0) ? '#fff' : '#aaa',
-            background: this.isBlackKey(midi) ? '#18181c' : '#232323',
-            borderBottom: '1px solid #23232a',
-            fontSize: '13px', userSelect: 'none', zIndex: 2, borderRight: '2px solid #282828'
-        }, window.Tone ? Tone.Frequency(midi, "midi").toNote() : midi);
+//     for (let midi = this.MIDI_HIGH; midi >= this.MIDI_LOW; midi--) {
+//         const isC4 = midi === 60, isCurrentFirstNote = midi === firstNoteMidi, row = this.MIDI_HIGH - midi;
 
-        const gridCell = this._div({
-            position: 'relative',
-            flexGrow: 1,
-            height: '100%',
-            minHeight: '100%',
-            background: 'transparent'
-        });
+//         const rowDiv = this._div({
+//             display: 'flex',
+//             height: cellH + 'px',
+//             minHeight: cellH + 'px',
+//             position: 'relative'
+//         });
 
-        const hLine = this._div({
-            position: 'absolute', left: 0, right: 0, top: 0, height: '1px',
-            background: (midi % 12 === 0) ? '#444' : '#292b2e',
-            opacity: (midi % 12 === 0) ? 0.55 : 0.22,
-            pointerEvents: 'none', zIndex: 1
-        });
-        gridCell.appendChild(hLine);
+//         const labelCell = this._div({
+//             width: '48px', minWidth: '48px', height: '100%',
+//             display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '8px',
+//             fontWeight: (midi % 12 === 0) ? 'bold' : 'normal',
+//             color: (midi % 12 === 0) ? '#fff' : '#aaa',
+//             background: this.isBlackKey(midi) ? '#18181c' : '#232323',
+//             borderBottom: '1px solid #23232a',
+//             fontSize: '13px', userSelect: 'none', zIndex: 2, borderRight: '2px solid #282828'
+//         }, window.Tone ? Tone.Frequency(midi, "midi").toNote() : midi);
 
-        if (this.isBlackKey(midi)) {
-            const bg = this._div({
-                position: 'absolute', left: 0, top: 0, width: '100%', height: '100%',
-                background: '#1c1c22', opacity: 0.46, zIndex: 0, pointerEvents: 'none'
-            });
-            gridCell.appendChild(bg);
-        }
+//         const gridCell = this._div({
+//             position: 'relative',
+//             flexGrow: 1,
+//             height: '100%',
+//             minHeight: '100%',
+//             background: 'transparent'
+//         });
 
-        if (quantGrid) {
-            for (let t = 0; t <= gridTimeCount; t += quantGrid) {
-                const isBar = (Math.round(t / 4) * 4 === t);
-                const vLine = this._div({
-                    position: 'absolute', top: 0, bottom: 0, left: (t * cellW) + 'px',
-                    width: isBar ? '2px' : '1px',
-                    background: isBar ? '#444' : '#292b2e',
-                    opacity: isBar ? 0.6 : 0.22,
-                    pointerEvents: 'none', zIndex: 1
-                });
-                gridCell.appendChild(vLine);
+//         const hLine = this._div({
+//             position: 'absolute', left: 0, right: 0, top: 0, height: '1px',
+//             background: (midi % 12 === 0) ? '#444' : '#292b2e',
+//             opacity: (midi % 12 === 0) ? 0.55 : 0.22,
+//             pointerEvents: 'none', zIndex: 1
+//         });
+//         gridCell.appendChild(hLine);
 
-                if (isBar && t !== 0 && midi === this.MIDI_HIGH) {
-                    const labelTop = this._div({
-                        position: 'absolute', top: '-18px', left: (t * cellW) + 2 + 'px',
-                        fontSize: '12px', color: '#555', zIndex: 10, pointerEvents: 'none'
-                    }, `Bar ${Math.floor(t / 4) + 1}`);
-                    this.innerContent.appendChild(labelTop);
-                }
-            }
-        }
+//         if (this.isBlackKey(midi)) {
+//             const bg = this._div({
+//                 position: 'absolute', left: 0, top: 0, width: '100%', height: '100%',
+//                 background: '#1c1c22', opacity: 0.46, zIndex: 0, pointerEvents: 'none'
+//             });
+//             gridCell.appendChild(bg);
+//         }
 
-        rowDiv.appendChild(labelCell);
-        rowDiv.appendChild(gridCell);
-        this.innerContent.appendChild(rowDiv);
+//         if (quantGrid) {
+//             for (let t = 0; t <= gridTimeCount; t += quantGrid) {
+//                 const isBar = (Math.round(t / 4) * 4 === t);
+//                 const vLine = this._div({
+//                     position: 'absolute', top: 0, bottom: 0, left: (t * cellW) + 'px',
+//                     width: isBar ? '2px' : '1px',
+//                     background: isBar ? '#444' : '#292b2e',
+//                     opacity: isBar ? 0.6 : 0.22,
+//                     pointerEvents: 'none', zIndex: 1
+//                 });
+//                 gridCell.appendChild(vLine);
 
-        if (isC4) c4Element = rowDiv;
-        if (isCurrentFirstNote) firstNoteElement = rowDiv;
+//                 if (isBar && t !== 0 && midi === this.MIDI_HIGH) {
+//                     const labelTop = this._div({
+//                         position: 'absolute', top: '-18px', left: (t * cellW) + 2 + 'px',
+//                         fontSize: '12px', color: '#555', zIndex: 10, pointerEvents: 'none'
+//                     }, `Bar ${Math.floor(t / 4) + 1}`);
+//                     this.innerContent.appendChild(labelTop);
+//                 }
+//             }
+//         }
 
-        seq.forEach((noteObj, i) => {
-            const noteMidi = Tone.Frequency(noteObj.note).toMidi();
-            if (noteMidi !== midi) return;
-            const x = noteObj.start * cellW, w = noteObj.dur * cellW;
+//         rowDiv.appendChild(labelCell);
+//         rowDiv.appendChild(gridCell);
+//         this.innerContent.appendChild(rowDiv);
 
-            const noteDiv = this._div({
-                position: 'absolute', left: x + 'px', width: w + 'px', height: '100%',
-                background: '#bb86fc', borderRadius: '4px', boxShadow: '0 2px 8px #0004',
-                opacity: noteObj.vel,
-                outline: synthApp.selNote === i ? '2px solid #03dac6' : '',
-                zIndex: 10, cursor: 'grab', display: 'flex',
-                alignItems: 'center', justifyContent: 'flex-end', paddingRight: '2px',
-                fontWeight: 'bold', color: '#232323'
-            }, '');
+//         if (isC4) c4Element = rowDiv;
+//         if (isCurrentFirstNote) firstNoteElement = rowDiv;
 
-            noteDiv.dataset.idx = i;
-            noteDiv.tabIndex = 0;
+//         seq.forEach((noteObj, i) => {
+//             const noteMidi = Tone.Frequency(noteObj.note).toMidi();
+//             if (noteMidi !== midi) return;
+//             const x = noteObj.start * cellW, w = noteObj.dur * cellW;
 
-            noteDiv.onclick = (evt) => {
-                evt.stopPropagation();
-                this.innerContent.querySelectorAll('.roll-note').forEach(e => e.classList.remove('selected'));
-                noteDiv.classList.add('selected');
-                synthApp.selNote = i;
-                window.synthApp?.synth?.triggerAttackRelease(Tone.Frequency(midi, "midi").toNote(), 0.3, undefined, 0.9);
-            };
+//             const noteDiv = this._div({
+//                 position: 'absolute', left: x + 'px', width: w + 'px', height: '100%',
+//                 background: '#bb86fc', borderRadius: '4px', boxShadow: '0 2px 8px #0004',
+//                 opacity: noteObj.vel,
+//                 outline: synthApp.selNote === i ? '2px solid #03dac6' : '',
+//                 zIndex: 10, cursor: 'grab', display: 'flex',
+//                 alignItems: 'center', justifyContent: 'flex-end', paddingRight: '2px',
+//                 fontWeight: 'bold', color: '#232323'
+//             }, '');
 
-            noteDiv.onmousedown = (e) => {
-                if (e.button !== 0) return;
-                e.stopPropagation();
-                this.dragData = {
-                    i, startX: e.clientX, startY: e.clientY,
-                    origStart: noteObj.start, origMidi: midi
-                };
-                this.dragNoteIndex = i;
-                this.lastPreviewMidi = midi;
-                document.body.style.cursor = 'move';
-            };
+//             noteDiv.dataset.idx = i;
+//             noteDiv.tabIndex = 0;
 
-            noteDiv.className = 'roll-note';
-            gridCell.appendChild(noteDiv);
-        });
-    }
-    this.innerContent.style.width = `calc(48px + ${gridWidth}px)`;
+//             noteDiv.onclick = (evt) => {
+//                 evt.stopPropagation();
+//                 this.innerContent.querySelectorAll('.roll-note').forEach(e => e.classList.remove('selected'));
+//                 noteDiv.classList.add('selected');
+//                 synthApp.selNote = i;
+//                 window.synthApp?.synth?.triggerAttackRelease(Tone.Frequency(midi, "midi").toNote(), 0.3, undefined, 0.9);
+//             };
+
+//             noteDiv.onmousedown = (e) => {
+//                 if (e.button !== 0) return;
+//                 e.stopPropagation();
+//                 this.dragData = {
+//                     i, startX: e.clientX, startY: e.clientY,
+//                     origStart: noteObj.start, origMidi: midi
+//                 };
+//                 this.dragNoteIndex = i;
+//                 this.lastPreviewMidi = midi;
+//                 document.body.style.cursor = 'move';
+//             };
+
+//             noteDiv.className = 'roll-note';
+//             gridCell.appendChild(noteDiv);
+//         });
+//     }
+//     this.innerContent.style.width = `calc(48px + ${gridWidth}px)`;
 
 
     
@@ -883,211 +607,211 @@ const PianoRoll = {
      
 
 
-            // --- Scrolling Logic ---
-requestAnimationFrame(() => {
-    if (this.scrollContainer) {
-        const containerRect = this.scrollContainer.getBoundingClientRect();
-        const containerHeight = containerRect.height;
-        let targetElement = null;
-        if (seq.length > 0 && firstNoteElement) targetElement = firstNoteElement;
-        else if (c4Element) targetElement = c4Element;
-        if (targetElement) {
-            const targetRect = targetElement.getBoundingClientRect();
-            const scrollTopTarget = targetRect.top - containerRect.top - (containerHeight / 2) + (targetRect.height / 2) + this.scrollContainer.scrollTop;
-            this.scrollContainer.scrollTo({ top: scrollTopTarget, behavior: 'auto' });
-        }
-    }
-});
+//             // --- Scrolling Logic ---
+// requestAnimationFrame(() => {
+//     if (this.scrollContainer) {
+//         const containerRect = this.scrollContainer.getBoundingClientRect();
+//         const containerHeight = containerRect.height;
+//         let targetElement = null;
+//         if (seq.length > 0 && firstNoteElement) targetElement = firstNoteElement;
+//         else if (c4Element) targetElement = c4Element;
+//         if (targetElement) {
+//             const targetRect = targetElement.getBoundingClientRect();
+//             const scrollTopTarget = targetRect.top - containerRect.top - (containerHeight / 2) + (targetRect.height / 2) + this.scrollContainer.scrollTop;
+//             this.scrollContainer.scrollTo({ top: scrollTopTarget, behavior: 'auto' });
+//         }
+//     }
+// });
 
-// --- Setup Drag Listeners ---
-const onMove = (e) => {
-    if (!this.dragData || this.dragNoteIndex === null) return;
-    const currentSeq = synthApp.seq;
-    const note = currentSeq[this.dragNoteIndex];
-    const dx = (e.clientX - this.dragData.startX);
-    const dy = (e.clientY - this.dragData.startY);
-    let dt = dx / (40 * this.zoomX);
-    const currentQuantGrid = LoopManager.quantizeEnabled ? LoopManager.quantizeGrid : null;
-    let newStart = currentQuantGrid
-        ? Math.round((this.dragData.origStart + dt) / currentQuantGrid) * currentQuantGrid
-        : this.dragData.origStart + dt;
-    note.start = Math.max(0, Math.round(newStart * 1000) / 1000);
-    const dpitch = -Math.round(dy / (this.CELL_H * this.zoomY));
-    const newMidi = Math.max(this.MIDI_LOW, Math.min(this.MIDI_HIGH, this.dragData.origMidi + dpitch));
-    if (note.note !== Tone.Frequency(newMidi, "midi").toNote()) {
-        note.note = Tone.Frequency(newMidi, "midi").toNote();
-        if (this.lastPreviewMidi !== newMidi && window.synthApp?.synth) {
-            window.synthApp.synth.triggerAttackRelease(
-                Tone.Frequency(newMidi, "midi").toNote(), 0.3, undefined, 0.9
-            );
-            this.lastPreviewMidi = newMidi;
-        }
-    }
-    this.draw();
-};
+// // --- Setup Drag Listeners ---
+// const onMove = (e) => {
+//     if (!this.dragData || this.dragNoteIndex === null) return;
+//     const currentSeq = synthApp.seq;
+//     const note = currentSeq[this.dragNoteIndex];
+//     const dx = (e.clientX - this.dragData.startX);
+//     const dy = (e.clientY - this.dragData.startY);
+//     let dt = dx / (40 * this.zoomX);
+//     const currentQuantGrid = LoopManager.quantizeEnabled ? LoopManager.quantizeGrid : null;
+//     let newStart = currentQuantGrid
+//         ? Math.round((this.dragData.origStart + dt) / currentQuantGrid) * currentQuantGrid
+//         : this.dragData.origStart + dt;
+//     note.start = Math.max(0, Math.round(newStart * 1000) / 1000);
+//     const dpitch = -Math.round(dy / (this.CELL_H * this.zoomY));
+//     const newMidi = Math.max(this.MIDI_LOW, Math.min(this.MIDI_HIGH, this.dragData.origMidi + dpitch));
+//     if (note.note !== Tone.Frequency(newMidi, "midi").toNote()) {
+//         note.note = Tone.Frequency(newMidi, "midi").toNote();
+//         if (this.lastPreviewMidi !== newMidi && window.synthApp?.synth) {
+//             window.synthApp.synth.triggerAttackRelease(
+//                 Tone.Frequency(newMidi, "midi").toNote(), 0.3, undefined, 0.9
+//             );
+//             this.lastPreviewMidi = newMidi;
+//         }
+//     }
+//     this.draw();
+// };
 
-const onUp = () => {
-    this.dragData = null;
-    this.dragNoteIndex = null;
-    this.lastPreviewMidi = null;
-    document.body.style.cursor = '';
-};
+// const onUp = () => {
+//     this.dragData = null;
+//     this.dragNoteIndex = null;
+//     this.lastPreviewMidi = null;
+//     document.body.style.cursor = '';
+// };
 
-window.removeEventListener('mousemove', onMove);
-window.removeEventListener('mouseup', onUp);
-window.addEventListener('mousemove', onMove);
-window.addEventListener('mouseup', onUp);
+// window.removeEventListener('mousemove', onMove);
+// window.removeEventListener('mouseup', onUp);
+// window.addEventListener('mousemove', onMove);
+// window.addEventListener('mouseup', onUp);
 
-// --- Deselect on Empty Click ---
-this.innerContent.onclick = (e) => {
-    if (e.target.classList.contains('roll-note') || e.target.closest('.roll-note')) return;
-    synthApp.selNote = null;
-    this.innerContent.querySelectorAll('.roll-note').forEach(el => el.classList.remove('selected'));
-};
+// // --- Deselect on Empty Click ---
+// this.innerContent.onclick = (e) => {
+//     if (e.target.classList.contains('roll-note') || e.target.closest('.roll-note')) return;
+//     synthApp.selNote = null;
+//     this.innerContent.querySelectorAll('.roll-note').forEach(el => el.classList.remove('selected'));
+// };
 
 
-            // --- Playhead ---
-            if (synthApp.isPlaying) {
-                this._drawPlayhead(synthApp.currentTime || 0, cellW, cellH);
-                if (!this.transportInterval) {
-                    this.transportInterval = setInterval(() => {
-                        this._drawPlayhead(synthApp.currentTime || 0, cellW, cellH);
-                    }, 33); // ~30fps
-                }
-            } else if (this.transportInterval) {
-                clearInterval(this.transportInterval);
-                this.transportInterval = null;
-            }
-        },
+//             // --- Playhead ---
+//             if (synthApp.isPlaying) {
+//                 this._drawPlayhead(synthApp.currentTime || 0, cellW, cellH);
+//                 if (!this.transportInterval) {
+//                     this.transportInterval = setInterval(() => {
+//                         this._drawPlayhead(synthApp.currentTime || 0, cellW, cellH);
+//                     }, 33); // ~30fps
+//                 }
+//             } else if (this.transportInterval) {
+//                 clearInterval(this.transportInterval);
+//                 this.transportInterval = null;
+//             }
+//         },
 
-        /**
-         * Draws or updates the playhead position.
-         * @param {number} playTime - The current playback time in seconds.
-         * @param {number} cellW - The width of a time cell.
-         * @param {number} cellH - The height of a pitch cell.
-         */
-        _drawPlayhead(playTime, cellW, cellH) {
-            if (!this.innerContent) return; // Safety check
+//         /**
+//          * Draws or updates the playhead position.
+//          * @param {number} playTime - The current playback time in seconds.
+//          * @param {number} cellW - The width of a time cell.
+//          * @param {number} cellH - The height of a pitch cell.
+//          */
+//         _drawPlayhead(playTime, cellW, cellH) {
+//             if (!this.innerContent) return; // Safety check
 
-            // Find or create the playhead element within the scroll container
-            // We place it directly in the scrollContainer to cover the full height easily
-            let ph = this.scrollContainer.querySelector('.playhead');
-            if (!ph) {
-                ph = this._div({
-                    position: 'absolute',
-                    top: 0,
-                    // height will be set dynamically
-                    width: '3px',
-                    background: 'linear-gradient(to bottom, #bb86fc 70%, #03dac6 100%)',
-                    opacity: 0.9,
-                    zIndex: 99,
-                    pointerEvents: 'none'
-                });
-                ph.className = 'playhead';
-                this.scrollContainer.appendChild(ph); // Append to scroll container
-            }
+//             // Find or create the playhead element within the scroll container
+//             // We place it directly in the scrollContainer to cover the full height easily
+//             let ph = this.scrollContainer.querySelector('.playhead');
+//             if (!ph) {
+//                 ph = this._div({
+//                     position: 'absolute',
+//                     top: 0,
+//                     // height will be set dynamically
+//                     width: '3px',
+//                     background: 'linear-gradient(to bottom, #bb86fc 70%, #03dac6 100%)',
+//                     opacity: 0.9,
+//                     zIndex: 99,
+//                     pointerEvents: 'none'
+//                 });
+//                 ph.className = 'playhead';
+//                 this.scrollContainer.appendChild(ph); // Append to scroll container
+//             }
 
-            // Position the playhead
-            ph.style.left = (playTime * cellW + 48) + 'px'; // Offset by label column width
+//             // Position the playhead
+//             ph.style.left = (playTime * cellW + 48) + 'px'; // Offset by label column width
 
-            // Dynamically set height to match scroll content
-            const contentHeight = this.innerContent.scrollHeight || this.innerContent.offsetHeight;
-            if (contentHeight > 0) {
-                ph.style.height = contentHeight + 'px';
-            } else {
-                // Fallback if content height is not immediately available
-                ph.style.height = '100%';
-            }
-        },
+//             // Dynamically set height to match scroll content
+//             const contentHeight = this.innerContent.scrollHeight || this.innerContent.offsetHeight;
+//             if (contentHeight > 0) {
+//                 ph.style.height = contentHeight + 'px';
+//             } else {
+//                 // Fallback if content height is not immediately available
+//                 ph.style.height = '100%';
+//             }
+//         },
 
-        // --- Utility Functions ---
+//         // --- Utility Functions ---
 
-        /**
-         * Creates a div element with specified styles and optional text content.
-         * @param {Object} styleObj - CSS styles to apply.
-         * @param {string} [text] - Optional text content.
-         * @returns {HTMLDivElement} The created div element.
-         */
-        _div(styleObj, text) {
-            const d = document.createElement('div');
-            Object.assign(d.style, styleObj);
-            if (text !== undefined) d.textContent = text;
-            return d;
-        },
+//         /**
+//          * Creates a div element with specified styles and optional text content.
+//          * @param {Object} styleObj - CSS styles to apply.
+//          * @param {string} [text] - Optional text content.
+//          * @returns {HTMLDivElement} The created div element.
+//          */
+//         _div(styleObj, text) {
+//             const d = document.createElement('div');
+//             Object.assign(d.style, styleObj);
+//             if (text !== undefined) d.textContent = text;
+//             return d;
+//         },
 
-        /**
-         * Creates a styled button element.
-         * @param {string} txt - Button text.
-         * @param {Function} onClick - Click handler function.
-         * @returns {HTMLButtonElement} The created button element.
-         */
-        _btn(txt, onClick) {
-            const btn = document.createElement('button');
-            btn.textContent = txt;
-            Object.assign(btn.style, {
-                background: '#272733',
-                color: '#fff',
-                border: '1px solid #363645',
-                borderRadius: '5px',
-                padding: '3px 10px',
-                margin: '0 2px',
-                cursor: 'pointer',
-                fontSize: '13px',
-                fontWeight: 'bold',
-                outline: 'none',
-                transition: 'background 0.15s'
-            });
-            btn.onmouseover = () => btn.style.background = '#363645';
-            btn.onmouseout = () => btn.style.background = '#272733';
-            btn.onclick = onClick;
-            return btn;
-        },
+//         /**
+//          * Creates a styled button element.
+//          * @param {string} txt - Button text.
+//          * @param {Function} onClick - Click handler function.
+//          * @returns {HTMLButtonElement} The created button element.
+//          */
+//         _btn(txt, onClick) {
+//             const btn = document.createElement('button');
+//             btn.textContent = txt;
+//             Object.assign(btn.style, {
+//                 background: '#272733',
+//                 color: '#fff',
+//                 border: '1px solid #363645',
+//                 borderRadius: '5px',
+//                 padding: '3px 10px',
+//                 margin: '0 2px',
+//                 cursor: 'pointer',
+//                 fontSize: '13px',
+//                 fontWeight: 'bold',
+//                 outline: 'none',
+//                 transition: 'background 0.15s'
+//             });
+//             btn.onmouseover = () => btn.style.background = '#363645';
+//             btn.onmouseout = () => btn.style.background = '#272733';
+//             btn.onclick = onClick;
+//             return btn;
+//         },
 
-        /**
-         * Creates a styled label span element.
-         * @param {string} txt - Label text.
-         * @returns {HTMLSpanElement} The created span element.
-         */
-        _label(txt) {
-            const span = document.createElement('span');
-            span.textContent = txt;
-            Object.assign(span.style, {
-                margin: '0 4px',
-                color: '#aaa',
-                fontSize: '13px'
-            });
-            return span;
-        },
+//         /**
+//          * Creates a styled label span element.
+//          * @param {string} txt - Label text.
+//          * @returns {HTMLSpanElement} The created span element.
+//          */
+//         _label(txt) {
+//             const span = document.createElement('span');
+//             span.textContent = txt;
+//             Object.assign(span.style, {
+//                 margin: '0 4px',
+//                 color: '#aaa',
+//                 fontSize: '13px'
+//             });
+//             return span;
+//         },
 
-        /**
-         * Checks if a given MIDI note corresponds to a black key on a piano.
-         * @param {number} midi - The MIDI note number.
-         * @returns {boolean} True if it's a black key, false otherwise.
-         */
-        isBlackKey(midi) {
-            return [1, 3, 6, 8, 10].includes(midi % 12); // Semitone offsets for black keys
-        },
+//         /**
+//          * Checks if a given MIDI note corresponds to a black key on a piano.
+//          * @param {number} midi - The MIDI note number.
+//          * @returns {boolean} True if it's a black key, false otherwise.
+//          */
+//         isBlackKey(midi) {
+//             return [1, 3, 6, 8, 10].includes(midi % 12); // Semitone offsets for black keys
+//         },
 
-        /**
-         * Sets the horizontal zoom level and redraws.
-         * @param {number} val - The new zoom level.
-         */
-        setZoomX(val) {
-            this.zoomX = Math.min(this.maxZoomX, Math.max(this.minZoomX, val));
-            this.draw();
-        },
+//         /**
+//          * Sets the horizontal zoom level and redraws.
+//          * @param {number} val - The new zoom level.
+//          */
+//         setZoomX(val) {
+//             this.zoomX = Math.min(this.maxZoomX, Math.max(this.minZoomX, val));
+//             this.draw();
+//         },
 
-        /**
-         * Sets the vertical zoom level and redraws.
-         * @param {number} val - The new zoom level.
-         */
-        setZoomY(val) {
-            this.zoomY = Math.min(this.maxZoomY, Math.max(this.minZoomY, val));
-            this.draw();
-        }
-    };
+//         /**
+//          * Sets the vertical zoom level and redraws.
+//          * @param {number} val - The new zoom level.
+//          */
+//         setZoomY(val) {
+//             this.zoomY = Math.min(this.maxZoomY, Math.max(this.minZoomY, val));
+//             this.draw();
+//         }
+//     };
 
-    // ***END OF CHUNK 3***
+//     // ***END OF CHUNK 3***
 
 
 
