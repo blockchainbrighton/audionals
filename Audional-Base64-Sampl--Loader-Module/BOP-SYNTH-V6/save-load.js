@@ -1,3 +1,8 @@
+// save-load.js
+
+// FIX: Added the '.js' extension to the file path.
+import EnvelopeManager from "./envelope-manager.js"; 
+ 
  // --- save-load.js ---
  const SaveLoad = {
     version: '1.0',
@@ -187,18 +192,18 @@
 
         // Get state directly from the modules' own methods for robustness.
         const envelopeSettings = EnvelopeManager.getSettings();
-        const effectsState = EnhancedEffects.savePreset();
+        const effectsState = window.EnhancedEffects?.savePreset() || {}; // Use window scope as fallback
         
         const loopSettings = {
-            enabled: LoopManager.isLoopEnabled,
-            start: LoopManager.loopStart,
-            end: LoopManager.loopEnd,
-            quantize: LoopManager.quantizeEnabled,
-            grid: LoopManager.quantizeGrid,
-            swing: LoopManager.swingAmount,
+            enabled: window.LoopManager?.isLoopEnabled,
+            start: window.LoopManager?.loopStart,
+            end: window.LoopManager?.loopEnd,
+            quantize: window.LoopManager?.quantizeEnabled,
+            grid: window.LoopManager?.quantizeGrid,
+            swing: window.LoopManager?.swingAmount,
             tempo: {
-                original: LoopManager.originalTempo,
-                target: LoopManager.targetTempo
+                original: window.LoopManager?.originalTempo,
+                target: window.LoopManager?.targetTempo
             }
         };
         
@@ -287,19 +292,19 @@
             if (loadedData.e) EnvelopeManager.setSettings(loadedData.e);
 
             // 2. Restore Effects
-            if (loadedData.fx) EnhancedEffects.loadPreset({
+            if (loadedData.fx && window.EnhancedEffects) window.EnhancedEffects.loadPreset({
                 enabled: loadedData.fx.e,
                 parameters: loadedData.fx.p
             });
             
             // 3. Restore Loop Settings
-            if (loadedData.l) {
+            if (loadedData.l && window.LoopManager) {
                 const l = loadedData.l;
-                LoopManager.setLoopEnabled(l.enabled);
-                LoopManager.setLoopBounds(l.start, l.end);
-                LoopManager.setQuantization(l.quantize, l.grid);
-                LoopManager.setSwing(l.swing);
-                if (l.tempo) LoopManager.setTempoConversion(l.tempo.original, l.tempo.target);
+                window.LoopManager.setLoopEnabled(l.enabled);
+                window.LoopManager.setLoopBounds(l.start, l.end);
+                window.LoopManager.setQuantization(l.quantize, l.grid);
+                window.LoopManager.setSwing(l.swing);
+                if (l.tempo) window.LoopManager.setTempoConversion(l.tempo.original, l.tempo.target);
                 this._safeCall(window.LoopUI?.updateUI, 'loop UI update');
             }
 
@@ -421,5 +426,4 @@
     }
 };
 
-// ADD THIS LINE AT THE END OF THE FILE:
 export default SaveLoad;
