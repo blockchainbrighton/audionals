@@ -54,67 +54,118 @@ Welcome to the future of on-chain music creation! BOP is your all-in-one studio 
 5.  **Export for the Blockchain:**
     *   Once you are happy with your composition, use the **Save/Export** functionality to generate the file needed for on-chain inscription.
 
----
 
 ## For Developers
 
-BOP is a modern, client-side web application built with a focus on performance and simplicity, avoiding heavy frameworks to ensure a fast and responsive user experience.
+BOP has been architected not just as a standalone application, but as a modular **Web Audio Module (WAM)**. This makes it a reusable instrument that can be loaded into any WAM-compatible host, such as a web-based Digital Audio Workstation (DAW).
 
-### Project Goal
+### Technology Stack & Architecture
 
-The project aims to be the reference implementation for a "Foundational Tooling" for "The Bitcoin Audional Matrix". Its primary technical challenge is to provide a robust audio digital workstation (DAW) experience in the browser and serialize the user's creation (both synth patch data and note data) into a format suitable for Bitcoin inscription.
+*   **Plugin Standard:** The synth now adheres to the **Web Audio Modules 2 (WAM 2)** specification. This decouples the audio processing from the user interface, allowing for true modularity.
+*   **Audio Processor:** The core synthesis logic resides in a headless `AudioWorkletProcessor` (`bop-wam-processor.js`), ensuring that all audio processing runs in a dedicated, high-priority thread, separate from the main UI thread.
+*   **User Interface:** The GUI is a self-contained **Web Component** (`<bop-wam-gui>`) that can be dropped into any host application. It uses a Shadow DOM to prevent any style conflicts.
+*   **Audio Library:** The underlying sound generation is powered by **Tone.js**, which is dynamically loaded within the audio worklet.
 
-### Technology Stack
-
-*   **Frontend:** Vanilla HTML5, CSS3, and JavaScript (ES Modules).
-    *   **No Frameworks:** The project intentionally avoids frameworks like React, Vue, or Angular to maintain a minimal footprint and direct DOM control.
-*   **Audio Engine:** The **Web Audio API** is used for all synthesis, sequencing, and audio processing tasks. The architecture involves creating and connecting various `AudioNode`s (e.g., `OscillatorNode`, `BiquadFilterNode`, `GainNode`) to form the synthesizer's signal path.
-*   **Styling:** Modern CSS with custom properties (variables) for easy theming, Flexbox/Grid for layout, and thoughtful use of transitions and animations. It includes considerations for accessibility (`prefers-reduced-motion`, `prefers-contrast`).
-
-### Getting Started (Local Development)
-
-Because this project uses ES Modules, it must be served from a web server. You cannot run it by opening the `index.html` file directly from your filesystem.
-
-1.  **Clone the repository:**
-    ```bash
-    git clone https://github.com/your-username/BOP-SYNTH-V6.git
-    cd BOP-SYNTH-V6
-    ```
-
-2.  **Serve the directory:**
-    The easiest way is to use a simple local server. If you have Node.js installed, you can use `live-server`:
-    ```bash
-    # Install live-server globally (if you haven't already)
-    npm install -g live-server
-
-    # Run the server
-    live-server
-    ```
-    Alternatively, if you have Python 3 installed:
-    ```bash
-    python -m http.server
-    ```
-
-3.  **Open in browser:**
-    Navigate to the local address provided by your server (e.g., `http://127.0.0.1:8080` or `http://localhost:8000`).
+---
 
 ### Codebase Structure
 
-*   `BOP-V6.html`: The single HTML file containing the entire DOM structure for the application, including the synth panel, MIDI editor, keyboard, and all controls.
-*   `style.css`: A comprehensive stylesheet that defines the application's visual identity, layout, responsiveness, and component styles. It is well-organized into logical sections (Global, Tabs, Controls, Keyboard, etc.).
-*   `app.js` *(inferred)*: This is the heart of the application. It contains all the JavaScript logic for:
-    *   **Audio Context:** Initializing and managing the Web Audio API.
-    *   **Synth Engine:** A class or set of functions to create and control the audio nodes.
-    *   **UI Binding:** Event listeners for all sliders, buttons, and keyboard interactions.
-    *   **State Management:** Handling the current state of synth parameters, recorded notes, loop settings, and tempo.
-    *   **Sequencer/Transport:** Logic for recording, playback timing (`setInterval` or `requestAnimationFrame`), and looping.
-    *   **Piano Roll:** Rendering the note grid and handling user interactions for editing MIDI data.
-    *   **MIDI API:** Handling input from connected MIDI devices.
-    *   **Serialization:** Functions to save/load project state, likely converting the composition and patch to a JSON or other portable format.
+The project is now split between the standalone application shell and the reusable WAM components.
+
+*   **`app.js`**: The main script for the **standalone application**. It acts as a *host* environment that loads and controls the BOP synth module, and also manages non-synth components like the piano roll, transport, and recording logic.
+*   **`bop-wam-processor.js`**: **The core audio engine.** This is a headless `AudioWorkletProcessor` that contains all the Tone.js logic. It exposes a standardized API for parameter control, state management, and MIDI handling. **This is the "backend" of the synth.**
+*   **`bop-wam-gui.js`**: **The user interface module.** This script defines the `<bop-wam-gui>` custom HTML element. It renders all the knobs and sliders for the synth and communicates with its corresponding processor node. **This is the "frontend" of the synth.**
+*   **Utility Modules (`piano-roll.js`, `transport.js`, etc.)**: These are components used by the standalone `app.js` host to provide a complete music-making experience. They are not part of the core WAM plugin itself.
+*   **`BOP-V6.html` & `style.css`**: The HTML and CSS for the standalone application host.
+
+---
+
+### Integration Guide for 3rd-Party Apps (DAWs)
+
+To load the BOP Synth into your own web application or on-chain DAW, you will interact with the WAM components. Here is how the API works.
+
+#### 1. Loading the Synth
+
+Your host application must first load the processor and then instantiate the synth node.
+
+```javascript
+// In your host application (e.g., your on-chain DAW)
+
+// 1. Get the AudioContext
+const audioContext = new AudioContext();
+
+// 2. Add the BOP processor module to the audio worklet
+// The WAM SDK you use might abstract this.
+await audioContext.audioWorklet.addModule('./bop-wam-processor.js');
+
+// 3. Create an instance of the BOP Synth WAM node
+// A WAM SDK provides a helper function like `createWam`.
+const bopSynthNode = await createWam(audioContext, 'BopSynthV6');
+
+// 4. Connect the synth's output to your DAW's mixer or destination
+bopSynthNode.connect(audioContext.destination);
+```
+
+#### 2. The Comprehensive Control API
+
+The `bopSynthNode` instance exposes a rich, standardized API for control and automation.
+
+*   **Parameter Discovery (`getParameterInfo`)**: Your host can query the synth for all its available parameters. This is perfect for dynamically building UIs or automation lanes.
+    ```javascript
+    const params = await bopSynthNode.getParameterInfo();
+    console.log(params.voiceAttack); 
+    //-> { defaultValue: 0.01, minValue: 0.001, maxValue: 2, type: 'float' }
+    ```
+
+*   **Real-time Parameter Control (`setParamValue`)**: Change any parameter in real-time. This is what you would call from a UI slider or an automation track.
+    ```javascript
+    // Set reverb wetness to 50%
+    bopSynthNode.setParamValue('reverbWet', 0.5);
+    ```
+
+*   **MIDI Events (`scheduleEvents`)**: Send standard MIDI messages to the synth to play notes.
+    ```javascript
+    // Play Middle C (MIDI note 60) with velocity 100
+    const noteOnMessage = { type: 'midi', data: { bytes: [144, 60, 100] } };
+    bopSynthNode.scheduleEvents(noteOnMessage);
+    ```
+
+*   **State Management (`getState` / `setState`)**: Save and load the entire synth patch as a JSON object. This is essential for saving and loading projects in your DAW.
+    ```javascript
+    // Save the current sound as a patch
+    const myPatch = await bopSynthNode.getState();
+
+    // Later, load the patch back into the synth
+    await bopSynthNode.setState(myPatch);
+    ```
+
+#### 3. Displaying the GUI
+
+The synth's GUI is a self-contained Web Component.
+
+```javascript
+// In your host application...
+
+// 1. Import the GUI script
+import './bop-wam-gui.js';
+
+// 2. Create the GUI element
+const bopGui = document.createElement('bop-wam-gui');
+
+// 3. CRITICAL: Link the GUI to its audio processor node
+bopGui.wamNode = bopSynthNode;
+
+// 4. Append the GUI to your application's DOM
+document.querySelector('#daw-plugin-window').appendChild(bopGui);
+```
+
+Once linked, the GUI will automatically update its controls when you call `setState` on the node, and moving a slider on the GUI will automatically call `setParamValue` on the node. The two are kept in perfect sync.
+
+---
 
 ### Contributing
 
-Contributions are welcome! Whether you want to fix a bug, add a new feature, or improve the UI, please feel free to:
+Contributions are welcome! Whether you want to fix a bug, add a new feature to the synth engine, or improve the UI, please feel free to:
 
 1.  Fork the repository.
 2.  Create a new branch (`git checkout -b feature/my-new-feature`).
