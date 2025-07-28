@@ -1,5 +1,3 @@
-// save-load.js
-
 // FIX: Added the '.js' extension to the file path.
 import EnvelopeManager from "./envelope-manager.js"; 
  
@@ -64,31 +62,44 @@ import EnvelopeManager from "./envelope-manager.js";
         this.bindEvents();
     },
 
-    /** Adds the Save/Load UI elements to the DOM. */
+    /** Adds the Save/Load UI elements directly into the transport controls. */
     addUI() {
         const transportEl = document.getElementById('transport-controls');
         if (!transportEl) {
-            console.error('[SaveLoad] Transport controls not found');
+            console.error('[SaveLoad] Transport controls container not found');
             return;
         }
 
-        const saveLoadContainer = document.createElement('div');
-        saveLoadContainer.className = 'save-load-controls';
-        saveLoadContainer.style.cssText = `
-            display: flex; gap: 8px; margin-top: 10px;
-            padding-top: 10px; border-top: 1px solid #333;
-        `;
-        saveLoadContainer.innerHTML = `
-            <button id="saveBtn" class="transport-button save-button">
-                <span>💾</span>Save State
-            </button>
-            <button id="loadBtn" class="transport-button load-button">
-                <span>📁</span>Load State
-            </button>
-            <input type="file" id="loadFileInput" accept=".synthstate,.json" style="display: none;">
-            <div id="saveLoadStatus" class="save-load-status" style="display: none;"></div>
-        `;
-        transportEl.appendChild(saveLoadContainer);
+        // Create Save Button
+        const saveBtn = document.createElement('button');
+        saveBtn.id = 'saveBtn';
+        saveBtn.className = 'transport-button save-button';
+        saveBtn.innerHTML = '<span>💾</span>Save State';
+
+        // Create Load Button
+        const loadBtn = document.createElement('button');
+        loadBtn.id = 'loadBtn';
+        loadBtn.className = 'transport-button load-button';
+        loadBtn.innerHTML = '<span>📁</span>Load State';
+
+        // Create hidden File Input for loading
+        const loadFileInput = document.createElement('input');
+        loadFileInput.type = 'file';
+        loadFileInput.id = 'loadFileInput';
+        loadFileInput.accept = '.synthstate,.json';
+        loadFileInput.style.display = 'none';
+
+        // Create Status Message Display
+        const saveLoadStatus = document.createElement('div');
+        saveLoadStatus.id = 'saveLoadStatus';
+        saveLoadStatus.className = 'save-load-status';
+        saveLoadStatus.style.display = 'none';
+
+        // Append all new elements directly to the main transport container
+        transportEl.appendChild(saveBtn);
+        transportEl.appendChild(loadBtn);
+        transportEl.appendChild(loadFileInput); // This is hidden
+        transportEl.appendChild(saveLoadStatus);
     },
 
     /** Binds event listeners for UI and keyboard shortcuts. */
