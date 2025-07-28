@@ -5,6 +5,8 @@ import EnvelopeManager from './envelope-manager.js'; // Only import what's in th
 import AudioSafety from './audio-safety.js';       // Import this from its own file
 import LoopManager from './loop-manager.js'; 
 import PianoRoll from './piano-roll.js'; 
+import { EnhancedRecorder } from './enhanced-recorder.js';
+import { EnhancedEffects } from './enhanced-effects.js';
 
 
 const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
@@ -24,244 +26,244 @@ import(TONE_ORDINALS_URL)
 function boot() {
     console.log('[Audionauts Enhanced] Booting enhanced app after Tone.js load...');
 
-    // --- from enhanced-effects.js ---
-const EnhancedEffects = {
-    effects: {
-        reverb: null, delay: null, filter: null,
-        chorus: null, distortion: null, phaser: null,
-        tremolo: null, vibrato: null, compressor: null, bitCrusher: null,
-        filterLFO: null, tremoloLFO: null, vibratoLFO: null, phaserLFO: null,
-        inputGain: null, outputGain: null, dryWetMixer: null, mixer: null,
-        chain1: null, chain2: null, chain3: null
-    },
-    enabled: {
-        reverb: true, delay: true, filter: true,
-        chorus: false, distortion: false, phaser: false,
-        tremolo: false, vibrato: false, compressor: true, bitCrusher: false,
-        filterLFO: false, tremoloLFO: false, vibratoLFO: false, phaserLFO: false
-    },
-    defaults: {
-        reverb: { decay: 2, wet: 0.3, roomSize: 0.7 },
-        delay: { delayTime: 0.25, feedback: 0.3, wet: 0.2 },
-        filter: { frequency: 5000, Q: 1, type: 'lowpass' },
-        chorus: { frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0.5 },
-        distortion: { distortion: 0.4, wet: 0.3 },
-        phaser: { frequency: 0.5, octaves: 3, baseFrequency: 350, wet: 0.5 },
-        tremolo: { frequency: 10, depth: 0.5, wet: 0.7 },
-        vibrato: { frequency: 5, depth: 0.1, wet: 0.8 },
-        compressor: { threshold: -24, ratio: 12, attack: 0.003, release: 0.25 },
-        bitCrusher: { bits: 4, wet: 0.3 },
-        filterLFO: { frequency: 0.5, min: 200, max: 2000, depth: 0.5 },
-        tremoloLFO: { frequency: 4, depth: 0.3 },
-        vibratoLFO: { frequency: 6, depth: 0.02 },
-        phaserLFO: { frequency: 0.3, depth: 0.5 }
-    },
+//     // --- from enhanced-effects.js ---
+// const EnhancedEffects = {
+//     effects: {
+//         reverb: null, delay: null, filter: null,
+//         chorus: null, distortion: null, phaser: null,
+//         tremolo: null, vibrato: null, compressor: null, bitCrusher: null,
+//         filterLFO: null, tremoloLFO: null, vibratoLFO: null, phaserLFO: null,
+//         inputGain: null, outputGain: null, dryWetMixer: null, mixer: null,
+//         chain1: null, chain2: null, chain3: null
+//     },
+//     enabled: {
+//         reverb: true, delay: true, filter: true,
+//         chorus: false, distortion: false, phaser: false,
+//         tremolo: false, vibrato: false, compressor: true, bitCrusher: false,
+//         filterLFO: false, tremoloLFO: false, vibratoLFO: false, phaserLFO: false
+//     },
+//     defaults: {
+//         reverb: { decay: 2, wet: 0.3, roomSize: 0.7 },
+//         delay: { delayTime: 0.25, feedback: 0.3, wet: 0.2 },
+//         filter: { frequency: 5000, Q: 1, type: 'lowpass' },
+//         chorus: { frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0.5 },
+//         distortion: { distortion: 0.4, wet: 0.3 },
+//         phaser: { frequency: 0.5, octaves: 3, baseFrequency: 350, wet: 0.5 },
+//         tremolo: { frequency: 10, depth: 0.5, wet: 0.7 },
+//         vibrato: { frequency: 5, depth: 0.1, wet: 0.8 },
+//         compressor: { threshold: -24, ratio: 12, attack: 0.003, release: 0.25 },
+//         bitCrusher: { bits: 4, wet: 0.3 },
+//         filterLFO: { frequency: 0.5, min: 200, max: 2000, depth: 0.5 },
+//         tremoloLFO: { frequency: 4, depth: 0.3 },
+//         vibratoLFO: { frequency: 6, depth: 0.02 },
+//         phaserLFO: { frequency: 0.3, depth: 0.5 }
+//     },
 
-    init() {
-        console.log('[EnhancedEffects] Initializing enhanced effects system...');
-        this.createEffects();
-        this.setupAudioChain();
-        this.applyDefaultSettings();
-        console.log('[EnhancedEffects] Enhanced effects system initialized');
-    },
+//     init() {
+//         console.log('[EnhancedEffects] Initializing enhanced effects system...');
+//         this.createEffects();
+//         this.setupAudioChain();
+//         this.applyDefaultSettings();
+//         console.log('[EnhancedEffects] Enhanced effects system initialized');
+//     },
 
-    createEffects() {
-        const d = this.defaults, e = this.effects;
-        e.inputGain = new Tone.Gain(1);
-        e.outputGain = new Tone.Gain(0.7);
-        e.reverb     = new Tone.Reverb(d.reverb);
-        e.delay      = new Tone.FeedbackDelay(d.delay);
-        e.filter     = new Tone.Filter(d.filter);
-        e.chorus     = new Tone.Chorus(d.chorus);
-        e.distortion = new Tone.Distortion(d.distortion);
-        e.phaser     = new Tone.Phaser(d.phaser);
-        e.tremolo    = new Tone.Tremolo({ frequency: d.tremolo.frequency, depth: 0 });
-        e.vibrato    = new Tone.Vibrato({ frequency: d.vibrato.frequency, depth: 0 });
-        e.compressor = new Tone.Compressor(d.compressor);
-        e.bitCrusher = new Tone.BitCrusher(d.bitCrusher);
+//     createEffects() {
+//         const d = this.defaults, e = this.effects;
+//         e.inputGain = new Tone.Gain(1);
+//         e.outputGain = new Tone.Gain(0.7);
+//         e.reverb     = new Tone.Reverb(d.reverb);
+//         e.delay      = new Tone.FeedbackDelay(d.delay);
+//         e.filter     = new Tone.Filter(d.filter);
+//         e.chorus     = new Tone.Chorus(d.chorus);
+//         e.distortion = new Tone.Distortion(d.distortion);
+//         e.phaser     = new Tone.Phaser(d.phaser);
+//         e.tremolo    = new Tone.Tremolo({ frequency: d.tremolo.frequency, depth: 0 });
+//         e.vibrato    = new Tone.Vibrato({ frequency: d.vibrato.frequency, depth: 0 });
+//         e.compressor = new Tone.Compressor(d.compressor);
+//         e.bitCrusher = new Tone.BitCrusher(d.bitCrusher);
 
-        // LFOs
-        e.filterLFO   = new Tone.LFO({ frequency: d.filterLFO.frequency, min: d.filterLFO.min, max: d.filterLFO.max, amplitude: 0 });
-        e.tremoloLFO  = new Tone.LFO({ frequency: d.tremoloLFO.frequency, min: 0, max: 1, amplitude: 0 });
-        e.vibratoLFO  = new Tone.LFO({ frequency: d.vibratoLFO.frequency, min: -d.vibratoLFO.depth, max: d.vibratoLFO.depth, amplitude: 0 });
-        e.phaserLFO   = new Tone.LFO({ frequency: d.phaserLFO.frequency, min: 0.1, max: 10, amplitude: 0 });
-    },
+//         // LFOs
+//         e.filterLFO   = new Tone.LFO({ frequency: d.filterLFO.frequency, min: d.filterLFO.min, max: d.filterLFO.max, amplitude: 0 });
+//         e.tremoloLFO  = new Tone.LFO({ frequency: d.tremoloLFO.frequency, min: 0, max: 1, amplitude: 0 });
+//         e.vibratoLFO  = new Tone.LFO({ frequency: d.vibratoLFO.frequency, min: -d.vibratoLFO.depth, max: d.vibratoLFO.depth, amplitude: 0 });
+//         e.phaserLFO   = new Tone.LFO({ frequency: d.phaserLFO.frequency, min: 0.1, max: 10, amplitude: 0 });
+//     },
 
-    setupAudioChain() {
-        const e = this.effects;
-        // Distortion -> Compressor
-        e.chain1 = new Tone.Gain();
-        e.inputGain.connect(e.distortion);
-        e.distortion.connect(e.compressor);
-        e.compressor.connect(e.chain1);
+//     setupAudioChain() {
+//         const e = this.effects;
+//         // Distortion -> Compressor
+//         e.chain1 = new Tone.Gain();
+//         e.inputGain.connect(e.distortion);
+//         e.distortion.connect(e.compressor);
+//         e.compressor.connect(e.chain1);
 
-        // Chorus -> Phaser -> Tremolo -> Vibrato
-        e.chain2 = new Tone.Gain();
-        e.inputGain.connect(e.chorus);
-        e.chorus.connect(e.phaser);
-        e.phaser.connect(e.tremolo);
-        e.tremolo.connect(e.vibrato);
-        e.vibrato.connect(e.chain2);
+//         // Chorus -> Phaser -> Tremolo -> Vibrato
+//         e.chain2 = new Tone.Gain();
+//         e.inputGain.connect(e.chorus);
+//         e.chorus.connect(e.phaser);
+//         e.phaser.connect(e.tremolo);
+//         e.tremolo.connect(e.vibrato);
+//         e.vibrato.connect(e.chain2);
 
-        // BitCrusher
-        e.chain3 = new Tone.Gain();
-        e.inputGain.connect(e.bitCrusher);
-        e.bitCrusher.connect(e.chain3);
+//         // BitCrusher
+//         e.chain3 = new Tone.Gain();
+//         e.inputGain.connect(e.bitCrusher);
+//         e.bitCrusher.connect(e.chain3);
 
-        // Mixer
-        const mixer = new Tone.Gain(0.33);
-        e.chain1.connect(mixer);
-        e.chain2.connect(mixer);
-        e.chain3.connect(mixer);
-        e.mixer = mixer;
+//         // Mixer
+//         const mixer = new Tone.Gain(0.33);
+//         e.chain1.connect(mixer);
+//         e.chain2.connect(mixer);
+//         e.chain3.connect(mixer);
+//         e.mixer = mixer;
 
-        // Mixer -> Filter -> Delay -> Reverb -> Output
-        mixer.connect(e.filter);
-        e.filter.connect(e.delay);
-        e.delay.connect(e.reverb);
-        e.reverb.connect(e.outputGain);
-    },
+//         // Mixer -> Filter -> Delay -> Reverb -> Output
+//         mixer.connect(e.filter);
+//         e.filter.connect(e.delay);
+//         e.delay.connect(e.reverb);
+//         e.reverb.connect(e.outputGain);
+//     },
 
-    applyDefaultSettings() {
-        console.log('[EnhancedEffects] Applying default settings...');
-        this.setupLFOConnections();
-        Object.keys(this.defaults).forEach(name => {
-            if (this.effects[name]) {
-                this.setEffectParameters(name, this.defaults[name]);
-                this.toggleEffect(name, this.enabled[name]);
-            } else {
-                console.warn(`[EnhancedEffects] Effect ${name} not found during default settings application.`);
-            }
-        });
-        console.log('[EnhancedEffects] Default settings applied.');
-    },
+//     applyDefaultSettings() {
+//         console.log('[EnhancedEffects] Applying default settings...');
+//         this.setupLFOConnections();
+//         Object.keys(this.defaults).forEach(name => {
+//             if (this.effects[name]) {
+//                 this.setEffectParameters(name, this.defaults[name]);
+//                 this.toggleEffect(name, this.enabled[name]);
+//             } else {
+//                 console.warn(`[EnhancedEffects] Effect ${name} not found during default settings application.`);
+//             }
+//         });
+//         console.log('[EnhancedEffects] Default settings applied.');
+//     },
 
-    setupLFOConnections() {
-        const e = this.effects;
-        console.log('[EnhancedEffects] Setting up LFO connections...');
-        e.filterLFO?.connect(e.filter?.frequency);
-        e.tremoloLFO?.connect(e.tremolo?.depth);
-        e.vibratoLFO?.connect(e.vibrato?.depth);
-        e.phaserLFO?.connect(e.phaser?.frequency);
-        console.log('[EnhancedEffects] LFO connections established.');
-    },
+//     setupLFOConnections() {
+//         const e = this.effects;
+//         console.log('[EnhancedEffects] Setting up LFO connections...');
+//         e.filterLFO?.connect(e.filter?.frequency);
+//         e.tremoloLFO?.connect(e.tremolo?.depth);
+//         e.vibratoLFO?.connect(e.vibrato?.depth);
+//         e.phaserLFO?.connect(e.phaser?.frequency);
+//         console.log('[EnhancedEffects] LFO connections established.');
+//     },
 
-    getInputNode() { return this.effects.inputGain; },
-    getOutputNode() { return this.effects.outputGain; },
+//     getInputNode() { return this.effects.inputGain; },
+//     getOutputNode() { return this.effects.outputGain; },
 
-    toggleEffect(effectName, enabled) {
-        const effect = this.effects[effectName];
-        if (!effect) {
-            console.warn(`[EnhancedEffects] Cannot toggle ${effectName}, effect not found.`);
-            return;
-        }
-        this.enabled[effectName] = enabled;
-        console.log(`[EnhancedEffects] Toggling ${effectName} to ${enabled}`);
-        if (effect.wet !== undefined) {
-            effect.wet.value = enabled ? (this.defaults[effectName]?.wet ?? 0.5) : 0;
-        } else if (effectName.endsWith('LFO')) {
-            const targetAmplitude = enabled ? (this.defaults[effectName]?.depth ?? 0.5) : 0;
-            effect.amplitude.rampTo(targetAmplitude, 0.01);
-            if (enabled && effect.start) effect.start();
-        } else if ('bypass' in effect) {
-            effect.bypass = !enabled;
-        }
-        // For always-in-chain effects: no toggle, control via params only.
-        console.log(`[EnhancedEffects] ${effectName} ${enabled ? 'enabled' : 'disabled'}`);
-    },
+//     toggleEffect(effectName, enabled) {
+//         const effect = this.effects[effectName];
+//         if (!effect) {
+//             console.warn(`[EnhancedEffects] Cannot toggle ${effectName}, effect not found.`);
+//             return;
+//         }
+//         this.enabled[effectName] = enabled;
+//         console.log(`[EnhancedEffects] Toggling ${effectName} to ${enabled}`);
+//         if (effect.wet !== undefined) {
+//             effect.wet.value = enabled ? (this.defaults[effectName]?.wet ?? 0.5) : 0;
+//         } else if (effectName.endsWith('LFO')) {
+//             const targetAmplitude = enabled ? (this.defaults[effectName]?.depth ?? 0.5) : 0;
+//             effect.amplitude.rampTo(targetAmplitude, 0.01);
+//             if (enabled && effect.start) effect.start();
+//         } else if ('bypass' in effect) {
+//             effect.bypass = !enabled;
+//         }
+//         // For always-in-chain effects: no toggle, control via params only.
+//         console.log(`[EnhancedEffects] ${effectName} ${enabled ? 'enabled' : 'disabled'}`);
+//     },
 
-    setEffectParameters(effectName, params) {
-        const effect = this.effects[effectName];
-        if (!effect) {
-            console.warn(`[EnhancedEffects] Cannot set parameters for ${effectName}, effect not found.`);
-            return;
-        }
-        for (const [k, v] of Object.entries(params)) {
-            try {
-                if (effectName.endsWith('LFO')) {
-                    if (k === 'depth') {
-                        if (this.defaults[effectName]) this.defaults[effectName][k] = v;
-                    } else if (k === 'min' || k === 'max') {
-                        effect[k] = v;
-                        if (this.defaults[effectName]) this.defaults[effectName][k] = v;
-                    } else {
-                        if (effect[k]?.value !== undefined) effect[k].value = v;
-                        else effect[k] = v;
-                        if (this.defaults[effectName]) this.defaults[effectName][k] = v;
-                    }
-                } else if ((effectName === 'tremolo' || effectName === 'vibrato') && k === 'depth') {
-                    if (effect[k]?.value !== undefined) effect[k].value = v;
-                    else effect[k] = v;
-                    if (this.defaults[effectName]) this.defaults[effectName][k] = v;
-                } else {
-                    if (effect[k] !== undefined) {
-                        if (effect[k]?.value !== undefined) effect[k].value = v;
-                        else effect[k] = v;
-                        if (this.defaults[effectName]) this.defaults[effectName][k] = v;
-                    } else {
-                        console.warn(`[EnhancedEffects] Parameter ${k} not found on effect ${effectName}`);
-                    }
-                }
-            } catch (err) {
-                console.warn(`[EnhancedEffects] Could not set ${k} on ${effectName}:`, err);
-            }
-        }
-    },
+//     setEffectParameters(effectName, params) {
+//         const effect = this.effects[effectName];
+//         if (!effect) {
+//             console.warn(`[EnhancedEffects] Cannot set parameters for ${effectName}, effect not found.`);
+//             return;
+//         }
+//         for (const [k, v] of Object.entries(params)) {
+//             try {
+//                 if (effectName.endsWith('LFO')) {
+//                     if (k === 'depth') {
+//                         if (this.defaults[effectName]) this.defaults[effectName][k] = v;
+//                     } else if (k === 'min' || k === 'max') {
+//                         effect[k] = v;
+//                         if (this.defaults[effectName]) this.defaults[effectName][k] = v;
+//                     } else {
+//                         if (effect[k]?.value !== undefined) effect[k].value = v;
+//                         else effect[k] = v;
+//                         if (this.defaults[effectName]) this.defaults[effectName][k] = v;
+//                     }
+//                 } else if ((effectName === 'tremolo' || effectName === 'vibrato') && k === 'depth') {
+//                     if (effect[k]?.value !== undefined) effect[k].value = v;
+//                     else effect[k] = v;
+//                     if (this.defaults[effectName]) this.defaults[effectName][k] = v;
+//                 } else {
+//                     if (effect[k] !== undefined) {
+//                         if (effect[k]?.value !== undefined) effect[k].value = v;
+//                         else effect[k] = v;
+//                         if (this.defaults[effectName]) this.defaults[effectName][k] = v;
+//                     } else {
+//                         console.warn(`[EnhancedEffects] Parameter ${k} not found on effect ${effectName}`);
+//                     }
+//                 }
+//             } catch (err) {
+//                 console.warn(`[EnhancedEffects] Could not set ${k} on ${effectName}:`, err);
+//             }
+//         }
+//     },
 
-    // API setters
-    setReverb(p)     { this.setEffectParameters('reverb',     p); },
-    setDelay(p)      { this.setEffectParameters('delay',      p); },
-    setFilter(p)     { this.setEffectParameters('filter',     p); },
-    setChorus(p)     { this.setEffectParameters('chorus',     p); },
-    setDistortion(p) { this.setEffectParameters('distortion', p); },
-    setPhaser(p)     { this.setEffectParameters('phaser',     p); },
-    setTremolo(p)    { this.setEffectParameters('tremolo',    p); },
-    setVibrato(p)    { this.setEffectParameters('vibrato',    p); },
-    setCompressor(p) { this.setEffectParameters('compressor', p); },
-    setBitCrusher(p) { this.setEffectParameters('bitCrusher', p); },
-    setFilterLFO(p)   { this.setEffectParameters('filterLFO',   p); },
-    setTremoloLFO(p)  { this.setEffectParameters('tremoloLFO',  p); },
-    setVibratoLFO(p)  { this.setEffectParameters('vibratoLFO',  p); },
-    setPhaserLFO(p)   { this.setEffectParameters('phaserLFO',   p); },
+//     // API setters
+//     setReverb(p)     { this.setEffectParameters('reverb',     p); },
+//     setDelay(p)      { this.setEffectParameters('delay',      p); },
+//     setFilter(p)     { this.setEffectParameters('filter',     p); },
+//     setChorus(p)     { this.setEffectParameters('chorus',     p); },
+//     setDistortion(p) { this.setEffectParameters('distortion', p); },
+//     setPhaser(p)     { this.setEffectParameters('phaser',     p); },
+//     setTremolo(p)    { this.setEffectParameters('tremolo',    p); },
+//     setVibrato(p)    { this.setEffectParameters('vibrato',    p); },
+//     setCompressor(p) { this.setEffectParameters('compressor', p); },
+//     setBitCrusher(p) { this.setEffectParameters('bitCrusher', p); },
+//     setFilterLFO(p)   { this.setEffectParameters('filterLFO',   p); },
+//     setTremoloLFO(p)  { this.setEffectParameters('tremoloLFO',  p); },
+//     setVibratoLFO(p)  { this.setEffectParameters('vibratoLFO',  p); },
+//     setPhaserLFO(p)   { this.setEffectParameters('phaserLFO',   p); },
 
-    setMasterVolume(vol) {
-        if (this.effects.outputGain) {
-            const clampedVol = Math.max(0, Math.min(1, vol));
-            this.effects.outputGain.gain.value = clampedVol;
-        }
-    },
+//     setMasterVolume(vol) {
+//         if (this.effects.outputGain) {
+//             const clampedVol = Math.max(0, Math.min(1, vol));
+//             this.effects.outputGain.gain.value = clampedVol;
+//         }
+//     },
 
-    savePreset() {
-        const snap = (fx, def) =>
-            Object.fromEntries(Object.keys(def).map(key => [key, fx[key]?.value ?? fx[key]]));
-        return {
-            enabled: { ...this.enabled },
-            parameters: Object.fromEntries(
-                Object.entries(this.defaults).map(([k, def]) =>
-                    [k, this.effects[k] ? snap(this.effects[k], def) : {}]
-                )
-            )
-        };
-    },
+//     savePreset() {
+//         const snap = (fx, def) =>
+//             Object.fromEntries(Object.keys(def).map(key => [key, fx[key]?.value ?? fx[key]]));
+//         return {
+//             enabled: { ...this.enabled },
+//             parameters: Object.fromEntries(
+//                 Object.entries(this.defaults).map(([k, def]) =>
+//                     [k, this.effects[k] ? snap(this.effects[k], def) : {}]
+//                 )
+//             )
+//         };
+//     },
 
-    loadPreset(preset) {
-        if (!preset) {
-            console.warn('[EnhancedEffects] No preset provided to load.');
-            return;
-        }
-        if (preset.enabled)
-            Object.entries(preset.enabled).forEach(([k, v]) => this.toggleEffect(k, v));
-        if (preset.parameters)
-            Object.entries(preset.parameters).forEach(([k, v]) => this.setEffectParameters(k, v));
-    },
+//     loadPreset(preset) {
+//         if (!preset) {
+//             console.warn('[EnhancedEffects] No preset provided to load.');
+//             return;
+//         }
+//         if (preset.enabled)
+//             Object.entries(preset.enabled).forEach(([k, v]) => this.toggleEffect(k, v));
+//         if (preset.parameters)
+//             Object.entries(preset.parameters).forEach(([k, v]) => this.setEffectParameters(k, v));
+//     },
 
-    getEffectsList() { return Object.keys(this.defaults); },
-    getEffectState(effectName) { return { enabled: this.enabled[effectName], parameters: this.defaults[effectName] || {} }; },
+//     getEffectsList() { return Object.keys(this.defaults); },
+//     getEffectState(effectName) { return { enabled: this.enabled[effectName], parameters: this.defaults[effectName] || {} }; },
 
-    dispose() {
-        Object.values(this.effects).forEach(e => e?.dispose?.());
-    }
-};
+//     dispose() {
+//         Object.values(this.effects).forEach(e => e?.dispose?.());
+//     }
+// };
 
     
    
@@ -358,676 +360,13 @@ const Keyboard = {
     }
 };
 
-// // --- from piano-roll.js ---
-// const PianoRoll = {
-//     MIDI_LOW: 21,
-//     MIDI_HIGH: 108,
-//     zoomX: 1,
-//     zoomY: 1,
-//     minZoomX: 0.25,
-//     maxZoomX: 4,
-//     minZoomY: 0.5,
-//     maxZoomY: 2.5,
-//     CELL_H: 18,
-//     transportInterval: null,
-//     dragData: null,
-//     dragNoteIndex: null,
-//     lastPreviewMidi: null,
 
-//     init() {
-//         const grid = this.rollGrid = document.getElementById('rollGrid');
-//         if (!grid) return;
-
-//         grid.innerHTML = '';
-//         Object.assign(grid.style, {
-//             position: 'relative',
-//             background: '#181a1b',
-//             width: '100%',
-//             height: '60vh',
-//             display: 'flex',
-//             flexDirection: 'column',
-//             fontFamily: 'Segoe UI, Arial, sans-serif',
-//             fontSize: '14px',
-//             userSelect: 'none',
-//             overflow: 'hidden'
-//         });
-
-//         // Controls Bar
-//         const bar = this._div({
-//             display: 'flex',
-//             gap: '10px',
-//             alignItems: 'center',
-//             background: '#212126',
-//             borderBottom: '2px solid #29292d',
-//             padding: '7px 10px',
-//             position: 'sticky',
-//             top: 0,
-//             zIndex: 30,
-//             minHeight: '32px'
-//         });
-//         bar.append(
-//             this._label('Zoom X:'),
-//             this._btn('-', () => this.setZoomX(this.zoomX / 1.3)),
-//             this._btn('+', () => this.setZoomX(this.zoomX * 1.3)),
-//             this._label('Zoom Y:'),
-//             this._btn('–', () => this.setZoomY(this.zoomY / 1.15)),
-//             this._btn('∣∣', () => this.setZoomY(this.zoomY * 1.15))
-//         );
-//         grid.appendChild(bar);
-
-//         this.pitchCount = this.MIDI_HIGH - this.MIDI_LOW + 1;
-
-//         // Scrollable Container
-//         this.scrollContainer = this._div({
-//             display: 'flex',
-//             flexGrow: 1,
-//             overflowX: 'auto',
-//             overflowY: 'auto',
-//             minWidth: 0,
-//             minHeight: 0,
-//             position: 'relative',
-//             background: 'transparent'
-//         });
-//         grid.appendChild(this.scrollContainer);
-
-//         // Main Content Area
-//         this.innerContent = this._div({
-//             display: 'flex',
-//             flexDirection: 'column',
-//             width: '100%',
-//             minHeight: '100%',
-//             position: 'relative'
-//         });
-//         this.scrollContainer.appendChild(this.innerContent);
-
-//         // Keyboard Shortcut Listener
-//         if (!this._keyListener) {
-//             this._keyListener = (e) => {
-//                 if ((e.key === "Delete" || e.key === "Backspace") &&
-//                     typeof synthApp.selNote === "number" && synthApp.selNote >= 0) {
-//                     synthApp.seq.splice(synthApp.selNote, 1);
-//                     synthApp.selNote = null;
-//                     this.draw();
-//                 }
-//             };
-//             document.addEventListener("keydown", this._keyListener);
-//         }
-//         this.draw();
-//     },
-
-
-//   // *** END OF CHUNK 2***
-
-
-
-
-//   // *** START OF CHUNK 3***
-//   draw() {
-//     const seq = synthApp.seq || [];
-//     const quantGrid = LoopManager.quantizeEnabled ? LoopManager.quantizeGrid : null;
-//     const timeMax = Math.max(16, ...seq.map(o => o.start + o.dur));
-//     const gridTimeCount = quantGrid
-//         ? Math.ceil(timeMax / quantGrid) * quantGrid
-//         : Math.ceil(timeMax / 0.25) * 0.25;
-//     const cellW = 40 * this.zoomX;
-//     const cellH = this.CELL_H * this.zoomY;
-//     this.innerContent.innerHTML = '';
-//     const gridWidth = cellW * gridTimeCount;
-//     let firstNoteElement = null, c4Element = null, firstNoteMidi = null;
-
-//     if (seq.length > 0 && seq[0]?.note) {
-//         try { firstNoteMidi = Tone.Frequency(seq[0].note).toMidi(); }
-//         catch (e) {
-//             console.warn("Error parsing first note for scroll:", seq[0].note, e);
-//             firstNoteMidi = null;
-//         }
-//     }
-
-//     for (let midi = this.MIDI_HIGH; midi >= this.MIDI_LOW; midi--) {
-//         const isC4 = midi === 60, isCurrentFirstNote = midi === firstNoteMidi, row = this.MIDI_HIGH - midi;
-
-//         const rowDiv = this._div({
-//             display: 'flex',
-//             height: cellH + 'px',
-//             minHeight: cellH + 'px',
-//             position: 'relative'
-//         });
-
-//         const labelCell = this._div({
-//             width: '48px', minWidth: '48px', height: '100%',
-//             display: 'flex', alignItems: 'center', justifyContent: 'flex-end', paddingRight: '8px',
-//             fontWeight: (midi % 12 === 0) ? 'bold' : 'normal',
-//             color: (midi % 12 === 0) ? '#fff' : '#aaa',
-//             background: this.isBlackKey(midi) ? '#18181c' : '#232323',
-//             borderBottom: '1px solid #23232a',
-//             fontSize: '13px', userSelect: 'none', zIndex: 2, borderRight: '2px solid #282828'
-//         }, window.Tone ? Tone.Frequency(midi, "midi").toNote() : midi);
-
-//         const gridCell = this._div({
-//             position: 'relative',
-//             flexGrow: 1,
-//             height: '100%',
-//             minHeight: '100%',
-//             background: 'transparent'
-//         });
-
-//         const hLine = this._div({
-//             position: 'absolute', left: 0, right: 0, top: 0, height: '1px',
-//             background: (midi % 12 === 0) ? '#444' : '#292b2e',
-//             opacity: (midi % 12 === 0) ? 0.55 : 0.22,
-//             pointerEvents: 'none', zIndex: 1
-//         });
-//         gridCell.appendChild(hLine);
-
-//         if (this.isBlackKey(midi)) {
-//             const bg = this._div({
-//                 position: 'absolute', left: 0, top: 0, width: '100%', height: '100%',
-//                 background: '#1c1c22', opacity: 0.46, zIndex: 0, pointerEvents: 'none'
-//             });
-//             gridCell.appendChild(bg);
-//         }
-
-//         if (quantGrid) {
-//             for (let t = 0; t <= gridTimeCount; t += quantGrid) {
-//                 const isBar = (Math.round(t / 4) * 4 === t);
-//                 const vLine = this._div({
-//                     position: 'absolute', top: 0, bottom: 0, left: (t * cellW) + 'px',
-//                     width: isBar ? '2px' : '1px',
-//                     background: isBar ? '#444' : '#292b2e',
-//                     opacity: isBar ? 0.6 : 0.22,
-//                     pointerEvents: 'none', zIndex: 1
-//                 });
-//                 gridCell.appendChild(vLine);
-
-//                 if (isBar && t !== 0 && midi === this.MIDI_HIGH) {
-//                     const labelTop = this._div({
-//                         position: 'absolute', top: '-18px', left: (t * cellW) + 2 + 'px',
-//                         fontSize: '12px', color: '#555', zIndex: 10, pointerEvents: 'none'
-//                     }, `Bar ${Math.floor(t / 4) + 1}`);
-//                     this.innerContent.appendChild(labelTop);
-//                 }
-//             }
-//         }
-
-//         rowDiv.appendChild(labelCell);
-//         rowDiv.appendChild(gridCell);
-//         this.innerContent.appendChild(rowDiv);
-
-//         if (isC4) c4Element = rowDiv;
-//         if (isCurrentFirstNote) firstNoteElement = rowDiv;
-
-//         seq.forEach((noteObj, i) => {
-//             const noteMidi = Tone.Frequency(noteObj.note).toMidi();
-//             if (noteMidi !== midi) return;
-//             const x = noteObj.start * cellW, w = noteObj.dur * cellW;
-
-//             const noteDiv = this._div({
-//                 position: 'absolute', left: x + 'px', width: w + 'px', height: '100%',
-//                 background: '#bb86fc', borderRadius: '4px', boxShadow: '0 2px 8px #0004',
-//                 opacity: noteObj.vel,
-//                 outline: synthApp.selNote === i ? '2px solid #03dac6' : '',
-//                 zIndex: 10, cursor: 'grab', display: 'flex',
-//                 alignItems: 'center', justifyContent: 'flex-end', paddingRight: '2px',
-//                 fontWeight: 'bold', color: '#232323'
-//             }, '');
-
-//             noteDiv.dataset.idx = i;
-//             noteDiv.tabIndex = 0;
-
-//             noteDiv.onclick = (evt) => {
-//                 evt.stopPropagation();
-//                 this.innerContent.querySelectorAll('.roll-note').forEach(e => e.classList.remove('selected'));
-//                 noteDiv.classList.add('selected');
-//                 synthApp.selNote = i;
-//                 window.synthApp?.synth?.triggerAttackRelease(Tone.Frequency(midi, "midi").toNote(), 0.3, undefined, 0.9);
-//             };
-
-//             noteDiv.onmousedown = (e) => {
-//                 if (e.button !== 0) return;
-//                 e.stopPropagation();
-//                 this.dragData = {
-//                     i, startX: e.clientX, startY: e.clientY,
-//                     origStart: noteObj.start, origMidi: midi
-//                 };
-//                 this.dragNoteIndex = i;
-//                 this.lastPreviewMidi = midi;
-//                 document.body.style.cursor = 'move';
-//             };
-
-//             noteDiv.className = 'roll-note';
-//             gridCell.appendChild(noteDiv);
-//         });
-//     }
-//     this.innerContent.style.width = `calc(48px + ${gridWidth}px)`;
-
-
-    
-       
-
-     
-
-
-//             // --- Scrolling Logic ---
-// requestAnimationFrame(() => {
-//     if (this.scrollContainer) {
-//         const containerRect = this.scrollContainer.getBoundingClientRect();
-//         const containerHeight = containerRect.height;
-//         let targetElement = null;
-//         if (seq.length > 0 && firstNoteElement) targetElement = firstNoteElement;
-//         else if (c4Element) targetElement = c4Element;
-//         if (targetElement) {
-//             const targetRect = targetElement.getBoundingClientRect();
-//             const scrollTopTarget = targetRect.top - containerRect.top - (containerHeight / 2) + (targetRect.height / 2) + this.scrollContainer.scrollTop;
-//             this.scrollContainer.scrollTo({ top: scrollTopTarget, behavior: 'auto' });
-//         }
-//     }
-// });
-
-// // --- Setup Drag Listeners ---
-// const onMove = (e) => {
-//     if (!this.dragData || this.dragNoteIndex === null) return;
-//     const currentSeq = synthApp.seq;
-//     const note = currentSeq[this.dragNoteIndex];
-//     const dx = (e.clientX - this.dragData.startX);
-//     const dy = (e.clientY - this.dragData.startY);
-//     let dt = dx / (40 * this.zoomX);
-//     const currentQuantGrid = LoopManager.quantizeEnabled ? LoopManager.quantizeGrid : null;
-//     let newStart = currentQuantGrid
-//         ? Math.round((this.dragData.origStart + dt) / currentQuantGrid) * currentQuantGrid
-//         : this.dragData.origStart + dt;
-//     note.start = Math.max(0, Math.round(newStart * 1000) / 1000);
-//     const dpitch = -Math.round(dy / (this.CELL_H * this.zoomY));
-//     const newMidi = Math.max(this.MIDI_LOW, Math.min(this.MIDI_HIGH, this.dragData.origMidi + dpitch));
-//     if (note.note !== Tone.Frequency(newMidi, "midi").toNote()) {
-//         note.note = Tone.Frequency(newMidi, "midi").toNote();
-//         if (this.lastPreviewMidi !== newMidi && window.synthApp?.synth) {
-//             window.synthApp.synth.triggerAttackRelease(
-//                 Tone.Frequency(newMidi, "midi").toNote(), 0.3, undefined, 0.9
-//             );
-//             this.lastPreviewMidi = newMidi;
-//         }
-//     }
-//     this.draw();
-// };
-
-// const onUp = () => {
-//     this.dragData = null;
-//     this.dragNoteIndex = null;
-//     this.lastPreviewMidi = null;
-//     document.body.style.cursor = '';
-// };
-
-// window.removeEventListener('mousemove', onMove);
-// window.removeEventListener('mouseup', onUp);
-// window.addEventListener('mousemove', onMove);
-// window.addEventListener('mouseup', onUp);
-
-// // --- Deselect on Empty Click ---
-// this.innerContent.onclick = (e) => {
-//     if (e.target.classList.contains('roll-note') || e.target.closest('.roll-note')) return;
-//     synthApp.selNote = null;
-//     this.innerContent.querySelectorAll('.roll-note').forEach(el => el.classList.remove('selected'));
-// };
-
-
-//             // --- Playhead ---
-//             if (synthApp.isPlaying) {
-//                 this._drawPlayhead(synthApp.currentTime || 0, cellW, cellH);
-//                 if (!this.transportInterval) {
-//                     this.transportInterval = setInterval(() => {
-//                         this._drawPlayhead(synthApp.currentTime || 0, cellW, cellH);
-//                     }, 33); // ~30fps
-//                 }
-//             } else if (this.transportInterval) {
-//                 clearInterval(this.transportInterval);
-//                 this.transportInterval = null;
-//             }
-//         },
-
-//         /**
-//          * Draws or updates the playhead position.
-//          * @param {number} playTime - The current playback time in seconds.
-//          * @param {number} cellW - The width of a time cell.
-//          * @param {number} cellH - The height of a pitch cell.
-//          */
-//         _drawPlayhead(playTime, cellW, cellH) {
-//             if (!this.innerContent) return; // Safety check
-
-//             // Find or create the playhead element within the scroll container
-//             // We place it directly in the scrollContainer to cover the full height easily
-//             let ph = this.scrollContainer.querySelector('.playhead');
-//             if (!ph) {
-//                 ph = this._div({
-//                     position: 'absolute',
-//                     top: 0,
-//                     // height will be set dynamically
-//                     width: '3px',
-//                     background: 'linear-gradient(to bottom, #bb86fc 70%, #03dac6 100%)',
-//                     opacity: 0.9,
-//                     zIndex: 99,
-//                     pointerEvents: 'none'
-//                 });
-//                 ph.className = 'playhead';
-//                 this.scrollContainer.appendChild(ph); // Append to scroll container
-//             }
-
-//             // Position the playhead
-//             ph.style.left = (playTime * cellW + 48) + 'px'; // Offset by label column width
-
-//             // Dynamically set height to match scroll content
-//             const contentHeight = this.innerContent.scrollHeight || this.innerContent.offsetHeight;
-//             if (contentHeight > 0) {
-//                 ph.style.height = contentHeight + 'px';
-//             } else {
-//                 // Fallback if content height is not immediately available
-//                 ph.style.height = '100%';
-//             }
-//         },
-
-//         // --- Utility Functions ---
-
-//         /**
-//          * Creates a div element with specified styles and optional text content.
-//          * @param {Object} styleObj - CSS styles to apply.
-//          * @param {string} [text] - Optional text content.
-//          * @returns {HTMLDivElement} The created div element.
-//          */
-//         _div(styleObj, text) {
-//             const d = document.createElement('div');
-//             Object.assign(d.style, styleObj);
-//             if (text !== undefined) d.textContent = text;
-//             return d;
-//         },
-
-//         /**
-//          * Creates a styled button element.
-//          * @param {string} txt - Button text.
-//          * @param {Function} onClick - Click handler function.
-//          * @returns {HTMLButtonElement} The created button element.
-//          */
-//         _btn(txt, onClick) {
-//             const btn = document.createElement('button');
-//             btn.textContent = txt;
-//             Object.assign(btn.style, {
-//                 background: '#272733',
-//                 color: '#fff',
-//                 border: '1px solid #363645',
-//                 borderRadius: '5px',
-//                 padding: '3px 10px',
-//                 margin: '0 2px',
-//                 cursor: 'pointer',
-//                 fontSize: '13px',
-//                 fontWeight: 'bold',
-//                 outline: 'none',
-//                 transition: 'background 0.15s'
-//             });
-//             btn.onmouseover = () => btn.style.background = '#363645';
-//             btn.onmouseout = () => btn.style.background = '#272733';
-//             btn.onclick = onClick;
-//             return btn;
-//         },
-
-//         /**
-//          * Creates a styled label span element.
-//          * @param {string} txt - Label text.
-//          * @returns {HTMLSpanElement} The created span element.
-//          */
-//         _label(txt) {
-//             const span = document.createElement('span');
-//             span.textContent = txt;
-//             Object.assign(span.style, {
-//                 margin: '0 4px',
-//                 color: '#aaa',
-//                 fontSize: '13px'
-//             });
-//             return span;
-//         },
-
-//         /**
-//          * Checks if a given MIDI note corresponds to a black key on a piano.
-//          * @param {number} midi - The MIDI note number.
-//          * @returns {boolean} True if it's a black key, false otherwise.
-//          */
-//         isBlackKey(midi) {
-//             return [1, 3, 6, 8, 10].includes(midi % 12); // Semitone offsets for black keys
-//         },
-
-//         /**
-//          * Sets the horizontal zoom level and redraws.
-//          * @param {number} val - The new zoom level.
-//          */
-//         setZoomX(val) {
-//             this.zoomX = Math.min(this.maxZoomX, Math.max(this.minZoomX, val));
-//             this.draw();
-//         },
-
-//         /**
-//          * Sets the vertical zoom level and redraws.
-//          * @param {number} val - The new zoom level.
-//          */
-//         setZoomY(val) {
-//             this.zoomY = Math.min(this.maxZoomY, Math.max(this.minZoomY, val));
-//             this.draw();
-//         }
-//     };
-
-//     // ***END OF CHUNK 3***
 
 
 
     // *** START OF CHUNK 4***
     
-   // --- from enhanced-recorder.js ---
-const EnhancedRecorder = {
-    buttons: {},
-    init() {
-        this.dom = [
-            'waveform', 'detune', 'detuneVal', 'bpm',
-            'recordBtn', 'stopBtn', 'playBtn', 'clearBtn',
-            'recInd', 'recStat'
-        ].reduce((o, id) => (o[id] = document.getElementById(id), o), {});
-        this.initAudio();
-        this.bindUI();
-        LoopManager.init();
-    },
-
-    onRecord() {
-        if (synthApp.isArmed) {
-            synthApp.isArmed = false;
-            this.buttons.record?.classList.remove('armed');
-            this.setStatus('Inactive');
-        } else if (!synthApp.isRec && !synthApp.isPlaying) {
-            synthApp.isArmed = true;
-            this.buttons.record?.classList.add('armed');
-            this.setStatus('Record ready');
-            this.buttons.stop && (this.buttons.stop.disabled = false);
-        }
-    },
-
-    onStop() { this.stop(); },
-    onPlay() { !synthApp.isPlaying && synthApp.seq.length && this.playSeq(); },
-    onClear() { this.clearSeq(); },
-
-    setStatus(txt) {
-        this.dom.recStat && (this.dom.recStat.textContent = 'Status: ' + txt);
-        this.dom.recInd?.classList.toggle('active', txt.match(/Recording|Playing/));
-        this.buttons.record?.classList.remove('armed');
-    },
-
-    async initAudio() {
-        let a = synthApp;
-        try {
-            EnhancedEffects.init();
-            EnhancedEffects.getOutputNode().connect(AudioSafety.getInputNode());
-            a.synth = new Tone.PolySynth(Tone.Synth, {
-                envelope: EnvelopeManager.createEnvelope(),
-                volume: -6
-            });
-            a.synth.connect(EnhancedEffects.getInputNode());
-            Object.assign(a, {
-                filter: EnhancedEffects.effects.filter,
-                reverb: EnhancedEffects.effects.reverb,
-                delay: EnhancedEffects.effects.delay,
-                enhancedEffects: EnhancedEffects
-            });
-            this.dom.bpm && (Tone.Transport.bpm.value = +this.dom.bpm.value);
-            this.setOsc();
-            this.setDetune();
-            console.log('[EnhancedRecorder] Enhanced audio system initialized successfully');
-        } catch (err) {
-            console.error('[EnhancedRecorder] Enhanced audio failed:', err);
-            a.reverb = new Tone.Reverb({ decay: 2, wet: 0.3 }).toDestination();
-            a.delay = new Tone.FeedbackDelay({ delayTime: 0.25, feedback: 0.3, wet: 0.2 }).toDestination();
-            a.filter = new Tone.Filter(5000, "lowpass").connect(a.reverb).connect(a.delay);
-            a.synth = new Tone.PolySynth(Tone.Synth).connect(a.filter);
-            this.dom.bpm && (Tone.Transport.bpm.value = +this.dom.bpm.value);
-            this.setOsc();
-            this.setDetune();
-        }
-    },
-
-    setOsc() {
-        if (synthApp.synth && this.dom.waveform)
-            synthApp.synth.set({ oscillator: { type: this.dom.waveform.value } });
-    },
-
-    setDetune() {
-        if (this.dom.detune && this.dom.detuneVal && synthApp.synth) {
-            this.dom.detuneVal.textContent = this.dom.detune.value;
-            synthApp.synth.set({ detune: +this.dom.detune.value });
-        }
-    },
-
-    bindUI() {
-        const d = this.dom;
-        d.waveform && (d.waveform.onchange = () => this.setOsc());
-        d.detune   && (d.detune.oninput   = () => this.setDetune());
-        d.bpm      && (d.bpm.onchange     = () => window.Tone && (Tone.Transport.bpm.value = +d.bpm.value));
-
-        // Transport
-        d.recordBtn && (d.recordBtn.onclick = () => {
-            synthApp.isArmed
-                ? (synthApp.isArmed = 0, d.recordBtn.classList.remove('armed'), d.recStat.textContent = 'Status: Inactive')
-                : (!synthApp.isRec && !synthApp.isPlaying && (synthApp.isArmed = 1, d.recordBtn.classList.add('armed'), d.recStat.textContent = 'Status: Record ready', d.stopBtn && (d.stopBtn.disabled = 0)));
-        });
-        d.stopBtn   && (d.stopBtn.onclick   = () => this.stop());
-        d.playBtn   && (d.playBtn.onclick   = () => !synthApp.isPlaying && synthApp.seq.length && this.playSeq());
-        d.clearBtn  && (d.clearBtn.onclick  = () => this.clearSeq());
-    },
-
-    playNote(note) {
-        if (!synthApp.synth) return;
-        if (!AudioSafety.canPlayNote()) return console.warn(`[EnhancedRecorder] Cannot play note ${note}: voice limit reached`);
-
-        const noteId = note + '_' + Date.now();
-        AudioSafety.addVoice(noteId);
-        synthApp.activeNoteIds ||= new Map();
-        synthApp.activeNoteIds.set(note, noteId);
-        synthApp.activeNotes.add(note);
-        Keyboard.updateKeyVisual(note, 1);
-
-        if (synthApp.isArmed && !synthApp.isRec) this.startRec();
-        if (synthApp.isRec) {
-            const now = Tone.now();
-            synthApp.seq.push({ note, start: now - synthApp.recStart, dur: 0, vel: 0.8 });
-        }
-        synthApp.synth.triggerAttack(note, undefined, 0.8);
-    },
-
-    releaseNote(note) {
-        if (!synthApp.synth) return;
-        if (synthApp.activeNoteIds?.has(note)) {
-            AudioSafety.removeVoice(synthApp.activeNoteIds.get(note));
-            synthApp.activeNoteIds.delete(note);
-        }
-        synthApp.activeNotes.delete(note);
-        Keyboard.updateKeyVisual(note, 0);
-        if (synthApp.isRec) {
-            const now = Tone.now();
-            let n = [...synthApp.seq].reverse().find(o => o.note === note && o.dur === 0);
-            n && (n.dur = now - synthApp.recStart - n.start);
-        }
-        try { synthApp.synth.triggerRelease(note); }
-        catch (err) { console.warn(`[EnhancedRecorder] Error releasing note ${note}:`, err); }
-    },
-
-    startRec() {
-        synthApp.isRec = 1; synthApp.isArmed = 0;
-        synthApp.recStart = Tone.now();
-        this.dom.recInd?.classList.add('active');
-        this.dom.recStat && (this.dom.recStat.textContent = 'Status: Recording...');
-        this.dom.recordBtn?.classList.remove('armed');
-        this.dom.stopBtn && (this.dom.stopBtn.disabled = 0);
-    },
-
-    stop() {
-        if (synthApp.isPlaying) {
-            Tone.Transport.stop(); Tone.Transport.cancel();
-            synthApp.events.forEach(clearTimeout);
-            synthApp.events = [];
-            synthApp.isPlaying = 0;
-        }
-        LoopManager.isCurrentlyLooping?.() && LoopManager.stopLoop?.();
-        synthApp.isRec = synthApp.isArmed = 0;
-        synthApp.activeNotes.forEach(n => {
-            synthApp.synth.triggerRelease(n);
-            Keyboard.updateKeyVisual(n, 0)
-        });
-        synthApp.activeNotes.clear();
-        this.dom.recStat && (this.dom.recStat.textContent = 'Status: Stopped');
-        this.dom.recInd?.classList.remove('active');
-        this.dom.recordBtn?.classList.remove('armed');
-        this.dom.stopBtn && (this.dom.stopBtn.disabled = 1);
-        this.dom.playBtn && (this.dom.playBtn.disabled = !synthApp.seq.length);
-    },
-
-    playSeq() {
-        if (!synthApp.seq.length || synthApp.isPlaying) return;
-        synthApp.isPlaying = 1;
-        this.dom.recStat && (this.dom.recStat.textContent = 'Status: Playing...');
-        this.dom.recInd?.classList.add('active');
-        this.dom.stopBtn && (this.dom.stopBtn.disabled = 0);
-
-        if (LoopManager.isLoopEnabled) {
-            this.dom.recStat && (this.dom.recStat.textContent = 'Status: Looping...');
-            LoopManager.startLoop(synthApp.seq);
-        } else {
-            Tone.Transport.cancel();
-            synthApp.seq.forEach(o => o.dur > 0 &&
-                synthApp.events.push(Tone.Transport.schedule(
-                    t => synthApp.synth.triggerAttackRelease(o.note, o.dur, t, o.vel), o.start)));
-            Tone.Transport.start();
-            let last = synthApp.seq.reduce((a, b) => a.start + a.dur > b.start + b.dur ? a : b);
-            Tone.Transport.schedule(() => this.stop(), last.start + last.dur);
-        }
-    },
-
-    clearSeq() {
-        synthApp.seq = []; this.stop();
-        this.dom.playBtn && (this.dom.playBtn.disabled = 1);
-        this.dom.recStat && (this.dom.recStat.textContent = 'Status: Cleared');
-        PianoRoll.draw();
-    },
-
-    getEffectsInstance() { return synthApp.enhancedEffects || EnhancedEffects; },
-    toggleEffect(effectName, enabled) { this.getEffectsInstance()?.toggleEffect(effectName, enabled); },
-    setEffectParameter(effectName, parameter, value) {
-        const fx = this.getEffectsInstance();
-        fx && fx.setEffectParameters(effectName, { [parameter]: value });
-    },
-    saveEffectsPreset() { return this.getEffectsInstance()?.savePreset(); },
-    loadEffectsPreset(preset) { this.getEffectsInstance()?.loadPreset(preset); },
-
-    dispose() {
-        this.getEffectsInstance()?.dispose?.();
-        synthApp.synth?.dispose?.();
-        console.log('[EnhancedRecorder] Audio system disposed');
-    }
-};
-
-
-
-
+  
 
 
     
