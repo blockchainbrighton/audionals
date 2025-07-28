@@ -33,6 +33,7 @@ window.synthApp = {
     events: [],
     selNote: null,
     synth: null, 
+    recorder: EnhancedRecorder, // Make the recorder globally accessible
 };
 
 let Tone;
@@ -50,7 +51,6 @@ import(TONE_ORDINALS_URL)
 
 // --- Show Overlay and Wait for User Audio Start ---
 function showAudioPrompt() {
-    // Create overlay
     const overlay = document.createElement('div');
     overlay.id = 'audio-prompt';
     overlay.style = `
@@ -76,7 +76,7 @@ function showAudioPrompt() {
             return;
         }
         overlay.remove();
-        appInit(); // Only now, start the app proper
+        appInit();
     };
 }
 
@@ -84,16 +84,15 @@ function showAudioPrompt() {
 function appInit() {
     console.log('[BOP App Host] DOMContentLoaded, initializing all modules...');
     try {
-        // 1. Instantiate the audio engine.
         const synthEngine = new SynthEngine(Tone);
         window.synthApp.synth = synthEngine;
         console.log('[BOP App Host] SynthEngine instantiated and is ready.');
 
-        // 2. Initialize all UI and logic modules in order.
+        // Initialize all UI and logic modules in order.
         EnhancedControls.init(); 
         Keyboard.init();
-        Transport.init();
-        EnhancedRecorder.init();
+        Transport.init(); // This will initialize the recorder via registerButtons
+        // EnhancedRecorder.init(); // <-- THIS LINE IS REMOVED. IT IS THE FIX.
         MidiControl.init();
         LoopManager.init();
         LoopUI.init();
@@ -105,13 +104,11 @@ function appInit() {
         console.error('[BOP App Host] A fatal error occurred during module initialization:', e);
     }
 
-    // 3. Attach all window-level and document-level event listeners.
     setupGlobalEventHandlers();
 }
 
-// --- Event Handler Setup ---
+// --- Event Handler Setup (Unchanged) ---
 function setupGlobalEventHandlers() {
-    // Tab switching
     document.querySelectorAll('.tab-button').forEach(btn => {
         btn.onclick = () => {
             document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
@@ -126,13 +123,11 @@ function setupGlobalEventHandlers() {
         };
     });
 
-    // Redraw keyboard on window resize
     window.onresize = () => {
         try { Keyboard.draw(); } 
         catch (e) { console.error('[BOP App Host] Error in Keyboard.draw (resize):', e); }
     };
 
-    // Keyboard shortcuts for effects
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey || e.metaKey) {
             const keyMap = { '1': 'reverb', '2': 'delay', '3': 'chorus', '4': 'distortion', '5': 'filter' };
@@ -143,7 +138,6 @@ function setupGlobalEventHandlers() {
         }
     });
 
-    // Visual feedback for LFOs
     setInterval(updateLFOVisuals, 100);
 }
 

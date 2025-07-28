@@ -27,7 +27,6 @@ const SaveLoad = {
             return;
         }
 
-        // Avoid re-adding elements if init is called more than once
         if (document.getElementById('saveBtn')) return;
 
         transportEl.insertAdjacentHTML('beforeend', `
@@ -65,15 +64,11 @@ const SaveLoad = {
         }
     },
 
-    /**
-     * Gathers all necessary data from other modules into a single serializable object.
-     */
     captureState() {
         if (!window.synthApp.synth) {
             throw new Error("Synth Engine not ready.");
         }
         
-        // Use the getPatch method from SynthEngine for all audio parameters
         const synthPatch = window.synthApp.synth.getPatch();
 
         return {
@@ -109,9 +104,6 @@ const SaveLoad = {
         event.target.value = '';
     },
 
-    /**
-     * Applies a loaded state object to all relevant application modules.
-     */
     loadState(jsonString) {
         try {
             console.log('[SaveLoad] Starting load operation...');
@@ -121,13 +113,9 @@ const SaveLoad = {
                 throw new Error('Invalid or unsupported state file format.');
             }
             
-            // 1. Restore the synthesizer patch
             window.synthApp.synth.setPatch(state.patch);
-
-            // 2. Restore the note sequence
             window.synthApp.seq = state.sequence || [];
             
-            // 3. Restore loop settings
             if (state.loop) {
                 LoopManager.setLoopEnabled(state.loop.enabled);
                 LoopManager.setLoopBounds(state.loop.start, state.loop.end);
@@ -135,14 +123,11 @@ const SaveLoad = {
                 LoopManager.setSwing(state.loop.swing || 0);
             }
 
-            // 4. Restore UI state
             if (state.ui) {
                 window.synthApp.curOct = state.ui.currentOctave || 4;
             }
 
-            // 5. Refresh all UIs to reflect the new state
             this.refreshAllUIs();
-
             this.showStatus('State loaded!', 'success');
 
         } catch (error) {
@@ -152,13 +137,19 @@ const SaveLoad = {
     },
     
     refreshAllUIs() {
-        // We need a way to tell EnhancedControls to update its sliders from the synth state.
-        // For now, we manually refresh what we can.
-        // A more robust solution would be for EnhancedControls to have an `updateFromSynth()` method.
+        console.log('[SaveLoad] Refreshing all UIs...');
         
         LoopUI.updateUI();
         Keyboard.draw();
         PianoRoll.draw();
+
+        // --- THIS IS THE FIX ---
+        // Tell the EnhancedRecorder to update the transport buttons based on the new state.
+        if (window.synthApp && window.synthApp.recorder) {
+            console.log('[SaveLoad] Triggering transport button state update.');
+            window.synthApp.recorder.updateButtonStates();
+        }
+        // --- END OF FIX ---
 
         const octaveLabel = document.getElementById('octaveLabel');
         if (octaveLabel) {
@@ -167,8 +158,6 @@ const SaveLoad = {
         
         console.log('[SaveLoad] All UIs refreshed.');
     },
-    
-    // --- Helper Methods ---
     
     downloadFile(content, filename) {
         const blob = new Blob([content], { type: 'application/json' });

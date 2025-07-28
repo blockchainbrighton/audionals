@@ -1,88 +1,27 @@
 /**
  * @file EnhancedRecorder.js
- * @description Manages MIDI recording, sequence management, and transport controls.
- * Refactored as a singleton object to match the application architecture.
+ * @description Manages MIDI recording, sequence management, and transport UI state.
+ * Refactored for clarity and to be controlled by other modules.
  */
 
-// Import other modules it needs to communicate with directly
 import Keyboard from './keyboard.js';
 import PianoRoll from './PianoRoll.js';
-// --- FIX 1: Import LoopManager to access loop settings ---
-import LoopManager from './LoopManager.js'; 
+import LoopManager from './LoopManager.js';
 
 const EnhancedRecorder = {
-    // --- Properties ---
-    dom: {}, // To hold references to DOM elements
-
-    // --- Initialization ---
-    init() {
-        // Find all necessary DOM elements once
-        const elementIds = [
-            'waveform', 'detune', 'detuneVal', 'bpm',
-            'recordBtn', 'stopBtn', 'playBtn', 'clearBtn',
-            'recInd', 'recStat'
-        ];
-        elementIds.forEach(id => {
-            this.dom[id] = document.getElementById(id);
-        });
-
-        // Bind UI element events to our methods
-        this.bindUI();
-
-        // Synchronize the synth with the initial UI state
-        this.syncSynthToUI();
-        
-        console.log('[EnhancedRecorder] Initialized successfully.');
-    },
+    isRecording: false,
+    isPlaying: false,
+    isArmed: false,
+    recStartTime: 0,
+    buttons: {}, // To hold references to transport buttons
 
     /**
-     * Sets initial synth parameters based on the UI's default values.
+     * This method is now called by `transport.js` after it creates the buttons.
+     * It stores the button references for later use.
      */
-    syncSynthToUI() {
-        if (!window.synthApp.synth) return;
-        
-        if (this.dom.bpm && window.Tone.Transport) {
-            window.Tone.Transport.bpm.value = parseFloat(this.dom.bpm.value);
-        }
-
-        this.setOsc();
-        this.setDetune();
-    },
-
-    /**
-     * Attaches event listeners to the transport and parameter controls.
-     */
-    bindUI() {
-        if (this.dom.waveform) this.dom.waveform.onchange = () => this.setOsc();
-        if (this.dom.detune) this.dom.detune.oninput = () => this.setDetune();
-        if (this.dom.bpm) {
-            this.dom.bpm.onchange = (e) => {
-                if (window.Tone && window.Tone.Transport) {
-                    window.Tone.Transport.bpm.value = parseFloat(e.target.value);
-                }
-            };
-        }
-
-        if (this.dom.recordBtn) this.dom.recordBtn.onclick = () => this.onRecord();
-        if (this.dom.stopBtn) this.dom.stopBtn.onclick = () => this.stop();
-        if (this.dom.playBtn) this.dom.playBtn.onclick = () => this.playSeq();
-        if (this.dom.clearBtn) this.dom.clearBtn.onclick = () => this.clearSeq();
-    },
-
-    // --- Synth Parameter Control ---
-    setOsc() {
-        const type = this.dom.waveform ? this.dom.waveform.value : 'sine';
-        if (window.synthApp.synth) {
-            window.synthApp.synth.setParameter('oscillator.type', type);
-        }
-    },
-    
-    setDetune() {
-        const value = this.dom.detune ? parseFloat(this.dom.detune.value) : 0;
-        if (this.dom.detuneVal) this.dom.detuneVal.textContent = value;
-        if (window.synthApp.synth) {
-            window.synthApp.synth.setParameter('oscillator.detune', value);
-        }
+    registerButtons(buttonRefs) {
+        this.buttons = buttonRefs;
+        this.updateButtonStates(); // Set the initial state correctly.
     },
 
     // --- Note Handling (Public API for Keyboard/MIDI) ---
@@ -92,12 +31,12 @@ const EnhancedRecorder = {
         window.synthApp.activeNotes.add(note);
         Keyboard.updateKeyVisual(note, true);
 
-        if (window.synthApp.isArmed && !window.synthApp.isRec) {
-            this.startRec();
+        if (this.isArmed && !this.isRecording) {
+            this.startRecording();
         }
 
-        if (window.synthApp.isRec) {
-            const time = window.Tone.now() - window.synthApp.recStart;
+        if (this.isRecording) {
+            const time = window.Tone.now() - this.recStartTime;
             const noteId = `${note}_${time}`;
             window.synthApp.activeNoteIds.set(note, noteId);
             window.synthApp.seq.push({ id: noteId, note, start: time, dur: 0, vel: 0.8 });
@@ -112,11 +51,11 @@ const EnhancedRecorder = {
         window.synthApp.activeNotes.delete(note);
         Keyboard.updateKeyVisual(note, false);
 
-        if (window.synthApp.isRec) {
+        if (this.isRecording) {
             const noteId = window.synthApp.activeNoteIds.get(note);
             const noteObject = window.synthApp.seq.find(n => n.id === noteId);
             if (noteObject) {
-                noteObject.dur = (window.Tone.now() - window.synthApp.recStart) - noteObject.start;
+                noteObject.dur = (window.Tone.now() - this.recStartTime) - noteObject.start;
                 window.synthApp.activeNoteIds.delete(note);
             }
         }
@@ -124,132 +63,146 @@ const EnhancedRecorder = {
         window.synthApp.synth.noteOff(note);
     },
 
-    // --- Transport Logic ---
+    // --- Transport Event Handlers (Called by transport.js) ---
     onRecord() {
-        if (window.synthApp.isArmed) {
-            window.synthApp.isArmed = false;
-            this.updateStatus();
-        } else if (!window.synthApp.isRec && !window.synthApp.isPlaying) {
-            window.synthApp.isArmed = true;
-            this.updateStatus();
+        if (this.isArmed) {
+            this.isArmed = false;
+        } else if (!this.isRecording && !this.isPlaying) {
+            this.isArmed = true;
         }
+        this.updateButtonStates();
     },
 
-    startRec() {
-        window.synthApp.isRec = true;
-        window.synthApp.isArmed = false;
-        window.synthApp.recStart = window.Tone.now();
+    onPlay() {
+        this.playSequence();
+    },
+
+    onStop() {
+        this.stopAll();
+    },
+
+    onClear() {
+        this.clearSequence();
+    },
+
+    // --- Core Logic ---
+    startRecording() {
+        this.isRecording = true;
+        this.isArmed = false;
+        this.recStartTime = window.Tone.now();
         window.synthApp.seq = [];
-        this.updateStatus();
+        PianoRoll.draw(); // Clear the piano roll visually
+        this.updateButtonStates();
     },
 
-    stop() {
-        if (window.synthApp.isPlaying) {
+    stopAll() {
+        if (this.isPlaying) {
             window.Tone.Transport.stop();
-            window.Tone.Transport.cancel(); // Clear all scheduled events
-            // --- FIX 2: Ensure the loop property is reset on stop ---
+            window.Tone.Transport.cancel(0); // Clear all scheduled events
             window.Tone.Transport.loop = false; 
         }
 
-        if (window.synthApp.isRec) {
+        if (this.isRecording) {
+            // Ensure any held notes are properly ended in the sequence
             window.synthApp.activeNotes.forEach(note => this.releaseNote(note));
         }
 
-        window.synthApp.isPlaying = false;
-        window.synthApp.isRec = false;
-        window.synthApp.isArmed = false;
+        this.isPlaying = false;
+        this.isRecording = false;
+        this.isArmed = false;
 
         window.synthApp.synth.releaseAll();
-        this.getSequenceNotes().forEach(note => Keyboard.updateKeyVisual(note, false));
-
-        this.updateStatus();
+        // Reset all key visuals
+        Keyboard.releaseAllKeys();
+        
+        this.updateButtonStates();
+        PianoRoll.draw(); // Redraw to show the final sequence
     },
 
-    // --- FIX 3: The entire playSeq function is rewritten to handle looping ---
-    playSeq() {
-        if (!window.synthApp.seq.length || window.synthApp.isPlaying) return;
+    playSequence() {
+        if (!window.synthApp.seq?.length || this.isPlaying) return;
     
-        this.stop(); // Ensure a clean state before playing
-        window.synthApp.isPlaying = true;
-        this.updateStatus();
+        this.stopAll(); // Ensure a clean state before playing
+        this.isPlaying = true;
+        this.updateButtonStates();
     
         // Schedule all notes from the sequence onto the transport
         window.synthApp.seq.forEach(noteEvent => {
             if (noteEvent.dur > 0.01) { 
-                // --- FIX: Use .schedule() instead of .scheduleOnce() ---
-                // This ensures the events will fire on every loop, not just the first time.
                 window.Tone.Transport.schedule(time => {
-                    // The 'time' argument provided by the transport is the precise,
-                    // audio-context-aware time for the event to start.
                     window.synthApp.synth.triggerAttackRelease(noteEvent.note, noteEvent.dur, time, noteEvent.vel);
                 }, noteEvent.start);
             }
         });
     
-        // Check LoopManager to decide playback mode
+        // Configure transport for looping or single playback
         if (LoopManager.isLoopEnabled) {
-            console.log('[EnhancedRecorder] Starting playback with loop enabled.');
-            // Set the transport to loop using settings from LoopManager
             window.Tone.Transport.loop = true;
             window.Tone.Transport.loopStart = LoopManager.loopStart;
             window.Tone.Transport.loopEnd = LoopManager.loopEnd;
         } else {
-            console.log('[EnhancedRecorder] Starting single playback.');
-            // Ensure looping is off and schedule a single stop event
             window.Tone.Transport.loop = false;
             const sequenceDuration = this.getSequenceDuration();
             window.Tone.Transport.scheduleOnce(() => {
-                this.stop(); // Stop automatically after one playthrough
+                // Check if still playing to avoid stopping if user manually stopped
+                if (this.isPlaying) this.stopAll(); 
             }, sequenceDuration);
         }
     
         window.Tone.Transport.start();
     },
 
-    clearSeq() {
-        this.stop();
+    clearSequence() {
+        this.stopAll();
         window.synthApp.seq = [];
-        this.updateStatus();
+        this.updateButtonStates();
         PianoRoll.draw();
     },
     
-    // --- UI and State Management ---
-    updateStatus() {
-        let statusText = 'Inactive';
-        let isIndicatorActive = false;
-        let isArmed = false;
+    /**
+     * THE KEY PUBLIC FUNCTION
+     * Updates the entire transport UI based on the current application state.
+     * This function should be called by any module that changes the sequence or playback state.
+     */
+    updateButtonStates() {
+        const { record, play, stop, clear } = this.buttons;
+        if (!record) return; // Exit if buttons aren't registered yet
 
-        if (window.synthApp.isRec) {
+        const hasSequence = window.synthApp.seq && window.synthApp.seq.length > 0;
+        let statusText = 'Inactive';
+        
+        // --- Button State Logic ---
+        play.disabled = !hasSequence || this.isRecording || this.isPlaying;
+        clear.disabled = !hasSequence || this.isRecording;
+        stop.disabled = !this.isPlaying && !this.isRecording;
+        record.disabled = this.isPlaying; // Can't arm/record while playing
+
+        // --- Record Button Style & Status Text ---
+        record.classList.remove('armed');
+        if (this.isRecording) {
             statusText = 'Recording...';
-            isIndicatorActive = true;
-        } else if (window.synthApp.isPlaying) {
+            record.classList.add('armed');
+        } else if (this.isPlaying) {
             statusText = 'Playing...';
-            isIndicatorActive = true;
-        } else if (window.synthApp.isArmed) {
+        } else if (this.isArmed) {
             statusText = 'Armed';
-            isArmed = true;
-        } else if (window.synthApp.seq.length > 0) {
+            record.classList.add('armed');
+        } else if (hasSequence) {
             statusText = 'Stopped';
         }
-
-        if (this.dom.recStat) this.dom.recStat.textContent = 'Status: ' + statusText;
-        if (this.dom.recInd) {
-            this.dom.recInd.classList.toggle('active', isIndicatorActive);
-            this.dom.recInd.classList.toggle('armed', isArmed);
-        }
-        if (this.dom.playBtn) this.dom.playBtn.disabled = !(window.synthApp.seq.length > 0) || window.synthApp.isPlaying || window.synthApp.isRec;
-        if (this.dom.stopBtn) this.dom.stopBtn.disabled = !window.synthApp.isPlaying && !window.synthApp.isRec;
+        
+        // Update the status indicator in the status bar
+        const recStatEl = document.getElementById('recStat');
+        const recIndEl = document.getElementById('recInd');
+        if (recStatEl) recStatEl.textContent = 'Status: ' + statusText;
+        if (recIndEl) recIndEl.classList.toggle('active', this.isRecording || this.isPlaying);
     },
     
     // --- Utility Methods ---
     getSequenceDuration() {
         if (!window.synthApp.seq.length) return 0;
-        return Math.max(...window.synthApp.seq.map(e => e.start + e.dur));
+        return Math.max(...window.synthApp.seq.map(e => e.start + (e.dur || 0)));
     },
-    
-    getSequenceNotes() {
-        return [...new Set(window.synthApp.seq.map(e => e.note))];
-    }
 };
 
 export default EnhancedRecorder;

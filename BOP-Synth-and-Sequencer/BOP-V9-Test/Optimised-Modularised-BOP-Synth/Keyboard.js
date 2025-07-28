@@ -26,7 +26,6 @@ const Keyboard = {
     },
 
     draw() {
-        // Halt if core dependencies aren't ready
         if (!this.keyboard || !window.Tone || !window.synthApp) {
             console.warn('[Keyboard] Cannot draw; dependencies (element, Tone.js, or synthApp) are not ready.');
             return;
@@ -61,7 +60,7 @@ const Keyboard = {
             this.keyboard.appendChild(wkey);
             whiteIndex++;
         }
-        // Black keys
+        
         whiteIndex = 0;
         for (let i = 0; i < totalWhite; i++) {
             if (this.BLACKS.hasOwnProperty(whiteIndex % 7)) {
@@ -86,16 +85,37 @@ const Keyboard = {
     addKeyHandlers(el, note) {
         el.onmousedown = () => EnhancedRecorder.playNote(note);
         el.onmouseup = () => EnhancedRecorder.releaseNote(note);
-        el.onmouseleave = () => EnhancedRecorder.releaseNote(note);
-        el.ontouchstart = e => { e.preventDefault(); EnhancedRecorder.playNote(note); }
-        el.ontouchend = e => { e.preventDefault(); EnhancedRecorder.releaseNote(note); }
+        el.onmouseleave = () => {
+            // Only release if the key is actually active to prevent double-releasing
+            if (window.synthApp.activeNotes.has(note)) {
+                EnhancedRecorder.releaseNote(note);
+            }
+        };
+        el.ontouchstart = e => { e.preventDefault(); EnhancedRecorder.playNote(note); };
+        el.ontouchend = e => { e.preventDefault(); EnhancedRecorder.releaseNote(note); };
     },
 
     updateKeyVisual(note, on) {
         if (!this.keyboard) return;
-        this.keyboard.querySelectorAll('.key-white,.key-black').forEach(k => {
-            if (k.dataset.note === note) k.classList.toggle('active', !!on);
+        // More efficient: directly query for the specific key
+        const keyElement = this.keyboard.querySelector(`[data-note="${note}"]`);
+        if (keyElement) {
+            keyElement.classList.toggle('active', !!on);
+        }
+    },
+
+    /**
+     * **THE NEW FUNCTION**
+     * Releases all visually active keys on the keyboard.
+     * This is crucial for stopping playback/recording to prevent "stuck" keys.
+     */
+    releaseAllKeys() {
+        if (!this.keyboard) return;
+        // Find all elements that have the 'active' class and remove it.
+        this.keyboard.querySelectorAll('.active').forEach(activeKey => {
+            activeKey.classList.remove('active');
         });
+        console.log('[Keyboard] All visual keys released.');
     }
 };
 

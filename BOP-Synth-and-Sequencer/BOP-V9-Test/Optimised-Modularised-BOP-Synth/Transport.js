@@ -1,4 +1,7 @@
-// transport.js
+/**
+ * @file transport.js
+ * @description Creates the transport UI and connects it to the EnhancedRecorder module.
+ */
 
 import EnhancedRecorder from './EnhancedRecorder.js';
 
@@ -12,27 +15,36 @@ const Transport = {
             return;
         }
 
+        // Create the buttons in the DOM
         el.innerHTML = `
-            <button id="recordBtn" class="transport-button"><span>●</span>Record</button>
-            <button id="stopBtn" class="transport-button" disabled><span>■</span>Stop</button>
-            <button id="playBtn" class="transport-button" disabled><span>▶</span>Play</button>
-            <button id="clearBtn" class="transport-button"><span>🗑</span>Clear</button>
+            <button id="recordBtn" class="transport-button record-btn"><span>●</span>Record</button>
+            <button id="stopBtn" class="transport-button stop-btn" disabled><span>■</span>Stop</button>
+            <button id="playBtn" class="transport-button play-btn" disabled><span>▶</span>Play</button>
+            <button id="clearBtn" class="transport-button clear-btn"><span>🗑</span>Clear</button>
         `;
 
-        // Wire up events to EnhancedRecorder module
-        document.getElementById('recordBtn').onclick = EnhancedRecorder.onRecord;
-        document.getElementById('stopBtn').onclick = EnhancedRecorder.onStop;
-        document.getElementById('playBtn').onclick = EnhancedRecorder.onPlay;
-        document.getElementById('clearBtn').onclick = EnhancedRecorder.onClear;
+        // Get references to the newly created buttons
+        const recordBtn = document.getElementById('recordBtn');
+        const stopBtn = document.getElementById('stopBtn');
+        const playBtn = document.getElementById('playBtn');
+        const clearBtn = document.getElementById('clearBtn');
+        
+        // Wire up UI events to the recorder's handler methods
+        recordBtn.onclick = () => EnhancedRecorder.onRecord();
+        stopBtn.onclick = () => EnhancedRecorder.onStop();
+        playBtn.onclick = () => EnhancedRecorder.onPlay();
+        clearBtn.onclick = () => EnhancedRecorder.onClear();
 
-        // Store references for state updates back in the recorder module.
-        // This preserves the original design where the recorder controls button states.
-        EnhancedRecorder.buttons = {
-            record: document.getElementById('recordBtn'),
-            stop: document.getElementById('stopBtn'),
-            play: document.getElementById('playBtn'),
-            clear: document.getElementById('clearBtn'),
-        };
+        // **This is the crucial step**:
+        // Give the button references to the EnhancedRecorder so it can manage their state.
+        EnhancedRecorder.registerButtons({
+            record: recordBtn,
+            stop: stopBtn,
+            play: playBtn,
+            clear: clearBtn,
+        });
+
+        console.log('[Transport] Transport controls initialized and registered with recorder.');
     }
 };
 
