@@ -80,18 +80,17 @@ const EnhancedRecorder = {
     setOsc() {
         const type = this.dom.waveform ? this.dom.waveform.value : 'sine';
         if (window.synthApp.synth) {
-            // Use the SynthEngine's API for consistency
-            window.synthApp.synth.setParameter('polySynth.oscillator.type', type);
+            window.synthApp.synth.setParameter('oscillator.type', type); // changed
         }
     },
-
+    
     setDetune() {
         const value = this.dom.detune ? parseFloat(this.dom.detune.value) : 0;
         if (this.dom.detuneVal) {
             this.dom.detuneVal.textContent = value;
         }
         if (window.synthApp.synth) {
-            window.synthApp.synth.setParameter('polySynth.detune', value);
+            window.synthApp.synth.setParameter('oscillator.detune', value); // changed
         }
     },
 

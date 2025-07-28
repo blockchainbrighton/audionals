@@ -1,20 +1,18 @@
 /**
  * @file app.js
- * @description The main application host/controller for the BOP Synth.
- * This file is responsible for loading Tone.js, instantiating the SynthEngine,
- * initializing all UI/logic modules, and setting up global event handlers.
- * It does NOT contain any direct audio synthesis logic itself.
+ * @description BOP Synth main host/controller. Handles Tone.js loading, SynthEngine instantiation,
+ * initializes all modules/UI, and sets up global handlers. All Tone/audio code runs *after* user gesture.
  */
 
 // --- Module Imports ---
-import { SynthEngine } from './SynthEngine.js'; // This import is correct
+import { SynthEngine } from './SynthEngine.js';
 import SaveLoad from './SaveLoad.js';
 import PianoRoll from './PianoRoll.js';
 import EnhancedRecorder from './EnhancedRecorder.js';
 import EnhancedControls from './EnhancedControls.js';
 import { MidiControl } from './midi.js';
 import { LoopUI } from './loop-ui.js';
-import LoopManager from './LoopManager.js'; // <-- ADD THIS IMPORT
+import LoopManager from './LoopManager.js';
 import Keyboard from './keyboard.js';
 import Transport from './transport.js';
 
@@ -36,32 +34,53 @@ window.synthApp = {
     selNote: null,
     synth: null, 
 };
-let Tone; 
 
-// --- Tone.js Loading ---
+let Tone;
+
+// --- Tone.js Loading & Audio Start Flow ---
 import(TONE_ORDINALS_URL)
     .then(() => {
         Tone = window.Tone;
         console.log(`[BOP App Host] Tone.js loaded: ${Tone?.version ?? 'Unknown'}`);
-        boot();
+        showAudioPrompt();
     })
     .catch(err => {
         console.error('[BOP App Host] Critical error: Failed to load Tone.js. App cannot start.', err);
     });
 
-// --- Application Bootstrapping ---
-function boot() {
-    console.log('[BOP App Host] Booting application after Tone.js load...');
-    
-    // Defer main initialization until the DOM is ready.
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', appInit);
-    } else {
-        appInit();
-    }
+// --- Show Overlay and Wait for User Audio Start ---
+function showAudioPrompt() {
+    // Create overlay
+    const overlay = document.createElement('div');
+    overlay.id = 'audio-prompt';
+    overlay.style = `
+        position:fixed;top:0;left:0;width:100vw;height:100vh;
+        display:flex;align-items:center;justify-content:center;
+        z-index:9999;background:rgba(0,0,0,0.87);`;
+    overlay.innerHTML = `
+        <button style="
+            padding:2em 3em;font-size:1.5em;
+            background:#1e1e28;color:#fff;
+            border:none;border-radius:16px;
+            box-shadow:0 8px 24px #0008;
+            cursor:pointer;">Click to Start Audio</button>
+    `;
+    document.body.appendChild(overlay);
+
+    overlay.querySelector('button').onclick = async () => {
+        try {
+            await Tone.start();
+            console.log('[BOP App Host] Tone.js started by user interaction.');
+        } catch (err) {
+            alert('Audio could not start. Please try again.');
+            return;
+        }
+        overlay.remove();
+        appInit(); // Only now, start the app proper
+    };
 }
 
-// --- Main Initialization Function ---
+// --- Main Initialization Function (runs *after* audio is ready) ---
 function appInit() {
     console.log('[BOP App Host] DOMContentLoaded, initializing all modules...');
     try {
@@ -71,13 +90,12 @@ function appInit() {
         console.log('[BOP App Host] SynthEngine instantiated and is ready.');
 
         // 2. Initialize all UI and logic modules in order.
-        // This call now works because EnhancedControls is a singleton object.
         EnhancedControls.init(); 
         Keyboard.init();
         Transport.init();
         EnhancedRecorder.init();
         MidiControl.init();
-        LoopManager.init(); // <-- ADD THIS LINE
+        LoopManager.init();
         LoopUI.init();
         PianoRoll.init();
         SaveLoad.init();
@@ -93,7 +111,7 @@ function appInit() {
 
 // --- Event Handler Setup ---
 function setupGlobalEventHandlers() {
-    // Tab switching functionality
+    // Tab switching
     document.querySelectorAll('.tab-button').forEach(btn => {
         btn.onclick = () => {
             document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
@@ -114,20 +132,6 @@ function setupGlobalEventHandlers() {
         catch (e) { console.error('[BOP App Host] Error in Keyboard.draw (resize):', e); }
     };
 
-    // Resume AudioContext on first user interaction.
-    // This is required by modern browsers.
-    const resumeAudio = () => {
-        if (Tone?.context.state !== 'running') {
-            Tone.context.resume().then(() => {
-                console.log('[BOP App Host] AudioContext resumed by user interaction.');
-            });
-        }
-        window.removeEventListener('click', resumeAudio);
-        window.removeEventListener('touchstart', resumeAudio);
-    };
-    window.addEventListener('click', resumeAudio);
-    window.addEventListener('touchstart', resumeAudio);
-
     // Keyboard shortcuts for effects
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey || e.metaKey) {
@@ -139,8 +143,7 @@ function setupGlobalEventHandlers() {
         }
     });
 
-    // Visual feedback for LFOs.
-    // NOTE: This could be further refactored into the control modules themselves.
+    // Visual feedback for LFOs
     setInterval(updateLFOVisuals, 100);
 }
 
@@ -153,7 +156,7 @@ function toggleEffectByKey(effectName) {
     const toggle = document.getElementById(effectName + 'Enable');
     if (toggle) {
         toggle.checked = !toggle.checked;
-        toggle.dispatchEvent(new Event('change')); // Trigger the listener in the control module
+        toggle.dispatchEvent(new Event('change'));
         console.log(`[BOP App Host] Toggled ${effectName} via keyboard shortcut.`);
     }
 }
@@ -168,8 +171,6 @@ function updateLFOVisuals() {
         const toggle = document.getElementById(checkboxId);
         const label = document.querySelector(`label[for="${checkboxId}"]`);
         if (toggle && label) {
-            // Assumes the "lfo-active" class creates a pulsing or glowing effect.
-            // The logic for filter is slightly different as its LFO is the AutoFilter itself.
             let isActive = toggle.checked;
             if (effectName === 'filter' && window.synthApp.synth) {
                 isActive = toggle.checked && window.synthApp.synth.nodes.filter.state === 'started';
