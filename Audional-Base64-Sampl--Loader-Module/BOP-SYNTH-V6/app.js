@@ -1,6 +1,13 @@
-// app.js
+/**
+ * @file app.js
+ * @description The main application host/controller for the BOP Synth.
+ * This file is responsible for loading Tone.js, instantiating the SynthEngine,
+ * initializing all UI/logic modules, and setting up global event handlers.
+ * It does NOT contain any direct audio synthesis logic itself.
+ */
 
 // --- Module Imports ---
+import { SynthEngine } from './synth-engine.js';
 import SaveLoad from './save-load.js';
 import PianoRoll from './piano-roll.js';
 import EnhancedRecorder from './enhanced-recorder.js';
@@ -12,10 +19,11 @@ import Transport from './transport.js';
 
 const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
 
-console.log('[Audionauts Enhanced] Starting enhanced app...');
+console.log('[BOP App Host] Starting application...');
 
 // --- Global State ---
-// This central state object is used by many modules.
+// This central state object is used by all modules. The `synth` property
+// will hold the instance of our decoupled SynthEngine.
 window.synthApp = {
     seq: [],
     curOct: 4,
@@ -27,28 +35,26 @@ window.synthApp = {
     recStart: 0,
     events: [],
     selNote: null,
-    synth: null,
-    enhancedEffects: null,
+    synth: null, // <-- The single source of truth for audio.
 };
-let Tone;
+let Tone; // Will be assigned after dynamic import.
 
 // --- Tone.js Loading ---
 import(TONE_ORDINALS_URL)
     .then(() => {
         Tone = window.Tone;
-        console.log('[Audionauts Enhanced] Tone.js loaded:', Tone?.version ?? Tone);
+        console.log(`[BOP App Host] Tone.js loaded: ${Tone?.version ?? 'Unknown'}`);
         boot();
     })
     .catch(err => {
-        console.error('[Audionauts Enhanced] Failed to load Tone.js:', err);
+        console.error('[BOP App Host] Critical error: Failed to load Tone.js. App cannot start.', err);
     });
 
 // --- Application Bootstrapping ---
 function boot() {
-    console.log('[Audionauts Enhanced] Booting enhanced app after Tone.js load...');
+    console.log('[BOP App Host] Booting application after Tone.js load...');
 
-    // Assign modules to the window object for legacy access (e.g., save-load, debugging)
-    // and global event handlers. This is a deliberate choice to maintain compatibility.
+    // Assign modules to the window object for legacy access or debugging.
     window.Keyboard = Keyboard;
     window.PianoRoll = PianoRoll;
     window.EnhancedRecorder = EnhancedRecorder;
@@ -64,9 +70,15 @@ function boot() {
 
 // --- Main Initialization Function ---
 function appInit() {
-    console.log('[Audionauts Enhanced] DOMContentLoaded, initializing all modules...');
+    console.log('[BOP App Host] DOMContentLoaded, initializing all modules...');
     try {
-        // Initialize UI and logic modules in a specific order
+        // 1. Instantiate the audio engine first. This is the most critical step.
+        // All other modules depend on `window.synthApp.synth` being available.
+        const synthEngine = new SynthEngine(Tone);
+        window.synthApp.synth = synthEngine;
+        console.log('[BOP App Host] SynthEngine instantiated and is ready.');
+
+        // 2. Initialize all UI and logic modules in order.
         EnhancedControls.init();
         Keyboard.init();
         Transport.init();
@@ -76,12 +88,12 @@ function appInit() {
         SaveLoad.init();
         LoopUI.init();
 
-        console.log('[Audionauts Enhanced] All modules initialized successfully!');
+        console.log('[BOP App Host] All modules initialized successfully!');
     } catch (e) {
-        console.error('[Audionauts Enhanced] Error during module initialization:', e);
+        console.error('[BOP App Host] A fatal error occurred during module initialization:', e);
     }
 
-    // Attach all window-level and document-level event listeners
+    // 3. Attach all window-level and document-level event listeners.
     setupGlobalEventHandlers();
 }
 
@@ -97,7 +109,7 @@ function setupGlobalEventHandlers() {
             document.getElementById(tabId).classList.add('active');
             if (tabId === 'midi') {
                 try { PianoRoll.draw(); } 
-                catch (e) { console.error('[Audionauts Enhanced] Error in PianoRoll.draw:', e); }
+                catch (e) { console.error('[BOP App Host] Error in PianoRoll.draw:', e); }
             }
         };
     });
@@ -105,22 +117,22 @@ function setupGlobalEventHandlers() {
     // Redraw keyboard on window resize
     window.onresize = () => {
         try { Keyboard.draw(); } 
-        catch (e) { console.error('[Audionauts Enhanced] Error in Keyboard.draw (resize):', e); }
+        catch (e) { console.error('[BOP App Host] Error in Keyboard.draw (resize):', e); }
     };
 
-    // Resume AudioContext on first user interaction
+    // Resume AudioContext on first user interaction.
+    // This is required by modern browsers.
     const resumeAudio = () => {
         if (Tone?.context.state !== 'running') {
-            Tone.context.resume();
-            console.log('[Audionauts Enhanced] AudioContext resumed.');
+            Tone.context.resume().then(() => {
+                console.log('[BOP App Host] AudioContext resumed by user interaction.');
+            });
         }
-        // Remove listener after first successful resume
         window.removeEventListener('click', resumeAudio);
         window.removeEventListener('touchstart', resumeAudio);
     };
     window.addEventListener('click', resumeAudio);
     window.addEventListener('touchstart', resumeAudio);
-
 
     // Keyboard shortcuts for effects
     document.addEventListener('keydown', (e) => {
@@ -133,46 +145,59 @@ function setupGlobalEventHandlers() {
         }
     });
 
-    // Visual feedback for LFOs
-    setInterval(updateEffectsVisualFeedback, 100);
+    // Visual feedback for LFOs.
+    // NOTE: This could be further refactored into the control modules themselves.
+    setInterval(updateLFOVisuals, 100);
 }
 
+/**
+ * Toggles an effect's enabled state by simulating a click on its checkbox.
+ * The actual logic is handled by the event listener in `EnhancedControls`.
+ * @param {string} effectName - The base name of the effect (e.g., "reverb").
+ */
 function toggleEffectByKey(effectName) {
     const toggle = document.getElementById(effectName + 'Enable');
     if (toggle) {
         toggle.checked = !toggle.checked;
-        toggle.dispatchEvent(new Event('change'));
-        console.log(`[Audionauts Enhanced] Toggled ${effectName} via keyboard shortcut`);
+        toggle.dispatchEvent(new Event('change')); // Trigger the listener in the control module
+        console.log(`[BOP App Host] Toggled ${effectName} via keyboard shortcut.`);
     }
 }
 
-function updateEffectsVisualFeedback() {
-    const lfoEffects = ['filterLFO', 'tremolo', 'vibrato', 'phaser'];
+/**
+ * Provides simple visual feedback for active LFOs by toggling a class on their label.
+ */
+function updateLFOVisuals() {
+    const lfoEffects = ['filter', 'tremolo', 'vibrato', 'phaser'];
     lfoEffects.forEach(effectName => {
         const checkboxId = `${effectName}Enable`;
         const toggle = document.getElementById(checkboxId);
-        // The original code had a bug looking for a label for "filterLFOEnable"
-        // Correctly, it should be the label for the parent effect, e.g., "filterEnable"
         const label = document.querySelector(`label[for="${checkboxId}"]`);
         if (toggle && label) {
-            label.classList.toggle('lfo-active', toggle.checked);
+            // Assumes the "lfo-active" class creates a pulsing or glowing effect.
+            // The logic for filter is slightly different as its LFO is the AutoFilter itself.
+            let isActive = toggle.checked;
+            if (effectName === 'filter' && window.synthApp.synth) {
+                isActive = toggle.checked && window.synthApp.synth.nodes.filter.state === 'started';
+            }
+            label.classList.toggle('lfo-active', isActive);
         }
     });
 }
 
 // --- Global Error Handling & Performance ---
 window.addEventListener('error', (e) => {
-    console.error('[Audionauts Enhanced] Global unhandled error:', e.error);
+    console.error('[BOP App Host] Global unhandled error:', e.error);
 });
 
 if (window.performance?.mark) {
-    window.performance.mark('audionauts-enhanced-start');
+    window.performance.mark('bop-app-start');
     window.addEventListener('load', () => {
-        window.performance.mark('audionauts-enhanced-loaded');
-        window.performance.measure('audionauts-enhanced-load-time', 'audionauts-enhanced-start', 'audionauts-enhanced-loaded');
-        const measure = window.performance.getEntriesByName('audionauts-enhanced-load-time')[0];
+        window.performance.mark('bop-app-loaded');
+        window.performance.measure('bop-app-load-time', 'bop-app-start', 'bop-app-loaded');
+        const measure = window.performance.getEntriesByName('bop-app-load-time')[0];
         if (measure) {
-            console.log(`[Audionauts Enhanced] Load time: ${measure.duration.toFixed(2)}ms`);
+            console.log(`[BOP App Host] Page load time: ${measure.duration.toFixed(2)}ms`);
         }
     });
 }
