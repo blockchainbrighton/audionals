@@ -329,7 +329,7 @@ import EnvelopeManager from "./envelope-manager.js";
             this.refreshDisplays();
             this._safeCall(window.EnhancedControls?.updateAllDisplayValues, 'enhanced controls update');
 
-            this.showStatus('State loaded successfully!', 'success');
+            this.showStatus('State loaded!', 'success');
             console.log('[SaveLoad] Load completed successfully');
 
         } catch (error) {
