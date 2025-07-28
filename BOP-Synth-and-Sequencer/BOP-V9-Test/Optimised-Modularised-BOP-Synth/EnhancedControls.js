@@ -1,11 +1,14 @@
 // *** @file EnhancedControls.js ***
-// *** Updated for Tone.js v15+ parameter correctness. ***
+// *** Updated for Tone.js v15+ and collapsible sections. ***
+
 const effectsWithWet = [
     'reverb', 'delay', 'chorus', 'phaser', 'tremolo', 'vibrato', 'distortion'
 ];
+
 const EnhancedControls = {
     panel: null,
     defaults: {
+        // ... (defaults are unchanged, keeping them for brevity)
         reverb:      { wet: 0.3, decay: 2, preDelay: 0 },
         delay:       { wet: 0.2, delayTime: 0.25, feedback: 0.3 },
         filter:      { frequency: 5000, Q: 1, type: 'lowpass' },
@@ -34,137 +37,76 @@ const EnhancedControls = {
         }
         this.panel.innerHTML = this.panelHTML();
         this.setupAllControls();
-        console.log('[EnhancedControls] Initialized successfully with full UI.');
+        console.log('[EnhancedControls] Initialized successfully with collapsible UI.');
     },
 
     panelHTML() {
+        // CHANGED: Sections are now wrapped in header/content divs and start collapsed.
         return `
             <div class="control-panel">
 
                 <!-- Audio Safety & Master -->
-                <div class="control-group">
-                    <h3>Audio Safety & Master</h3>
-                    ${this.createSliderControl('masterVolume', 'Master Volume', this.defaults.master.volume, 0, 1, 0.01, 'master.volume')}
-                    ${this.createSliderControl('limiterThreshold', 'Limiter Threshold', this.defaults.limiter.threshold, -20, 0, 0.1, 'limiter.threshold')}
-                    <div class="control-row">
-                        <button id="emergencyStop" class="emergency-button">Emergency Stop</button>
+                <div class="control-group collapsed">
+                    <div class="group-header"><h3>Audio Safety & Master</h3></div>
+                    <div class="group-content">
+                        ${this.createSliderControl('masterVolume', 'Master Volume', this.defaults.master.volume, 0, 1, 0.01, 'master.volume')}
+                        ${this.createSliderControl('limiterThreshold', 'Limiter Threshold', this.defaults.limiter.threshold, -20, 0, 0.1, 'limiter.threshold')}
+                        <div class="control-row">
+                            <button id="emergencyStop" class="emergency-button">Emergency Stop</button>
+                        </div>
                     </div>
                 </div>
 
                 <!-- ADSR Envelope -->
-                <div class="control-group">
-                    <h3>ADSR Envelope</h3>
-                    ${this.createSliderControl('envAttack', 'Attack', this.defaults.envelope.attack, 0.001, 5, 0.001, 'envelope.attack')}
-                    ${this.createSliderControl('envDecay', 'Decay', this.defaults.envelope.decay, 0.001, 5, 0.001, 'envelope.decay')}
-                    ${this.createSliderControl('envSustain', 'Sustain', this.defaults.envelope.sustain, 0, 1, 0.01, 'envelope.sustain')}
-                    ${this.createSliderControl('envRelease', 'Release', this.defaults.envelope.release, 0.001, 5, 0.001, 'envelope.release')}
+                <div class="control-group collapsed">
+                    <div class="group-header"><h3>ADSR Envelope</h3></div>
+                    <div class="group-content">
+                        ${this.createSliderControl('envAttack', 'Attack', this.defaults.envelope.attack, 0.001, 5, 0.001, 'envelope.attack')}
+                        ${this.createSliderControl('envDecay', 'Decay', this.defaults.envelope.decay, 0.001, 5, 0.001, 'envelope.decay')}
+                        ${this.createSliderControl('envSustain', 'Sustain', this.defaults.envelope.sustain, 0, 1, 0.01, 'envelope.sustain')}
+                        ${this.createSliderControl('envRelease', 'Release', this.defaults.envelope.release, 0.001, 5, 0.001, 'envelope.release')}
+                    </div>
                 </div>
 
                 <!-- Oscillator -->
-                <div class="control-group">
-                    <h3>Oscillator</h3>
-                    ${this.createSelectControl('oscType', 'Type', ['sine','square','sawtooth','triangle','fatsawtooth','fatsquare','fattriangle'], this.defaults.oscillator.type, 'oscillator.type')}
-                    ${this.createSliderControl('oscDetune', 'Detune (cents)', this.defaults.oscillator.detune, -50, 50, 1, 'oscillator.detune')}
+                <div class="control-group collapsed">
+                    <div class="group-header"><h3>Oscillator</h3></div>
+                    <div class="group-content">
+                        ${this.createSelectControl('oscType', 'Type', ['sine','square','sawtooth','triangle','fatsawtooth','fatsquare','fattriangle'], this.defaults.oscillator.type, 'oscillator.type')}
+                        ${this.createSliderControl('oscDetune', 'Detune (cents)', this.defaults.oscillator.detune, -50, 50, 1, 'oscillator.detune')}
+                    </div>
                 </div>
 
-                <!-- Filter -->
+                <!-- All other effect sections are now generated by the updated createEffectSection -->
                 ${this.createEffectSection('filter', 'Filter', [
                     { param: 'frequency', min: 20, max: 20000, step: 1 },
                     { param: 'Q', min: 0, max: 20, step: 0.1 },
                     { param: 'type', type: 'select', options: ['lowpass','highpass','bandpass'] }
                 ])}
-                <!-- Filter LFO -->
                 ${this.createEffectSection('filterLFO', 'Filter LFO', [
                     { param: 'frequency', min: 0.1, max: 10, step: 0.1 },
                     { param: 'depth', min: 0, max: 1, step: 0.01 },
                     { param: 'min', min: 20, max: 20000, step: 1 },
                     { param: 'max', min: 20, max: 20000, step: 1 }
                 ], true)}
-
-                <!-- Chorus -->
-                ${this.createEffectSection('chorus', 'Chorus', [
-                    { param: 'wet', min: 0, max: 1, step: 0.01 },
-                    { param: 'frequency', min: 0.1, max: 5, step: 0.01 },
-                    { param: 'delayTime', min: 1, max: 10, step: 0.01 },
-                    { param: 'depth', min: 0, max: 1, step: 0.01 }
-                ])}
-
-                <!-- Phaser -->
-                ${this.createEffectSection('phaser', 'Phaser', [
-                    { param: 'wet', min: 0, max: 1, step: 0.01 },
-                    { param: 'frequency', min: 0.1, max: 2, step: 0.01 },
-                    { param: 'octaves', min: 1, max: 8, step: 1 },
-                    { param: 'baseFrequency', min: 20, max: 1000, step: 1 }
-                ])}
-                <!-- Phaser LFO -->
-                ${this.createEffectSection('phaserLFO', 'Phaser LFO', [
-                    { param: 'frequency', min: 0.1, max: 10, step: 0.1 },
-                    { param: 'depth', min: 0, max: 1, step: 0.01 }
-                ], true)}
-
-                <!-- Tremolo -->
-                ${this.createEffectSection('tremolo', 'Tremolo', [
-                    { param: 'wet', min: 0, max: 1, step: 0.01 },
-                    { param: 'frequency', min: 1, max: 20, step: 0.5 },
-                    { param: 'depth', min: 0, max: 1, step: 0.01 }
-                ])}
-                <!-- Tremolo LFO -->
-                ${this.createEffectSection('tremoloLFO', 'Tremolo LFO', [
-                    { param: 'frequency', min: 0.1, max: 10, step: 0.1 },
-                    { param: 'depth', min: 0, max: 1, step: 0.01 }
-                ], true)}
-
-                <!-- Vibrato -->
-                ${this.createEffectSection('vibrato', 'Vibrato', [
-                    { param: 'wet', min: 0, max: 1, step: 0.01 },
-                    { param: 'frequency', min: 1, max: 15, step: 0.5 },
-                    { param: 'depth', min: 0, max: 1, step: 0.01 }
-                ])}
-                <!-- Vibrato LFO -->
-                ${this.createEffectSection('vibratoLFO', 'Vibrato LFO', [
-                    { param: 'frequency', min: 0.1, max: 10, step: 0.1 },
-                    { param: 'depth', min: 0, max: 1, step: 0.01 }
-                ], true)}
-
-                <!-- Distortion -->
-                ${this.createEffectSection('distortion', 'Distortion', [
-                    { param: 'wet', min: 0, max: 1, step: 0.01 },
-                    { param: 'distortion', min: 0, max: 1, step: 0.01 },
-                    { param: 'oversample', type: 'select', options: ['none','2x','4x'] }
-                ])}
-
-                <!-- Compressor -->
-                ${this.createEffectSection('compressor', 'Compressor', [
-                    { param: 'threshold', min: -40, max: 0, step: 1 },
-                    { param: 'ratio', min: 1, max: 20, step: 0.5 },
-                    { param: 'attack', min: 0.001, max: 1, step: 0.001 },
-                    { param: 'release', min: 0.001, max: 1, step: 0.001 },
-                    { param: 'knee', min: 0, max: 40, step: 1 }
-                ])}
-
-                <!-- BitCrusher -->
-                ${this.createEffectSection('bitCrusher', 'BitCrusher', [
-                    { param: 'bits', min: 1, max: 16, step: 1 }
-                ])}
-
-                <!-- Delay -->
-                ${this.createEffectSection('delay', 'Delay', [
-                    { param: 'wet', min: 0, max: 1, step: 0.01 },
-                    { param: 'delayTime', min: 0.01, max: 1, step: 0.01 },
-                    { param: 'feedback', min: 0, max: 0.95, step: 0.01 }
-                ])}
-
-                <!-- Reverb -->
-                ${this.createEffectSection('reverb', 'Reverb', [
-                    { param: 'wet', min: 0, max: 1, step: 0.01 },
-                    { param: 'decay', min: 0.1, max: 10, step: 0.1 },
-                    { param: 'preDelay', min: 0, max: 1, step: 0.01 }
-                ])}
+                ${this.createEffectSection('chorus', 'Chorus', [ { param: 'wet', min: 0, max: 1, step: 0.01 }, { param: 'frequency', min: 0.1, max: 5, step: 0.01 }, { param: 'delayTime', min: 1, max: 10, step: 0.01 }, { param: 'depth', min: 0, max: 1, step: 0.01 } ])}
+                ${this.createEffectSection('phaser', 'Phaser', [ { param: 'wet', min: 0, max: 1, step: 0.01 }, { param: 'frequency', min: 0.1, max: 2, step: 0.01 }, { param: 'octaves', min: 1, max: 8, step: 1 }, { param: 'baseFrequency', min: 20, max: 1000, step: 1 } ])}
+                ${this.createEffectSection('phaserLFO', 'Phaser LFO', [ { param: 'frequency', min: 0.1, max: 10, step: 0.1 }, { param: 'depth', min: 0, max: 1, step: 0.01 } ], true)}
+                ${this.createEffectSection('tremolo', 'Tremolo', [ { param: 'wet', min: 0, max: 1, step: 0.01 }, { param: 'frequency', min: 1, max: 20, step: 0.5 }, { param: 'depth', min: 0, max: 1, step: 0.01 } ])}
+                ${this.createEffectSection('tremoloLFO', 'Tremolo LFO', [ { param: 'frequency', min: 0.1, max: 10, step: 0.1 }, { param: 'depth', min: 0, max: 1, step: 0.01 } ], true)}
+                ${this.createEffectSection('vibrato', 'Vibrato', [ { param: 'wet', min: 0, max: 1, step: 0.01 }, { param: 'frequency', min: 1, max: 15, step: 0.5 }, { param: 'depth', min: 0, max: 1, step: 0.01 } ])}
+                ${this.createEffectSection('vibratoLFO', 'Vibrato LFO', [ { param: 'frequency', min: 0.1, max: 10, step: 0.1 }, { param: 'depth', min: 0, max: 1, step: 0.01 } ], true)}
+                ${this.createEffectSection('distortion', 'Distortion', [ { param: 'wet', min: 0, max: 1, step: 0.01 }, { param: 'distortion', min: 0, max: 1, step: 0.01 }, { param: 'oversample', type: 'select', options: ['none','2x','4x'] } ])}
+                ${this.createEffectSection('compressor', 'Compressor', [ { param: 'threshold', min: -40, max: 0, step: 1 }, { param: 'ratio', min: 1, max: 20, step: 0.5 }, { param: 'attack', min: 0.001, max: 1, step: 0.001 }, { param: 'release', min: 0.001, max: 1, step: 0.001 }, { param: 'knee', min: 0, max: 40, step: 1 } ])}
+                ${this.createEffectSection('bitCrusher', 'BitCrusher', [ { param: 'bits', min: 1, max: 16, step: 1 } ])}
+                ${this.createEffectSection('delay', 'Delay', [ { param: 'wet', min: 0, max: 1, step: 0.01 }, { param: 'delayTime', min: 0.01, max: 1, step: 0.01 }, { param: 'feedback', min: 0, max: 0.95, step: 0.01 } ])}
+                ${this.createEffectSection('reverb', 'Reverb', [ { param: 'wet', min: 0, max: 1, step: 0.01 }, { param: 'decay', min: 0.1, max: 10, step: 0.1 }, { param: 'preDelay', min: 0, max: 1, step: 0.01 } ])}
             </div>
         `;
     },
 
     createEffectSection(name, label, params, isLFO = false) {
+        // ... (this function's internals are mostly the same) ...
         let controls = '';
         const d = this.defaults[name] || {};
         params.forEach(p => {
@@ -177,16 +119,24 @@ const EnhancedControls = {
                 controls += this.createSliderControl(id, this.formatLabel(param), d[param], min, max, step, `${name}.${param}`);
             }
         });
-        // Only add toggle for effects that have a "wet" parameter!
+        
         const showToggle = effectsWithWet.includes(name);
+
+        // CHANGED: This now returns the full collapsible structure.
         return `
-            <div class="control-group">
-                <h3>${label}${!isLFO && showToggle ? this.createToggleSwitch(`${name}Enable`, `${name}.wet`) : ''}</h3>
-                ${controls}
+            <div class="control-group collapsed">
+                <div class="group-header">
+                    <h3>${label}</h3>
+                    ${!isLFO && showToggle ? this.createToggleSwitch(`${name}Enable`, `${name}.wet`) : ''}
+                </div>
+                <div class="group-content">
+                    ${controls}
+                </div>
             </div>
         `;
     },
 
+    // ... createSliderControl, createSelectControl, etc. are UNCHANGED ...
     createSliderControl(id, label, value, min, max, step, path) {
         const formatter = this.getFormatter(id);
         return `
@@ -251,8 +201,9 @@ const EnhancedControls = {
         }
     },
 
+
     setupAllControls() {
-        // Range/number controls
+        // ... (existing control setup logic is unchanged) ...
         this.panel.querySelectorAll('input[type="range"], input[type="number"]').forEach(el => {
             const path = el.dataset.path;
             if (!path) return;
@@ -268,7 +219,6 @@ const EnhancedControls = {
             update(el.value);
         });
 
-        // Selects
         this.panel.querySelectorAll('select[data-path]').forEach(el => {
             const path = el.dataset.path;
             if (!path) return;
@@ -277,7 +227,6 @@ const EnhancedControls = {
             update(el.value);
         });
 
-        // Checkbox toggles
         this.panel.querySelectorAll('input[type="checkbox"][data-path]').forEach(el => {
             const path = el.dataset.path;
             if (!path) return;
@@ -285,12 +234,24 @@ const EnhancedControls = {
             el.addEventListener('change', e => update(e.target.checked));
             update(el.checked);
         });
-
-        // Emergency Stop button
+        
         const stopBtn = this.panel.querySelector('#emergencyStop');
         if (stopBtn && window.AudioSafety && typeof AudioSafety.emergencyStop === 'function') {
             stopBtn.onclick = AudioSafety.emergencyStop;
         }
+
+        // CHANGED: Add event listener for collapsing/expanding sections.
+        this.panel.addEventListener('click', (e) => {
+            // Use .closest() to find the header, making the whole header area clickable
+            const header = e.target.closest('.group-header');
+            if (header) {
+                // Find the parent .control-group and toggle the 'collapsed' class
+                const group = header.parentElement;
+                if (group) {
+                    group.classList.toggle('collapsed');
+                }
+            }
+        });
     }
 };
 
