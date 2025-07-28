@@ -7,6 +7,8 @@
 // Import other modules it needs to communicate with directly
 import Keyboard from './keyboard.js';
 import PianoRoll from './PianoRoll.js';
+// --- FIX 1: Import LoopManager to access loop settings ---
+import LoopManager from './LoopManager.js'; 
 
 const EnhancedRecorder = {
     // --- Properties ---
@@ -39,12 +41,10 @@ const EnhancedRecorder = {
     syncSynthToUI() {
         if (!window.synthApp.synth) return;
         
-        // Set initial BPM from the input field
         if (this.dom.bpm && window.Tone.Transport) {
             window.Tone.Transport.bpm.value = parseFloat(this.dom.bpm.value);
         }
 
-        // Set initial oscillator type and detune
         this.setOsc();
         this.setDetune();
     },
@@ -53,14 +53,8 @@ const EnhancedRecorder = {
      * Attaches event listeners to the transport and parameter controls.
      */
     bindUI() {
-        // Oscillator controls
-        if (this.dom.waveform) {
-            this.dom.waveform.onchange = () => this.setOsc();
-        }
-        if (this.dom.detune) {
-            // Use 'input' for real-time updates from the slider
-            this.dom.detune.oninput = () => this.setDetune();
-        }
+        if (this.dom.waveform) this.dom.waveform.onchange = () => this.setOsc();
+        if (this.dom.detune) this.dom.detune.oninput = () => this.setDetune();
         if (this.dom.bpm) {
             this.dom.bpm.onchange = (e) => {
                 if (window.Tone && window.Tone.Transport) {
@@ -69,7 +63,6 @@ const EnhancedRecorder = {
             };
         }
 
-        // Transport controls
         if (this.dom.recordBtn) this.dom.recordBtn.onclick = () => this.onRecord();
         if (this.dom.stopBtn) this.dom.stopBtn.onclick = () => this.stop();
         if (this.dom.playBtn) this.dom.playBtn.onclick = () => this.playSeq();
@@ -80,17 +73,15 @@ const EnhancedRecorder = {
     setOsc() {
         const type = this.dom.waveform ? this.dom.waveform.value : 'sine';
         if (window.synthApp.synth) {
-            window.synthApp.synth.setParameter('oscillator.type', type); // changed
+            window.synthApp.synth.setParameter('oscillator.type', type);
         }
     },
     
     setDetune() {
         const value = this.dom.detune ? parseFloat(this.dom.detune.value) : 0;
-        if (this.dom.detuneVal) {
-            this.dom.detuneVal.textContent = value;
-        }
+        if (this.dom.detuneVal) this.dom.detuneVal.textContent = value;
         if (window.synthApp.synth) {
-            window.synthApp.synth.setParameter('oscillator.detune', value); // changed
+            window.synthApp.synth.setParameter('oscillator.detune', value);
         }
     },
 
@@ -99,16 +90,14 @@ const EnhancedRecorder = {
         if (!window.synthApp.synth || window.synthApp.activeNotes.has(note)) return;
 
         window.synthApp.activeNotes.add(note);
-        Keyboard.updateKeyVisual(note, true); // Direct call to Keyboard module
+        Keyboard.updateKeyVisual(note, true);
 
-        // If armed, start recording on the first note press
         if (window.synthApp.isArmed && !window.synthApp.isRec) {
             this.startRec();
         }
 
         if (window.synthApp.isRec) {
             const time = window.Tone.now() - window.synthApp.recStart;
-            // Use a durable note ID for tracking release
             const noteId = `${note}_${time}`;
             window.synthApp.activeNoteIds.set(note, noteId);
             window.synthApp.seq.push({ id: noteId, note, start: time, dur: 0, vel: 0.8 });
@@ -121,14 +110,13 @@ const EnhancedRecorder = {
         if (!window.synthApp.synth || !window.synthApp.activeNotes.has(note)) return;
 
         window.synthApp.activeNotes.delete(note);
-        Keyboard.updateKeyVisual(note, false); // Direct call to Keyboard module
+        Keyboard.updateKeyVisual(note, false);
 
         if (window.synthApp.isRec) {
             const noteId = window.synthApp.activeNoteIds.get(note);
             const noteObject = window.synthApp.seq.find(n => n.id === noteId);
             if (noteObject) {
                 noteObject.dur = (window.Tone.now() - window.synthApp.recStart) - noteObject.start;
-                // Clean up the temporary ID map
                 window.synthApp.activeNoteIds.delete(note);
             }
         }
@@ -151,7 +139,7 @@ const EnhancedRecorder = {
         window.synthApp.isRec = true;
         window.synthApp.isArmed = false;
         window.synthApp.recStart = window.Tone.now();
-        window.synthApp.seq = []; // Start a new sequence
+        window.synthApp.seq = [];
         this.updateStatus();
     },
 
@@ -159,11 +147,11 @@ const EnhancedRecorder = {
         if (window.synthApp.isPlaying) {
             window.Tone.Transport.stop();
             window.Tone.Transport.cancel(); // Clear all scheduled events
+            // --- FIX 2: Ensure the loop property is reset on stop ---
+            window.Tone.Transport.loop = false; 
         }
 
-        // If recording was active, finalize the recording
         if (window.synthApp.isRec) {
-            // Ensure any held notes have their durations calculated
             window.synthApp.activeNotes.forEach(note => this.releaseNote(note));
         }
 
@@ -171,36 +159,50 @@ const EnhancedRecorder = {
         window.synthApp.isRec = false;
         window.synthApp.isArmed = false;
 
-        // Ensure all synth voices are silenced
         window.synthApp.synth.releaseAll();
-        // Reset visuals for any stuck keys
         this.getSequenceNotes().forEach(note => Keyboard.updateKeyVisual(note, false));
 
         this.updateStatus();
     },
 
+    // --- FIX 3: The entire playSeq function is rewritten to handle looping ---
     playSeq() {
         if (!window.synthApp.seq.length || window.synthApp.isPlaying) return;
-
+    
         this.stop(); // Ensure a clean state before playing
         window.synthApp.isPlaying = true;
         this.updateStatus();
-
+    
         // Schedule all notes from the sequence onto the transport
         window.synthApp.seq.forEach(noteEvent => {
-            if (noteEvent.dur > 0.01) { // Avoid scheduling zero-duration notes
-                window.Tone.Transport.scheduleOnce(time => {
+            if (noteEvent.dur > 0.01) { 
+                // --- FIX: Use .schedule() instead of .scheduleOnce() ---
+                // This ensures the events will fire on every loop, not just the first time.
+                window.Tone.Transport.schedule(time => {
+                    // The 'time' argument provided by the transport is the precise,
+                    // audio-context-aware time for the event to start.
                     window.synthApp.synth.triggerAttackRelease(noteEvent.note, noteEvent.dur, time, noteEvent.vel);
                 }, noteEvent.start);
             }
         });
-
-        // Schedule a stop event at the end of the sequence
-        const sequenceDuration = this.getSequenceDuration();
-        window.Tone.Transport.scheduleOnce(() => {
-            this.stop();
-        }, sequenceDuration);
-
+    
+        // Check LoopManager to decide playback mode
+        if (LoopManager.isLoopEnabled) {
+            console.log('[EnhancedRecorder] Starting playback with loop enabled.');
+            // Set the transport to loop using settings from LoopManager
+            window.Tone.Transport.loop = true;
+            window.Tone.Transport.loopStart = LoopManager.loopStart;
+            window.Tone.Transport.loopEnd = LoopManager.loopEnd;
+        } else {
+            console.log('[EnhancedRecorder] Starting single playback.');
+            // Ensure looping is off and schedule a single stop event
+            window.Tone.Transport.loop = false;
+            const sequenceDuration = this.getSequenceDuration();
+            window.Tone.Transport.scheduleOnce(() => {
+                this.stop(); // Stop automatically after one playthrough
+            }, sequenceDuration);
+        }
+    
         window.Tone.Transport.start();
     },
 
@@ -208,7 +210,7 @@ const EnhancedRecorder = {
         this.stop();
         window.synthApp.seq = [];
         this.updateStatus();
-        PianoRoll.draw(); // Direct call to PianoRoll module
+        PianoRoll.draw();
     },
     
     // --- UI and State Management ---
