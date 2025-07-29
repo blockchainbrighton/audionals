@@ -197,5 +197,14 @@ export class SynthEngine {
         Object.values(this.nodes).forEach(node => node?.dispose?.());
         console.log('[SynthEngine] All nodes disposed.');
     }
+
+    /**
+     * Returns the final node in the synth's audio chain, allowing it to be
+     * connected to an external destination like a host's mixer.
+     * @returns {Tone.Gain} The master gain node.
+     */
+    getOutputNode() {
+        return this.nodes.master;
+    }
 }
 
