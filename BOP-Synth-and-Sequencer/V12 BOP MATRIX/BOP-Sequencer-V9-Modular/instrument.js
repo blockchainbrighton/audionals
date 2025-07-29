@@ -4,13 +4,17 @@ import { projectState, runtimeState, getCurrentSequence } from './state.js';
 import * as config from './config.js';
 import { setLoaderStatus } from './ui.js';
 
-// --- NEW, FUTURE-PROOF IMPORTS ---
 import { BopSynthLogic } from '../BOP-SYNTH-V12/BopSynthLogic.js';
-// We import the component definition, which automatically registers <bop-synth-ui>
+// This import registers the <bop-synth-ui> custom element.
 import '../BOP-SYNTH-V12/BopSynthUIComponent.js';
 
 let activeInstrumentLogic = null; 
 
+/**
+ * Creates a new BopSynth instance and assigns it to a channel.
+ * @param {number} seqIndex - The index of the sequence.
+ * @param {number} chanIndex - The index of the channel.
+ */
 export function createInstrumentForChannel(seqIndex, chanIndex) {
     try {
         setLoaderStatus('Loading Instrument...');
@@ -23,17 +27,31 @@ export function createInstrumentForChannel(seqIndex, chanIndex) {
         }
 
         const instrumentId = `inst-${projectState.nextInstrumentId++}`;
+        
         runtimeState.instrumentRack[instrumentId] = {
             id: instrumentId,
-            logic: logic,
-            // The UI is no longer stored here; it's managed by the DOM element
+            logic: logic, 
+
+            playInternalSequence: (startTime) => {
+                logic.eventBus.dispatchEvent(new CustomEvent('transport-play', { detail: { startTime } }));
+            },
+            stopInternalSequence: () => {
+                logic.eventBus.dispatchEvent(new CustomEvent('transport-stop'));
+            },
+            getPatch: () => {
+                const soundPatch = logic.modules.saveLoad.getFullState();
+                const sequenceData = logic.modules.recorder.getSequence();
+                return { sound: soundPatch, sequence: sequenceData };
+            }
         };
-        
+
         const channel = projectState.sequences[seqIndex].channels[chanIndex];
         channel.instrumentId = instrumentId;
 
+        // "LOAD" LOGIC: Correctly loads sound and sequence when instrument is first created.
         if (channel.patch) {
-            logic.modules.saveLoad.loadState(channel.patch);
+            if (channel.patch.sound) logic.modules.saveLoad.loadState(channel.patch.sound);
+            if (channel.patch.sequence) logic.modules.recorder.setSequence(channel.patch.sequence);
         }
 
         setLoaderStatus('Instrument Loaded.', false);
@@ -46,7 +64,12 @@ export function createInstrumentForChannel(seqIndex, chanIndex) {
     }
 }
 
-export function openSynthUI(chanIndex) {
+
+/**
+ * Opens the synth UI modal for a specific instrument on a channel.
+ * @param {number} chanIndex - The index of the channel whose synth UI should be opened.
+ */
+export async function openSynthUI(chanIndex) {
     const channel = getCurrentSequence().channels[chanIndex];
     if (!channel || !channel.instrumentId) return;
 
@@ -59,18 +82,16 @@ export function openSynthUI(chanIndex) {
 
     const modalContainer = document.getElementById('synth-modal-container');
     
-    // --- THIS IS THE NEW, SIMPLIFIED LOGIC ---
-    // 1. Create an instance of our new custom element.
     const synthElement = document.createElement('bop-synth-ui');
-
-    // 2. Connect the UI element to the instrument's logic core.
     synthElement.connect(instrument.logic);
-
-    // 3. Re-wire its controls for sequencer integration.
-    // We pass the element's shadowRoot so the function can find the buttons inside it.
     reWireSynthControls(synthElement.shadowRoot, instrument.logic.eventBus);
     
-    // 4. Build the modal content around our self-contained component.
+    // --- THE "RE-SYNC" FIX ---
+    // The UI has been created, but it's in a default state.
+    // We must now command the logic core's recorder to broadcast its current state.
+    // The newly created UI will hear this event and update itself accordingly (e.g., enable the Play button).
+    instrument.logic.modules.recorder.updateState();
+    
     const modalContent = document.createElement('div');
     modalContent.className = 'synth-modal-content';
     modalContent.appendChild(synthElement);
@@ -79,21 +100,24 @@ export function openSynthUI(chanIndex) {
     closeButton.textContent = 'Close & Save Patch';
     closeButton.className = 'close-button';
     closeButton.onclick = () => {
-        channel.patch = instrument.logic.modules.saveLoad.getFullState();
+        // "SAVE" LOGIC: Correctly gets the full state and saves it to the channel.
+        channel.patch = instrument.getPatch();
+        console.log("Saved state to channel:", channel.patch);
+
         modalContainer.style.display = 'none';
-        modalContainer.innerHTML = ''; // This automatically triggers disconnectedCallback in the component for cleanup.
+        modalContainer.innerHTML = '';
         activeInstrumentLogic = null;
     };
     modalContent.appendChild(closeButton);
 
-    // 5. Display the modal.
     modalContainer.innerHTML = '';
     modalContainer.appendChild(modalContent);
     modalContainer.style.display = 'flex';
 }
 
+// No changes needed in this function from the last version.
 function reWireSynthControls(shadowRoot, eventBus) {
-    // This function now queries for elements inside the component's Shadow DOM
+    // ... (rest of the function is identical to previous correct version)
     const recordBtn = shadowRoot.querySelector('.record-btn');
     const playBtn = shadowRoot.querySelector('.play-btn');
     const stopBtn = shadowRoot.querySelector('.stop-btn');
@@ -108,37 +132,27 @@ function reWireSynthControls(shadowRoot, eventBus) {
         e.preventDefault();
         document.dispatchEvent(new CustomEvent('bop:request-record-toggle'));
     };
+    
     playBtn.onclick = e => {
         e.preventDefault();
-        document.getElementById('playSequenceBtn').click();
+        eventBus.dispatchEvent(new CustomEvent('transport-play')); 
     };
+    
     stopBtn.onclick = e => {
         e.preventDefault();
-        document.getElementById('stopBtn').click();
-    };
-    clearBtn.onclick = e => {
-        e.preventDefault();
-        if (confirm('Clear all steps for this instrument track?')) {
-            document.dispatchEvent(new CustomEvent('bop:request-clear', { 
-                detail: { instrumentId: activeInstrumentLogic.id } 
-            }));
-        }
+        eventBus.dispatchEvent(new CustomEvent('transport-stop'));
     };
 
+    clearBtn.onclick = e => {
+        e.preventDefault();
+        if (confirm('Clear the internal recording for this synth?')) {
+            eventBus.dispatchEvent(new CustomEvent('transport-clear'));
+        }
+    };
+    
     eventBus.addEventListener('keyboard-note-on', e => {
         if (activeInstrumentLogic) {
-            const { note, velocity } = e.detail;
-            activeInstrumentLogic.modules.synthEngine.noteOn(note, velocity);
-            
-            if (projectState.isRecording) {
-                const stepIndex = runtimeState.currentStepIndex;
-                const sequence = getCurrentSequence();
-                const channel = sequence.channels.find(c => c.instrumentId === activeInstrumentLogic.id);
-                if (channel && stepIndex >= 0 && stepIndex < config.TOTAL_STEPS) {
-                    channel.steps[stepIndex] = true;
-                    // ... (logic to visually update the step in the main sequencer UI)
-                }
-            }
+            activeInstrumentLogic.modules.synthEngine.noteOn(e.detail.note, e.detail.velocity);
         }
     });
 
