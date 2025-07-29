@@ -1,11 +1,16 @@
+// In BOP-SYNTH-V12/BopSynthLogic.js
+
+
 /**
  * @file BopSynthLogic.js
  * @description The "headless" core logic controller for the BOP Synthesizer.
  * Manages state, the audio engine, recording, and presets. It is UI-agnostic.
+ * v2: Includes direct API methods for host integration.
  */
 
 import { SynthEngine } from './SynthEngine.js';
-import { SaveLoad } from './SaveLoad.js'; // Ensure correct import name if default export is used
+// We now need to import SaveLoad to access its methods directly
+import { SaveLoad } from './SaveLoad.js'; 
 import { EnhancedRecorder } from './EnhancedRecorder.js';
 import LoopManager from './LoopManager.js';
 
@@ -14,8 +19,6 @@ export class BopSynthLogic {
         this.Tone = Tone;
         this.eventBus = document.createElement('div');
 
-        // --- FIX: The state object MUST be created INSIDE the constructor. ---
-        // This guarantees that every `new BopSynthLogic()` gets its own unique state.
         this.state = {
             seq: [],
             curOct: 4,
@@ -26,8 +29,8 @@ export class BopSynthLogic {
             isPlaying: false,
             recStart: 0,
             selNote: null,
-            synth: null,
-            recorder: null
+            synth: null, // This will hold the SynthEngine instance
+            recorder: null // This will hold the EnhancedRecorder instance
         };
 
         this.modules = {};
@@ -35,11 +38,10 @@ export class BopSynthLogic {
     }
 
     init() {
-        // --- Initialize Core Logic Modules ---
-        // Each of these gets a reference to THIS instance's unique state object.
         this.modules.synthEngine = new SynthEngine(this.Tone);
+        // Pass the full logic controller `this` to SaveLoad so it can call back
+        this.modules.saveLoad = new SaveLoad(this); 
         this.modules.recorder = new EnhancedRecorder(this.state, this.modules.synthEngine, this.eventBus);
-        this.modules.saveLoad = new SaveLoad(this.state, this.eventBus);
         this.modules.loopManager = new LoopManager(this.state, this.eventBus);
 
         this.state.synth = this.modules.synthEngine;
@@ -48,10 +50,38 @@ export class BopSynthLogic {
         this.wireUpEvents();
         console.log('[BopSynthLogic] Headless logic core initialized.');
     }
+    
+    // =====================================================================
+    // --- HOST (SEQUENCER) FACING API ---
+    // These methods provide direct, synchronous access for host applications.
+    // =====================================================================
 
     /**
-     * Wires up event handlers for core logic and state management.
+     * Retrieves the complete, serializable state of the synthesizer.
+     * Use this in your sequencer's "Save Project" function.
+     * @returns {object} A JSON-compatible object representing all synth settings.
      */
+    getFullState() {
+        // Delegate state retrieval to the specialized SaveLoad module.
+        return this.modules.saveLoad.getStateObject();
+    }
+
+    /**
+     * Loads a state object into the synthesizer, updating all settings.
+     * Use this in your sequencer's "Load Project" function.
+     * @param {object} stateObject A valid state object, typically from getFullState().
+     */
+    loadFullState(stateObject) {
+        // Delegate state loading to the SaveLoad module.
+        this.modules.saveLoad.loadState(stateObject);
+    }
+
+
+    // =====================================================================
+    // --- STANDALONE UI EVENT WIRING ---
+    // This section remains unchanged to preserve standalone functionality.
+    // =====================================================================
+    
     wireUpEvents() {
         const bus = this.eventBus;
         const recorder = this.modules.recorder;
@@ -67,10 +97,7 @@ export class BopSynthLogic {
         });
 
         // Transport Events
-        bus.addEventListener('transport-play', (e) => {
-            const startTime = e.detail?.startTime; // Get the time from the event
-            recorder.startPlayback(startTime); // Pass it to the recorder
-        });
+        bus.addEventListener('transport-play', (e) => recorder.startPlayback(e.detail?.startTime));
         bus.addEventListener('transport-stop', () => recorder.stopAll());
         bus.addEventListener('transport-record', () => recorder.toggleRecording());
         bus.addEventListener('transport-clear', () => recorder.clearSequence());
@@ -90,31 +117,20 @@ export class BopSynthLogic {
             this.state.curOct = e.detail.octave;
         });
 
-        // Save/Load Events
-        bus.addEventListener('save-project', () => this.modules.saveLoad.saveState());
-        bus.addEventListener('load-project', e => this.modules.saveLoad.loadState(e.detail.data));
-        // The 'load-project-trigger' listener was correctly removed in the previous step.
-
+        // --- UPDATED SAVE/LOAD FOR STANDALONE ---
+        // These events are for the standalone UI's buttons.
+        bus.addEventListener('save-project', () => this.modules.saveLoad.saveStateToFile());
+        bus.addEventListener('load-project', e => this.modules.saveLoad.loadStateFromFile(e.detail.data));
+        
         // Piano Roll Editing Events
-        bus.addEventListener('note-selected', e => {
-            this.state.selNote = e.detail.noteIndex;
-        });
-        // Note: 'note-edited' was missing, adding it back for completeness.
+        bus.addEventListener('note-selected', e => { this.state.selNote = e.detail.noteIndex; });
         bus.addEventListener('note-edited', e => {
-             if (recorder.editNote) {
-                recorder.editNote(e.detail.noteIndex, e.detail.changes);
-             }
+             if (recorder.editNote) { recorder.editNote(e.detail.noteIndex, e.detail.changes); }
         });
 
         // Synth Parameter Events
-        bus.addEventListener('effect-toggle', e => {
-            if (this.modules.synthEngine.toggleEffect) {
-                this.modules.synthEngine.toggleEffect(e.detail.effectName, e.detail.enabled);
-            }
-        });
-        bus.addEventListener('parameter-change', e => {
-            this.modules.synthEngine.setParameter(e.detail.parameter, e.detail.value);
-        });
+        bus.addEventListener('effect-toggle', e => this.modules.synthEngine.toggleEffect(e.detail.effectName, e.detail.enabled));
+        bus.addEventListener('parameter-change', e => this.modules.synthEngine.setParameter(e.detail.parameter, e.detail.value));
 
         // Loop Events
         bus.addEventListener('loop-toggle', () => this.modules.loopManager.toggleLoop());

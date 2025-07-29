@@ -28,30 +28,27 @@ export function createInstrumentForChannel(seqIndex, chanIndex) {
 
         const instrumentId = `inst-${projectState.nextInstrumentId++}`;
         
+        // --- THE DEFINITIVE FIX: Use the synth's own state management ---
         runtimeState.instrumentRack[instrumentId] = {
             id: instrumentId,
             logic: logic, 
-
-            playInternalSequence: (startTime) => {
-                logic.eventBus.dispatchEvent(new CustomEvent('transport-play', { detail: { startTime } }));
-            },
-            stopInternalSequence: () => {
-                logic.eventBus.dispatchEvent(new CustomEvent('transport-stop'));
-            },
-            getPatch: () => {
-                const soundPatch = logic.modules.saveLoad.getFullState();
-                const sequenceData = logic.modules.recorder.getSequence();
-                return { sound: soundPatch, sequence: sequenceData };
-            }
+            
+            // Public API for the sequencer to use
+            playInternalSequence: (startTime) => logic.eventBus.dispatchEvent(new CustomEvent('transport-play', { detail: { startTime } })),
+            stopInternalSequence: () => logic.eventBus.dispatchEvent(new CustomEvent('transport-stop')),
+            
+            // This now correctly uses the synth's own getFullState method
+            getPatch: () => logic.modules.saveLoad.getFullState()
         };
 
         const channel = projectState.sequences[seqIndex].channels[chanIndex];
         channel.instrumentId = instrumentId;
 
-        // "LOAD" LOGIC: Correctly loads sound and sequence when instrument is first created.
+        // --- THE "LOAD" FIX ---
+        // If the channel has a saved patch, pass the entire object to the synth's loadState method.
+        // The synth's SaveLoad module knows how to handle its own data structure.
         if (channel.patch) {
-            if (channel.patch.sound) logic.modules.saveLoad.loadState(channel.patch.sound);
-            if (channel.patch.sequence) logic.modules.recorder.setSequence(channel.patch.sequence);
+            logic.modules.saveLoad.loadState(channel.patch);
         }
 
         setLoaderStatus('Instrument Loaded.', false);
@@ -74,10 +71,8 @@ export async function openSynthUI(chanIndex) {
     if (!channel || !channel.instrumentId) return;
 
     const instrument = runtimeState.instrumentRack[channel.instrumentId];
-    if (!instrument) {
-        console.error(`Cannot open modal: Instrument ${channel.instrumentId} not found.`);
-        return;
-    }
+    if (!instrument) return;
+    
     activeInstrumentLogic = instrument.logic; 
 
     const modalContainer = document.getElementById('synth-modal-container');
@@ -86,10 +81,7 @@ export async function openSynthUI(chanIndex) {
     synthElement.connect(instrument.logic);
     reWireSynthControls(synthElement.shadowRoot, instrument.logic.eventBus);
     
-    // --- THE "RE-SYNC" FIX ---
-    // The UI has been created, but it's in a default state.
-    // We must now command the logic core's recorder to broadcast its current state.
-    // The newly created UI will hear this event and update itself accordingly (e.g., enable the Play button).
+    // After connecting, command the logic core to re-broadcast its state for the new UI to sync up.
     instrument.logic.modules.recorder.updateState();
     
     const modalContent = document.createElement('div');
@@ -100,9 +92,11 @@ export async function openSynthUI(chanIndex) {
     closeButton.textContent = 'Close & Save Patch';
     closeButton.className = 'close-button';
     closeButton.onclick = () => {
-        // "SAVE" LOGIC: Correctly gets the full state and saves it to the channel.
+        // --- THE "SAVE" FIX ---
+        // The instrument's getPatch() method already returns the full state object.
+        // We just need to store this entire object.
         channel.patch = instrument.getPatch();
-        console.log("Saved state to channel:", channel.patch);
+        console.log("Saved full state to channel:", channel.patch);
 
         modalContainer.style.display = 'none';
         modalContainer.innerHTML = '';
@@ -115,7 +109,7 @@ export async function openSynthUI(chanIndex) {
     modalContainer.style.display = 'flex';
 }
 
-// No changes needed in this function from the last version.
+// No changes are needed in this function.
 function reWireSynthControls(shadowRoot, eventBus) {
     // ... (rest of the function is identical to previous correct version)
     const recordBtn = shadowRoot.querySelector('.record-btn');

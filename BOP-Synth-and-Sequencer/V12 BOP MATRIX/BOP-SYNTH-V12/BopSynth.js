@@ -1,3 +1,5 @@
+// In BOP-SYNTH-V12/BopSynth.js
+
 /**
  * @file BopSynth.js
  * @description Main controller class for the BOP Synthesizer application.

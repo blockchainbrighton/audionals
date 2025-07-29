@@ -1,3 +1,6 @@
+// In BOP-SYNTH-V12/EnhancedControls.js
+
+
 /**
  * @file EnhancedControls.js
  * @description Enhanced controls UI component for the BOP Synthesizer.

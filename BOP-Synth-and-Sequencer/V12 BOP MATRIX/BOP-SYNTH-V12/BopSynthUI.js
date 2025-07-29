@@ -1,3 +1,6 @@
+// In BOP-SYNTH-V12/BopSynthUI.js
+
+
 /**
  * @file BopSynthUI.js
  * @description The UI controller for the BOP Synthesizer application.
