@@ -144,17 +144,22 @@ export class BopSynth {
         });
         
         // Recorder events
+        // ***FIX START***
+        // The original code was not passing the `hasSequence` property to the UI.
+        // This meant the UI didn't know when to enable the play button after a recording was made or loaded.
+        // The fix is to destructure `hasSequence` and include it in the `transport-state-update` event.
         this.eventBus.addEventListener('recording-state-changed', (e) => {
-            const { isRecording, isArmed, isPlaying } = e.detail;
+            const { isRecording, isArmed, isPlaying, hasSequence } = e.detail;
             this.state.isRec = isRecording;
             this.state.isArmed = isArmed;
             this.state.isPlaying = isPlaying;
             
-            // Update transport UI
+            // Update transport UI, now including the 'hasSequence' detail.
             this.eventBus.dispatchEvent(new CustomEvent('transport-state-update', {
-                detail: { isRecording, isArmed, isPlaying }
+                detail: { isRecording, isArmed, isPlaying, hasSequence }
             }));
         });
+        // ***FIX END***
         
         this.eventBus.addEventListener('sequence-changed', (e) => {
             // Update piano roll when sequence changes
@@ -289,4 +294,3 @@ export class BopSynth {
 }
 
 export default BopSynth;
-
