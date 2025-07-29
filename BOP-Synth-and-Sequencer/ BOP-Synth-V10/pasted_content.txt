@@ -1,0 +1,51 @@
+You are an expert JavaScript software architect specializing in modern, component-based design patterns. Your task is to perform a significant refactoring of a web synthesizer application. The primary goal is to eliminate the application's reliance on the global window.synthApp state object and transform the codebase into a portable, instantiable, and well-encapsulated component.
+I will provide you with the complete codebase, with each file delimited by --- START OF FILE [filename] --- and --- END OF FILE ---.
+Core Architectural Plan: The "BopSynth Appliance" Model
+You will refactor the application to follow a Controller/Appliance pattern. The entire synthesizer will be managed by a new main class called BopSynth.
+Create a New Controller Class (BopSynth.js):
+This class will be the new "brain" of the application.
+It will own the application state (the data that was previously in window.synthApp).
+It will instantiate all other modules (like the SynthEngine, EnhancedRecorder, Keyboard, PianoRoll, etc.).
+It will manage a simple Event Bus for communication between modules. This event bus can be a simple document.createElement('div').
+It will be responsible for Dependency Injection—passing necessary dependencies (like the state object, the event bus, or other module instances) into the constructors of the modules it creates.
+Decouple All Modules:
+Modules must no longer access window.synthApp.
+Modules must no longer call methods on each other directly (e.g., Keyboard must not call EnhancedRecorder).
+Communication must happen exclusively through the event bus or by calling methods on dependencies that were explicitly passed into the module's constructor.
+Step-by-Step Refactoring Instructions
+You will create one new file (BopSynth.js) and modify all existing modules according to the following plan:
+1. Create BopSynth.js (The New Controller)
+Create a new file named BopSynth.js.
+Define and export a class BopSynth.
+Constructor: The constructor should accept (Tone, uiElements), where uiElements is an object of DOM selectors (e.g., { keyboard: '#keyboard', pianoRoll: '#rollGrid', ... }).
+Properties:
+this.state: An object containing all the data formerly in window.synthApp.
+this.eventBus: An instance of a simple event emitter.
+Instances of all other modules (e.g., this.synthEngine, this.recorder, this.keyboard).
+wireUpEvents() Method: This method is crucial. It will contain all the this.eventBus.addEventListener(...) calls that connect the decoupled modules. For example: this.eventBus.addEventListener('keyboard-note-on', (e) => { this.recorder.handleNoteOn(e.detail.note); });. It will orchestrate all interactions.
+2. Refactor app.js (The Host Application)
+Remove all logic related to window.synthApp.
+Its only responsibility should be to load Tone.js, show the audio start prompt, and then, in appInit(), create a single instance of your new BopSynth class: window.bopSynth = new BopSynth(Tone, uiMountPoints);.
+All other module initializations (EnhancedControls.init(), Keyboard.init(), etc.) should be removed from app.js as this is now the BopSynth class's responsibility.
+3. Refactor Logic Modules (e.g., EnhancedRecorder.js, AudioSafety.js, SaveLoad.js)
+Convert them from singleton objects or existing classes into new classes designed for instantiation.
+Their constructors should accept the dependencies they need (e.g., constructor(state, synthEngine, eventBus)).
+Remove all direct DOM manipulation. Instead of updating a status element, emit an event like this.eventBus.dispatchEvent(new CustomEvent('status-update', { detail: { ... } }));.
+Remove all direct calls to other modules. Instead of PianoRoll.draw(), emit an event like this.eventBus.dispatchEvent(new CustomEvent('sequence-changed'));.
+Replace all reads/writes to window.synthApp with reads/writes to the this.state object passed into the constructor.
+4. Refactor UI Modules (e.g., Keyboard.js, PianoRoll.js, EnhancedControls.js, Transport.js)
+Convert them into classes.
+Their constructors should accept a DOM element (or selector) to attach to, and the eventBus.
+Event Emission: When a user interacts with the UI (e.g., clicks a key), the module should emit a generic event on the event bus (e.g., 'keyboard-note-on'). It should have no knowledge of who is listening.
+Event Listening: These modules will listen to events on the bus to know when to update their own visual state. For example, Keyboard.js will listen for a 'note-visual-change' event to light up a key.
+They must not contain application logic beyond what is necessary for their UI function.
+Guiding Principles and Constraints
+No Global State: After refactoring, window.synthApp must be completely gone.
+Strict Separation of Concerns:
+Logic/Data modules (EnhancedRecorder) must NOT know about the DOM.
+UI modules (Keyboard) must NOT know about other modules or complex application logic.
+Communication via Event Bus: All indirect communication between modules must use the event bus provided by the BopSynth controller.
+Dependency Injection: The BopSynth controller is the only component that should use new to create module instances. It passes these instances or other dependencies to the modules that need them.
+Output Format
+Please provide the fully refactored code. Each file should be clearly delimited in the same --- START OF FILE --- / --- END OF FILE --- format as the input. Additionally, please provide a summary.md file that briefly outlines the key changes made to each file, confirming the new architecture has been implemented.
+Now, here is the full source code for you to refactor:
