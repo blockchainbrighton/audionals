@@ -1,19 +1,22 @@
 /**
  * @file app.js
- * @description BOP Synth main host application. Handles Tone.js loading and BopSynth instantiation.
- * Refactored to use the new component-based architecture with BopSynth controller.
+ * @description BOP Synth main host application. Handles Tone.js loading and instantiates the BopSynth controllers.
+ * This file acts as the "shell" or "host" for the synthesizer application.
  */
 
-import BopSynth from './BopSynth.js';
+import { BopSynthLogic } from './BopSynthLogic.js';
+import { BopSynthUI } from './BopSynthUI.js';
 
 const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
 
 console.log('[BOP App Host] Starting application...');
 
+// --- Module-level variables ---
 let Tone;
-let bopSynth;
+let logicController;
+let uiController;
 
-// --- Tone.js Loading & Audio Start Flow ---
+// --- Tone.js Loading & Audio Start Flow (Unchanged) ---
 import(TONE_ORDINALS_URL)
     .then(() => {
         Tone = window.Tone;
@@ -24,7 +27,7 @@ import(TONE_ORDINALS_URL)
         console.error('[BOP App Host] Critical error: Failed to load Tone.js. App cannot start.', err);
     });
 
-// --- Show Overlay and Wait for User Audio Start ---
+// --- Show Overlay and Wait for User Audio Start (Unchanged) ---
 function showAudioPrompt() {
     const overlay = document.createElement('div');
     overlay.id = 'audio-prompt';
@@ -55,12 +58,15 @@ function showAudioPrompt() {
     };
 }
 
-// --- Main Initialization Function (runs *after* audio is ready) ---
+// --- Main Initialization Function (UPDATED) ---
 function appInit() {
     console.log('[BOP App Host] Initializing BOP Synth application...');
     
     try {
-        // Define UI element selectors for the BopSynth controller
+        // 1. Create the headless logic core. This holds the state and audio engine.
+        logicController = new BopSynthLogic(Tone);
+        
+        // 2. Define UI element selectors for the visual layer.
         const uiElements = {
             keyboard: '#keyboard',
             pianoRoll: '#rollGrid',
@@ -68,20 +74,21 @@ function appInit() {
             controls: '#control-panel'
         };
         
-        // Create the main BopSynth controller instance
-        bopSynth = new BopSynth(Tone, uiElements);
+        // 3. Create the UI layer, passing it the logic core and UI element selectors.
+        uiController = new BopSynthUI(logicController, uiElements);
         
-        // Make it globally accessible for debugging (optional)
-        window.bopSynth = bopSynth;
+        // Make controllers globally accessible for easier debugging
+        window.bopSynthLogic = logicController;
+        window.bopSynthUI = uiController;
         
-        // Emit Tone ready event for modules that need it
-        bopSynth.eventBus.dispatchEvent(new CustomEvent('tone-ready', {
+        // The eventBus is on the logic controller, dispatch events from there.
+        logicController.eventBus.dispatchEvent(new CustomEvent('tone-ready', {
             detail: { Tone }
         }));
         
         console.log('[BOP App Host] BopSynth application initialized successfully!');
         
-        // Setup global event handlers that don't belong to specific modules
+        // Setup global event handlers that are part of the host environment.
         setupGlobalEventHandlers();
         
     } catch (e) {
@@ -89,103 +96,72 @@ function appInit() {
     }
 }
 
-// --- Global Event Handler Setup ---
+// --- Global Event Handler Setup (UPDATED & SIMPLIFIED) ---
 function setupGlobalEventHandlers() {
-    // Tab switching functionality
+    // The event bus is the single point of communication.
+    const eventBus = logicController.eventBus;
+
+    // Tab switching functionality is a host-level UI concern.
     document.querySelectorAll('.tab-button').forEach(btn => {
         btn.onclick = () => {
             document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
             btn.classList.add('active');
             document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+            
             const tabId = btn.dataset.tab;
             const tabContent = document.getElementById(tabId);
             if (tabContent) {
                 tabContent.classList.add('active');
                 
-                // Emit tab change event for modules that need to respond
-                if (bopSynth) {
-                    bopSynth.eventBus.dispatchEvent(new CustomEvent('tab-changed', {
-                        detail: { tabId }
-                    }));
-                    
-                    // Special handling for MIDI tab to redraw piano roll
-                    if (tabId === 'midi') {
-                        bopSynth.eventBus.dispatchEvent(new CustomEvent('pianoroll-redraw'));
-                    }
+                // Notify modules about the tab change.
+                eventBus.dispatchEvent(new CustomEvent('tab-changed', {
+                    detail: { tabId }
+                }));
+                
+                // If the MIDI tab is opened, specifically request a redraw of the piano roll.
+                if (tabId === 'midi') {
+                    eventBus.dispatchEvent(new CustomEvent('pianoroll-redraw'));
                 }
             }
         };
     });
 
-    // Window resize handler
+    // Window resize handler.
     window.onresize = () => {
-        if (bopSynth) {
-            bopSynth.eventBus.dispatchEvent(new CustomEvent('window-resize'));
-            bopSynth.eventBus.dispatchEvent(new CustomEvent('keyboard-redraw'));
+        if (logicController) {
+            eventBus.dispatchEvent(new CustomEvent('window-resize'));
+            eventBus.dispatchEvent(new CustomEvent('keyboard-redraw')); // Specific redraw for keyboard
         }
     };
 
-    // Global keyboard shortcuts for effects
+    // Global keyboard shortcuts.
+    // This now fires a generic event, decoupling the host from the UI implementation.
     document.addEventListener('keydown', (e) => {
         if (e.ctrlKey || e.metaKey) {
             const keyMap = { 
-                '1': 'reverb', 
-                '2': 'delay', 
-                '3': 'chorus', 
-                '4': 'distortion', 
-                '5': 'filter' 
+                '1': 'reverb', '2': 'delay', '3': 'chorus', '4': 'distortion', '5': 'filter' 
             };
             if (keyMap[e.key]) {
                 e.preventDefault();
-                toggleEffectByKey(keyMap[e.key]);
+                // Fire an event that the UI layer (e.g., EnhancedControls) should listen for.
+                eventBus.dispatchEvent(new CustomEvent('shortcut-toggle-effect', {
+                    detail: { effectName: keyMap[e.key] }
+                }));
             }
         }
     });
 
-    // Start LFO visual updates
-    setInterval(updateLFOVisuals, 100);
+    // NOTE: LFO visual updates and their helper functions have been removed.
+    // This logic should be moved inside the relevant UI component (e.g., EnhancedControls.js)
+    // as it is not the responsibility of the host application.
 }
 
-/**
- * Toggles an effect's enabled state by simulating a click on its checkbox.
- * @param {string} effectName - The base name of the effect (e.g., "reverb").
- */
-function toggleEffectByKey(effectName) {
-    const toggle = document.getElementById(effectName + 'Enable');
-    if (toggle) {
-        toggle.checked = !toggle.checked;
-        toggle.dispatchEvent(new Event('change'));
-        console.log(`[BOP App Host] Toggled ${effectName} via keyboard shortcut.`);
-    }
-}
 
-/**
- * Provides simple visual feedback for active LFOs by toggling a class on their label.
- */
-function updateLFOVisuals() {
-    if (!bopSynth || !bopSynth.synthEngine) return;
-    
-    const lfoEffects = ['filter', 'tremolo', 'vibrato', 'phaser'];
-    lfoEffects.forEach(effectName => {
-        const checkboxId = `${effectName}Enable`;
-        const toggle = document.getElementById(checkboxId);
-        const label = document.querySelector(`label[for="${checkboxId}"]`);
-        if (toggle && label) {
-            let isActive = toggle.checked;
-            if (effectName === 'filter' && bopSynth.synthEngine.nodes.filter) {
-                isActive = toggle.checked && bopSynth.synthEngine.nodes.filter.state === 'started';
-            }
-            label.classList.toggle('lfo-active', isActive);
-        }
-    });
-}
-
-// --- Global Error Handling & Performance ---
+// --- Global Error Handling & Performance (Unchanged) ---
 window.addEventListener('error', (e) => {
     console.error('[BOP App Host] Global unhandled error:', e.error);
 });
 
-// Performance monitoring
 if (window.performance?.mark) {
     window.performance.mark('bop-app-start');
     window.addEventListener('load', () => {
@@ -198,10 +174,13 @@ if (window.performance?.mark) {
     });
 }
 
-// Cleanup on page unload
+// --- Cleanup on page unload (UPDATED) ---
 window.addEventListener('beforeunload', () => {
-    if (bopSynth) {
-        bopSynth.destroy();
+    // Destroy both controllers to ensure proper cleanup of all modules and listeners.
+    if (uiController) {
+        uiController.destroy();
+    }
+    if (logicController) {
+        logicController.destroy();
     }
 });
-

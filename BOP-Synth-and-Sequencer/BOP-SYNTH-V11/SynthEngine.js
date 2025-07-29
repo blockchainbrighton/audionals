@@ -17,6 +17,8 @@ export class SynthEngine {
         // Use the provided output node, or default to the master destination for standalone use.
         this.output = config.outputNode || this.Tone.getDestination();
         
+        this.effectState = {}; // Stores the 'wet' value when an effect is enabled
+
         this.nodes = {};
         this.init();
     }
@@ -156,6 +158,31 @@ export class SynthEngine {
             }
         }
         console.log('[SynthEngine] Patch loaded.');
+    }
+
+    /**
+     * Toggles an effect on or off by controlling its 'wet' signal.
+     * @param {string} effectName - The name of the effect node (e.g., 'reverb', 'delay').
+     * @param {boolean} enabled - True to turn the effect on, false to turn it off.
+     */
+    toggleEffect(effectName, enabled) {
+        const effectNode = this.nodes[effectName];
+        if (!effectNode || !effectNode.wet) {
+            console.warn(`[SynthEngine] Cannot toggle unknown or non-wettable effect: ${effectName}`);
+            return;
+        }
+
+        if (enabled) {
+            // Turning ON: Restore the previous wet value, or default to a sensible value if none exists.
+            const wetValue = this.effectState[effectName] ?? effectNode.get().wet ?? 0.5;
+            effectNode.wet.value = wetValue;
+            console.log(`[SynthEngine] Enabled ${effectName}, wet set to ${wetValue.toFixed(2)}`);
+        } else {
+            // Turning OFF: Store the current wet value, then set it to 0.
+            this.effectState[effectName] = effectNode.wet.value;
+            effectNode.wet.value = 0;
+            console.log(`[SynthEngine] Disabled ${effectName}, stored wet value ${this.effectState[effectName].toFixed(2)}`);
+        }
     }
     
     /**
