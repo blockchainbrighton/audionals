@@ -1,11 +1,13 @@
 // ui.js
+
 import { projectState, runtimeState, getCurrentSequence, createNewChannel } from './state.js';
 import * as config from './config.js';
 import { startPlayback, stopPlayback, setBPM as setAudioBPM } from './audio.js';
 import { loadProject, saveProject } from './saveload.js';
-import { loadInstrument, openSynthUI } from './instrument.js';
+// --- MODIFIED IMPORT ---
+import { createInstrumentForChannel, openSynthUI } from './instrument.js';
 
-// --- Element Cache ---
+// --- Element Cache --- (No changes)
 const elements = {
     playSequenceBtn: document.getElementById('playSequenceBtn'),
     playAllBtn: document.getElementById('playAllBtn'),
@@ -27,7 +29,7 @@ const elements = {
 
 let STEP_ROWS = 1, STEPS_PER_ROW = 64;
 
-// --- BPM Controls ---
+// --- BPM Controls --- (No changes)
 function renderBPM(val) {
     elements.bpmInput.value = val.toFixed(2).replace(/\.00$/, '');
     elements.bpmSlider.value = Math.round(val);
@@ -40,7 +42,7 @@ function setBPM(val) {
     checkAllSelectedLoopsBPM();
 }
 
-// --- Responsive Layout ---
+// --- Responsive Layout --- (No changes)
 export function updateStepRows() {
     const width = Math.min(window.innerWidth, document.body.offsetWidth);
     const layout = config.ROWS_LAYOUTS.find(l => width <= l.maxWidth) || config.ROWS_LAYOUTS[0];
@@ -54,7 +56,7 @@ export function updateStepRows() {
     document.documentElement.style.setProperty('--step-size', stepSize + 'px');
 }
 
-// --- Core Rendering ---
+// --- Core Rendering --- (No changes needed in most functions)
 function renderSamplerChannel(channel, channelData, chIndex) {
     const { names, isLoop, bpms } = runtimeState.sampleMetadata;
     const label = document.createElement('div');
@@ -80,6 +82,7 @@ function renderSamplerChannel(channel, channelData, chIndex) {
     channel.appendChild(select);
 }
 
+// --- MODIFIED RENDER INSTRUMENT CHANNEL ---
 function renderInstrumentChannel(channel, channelData, chIndex) {
     const instrumentControls = document.createElement('div');
     instrumentControls.className = 'instrument-controls';
@@ -91,13 +94,17 @@ function renderInstrumentChannel(channel, channelData, chIndex) {
         label.textContent = 'BOP Synth';
         const openBtn = document.createElement('button');
         openBtn.textContent = 'Open Editor';
-        openBtn.onclick = () => openSynthUI(chIndex);
+        openBtn.onclick = () => openSynthUI(chIndex); // This still works
         instrumentControls.appendChild(openBtn);
     } else {
         label.textContent = 'Empty Instrument';
         const loadBtn = document.createElement('button');
         loadBtn.textContent = 'Load';
-        loadBtn.onclick = () => loadInstrument(projectState.currentSequenceIndex, chIndex).then(render);
+        // Calls the new creator function
+        loadBtn.onclick = () => {
+            createInstrumentForChannel(projectState.currentSequenceIndex, chIndex);
+            render(); // Re-render to show the "Open Editor" button
+        }
         instrumentControls.appendChild(loadBtn);
     }
     channel.appendChild(instrumentControls);
@@ -115,6 +122,7 @@ function renderStepGrid(channel, channelData, chIndex) {
 
             const stepEl = document.createElement('div');
             stepEl.className = 'step';
+            stepEl.dataset.step = stepIndex; // Add dataset for easier identification
             if (channelData.steps[stepIndex]) stepEl.classList.add('active');
 
             if (stepIndex === runtimeState.currentStepIndex && projectState.isPlaying) {
@@ -150,22 +158,20 @@ export function render() {
         elements.sequencer.appendChild(channelEl);
     });
 
-    // Update other UI elements
     updateSequenceListUI();
     updatePlaybackControls();
 }
 
 function highlightPlayhead() {
     document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
-    document.querySelectorAll('.step').forEach(stepEl => {
-        const stepIndex = parseInt(stepEl.parentElement.parentElement.dataset.step, 10); // needs fixing
+    const allStepElements = elements.sequencer.querySelectorAll('.step');
+    allStepElements.forEach(stepEl => {
+        const stepIndex = parseInt(stepEl.dataset.step);
         if (stepIndex === runtimeState.currentStepIndex) {
              stepEl.classList.add('playing');
         }
     });
-    requestAnimationFrame(highlightPlayhead);
 }
-
 
 function updateSequenceListUI() {
     elements.sequenceList.innerHTML = '';
@@ -243,22 +249,36 @@ export function bindEventListeners() {
 
     window.onresize = () => { updateStepRows(); render(); };
     
-    // Start playhead animation loop
     function animatePlayhead() {
         if (projectState.isPlaying) {
-             // Simplified - full implementation requires tracking steps properly
-             document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
-             const allStepElements = elements.sequencer.querySelectorAll('.step');
-             allStepElements.forEach(stepEl => {
-                 const stepIndex = parseInt(stepEl.dataset.step);
-                 if (stepIndex === runtimeState.currentStepIndex) {
-                     stepEl.classList.add('playing');
-                 }
-             });
+             highlightPlayhead();
         } else {
             document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
         }
         requestAnimationFrame(animatePlayhead);
     }
     animatePlayhead();
+    
+    // --- NEW EVENT LISTENERS FOR SYNTH UI COMMANDS ---
+    document.addEventListener('bop:request-record-toggle', () => {
+        projectState.isRecording = !projectState.isRecording;
+        // You may want a dedicated record button on the main UI later
+        console.log("Sequencer recording armed:", projectState.isRecording);
+        
+        // Inform all listeners (including the synth UI) of the state change
+        document.dispatchEvent(new CustomEvent('sequencer:status-update', {
+             detail: { isRecording: projectState.isRecording }
+        }));
+    });
+
+    document.addEventListener('bop:request-clear', (e) => {
+        const { instrumentId } = e.detail;
+        const sequence = getCurrentSequence();
+        const channel = sequence.channels.find(c => c.instrumentId === instrumentId);
+        if (channel) {
+            channel.steps.fill(false);
+            render(); // Re-render to show the cleared steps
+            console.log(`Cleared steps for instrument: ${instrumentId}`);
+        }
+    });
 }

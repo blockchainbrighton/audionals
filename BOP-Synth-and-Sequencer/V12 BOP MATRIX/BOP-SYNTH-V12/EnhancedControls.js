@@ -14,7 +14,7 @@ export class EnhancedControls {
         this.eventBus = eventBus;
         this.synthEngine = synthEngine;
         
-        this.panel = null;
+
         this.defaults = {
             reverb:      { wet: 0.3, decay: 2, preDelay: 0 },
             delay:       { wet: 0.2, delayTime: 0.25, feedback: 0.3 },

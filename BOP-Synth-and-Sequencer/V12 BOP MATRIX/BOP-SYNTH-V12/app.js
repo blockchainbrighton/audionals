@@ -68,11 +68,13 @@ function appInit() {
         
         // 2. Define UI element selectors for the visual layer.
         const uiElements = {
-            keyboard: '#keyboard',
-            pianoRoll: '#rollGrid',
-            transport: '#transport-controls',
-            controls: '#control-panel'
+            keyboard: document.querySelector('.keyboard-container'),   // Not '#keyboard' (unless your HTML uses id="keyboard")
+            pianoRoll: document.getElementById('rollGrid'),
+            transport: document.getElementById('transport-controls'),
+            controls: document.getElementById('control-panel'),
+            loopControls: document.getElementById('loop-controls')     // If required by LoopUI
         };
+        
         
         // 3. Create the UI layer, passing it the logic core and UI element selectors.
         uiController = new BopSynthUI(logicController, uiElements);
