@@ -30,9 +30,9 @@ export class SaveLoad {
             this.loadState(data);
         });
         
-        this.eventBus.addEventListener('load-project-trigger', () => {
-            this.triggerLoad();
-        });
+        // this.eventBus.addEventListener('load-project-trigger', () => {
+        //     this.triggerLoad();
+        // });
     }
 
     saveState() {
