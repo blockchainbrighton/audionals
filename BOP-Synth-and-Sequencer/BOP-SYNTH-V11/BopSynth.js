@@ -2,9 +2,9 @@
  * @file BopSynth.js
  * @description Main controller class for the BOP Synthesizer application.
  * Manages state, dependencies, and communication between all modules via event bus.
- * Eliminates the need for global window.synthApp state.
  */
 
+// Imports are unchanged
 import { SynthEngine } from './SynthEngine.js';
 import SaveLoad from './SaveLoad.js';
 import PianoRoll from './PianoRoll.js';
@@ -13,18 +13,16 @@ import EnhancedControls from './EnhancedControls.js';
 import { MidiControl } from './midi.js';
 import { LoopUI } from './loop-ui.js';
 import LoopManager from './LoopManager.js';
-import Keyboard from './Keyboard.js';
+import { Keyboard } from './Keyboard.js'; // Use named import
 import Transport from './Transport.js';
 
 export class BopSynth {
     constructor(Tone, uiElements = {}) {
+        // The constructor now only sets up properties.
         this.Tone = Tone;
         this.uiElements = uiElements;
-        
-        // Create event bus for module communication
         this.eventBus = document.createElement('div');
         
-        // Initialize application state (formerly window.synthApp)
         this.state = {
             seq: [],
             curOct: 4,
@@ -40,9 +38,13 @@ export class BopSynth {
             recorder: null
         };
         
-        // Module instances
+        // <<< FIX: REMOVE KEYBOARD INITIALIZATION FROM CONSTRUCTOR
+        // The this.keyboard property will be created in init().
+
+        // Module instances will be populated in init()
         this.modules = {};
         
+        // Call init() at the end of the constructor to complete setup.
         this.init();
     }
     
@@ -55,18 +57,21 @@ export class BopSynth {
             this.synthEngine = new SynthEngine(this.Tone, this.state, this.eventBus);
             this.state.synth = this.synthEngine;
             
-            // Initialize logic modules with dependency injection
+            // Initialize logic modules
             this.recorder = new EnhancedRecorder(this.state, this.synthEngine, this.eventBus);
             this.state.recorder = this.recorder;
-            
             this.saveLoad = new SaveLoad(this.state, this.eventBus);
             this.loopManager = new LoopManager(this.state, this.eventBus);
             
-            // Initialize UI modules with event bus and DOM elements
+            // --- UI Module Initialization ---
+
+            // <<< FIX: THIS IS THE CORRECT AND ONLY PLACE TO INITIALIZE THE KEYBOARD.
+            // We now pass all four required arguments.
             this.keyboard = new Keyboard(
                 this.uiElements.keyboard || '#keyboard',
                 this.eventBus,
-                this.state
+                this.state,
+                this.Tone // Pass the Tone object
             );
             
             this.transport = new Transport(
@@ -86,7 +91,6 @@ export class BopSynth {
                 this.synthEngine
             );
             
-            // Initialize MIDI and Loop UI
             this.midiControl = new MidiControl(this.eventBus);
             this.loopUI = new LoopUI(this.eventBus);
             

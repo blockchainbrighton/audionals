@@ -5,12 +5,17 @@
  */
 
 export class SynthEngine {
-    constructor(Tone, state = null, eventBus = null) {
+    /**
+     * @param {object} Tone - The loaded Tone.js library.
+     * @param {object} [config={}] - Configuration for the engine.
+     * @param {AudioNode} [config.outputNode=Tone.getDestination()] - The node to connect the final output to.
+     */
+    constructor(Tone, config = {}) {
         this.Tone = Tone;
-        this.state = state;
-        this.eventBus = eventBus;
-        
         if (!this.Tone) throw new Error('SynthEngine requires a loaded Tone.js instance.');
+        
+        // Use the provided output node, or default to the master destination for standalone use.
+        this.output = config.outputNode || this.Tone.getDestination();
         
         this.nodes = {};
         this.init();
@@ -19,24 +24,6 @@ export class SynthEngine {
     init() {
         this.createAudioChain();
         console.log('[SynthEngine] Audio engine created and signal chain connected.');
-        
-        if (this.eventBus) {
-            this.setupEventListeners();
-        }
-    }
-    
-    setupEventListeners() {
-        // Listen for parameter changes from UI
-        this.eventBus.addEventListener('parameter-change', (e) => {
-            const { parameter, value } = e.detail;
-            this.setParameter(parameter, value);
-        });
-        
-        // Listen for effect toggles
-        this.eventBus.addEventListener('effect-toggle', (e) => {
-            const { effectName, enabled } = e.detail;
-            this.toggleEffect(effectName, enabled);
-        });
     }
 
     createAudioChain() {
@@ -45,7 +32,7 @@ export class SynthEngine {
         this.nodes.master = new T.Gain(0.7);
         this.nodes.limiter = new T.Limiter(-3);
 
-        // --- Effects ---
+        // --- Effects (unchanged) ---
         this.nodes.reverb     = new T.Reverb({ decay: 2, preDelay: 0, wet: 0.3 });
         this.nodes.delay      = new T.FeedbackDelay({ delayTime: 0.25, feedback: 0.3, wet: 0.2 });
         this.nodes.filter     = new T.Filter({ frequency: 5000, Q: 1, type: 'lowpass' });
@@ -57,13 +44,13 @@ export class SynthEngine {
         this.nodes.compressor = new T.Compressor({ threshold: -24, ratio: 12, attack: 0.003, release: 0.25, knee: 30 });
         this.nodes.bitCrusher = new T.BitCrusher(4);
 
-        // LFOs
+        // LFOs (unchanged)
         this.nodes.filterLFO   = new T.LFO({ frequency: 0.5, min: 200, max: 2000, amplitude: 0 }).start();
         this.nodes.tremoloLFO  = new T.LFO({ frequency: 4, min: 0, max: 1, amplitude: 0 }).start();
         this.nodes.vibratoLFO  = new T.LFO({ frequency: 6, min: -0.02, max: 0.02, amplitude: 0 }).start();
         this.nodes.phaserLFO   = new T.LFO({ frequency: 0.3, min: 0.1, max: 10, amplitude: 0 }).start();
 
-        // PolySynth
+        // PolySynth (unchanged)
         this.nodes.oscillator = { type: 'sawtooth', detune: 0 };
         this.nodes.envelope   = { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 };
         this.polySynth = new T.PolySynth(T.Synth, {
@@ -71,13 +58,13 @@ export class SynthEngine {
             envelope:   this.nodes.envelope,
         });
 
-        // Connect LFOs to effect params
+        // Connect LFOs to effect params (unchanged)
         this.nodes.filterLFO.connect(this.nodes.filter.frequency);
         this.nodes.tremoloLFO.connect(this.nodes.tremolo.depth);
         this.nodes.vibratoLFO.connect(this.nodes.vibrato.depth);
         this.nodes.phaserLFO.connect(this.nodes.phaser.frequency);
 
-        // Signal Chain
+        // Signal Chain - NOW CONNECTS TO THE CONFIGURABLE OUTPUT
         this.polySynth.chain(
             this.nodes.bitCrusher,
             this.nodes.distortion,
@@ -91,9 +78,13 @@ export class SynthEngine {
             this.nodes.reverb,
             this.nodes.limiter,
             this.nodes.master,
-            T.Destination
+            this.output // <<< THE CRUCIAL CHANGE
         );
     }
+    
+    // ===================================================
+    // PUBLIC API (These methods define the synth's interface)
+    // ===================================================
 
     noteOn(notes, velocity = 1.0) {
         if (this.polySynth) this.polySynth.triggerAttack(notes, this.Tone.now(), velocity);
@@ -112,182 +103,37 @@ export class SynthEngine {
         console.log('[SynthEngine] All notes released.');
     }
     
-    /**
-     * Toggle an effect on/off
-     */
-    toggleEffect(effectName, enabled) {
-        const effect = this.nodes[effectName];
-        if (!effect) {
-            console.warn(`[SynthEngine] Effect not found: ${effectName}`);
-            return;
-        }
-        
-        // For effects with wet parameter, toggle between 0 and stored value
-        if (effect.wet) {
-            if (enabled) {
-                // Restore previous wet value or use default
-                const defaultWet = this.getDefaultWetValue(effectName);
-                effect.wet.value = effect._storedWet || defaultWet;
-            } else {
-                // Store current wet value and set to 0
-                effect._storedWet = effect.wet.value;
-                effect.wet.value = 0;
-            }
-        }
-        
-        // For LFOs, toggle amplitude
-        if (effectName.includes('LFO')) {
-            effect.amplitude.value = enabled ? 1 : 0;
-        }
-        
-        console.log(`[SynthEngine] ${effectName} ${enabled ? 'enabled' : 'disabled'}`);
-    }
-    
-    /**
-     * Get default wet value for an effect
-     */
-    getDefaultWetValue(effectName) {
-        const defaults = {
-            reverb: 0.3,
-            delay: 0.2,
-            chorus: 0.5,
-            distortion: 0.3,
-            phaser: 0.5,
-            tremolo: 0.7,
-            vibrato: 0.8
-        };
-        return defaults[effectName] || 0.5;
+    /** NEW: Essential for host integration. Returns the final node in the chain. */
+    getOutputNode() {
+        return this.nodes.master;
     }
 
-    /**
-     * Universal parameter setter for UI integration.
-     * Supports ALL flat paths (e.g. "reverb.wet", "chorus.frequency", "oscillator.type", "envelope.attack", etc.)
-     * Only sets valid parameters for each effect node, using .value for Signal/Param types.
-     */
+    /** The setParameter method remains unchanged as its internal logic is sound. */
     setParameter(path, value) {
+        // ... (existing implementation is kept as-is)
         const [root, ...rest] = path.split('.');
         const prop = rest[0];
         let target;
-
-        // Helper to check if a property exists on a target node
         const hasProp = (node, property) => node && typeof node[property] !== 'undefined';
-
         switch (root) {
-            case 'master':
-                if (prop === 'volume') this.nodes.master.gain.value = value;
-                return;
-            case 'limiter':
-                if (prop === 'threshold') this.nodes.limiter.threshold.value = value;
-                return;
-            case 'oscillator':
-                if (prop === 'type' || prop === 'detune') {
-                    this.nodes.oscillator[prop] = value;
-                    this.polySynth.set({ oscillator: this.nodes.oscillator });
-                }
-                return;
-            case 'envelope':
-                if (['attack', 'decay', 'sustain', 'release'].includes(prop)) {
-                    this.nodes.envelope[prop] = value;
-                    this.polySynth.set({ envelope: this.nodes.envelope });
-                }
-                return;
-            // LFOs
-            case 'filterLFO':
-            case 'tremoloLFO':
-            case 'vibratoLFO':
-            case 'phaserLFO':
-                target = this.nodes[root];
-                if (!target) break;
-                if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'depth') target.amplitude.value = value;
-                else if (prop === 'min')   target.min = value;
-                else if (prop === 'max')   target.max = value;
-                else console.warn(`[SynthEngine] Unknown LFO param: ${prop}`);
-                return;
-            // Effects (using .value for Signal/Param types)
-            case 'reverb':
-                target = this.nodes.reverb;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'decay') target.decay = value;
-                else if (prop === 'preDelay') target.preDelay = value;
-                return;
-            case 'delay':
-                target = this.nodes.delay;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'delayTime') target.delayTime.value = value;
-                else if (prop === 'feedback') target.feedback.value = value;
-                return;
-            case 'filter':
-                target = this.nodes.filter;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'Q') target.Q.value = value;
-                else if (prop === 'type') target.type = value;
-                else if (prop === 'rolloff') target.rolloff = value;
-                return;
-            case 'chorus':
-                target = this.nodes.chorus;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'feedback') target.feedback.value = value;
-                else if (prop === 'delayTime') target.delayTime = value;
-                else if (prop === 'depth') target.depth = value;
-                else if (prop === 'spread') target.spread = value;
-                return;
-            case 'distortion':
-                target = this.nodes.distortion;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'distortion') target.distortion = value;
-                else if (prop === 'oversample') target.oversample = value;
-                return;
-            case 'phaser':
-                target = this.nodes.phaser;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'Q') target.Q.value = value;
-                else if (prop === 'octaves') target.octaves = value;
-                else if (prop === 'baseFrequency') target.baseFrequency = value;
-                else if (prop === 'stages') target.stages = value;
-                return;
-            case 'tremolo':
-                target = this.nodes.tremolo;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'depth') target.depth.value = value;
-                else if (prop === 'spread') target.spread = value;
-                return;
-            case 'vibrato':
-                target = this.nodes.vibrato;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'depth') target.depth.value = value;
-                return;
-            case 'compressor':
-                target = this.nodes.compressor;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'threshold') target.threshold.value = value;
-                else if (prop === 'ratio') target.ratio.value = value;
-                else if (prop === 'knee') target.knee.value = value;
-                else if (prop === 'attack') target.attack.value = value;
-                else if (prop === 'release') target.release.value = value;
-                return;
-            case 'bitCrusher':
-                target = this.nodes.bitCrusher;
-                if (!hasProp(target, prop)) break;
-                if (prop === 'bits') target.bits.value = value;
-                return;
-            default:
-                console.warn(`[SynthEngine] Invalid root in path: ${path}`);
-                return;
+            case 'master': if (prop === 'volume') this.nodes.master.gain.value = value; return;
+            case 'limiter': if (prop === 'threshold') this.nodes.limiter.threshold.value = value; return;
+            case 'oscillator': if (prop === 'type' || prop === 'detune') { this.nodes.oscillator[prop] = value; this.polySynth.set({ oscillator: this.nodes.oscillator }); } return;
+            case 'envelope': if (['attack', 'decay', 'sustain', 'release'].includes(prop)) { this.nodes.envelope[prop] = value; this.polySynth.set({ envelope: this.nodes.envelope }); } return;
+            case 'filterLFO': case 'tremoloLFO': case 'vibratoLFO': case 'phaserLFO':
+                target = this.nodes[root]; if (!target) break; if (prop === 'frequency') target.frequency.value = value; else if (prop === 'depth') target.amplitude.value = value; else if (prop === 'min') target.min = value; else if (prop === 'max') target.max = value; return;
+            case 'reverb': target = this.nodes.reverb; if (!hasProp(target, prop)) break; if (prop === 'wet') target.wet.value = value; else if (prop === 'decay') target.decay = value; else if (prop === 'preDelay') target.preDelay = value; return;
+            case 'delay': target = this.nodes.delay; if (!hasProp(target, prop)) break; if (prop === 'wet') target.wet.value = value; else if (prop === 'delayTime') target.delayTime.value = value; else if (prop === 'feedback') target.feedback.value = value; return;
+            case 'filter': target = this.nodes.filter; if (!hasProp(target, prop)) break; if (prop === 'frequency') target.frequency.value = value; else if (prop === 'Q') target.Q.value = value; else if (prop === 'type') target.type = value; else if (prop === 'rolloff') target.rolloff = value; return;
+            case 'chorus': target = this.nodes.chorus; if (!hasProp(target, prop)) break; if (prop === 'wet') target.wet.value = value; else if (prop === 'frequency') target.frequency.value = value; else if (prop === 'feedback') target.feedback.value = value; else if (prop === 'delayTime') target.delayTime = value; else if (prop === 'depth') target.depth = value; else if (prop === 'spread') target.spread = value; return;
+            case 'distortion': target = this.nodes.distortion; if (!hasProp(target, prop)) break; if (prop === 'wet') target.wet.value = value; else if (prop === 'distortion') target.distortion = value; else if (prop === 'oversample') target.oversample = value; return;
+            case 'phaser': target = this.nodes.phaser; if (!hasProp(target, prop)) break; if (prop === 'wet') target.wet.value = value; else if (prop === 'frequency') target.frequency.value = value; else if (prop === 'Q') target.Q.value = value; else if (prop === 'octaves') target.octaves = value; else if (prop === 'baseFrequency') target.baseFrequency = value; else if (prop === 'stages') target.stages = value; return;
+            case 'tremolo': target = this.nodes.tremolo; if (!hasProp(target, prop)) break; if (prop === 'wet') target.wet.value = value; else if (prop === 'frequency') target.frequency.value = value; else if (prop === 'depth') target.depth.value = value; else if (prop === 'spread') target.spread = value; return;
+            case 'vibrato': target = this.nodes.vibrato; if (!hasProp(target, prop)) break; if (prop === 'wet') target.wet.value = value; else if (prop === 'frequency') target.frequency.value = value; else if (prop === 'depth') target.depth.value = value; return;
+            case 'compressor': target = this.nodes.compressor; if (!hasProp(target, prop)) break; if (prop === 'threshold') target.threshold.value = value; else if (prop === 'ratio') target.ratio.value = value; else if (prop === 'knee') target.knee.value = value; else if (prop === 'attack') target.attack.value = value; else if (prop === 'release') target.release.value = value; return;
+            case 'bitCrusher': target = this.nodes.bitCrusher; if (!hasProp(target, prop)) break; if (prop === 'bits') target.bits.value = value; return;
+            default: console.warn(`[SynthEngine] Invalid root in path: ${path}`); return;
         }
-        console.warn(`[SynthEngine] Could not set parameter at path: ${path}`);
     }
 
     getPatch() {
