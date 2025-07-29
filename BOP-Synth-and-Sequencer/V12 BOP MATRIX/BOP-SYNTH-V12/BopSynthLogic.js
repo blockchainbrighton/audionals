@@ -1,15 +1,10 @@
-// In BOP-SYNTH-V12/BopSynthLogic.js
-
-
 /**
  * @file BopSynthLogic.js
  * @description The "headless" core logic controller for the BOP Synthesizer.
  * Manages state, the audio engine, recording, and presets. It is UI-agnostic.
- * v2: Includes direct API methods for host integration.
  */
 
 import { SynthEngine } from './SynthEngine.js';
-// We now need to import SaveLoad to access its methods directly
 import { SaveLoad } from './SaveLoad.js'; 
 import { EnhancedRecorder } from './EnhancedRecorder.js';
 import LoopManager from './LoopManager.js';
@@ -17,7 +12,10 @@ import LoopManager from './LoopManager.js';
 export class BopSynthLogic {
     constructor(Tone) {
         this.Tone = Tone;
-        this.eventBus = document.createElement('div');
+        
+        // --- REFACTOR 1: Use a proper EventTarget instead of a DOM element ---
+        // This is a modern, non-UI-related way to create an event bus.
+        this.eventBus = new EventTarget();
 
         this.state = {
             seq: [],
@@ -29,8 +27,8 @@ export class BopSynthLogic {
             isPlaying: false,
             recStart: 0,
             selNote: null,
-            synth: null, // This will hold the SynthEngine instance
-            recorder: null // This will hold the EnhancedRecorder instance
+            synth: null,    // Will hold the SynthEngine instance
+            recorder: null  // Will hold the EnhancedRecorder instance
         };
 
         this.modules = {};
@@ -38,50 +36,45 @@ export class BopSynthLogic {
     }
 
     init() {
+        // --- REFACTOR 2: CORRECT DEPENDENCY INJECTION (THE CORE FIX) ---
+
+        // 1. Instantiate modules that don't depend on other custom modules first.
         this.modules.synthEngine = new SynthEngine(this.Tone);
-        // Pass the full logic controller `this` to SaveLoad so it can call back
-        this.modules.saveLoad = new SaveLoad(this); 
+        
+        // 2. Instantiate modules that depend on the state, bus, or other modules.
         this.modules.recorder = new EnhancedRecorder(this.state, this.modules.synthEngine, this.eventBus);
+
+        // 3. THIS IS THE FIX: Pass the `state` object and `eventBus` to SaveLoad.
+        // The original `new SaveLoad(this)` was incorrect. SaveLoad's constructor
+        // expects `(state, eventBus)`, not the entire logic controller.
+        this.modules.saveLoad = new SaveLoad(this.state, this.eventBus);
+        
         this.modules.loopManager = new LoopManager(this.state, this.eventBus);
 
+        // 4. This part is correct: Populate the shared state object with references.
+        // Now, when SaveLoad checks `this.state.synth`, it will find the real SynthEngine.
         this.state.synth = this.modules.synthEngine;
         this.state.recorder = this.modules.recorder;
 
         this.wireUpEvents();
-        console.log('[BopSynthLogic] Headless logic core initialized.');
+        console.log('[BopSynthLogic] Headless logic core initialized correctly.');
     }
     
-    // =====================================================================
-    // --- HOST (SEQUENCER) FACING API ---
-    // These methods provide direct, synchronous access for host applications.
-    // =====================================================================
+    // --- REFACTOR 3: REMOVE REDUNDANT HOST API ---
+    // The host application (instrument.js) is already designed to access modules
+    // directly (e.g., `logic.modules.saveLoad.getFullState()`). These wrapper
+    // methods were confusing, redundant, and contained a bug (`getStateObject` did not exist).
+    // Removing them makes the public API of this class cleaner. The host interacts
+    // via the `modules` object, which is a clear and direct pattern.
+    /*
+        getFullState() { ... }
+        loadFullState(stateObject) { ... }
+    */
 
     /**
-     * Retrieves the complete, serializable state of the synthesizer.
-     * Use this in your sequencer's "Save Project" function.
-     * @returns {object} A JSON-compatible object representing all synth settings.
+     * Wires up internal event listeners for standalone functionality.
+     * The host application can also dispatch these events on the eventBus.
      */
-    getFullState() {
-        // Delegate state retrieval to the specialized SaveLoad module.
-        return this.modules.saveLoad.getStateObject();
-    }
-
-    /**
-     * Loads a state object into the synthesizer, updating all settings.
-     * Use this in your sequencer's "Load Project" function.
-     * @param {object} stateObject A valid state object, typically from getFullState().
-     */
-    loadFullState(stateObject) {
-        // Delegate state loading to the SaveLoad module.
-        this.modules.saveLoad.loadState(stateObject);
-    }
-
-
-    // =====================================================================
-    // --- STANDALONE UI EVENT WIRING ---
-    // This section remains unchanged to preserve standalone functionality.
-    // =====================================================================
-    
     wireUpEvents() {
         const bus = this.eventBus;
         const recorder = this.modules.recorder;
@@ -117,10 +110,10 @@ export class BopSynthLogic {
             this.state.curOct = e.detail.octave;
         });
 
-        // --- UPDATED SAVE/LOAD FOR STANDALONE ---
-        // These events are for the standalone UI's buttons.
-        bus.addEventListener('save-project', () => this.modules.saveLoad.saveStateToFile());
-        bus.addEventListener('load-project', e => this.modules.saveLoad.loadStateFromFile(e.detail.data));
+        // Save/Load events for STANDALONE UI buttons (e.g., if you run the synth by itself).
+        // The host application (sequencer) will use `logic.modules.saveLoad.getFullState()` directly.
+        bus.addEventListener('save-project', () => this.modules.saveLoad.saveState());
+        bus.addEventListener('load-project', e => this.modules.saveLoad.loadState(e.detail.data));
         
         // Piano Roll Editing Events
         bus.addEventListener('note-selected', e => { this.state.selNote = e.detail.noteIndex; });
@@ -137,6 +130,9 @@ export class BopSynthLogic {
         bus.addEventListener('loop-clear', () => this.modules.loopManager.clearLoop());
     }
 
+    /**
+     * Cleans up resources, especially audio nodes and event listeners.
+     */
     destroy() {
         if (this.modules.synthEngine) {
             this.modules.synthEngine.destroy();
@@ -146,6 +142,8 @@ export class BopSynthLogic {
                 module.destroy();
             }
         });
+        // You would typically remove listeners here if they were attached to a global object,
+        // but since they are on a local eventBus that will be garbage collected, it's okay.
         console.log('[BopSynthLogic] Logic core destroyed.');
     }
 }
