@@ -72,6 +72,16 @@ export class BopSynthAdapter {
         this.logicController.modules.synthEngine.setParameter(path, value);
     }
 
+    /**
+     * [NEW METHOD] Triggers the synth's internal sequencer to play its recorded sequence.
+     * This is the method called by the host (the BOP Matrix Sequencer).
+     */
+    playInternalSequence() {
+        // The logic controller is listening for this event to start its recorder's playback.
+        this.logicController.eventBus.dispatchEvent(new CustomEvent('transport-play'));
+    }
+
+
     // --- UI Management ---
 
     /**
