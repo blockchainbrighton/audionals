@@ -3,6 +3,13 @@ import { TONE_ORDINALS_URL } from './config.js';
 import { runtimeState, initializeProject } from './state.js';
 import { render, bindEventListeners, setLoaderStatus, updateStepRows } from './ui.js';
 import { SimpleSampleLoader } from './audional-base64-sample-loader.js';
+// In your main.js, at a high level
+import { BopSynthLogic } from '../BOP-SYNTH-V12/src/BopSynthLogic.js'; // Adjust path
+import { BopSynthUI } from '../BOP-SYNTH-V12/src/BopSynthUI.js';   // Adjust path
+
+const synthInstances = new Map(); // Key: channelId, Value: BopSynthLogic instance
+let activeSynthUI = null; // To manage the single modal UI
+
 
 async function boot() {
     try {
