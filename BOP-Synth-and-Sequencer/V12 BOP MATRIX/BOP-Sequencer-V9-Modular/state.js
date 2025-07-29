@@ -21,7 +21,8 @@ export const runtimeState = {
         names: [],
         bpms: [],
         isLoop: []
-    }
+    },
+    activeInstrumentTriggers: new Set() // NEW: Stores instrumentId of currently playing instruments
 };
 
 export function createNewChannel(type = 'sampler') {

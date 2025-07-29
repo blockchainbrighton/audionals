@@ -13,6 +13,7 @@ export class EnhancedRecorder {
         this.isPlaying = false;
         this.isArmed = false;
         this.recStartTime = 0;
+        this.scheduledEventIds = [];
     }
     
     // --- Primary Input Actions (called by BopSynth event bus) ---
@@ -116,56 +117,72 @@ export class EnhancedRecorder {
     }
     
     /**
-     * Starts playback of the recorded sequence.
+     * Schedules the playback of the recorded sequence on the main transport.
+     * @param {number} [hostStartTime] - The precise Tone.js time to start playback, provided by a host.
      */
-    startPlayback() {
-        if (this.isRecording || this.isPlaying || !this.state.seq?.length) return;
-    
+    startPlayback(hostStartTime) {
+        if (this.isPlaying || !this.state.seq?.length) return;
         this.isPlaying = true;
-        this.updateState();
-    
-        // Schedule all notes using Tone.Transport
-        this.state.seq.forEach(noteEvent => {
-            if (noteEvent.dur > 0.01) { // Avoid scheduling zero-duration notes
-                this.synthEngine.Tone.Transport.schedule(time => {
-                    this.synthEngine.triggerAttackRelease(
-                        noteEvent.note, 
-                        noteEvent.dur, 
-                        time, 
-                        noteEvent.vel
-                    );
-                    // Also trigger visual feedback during playback
-                    this.eventBus.dispatchEvent(new CustomEvent('note-visual-change', { detail: { note: noteEvent.note, active: true }}));
-                    this.synthEngine.Tone.Transport.scheduleOnce(() => {
-                        this.eventBus.dispatchEvent(new CustomEvent('note-visual-change', { detail: { note: noteEvent.note, active: false }}));
-                    }, `+${noteEvent.dur - 0.01}`);
 
-                }, noteEvent.start);
+        const isStandalone = typeof hostStartTime === 'undefined';
+
+        this.state.seq.forEach(noteEvent => {
+            if (noteEvent.dur > 0.01) {
+                const eventTime = isStandalone ? `+${noteEvent.start}` : hostStartTime + noteEvent.start;
+                
+                // --- FIX: Schedule the note and store its event ID ---
+                const noteEventId = this.synthEngine.Tone.Transport.schedule(time => {
+                    // We use triggerAttackRelease inside schedule to be sample-accurate
+                    this.synthEngine.triggerAttackRelease(noteEvent.note, noteEvent.dur, time, noteEvent.vel);
+                }, eventTime);
+                this.scheduledEventIds.push(noteEventId);
+
+                // --- FIX: Schedule visuals and store their IDs too ---
+                const visualOnId = this.synthEngine.Tone.Transport.scheduleOnce(time => {
+                    this.eventBus.dispatchEvent(new CustomEvent('note-visual-change', { detail: { note: noteEvent.note, active: true }}));
+                }, eventTime);
+                this.scheduledEventIds.push(visualOnId);
+
+                const visualOffId = this.synthEngine.Tone.Transport.scheduleOnce(time => {
+                    this.eventBus.dispatchEvent(new CustomEvent('note-visual-change', { detail: { note: noteEvent.note, active: false }}));
+                }, eventTime + noteEvent.dur);
+                this.scheduledEventIds.push(visualOffId);
             }
         });
-    
-        // Schedule the transport to stop at the end of the sequence.
-        const sequenceDuration = this.getSequenceDuration();
-        this.synthEngine.Tone.Transport.scheduleOnce(() => {
-            if (this.isPlaying) this.stopAll(); 
-        }, sequenceDuration + 0.1); // Add a small buffer
-    
-        this.synthEngine.Tone.Transport.start();
+
+        // In standalone mode, we still manage the transport.
+        if (isStandalone) {
+            const sequenceDuration = this.getSequenceDuration();
+            const stopId = this.synthEngine.Tone.Transport.scheduleOnce(() => this.stopAll(), `+${sequenceDuration + 0.1}`);
+            this.scheduledEventIds.push(stopId);
+            this.synthEngine.Tone.Transport.start();
+        }
+        
+        this.updateState();
     }
     
     /**
      * Stops all playback and recording activity, resetting state.
      */
     stopAll() {
-        if (this.isPlaying) {
-            this.synthEngine.Tone.Transport.stop();
-            this.synthEngine.Tone.Transport.cancel(0);
-        }
+        // --- THE CRITICAL FIX ---
+        // Instead of cancelling everything, surgically clear only our own scheduled events.
+        this.scheduledEventIds.forEach(id => this.synthEngine.Tone.Transport.clear(id));
+        this.scheduledEventIds = []; // Reset for the next playback
 
-        // If we were recording, finalize any "stuck" notes
-        if (this.isRecording) {
-            const heldNotes = Array.from(this.state.activeNotes);
-            heldNotes.forEach(note => this.releaseNote(note));
+        // If in standalone mode, we are also responsible for stopping the transport.
+        // We can check if any scheduled events remain; if not, and we're playing, we can stop.
+        // A simpler check is just to see if WE think we are playing in standalone.
+        // But for host-mode, the most important thing is that Transport.stop() is NOT called.
+        // The logic in startPlayback already avoids calling this for host-mode.
+        // The 'stop' event for the standalone player is now also just a scheduled event, which is fine.
+        
+        // This is safe to call now because it won't affect the host's transport state.
+        if (this.isPlaying && this.synthEngine.Tone.Transport.state === 'started') {
+            // This is primarily for standalone mode.
+            // In host mode, we rely on the host to manage the transport state.
+            // Let's comment this out to be safe in a host environment.
+            // this.synthEngine.Tone.Transport.stop(); 
         }
 
         this.isPlaying = false;
@@ -240,34 +257,22 @@ export class EnhancedRecorder {
      * @returns {Array} The array of note events.
      */
    getSequence() {
-    // Ensure "stuck" notes are finalized before returning the sequence
-    if (this.isRecording) {
-        const heldNotes = Array.from(this.state.activeNotes);
-        const now = this.synthEngine.Tone.now() - this.recStartTime;
-        heldNotes.forEach(note => {
-            const noteId = this.state.activeNoteIds.get(note);
-            const noteObject = this.state.seq.find(n => n.id === noteId);
-            if (noteObject && noteObject.dur === 0) {
-                noteObject.dur = now - noteObject.start;
-            }
-        });
+        return this.state.seq;
     }
-    return this.state.seq;
-}
 
-/**
- * [NEW METHOD] Sets the sequence data, replacing the existing sequence.
- * @param {Array} sequenceArray The new array of note events.
- */
-setSequence(sequenceArray) {
-    if (Array.isArray(sequenceArray)) {
-        this.state.seq = sequenceArray;
-        console.log('[Recorder] Sequence data set from patch.');
-        this.updateState(); // Update transport buttons etc.
-    } else {
-        console.error('[Recorder] Invalid sequence data provided.');
+    /**
+     * [NEW METHOD] Sets the sequence data, replacing the existing sequence.
+     * @param {Array} sequenceArray The new array of note events.
+     */
+    setSequence(sequenceArray) {
+        if (Array.isArray(sequenceArray)) {
+            this.state.seq = sequenceArray;
+            console.log('[Recorder] Sequence data set from patch.');
+            this.updateState(); // Crucial to update UI (e.g., enable play button)
+        } else {
+            console.error('[Recorder] Invalid sequence data provided to setSequence.');
+        }
     }
-}
-}
+    }
 
-export default EnhancedRecorder;
+    export default EnhancedRecorder;

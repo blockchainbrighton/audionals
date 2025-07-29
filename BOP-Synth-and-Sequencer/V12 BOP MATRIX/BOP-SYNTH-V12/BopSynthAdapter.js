@@ -76,9 +76,19 @@ export class BopSynthAdapter {
      * [NEW METHOD] Triggers the synth's internal sequencer to play its recorded sequence.
      * This is the method called by the host (the BOP Matrix Sequencer).
      */
-    playInternalSequence() {
-        // The logic controller is listening for this event to start its recorder's playback.
-        this.logicController.eventBus.dispatchEvent(new CustomEvent('transport-play'));
+    playInternalSequence(startTime) { // Receive the time
+        this.logicController.eventBus.dispatchEvent(new CustomEvent('transport-play', {
+            detail: { startTime } // Pass it in the event detail
+        }));
+    }
+
+    /**
+     * [NEW METHOD] Stops the synth's internal sequencer and releases all sounding notes.
+     * This is called by the host when a trigger step is passed or the host stops.
+     */
+    stopInternalSequence() {
+        // The logic controller is listening for this event to stop its recorder's playback.
+        this.logicController.eventBus.dispatchEvent(new CustomEvent('transport-stop'));
     }
 
 
