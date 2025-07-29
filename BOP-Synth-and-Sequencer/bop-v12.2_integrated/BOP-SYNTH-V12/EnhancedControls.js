@@ -228,13 +228,13 @@ export class EnhancedControls {
     }
 
     setSynthParam(path, value) {
+        // LOG UI changes directly from the panel
+        console.log('[EnhancedControls][UI] setSynthParam:', path, value);
         if (this.synthEngine) {
             this.synthEngine.setParameter(path, value);
-        } else {
-            console.warn(`[EnhancedControls] Could not set synth param ${path}. Synth not available.`);
         }
-        
-        // Also emit parameter change event
+        // Log event dispatch for the logic core
+        console.log('[EnhancedControls][UI] dispatchEvent parameter-change:', { parameter: path, value });
         this.eventBus.dispatchEvent(new CustomEvent('parameter-change', {
             detail: { parameter: path, value }
         }));
@@ -244,19 +244,15 @@ export class EnhancedControls {
      * Update a control value programmatically
      */
     updateControlValue(parameter, value) {
+        // Called when updating a UI element programmatically
         const element = this.panel.querySelector(`[data-path="${parameter}"]`);
         if (element) {
             element.value = value;
-            
-            // Update display value if it's a range input
-            if (element.type === 'range') {
-                const valueDisplay = this.panel.querySelector(`span[data-value-for="${element.id}"]`);
-                if (valueDisplay) {
-                    const formatter = this.getFormatter(element.id);
-                    valueDisplay.textContent = formatter(value);
-                }
-            }
+            // Update display if present
+            const valueDisplay = this.panel.querySelector(`span[data-value-for="${element.id}"]`);
+            if (valueDisplay) valueDisplay.textContent = value;
         }
+        console.log('[EnhancedControls][UI] updateControlValue:', parameter, value);
     }
     
     /**

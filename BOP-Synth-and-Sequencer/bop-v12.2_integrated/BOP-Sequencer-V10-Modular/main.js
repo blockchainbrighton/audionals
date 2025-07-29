@@ -3,7 +3,8 @@ import { TONE_ORDINALS_URL } from './config.js';
 import { runtimeState, initializeProject } from './state.js';
 import { render, bindEventListeners, setLoaderStatus, updateStepRows } from './ui.js';
 import { SimpleSampleLoader } from './audional-base64-sample-loader.js';
-
+import { installStateProbeButton } from './stateProbe.js';
+installStateProbeButton();
 
 async function boot() {
     try {

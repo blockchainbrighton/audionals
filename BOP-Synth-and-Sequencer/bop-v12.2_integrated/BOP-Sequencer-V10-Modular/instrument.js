@@ -1,4 +1,4 @@
-// BOP-Sequencer-V9-Modular/instrument.js
+// instrument.js (Current Version: With Logging and Patch State Verification)
 
 import { projectState, runtimeState, getCurrentSequence } from './state.js';
 import * as config from './config.js';
@@ -19,36 +19,50 @@ export function createInstrumentForChannel(seqIndex, chanIndex) {
     try {
         setLoaderStatus('Loading Instrument...');
 
+        // ---- INSTANTIATE LOGIC ----
         const logic = new BopSynthLogic(runtimeState.Tone);
-        
+
+        // ---- ROUTE OUTPUT ----
         const synthOutputNode = logic.modules.synthEngine.getOutputNode();
-        if(synthOutputNode && typeof synthOutputNode.connect === 'function') {
+        if (synthOutputNode && typeof synthOutputNode.connect === 'function') {
             synthOutputNode.connect(runtimeState.Tone.getDestination());
         }
 
         const instrumentId = `inst-${projectState.nextInstrumentId++}`;
         
-        // --- THE DEFINITIVE FIX: Use the synth's own state management ---
+        // ---- REGISTER INSTRUMENT ----
         runtimeState.instrumentRack[instrumentId] = {
             id: instrumentId,
-            logic: logic, 
-            
-            // Public API for the sequencer to use
+            logic: logic,
             playInternalSequence: (startTime) => logic.eventBus.dispatchEvent(new CustomEvent('transport-play', { detail: { startTime } })),
             stopInternalSequence: () => logic.eventBus.dispatchEvent(new CustomEvent('transport-stop')),
-            
-            // This now correctly uses the synth's own getFullState method
-            getPatch: () => logic.getFullState()
+            getPatch: () => {
+                const patch = logic.getFullState();
+                console.log("[INSTRUMENT] getPatch():", patch);
+                return patch;
+            }
         };
 
         const channel = projectState.sequences[seqIndex].channels[chanIndex];
         channel.instrumentId = instrumentId;
 
-        // --- THE "LOAD" FIX ---
-        // If the channel has a saved patch, pass the entire object to the synth's loadFullState method.
-        // The synth's SaveLoad module knows how to handle its own data structure.
+        // ---- PATCH LOADING ----
         if (channel.patch) {
+            console.log("[INSTRUMENT] Loading patch for channel:", channel.patch);
             logic.loadFullState(channel.patch);
+            // DEBUG: Immediately log the state after load
+            setTimeout(() => {
+                const afterLoadPatch = logic.getFullState();
+                console.log("[INSTRUMENT] State after loadFullState():", afterLoadPatch);
+
+                // UI SYNC HOOK (insert UI update trigger here)
+                // If you have a UI sync event or method, call it here:
+                // e.g., logic.eventBus.dispatchEvent(new CustomEvent('synth-state-loaded', { detail: afterLoadPatch }));
+                // or call logic.syncUI?.(); if you have such a method.
+                console.log("[INSTRUMENT] (Optional) Dispatched synth-state-loaded event for UI sync");
+            }, 0);
+        } else {
+            console.log("[INSTRUMENT] No patch found for channel, using default state.");
         }
 
         setLoaderStatus('Instrument Loaded.', false);
@@ -60,7 +74,6 @@ export function createInstrumentForChannel(seqIndex, chanIndex) {
         return null;
     }
 }
-
 
 /**
  * Opens the synth UI modal for a specific instrument on a channel.
@@ -83,7 +96,10 @@ export async function openSynthUI(chanIndex) {
     
     // After connecting, command the logic core to re-broadcast its state for the new UI to sync up.
     instrument.logic.modules.recorder.updateState();
-    
+
+    // DEBUG: Log patch before modal opens
+    console.log("[INSTRUMENT] Patch before opening UI:", instrument.getPatch());
+
     const modalContent = document.createElement('div');
     modalContent.className = 'synth-modal-content';
     modalContent.appendChild(synthElement);
@@ -94,9 +110,8 @@ export async function openSynthUI(chanIndex) {
     closeButton.onclick = () => {
         // --- THE "SAVE" FIX ---
         // The instrument's getPatch() method already returns the full state object.
-        // We just need to store this entire object.
         channel.patch = instrument.getPatch();
-        console.log("Saved full state to channel:", channel.patch);
+        console.log("[INSTRUMENT] Saved full state to channel:", channel.patch);
 
         modalContainer.style.display = 'none';
         modalContainer.innerHTML = '';
