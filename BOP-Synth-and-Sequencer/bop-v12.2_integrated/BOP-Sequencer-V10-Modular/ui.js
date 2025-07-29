@@ -1,10 +1,10 @@
-// ui.js
+// ui.js (Rewritten with localStorage integration and enhanced logging)
 
-import { projectState, runtimeState, getCurrentSequence, createNewChannel } from './state.js';
+import { projectState, runtimeState, getCurrentSequence, createNewChannel, initializeProject } from './state.js';
 import * as config from './config.js';
 import { startPlayback, stopPlayback, setBPM as setAudioBPM } from './audio.js';
+// The import name is now correct, assuming your file is named 'saveload.js'
 import { loadProject, saveProject } from './save-load-sequence.js';
-// --- MODIFIED IMPORT ---
 import { createInstrumentForChannel, openSynthUI } from './instrument.js';
 
 // --- Element Cache --- (No changes)
@@ -26,6 +26,8 @@ const elements = {
     bpmWarning: document.getElementById('bpmWarning'),
     modalContainer: document.getElementById('synth-modal-container'),
 };
+
+const PROJECT_STORAGE_KEY = 'myBopMachineProject'; // Define a consistent key for localStorage
 
 let STEP_ROWS = 1, STEPS_PER_ROW = 64;
 
@@ -82,7 +84,6 @@ function renderSamplerChannel(channel, channelData, chIndex) {
     channel.appendChild(select);
 }
 
-// --- MODIFIED RENDER INSTRUMENT CHANNEL ---
 function renderInstrumentChannel(channel, channelData, chIndex) {
     const instrumentControls = document.createElement('div');
     instrumentControls.className = 'instrument-controls';
@@ -94,16 +95,15 @@ function renderInstrumentChannel(channel, channelData, chIndex) {
         label.textContent = 'BOP Synth';
         const openBtn = document.createElement('button');
         openBtn.textContent = 'Open Editor';
-        openBtn.onclick = () => openSynthUI(chIndex); // This still works
+        openBtn.onclick = () => openSynthUI(chIndex);
         instrumentControls.appendChild(openBtn);
     } else {
         label.textContent = 'Empty Instrument';
         const loadBtn = document.createElement('button');
         loadBtn.textContent = 'Load';
-        // Calls the new creator function
         loadBtn.onclick = () => {
             createInstrumentForChannel(projectState.currentSequenceIndex, chIndex);
-            render(); // Re-render to show the "Open Editor" button
+            render();
         }
         instrumentControls.appendChild(loadBtn);
     }
@@ -122,7 +122,7 @@ function renderStepGrid(channel, channelData, chIndex) {
 
             const stepEl = document.createElement('div');
             stepEl.className = 'step';
-            stepEl.dataset.step = stepIndex; // Add dataset for easier identification
+            stepEl.dataset.step = stepIndex;
             if (channelData.steps[stepIndex]) stepEl.classList.add('active');
 
             if (stepIndex === runtimeState.currentStepIndex && projectState.isPlaying) {
@@ -238,14 +238,68 @@ export function bindEventListeners() {
         }
     };
     
+    // ==========================================================
+    // --- MODIFIED SAVE/LOAD EVENT HANDLERS ---
+    // ==========================================================
+    
+    // Note: The text field is now primarily for *exporting* data, not loading.
     elements.saveBtn.onclick = () => {
-        elements.saveLoadField.value = saveProject();
-        elements.saveLoadField.select();
-        document.execCommand('copy');
+        console.log('[UI] Save button clicked.');
+        try {
+            // 1. Get the JSON string from our logged save function.
+            const projectJson = saveProject();
+            
+            // 2. Save it to localStorage for persistence.
+            localStorage.setItem(PROJECT_STORAGE_KEY, projectJson);
+            
+            // 3. (Optional) Put it in the text field for manual backup/export.
+            elements.saveLoadField.value = projectJson;
+            elements.saveLoadField.select();
+            
+            setLoaderStatus('Project saved successfully to browser storage!');
+        } catch (error) {
+            console.error('[UI] Save failed:', error);
+            setLoaderStatus('Error saving project. See console.', true);
+        }
     };
+
+    // This button is now effectively a "Clear Storage" button for testing purposes.
+    // The main loading happens automatically on page start.
+    elements.loadBtn.textContent = 'Clear Storage & Reset'; // Let's rename the button for clarity
     elements.loadBtn.onclick = () => {
-        loadProject(elements.saveLoadField.value).then(render);
+        if (confirm('This will clear the saved project from browser storage and reset the app. Are you sure?')) {
+            console.log('[UI] Clearing localStorage and resetting project.');
+            localStorage.removeItem(PROJECT_STORAGE_KEY);
+            // Re-initialize to a blank slate and re-render
+            initializeProject();
+            render();
+            setLoaderStatus('Cleared storage. App has been reset.');
+        }
     };
+
+    // --- NEW: AUTO-LOAD ON STARTUP ---
+    document.addEventListener('DOMContentLoaded', () => {
+        console.log('[UI] DOMContentLoaded: Checking for saved project in localStorage...');
+        const savedProjectJson = localStorage.getItem(PROJECT_STORAGE_KEY);
+        if (savedProjectJson) {
+            console.log('[UI] Found saved project. Attempting to load...');
+            // The loadProject function is async, so we handle it with .then()
+            loadProject(savedProjectJson)
+                .then(() => {
+                    console.log('[UI] Project loaded successfully from auto-load.');
+                    render(); // Render the fully loaded state
+                })
+                .catch(error => {
+                    console.error('[UI] Auto-load failed. Initializing a new project.', error);
+                    initializeProject();
+                    render();
+                });
+        } else {
+            console.log('[UI] No saved project found. Initializing a new project.');
+            // This path is taken on the very first run or after clearing storage.
+            // initializeProject is already called by default in state.js, so this can be a no-op or a log.
+        }
+    });
 
     window.onresize = () => { updateStepRows(); render(); };
     
@@ -259,13 +313,10 @@ export function bindEventListeners() {
     }
     animatePlayhead();
     
-    // --- NEW EVENT LISTENERS FOR SYNTH UI COMMANDS ---
+    // --- Synth UI Command Listeners (No changes) ---
     document.addEventListener('bop:request-record-toggle', () => {
         projectState.isRecording = !projectState.isRecording;
-        // You may want a dedicated record button on the main UI later
         console.log("Sequencer recording armed:", projectState.isRecording);
-        
-        // Inform all listeners (including the synth UI) of the state change
         document.dispatchEvent(new CustomEvent('sequencer:status-update', {
              detail: { isRecording: projectState.isRecording }
         }));
@@ -277,7 +328,7 @@ export function bindEventListeners() {
         const channel = sequence.channels.find(c => c.instrumentId === instrumentId);
         if (channel) {
             channel.steps.fill(false);
-            render(); // Re-render to show the cleared steps
+            render();
             console.log(`Cleared steps for instrument: ${instrumentId}`);
         }
     });
