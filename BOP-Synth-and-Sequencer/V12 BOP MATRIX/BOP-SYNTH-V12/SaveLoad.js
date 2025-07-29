@@ -1,7 +1,6 @@
 /**
  * @file SaveLoad.js
  * @description Save/load module for the BOP Synthesizer component.
- * Refactored to use dependency injection and event-driven communication.
  */
 
 export class SaveLoad {
@@ -20,152 +19,82 @@ export class SaveLoad {
     }
     
     setupEventListeners() {
-        // Listen for save/load requests from other modules
-        this.eventBus.addEventListener('save-project', () => {
-            this.saveState();
-        });
-        
-        this.eventBus.addEventListener('load-project', (e) => {
-            const { data } = e.detail;
-            this.loadState(data);
-        });
-        
-        // this.eventBus.addEventListener('load-project-trigger', () => {
-        //     this.triggerLoad();
-        // });
+        this.eventBus.addEventListener('save-project', () => this.saveState());
+        this.eventBus.addEventListener('load-project', (e) => this.loadState(e.detail.data));
     }
 
-    saveState() {
-        try {
-            console.log('[SaveLoad] Starting state save operation...');
-            const state = this.captureState();
-            const jsonString = JSON.stringify(state);
-            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
-            this.downloadFile(jsonString, `bop-patch-${timestamp}.json`);
-            this.showStatus('State saved successfully!', 'success');
-            
-            // Emit save completed event
-            this.eventBus.dispatchEvent(new CustomEvent('save-completed', {
-                detail: { filename: `bop-patch-${timestamp}.json` }
-            }));
-        } catch (error) {
-            console.error('[SaveLoad] Save error:', error);
-            this.showStatus(`Save failed: ${error.message}`, 'error');
-            
-            // Emit save error event
-            this.eventBus.dispatchEvent(new CustomEvent('save-error', {
-                detail: { error: error.message }
-            }));
-        }
-    }
-
-    captureState() {
-        if (!this.state.synth) {
-            throw new Error("Synth Engine not ready.");
+    /**
+     * [NEW METHOD] Gathers all serializable state into a single object.
+     * This is the "pure" data-gathering method for host applications.
+     * @returns {object} A JSON-serializable object representing the full synth patch.
+     */
+    getFullState() {
+        if (!this.state.synth || !this.state.recorder) {
+            throw new Error("Synth or Recorder not available to get state.");
         }
         
-        const synthPatch = this.state.synth.getPatch();
-
         return {
             version: this.version,
-            patch: synthPatch,
-            sequence: this.state.seq || [],
-            loop: {
-                enabled: false, // Will be updated by LoopManager if available
-                start: 0,
-                end: 4,
-                quantize: false,
-                grid: 16,
-                swing: 0,
-            },
+            patch: this.state.synth.getPatch(),
+            sequence: this.state.recorder.getSequence(), // Uses new recorder method
             ui: {
                 currentOctave: this.state.curOct,
             }
         };
     }
 
-    triggerLoad() {
-        const loadFileInput = document.getElementById('loadFileInput');
-        if (loadFileInput) {
-            loadFileInput.click();
-        } else {
-            console.error('[SaveLoad] Load file input not found');
+    /**
+     * Captures the current state and triggers a file download.
+     * This now uses getFullState() internally.
+     */
+    saveState() {
+        try {
+            const state = this.getFullState(); // Use the new pure function
+            const jsonString = JSON.stringify(state, null, 2); // Pretty print for readability
+            const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, -5);
+            this.downloadFile(jsonString, `bop-patch-${timestamp}.json`);
+            this.showStatus('State saved successfully!', 'success');
+        } catch (error) {
+            console.error('[SaveLoad] Save error:', error);
+            this.showStatus(`Save failed: ${error.message}`, 'error');
         }
     }
 
-    loadState(jsonString) {
+    /**
+     * Loads state from a patch object or a JSON string.
+     * @param {object|string} data - The state object or JSON string.
+     */
+    loadState(data) {
         try {
-            console.log('[SaveLoad] Starting load operation...');
-            const state = JSON.parse(jsonString);
+            const state = (typeof data === 'string') ? JSON.parse(data) : data;
 
             if (!state.version || !state.patch || !state.sequence) {
                 throw new Error('Invalid or unsupported state file format.');
             }
             
-            // Load synth patch
             this.state.synth.setPatch(state.patch);
+            this.state.recorder.setSequence(state.sequence); // Uses new recorder method
             
-            // Load sequence
-            this.state.seq = state.sequence || [];
-            
-            // Load loop settings via events
-            if (state.loop) {
-                this.eventBus.dispatchEvent(new CustomEvent('loop-settings-load', {
-                    detail: state.loop
-                }));
-            }
-
-            // Load UI settings
             if (state.ui) {
                 this.state.curOct = state.ui.currentOctave || 4;
-                this.eventBus.dispatchEvent(new CustomEvent('octave-change', {
-                    detail: { octave: this.state.curOct }
-                }));
             }
 
-            // Emit events to refresh all UIs
             this.refreshAllUIs();
             this.showStatus('State loaded!', 'success');
-            
-            // Emit load completed event
-            this.eventBus.dispatchEvent(new CustomEvent('load-completed', {
-                detail: { state }
-            }));
+            this.eventBus.dispatchEvent(new CustomEvent('load-completed'));
 
         } catch (error) {
             console.error('[SaveLoad] Load error:', error);
             this.showStatus(`Load failed: ${error.message}`, 'error');
-            
-            // Emit load error event
-            this.eventBus.dispatchEvent(new CustomEvent('load-error', {
-                detail: { error: error.message }
-            }));
         }
     }
     
     refreshAllUIs() {
-        console.log('[SaveLoad] Refreshing all UIs...');
-        
-        // Emit events to refresh all UI components
-        this.eventBus.dispatchEvent(new CustomEvent('loop-ui-refresh'));
-        this.eventBus.dispatchEvent(new CustomEvent('keyboard-redraw'));
-        this.eventBus.dispatchEvent(new CustomEvent('pianoroll-redraw'));
-        this.eventBus.dispatchEvent(new CustomEvent('recording-state-changed', {
-            detail: {
-                isRecording: this.state.isRec,
-                isArmed: this.state.isArmed,
-                isPlaying: this.state.isPlaying,
-                hasSequence: this.state.seq && this.state.seq.length > 0
-            }
+        // This method now correctly dispatches events for other modules to handle.
+        this.eventBus.dispatchEvent(new CustomEvent('sequence-changed'));
+        this.eventBus.dispatchEvent(new CustomEvent('octave-change', {
+            detail: { octave: this.state.curOct }
         }));
-        
-        // Update octave label
-        const octaveLabel = document.getElementById('octaveLabel');
-        if (octaveLabel) {
-            octaveLabel.textContent = `Octave: ${this.state.curOct}`;
-        }
-        
-        console.log('[SaveLoad] All UIs refreshed.');
     }
     
     downloadFile(content, filename) {

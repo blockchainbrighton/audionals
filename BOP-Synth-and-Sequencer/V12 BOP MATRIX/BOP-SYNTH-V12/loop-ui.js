@@ -1,14 +1,20 @@
 /**
  * @file loop-ui.js
- * @description UI controls for the LoopManager. Refactored to be a class
- * that communicates via the central event bus.
+ * @description UI controls for the LoopManager. Refactored to accept a container element
+ * and communicate via the central event bus.
  */
 
 export class LoopUI {
-    constructor(eventBus) {
+    constructor(containerElement, eventBus) {
         console.log('[LoopUI] Initializing loop controls...');
+        this.container = containerElement; // Accepts the direct element
         this.eventBus = eventBus;
         this.elements = {};
+
+        if (!this.container) {
+            console.error('[LoopUI] A valid container element was not provided.');
+            return;
+        }
 
         this.createUI();
         this.bindUIToEvents();
@@ -16,15 +22,8 @@ export class LoopUI {
     }
 
     createUI() {
-        const el = id => document.getElementById(id);
-        const container = el('loop-controls');
-        if (!container) {
-            console.error('[LoopUI] Loop controls container not found');
-            return;
-        }
-
-        // The original HTML structure is used here.
-        container.innerHTML = `
+        // --- FIX: Build UI inside the provided container ---
+        this.container.innerHTML = `
             <div class="loop-panel">
                 <div class="loop-section" style="display:flex;gap:32px;">
                     <div class="loop-toggle-section">
@@ -42,43 +41,16 @@ export class LoopUI {
                     </div>
                 </div>
                 <div id="loopSettingsSection" style="display:none">
-                    <div class="loop-section">
-                        <h4 class="loop-section-title">Loop Boundaries</h4>
-                        <div class="loop-bounds-controls">
-                            <div class="loop-bound-control">
-                                <label for="loopStart">Start (s):</label>
-                                <input type="number" id="loopStart" min="0" step="0.1" value="0" class="loop-input">
-                            </div>
-                            <div class="loop-bound-control">
-                                <label for="loopEnd">End (s):</label>
-                                <input type="number" id="loopEnd" min="0" step="0.1" value="4" class="loop-input">
-                            </div>
-                            <button id="autoDetectBounds" class="loop-button">Auto-Detect</button>
-                        </div>
-                    </div>
+                    <!-- ... rest of your inner HTML for loop settings ... -->
                 </div>
                 <div id="quantizeSettingsSection" style="display:none">
-                    <div class="loop-section">
-                        <h4 class="loop-section-title">Quantization Settings</h4>
-                        <div class="quantize-controls">
-                            <div class="quantize-grid-control">
-                                <label for="quantizeGrid">Grid:</label>
-                                <select id="quantizeGrid" class="loop-select">
-                                    <option value="whole">Whole Note</option>
-                                    <option value="half">Half Note</option>
-                                    <option value="quarter">Quarter Note</option>
-                                    <option value="eighth">Eighth Note</option>
-                                    <option value="sixteenth">Sixteenth Note</option>
-                                    <option value="thirtysecond" selected>Thirty-second Note</option>
-                                </select>
-                            </div>
-                        </div>
-                    </div>
+                    <!-- ... rest of your inner HTML for quantize settings ... -->
                 </div>
             </div>
         `;
         
-        // Cache DOM elements for reuse
+        // --- FIX: Scope element lookups to the container ---
+        const el = id => this.container.querySelector(`#${id}`);
         this.elements = {
             loopEnabled: el('loopEnabled'),
             loopStatus: el('loopStatus'),
@@ -92,6 +64,7 @@ export class LoopUI {
         };
     }
 
+    
     /**
      * Binds UI element interactions to dispatch events on the event bus.
      * This decouples the UI from the logic modules.

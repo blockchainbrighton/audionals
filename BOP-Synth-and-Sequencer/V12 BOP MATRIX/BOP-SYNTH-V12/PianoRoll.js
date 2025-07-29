@@ -1,26 +1,20 @@
 /**
  * @file PianoRoll.js
  * @description Piano roll UI component for the BOP Synthesizer.
- * Refactored to use event-driven communication instead of direct module calls.
+ * Refactored to accept a container element and use event-driven communication.
  */
 
 export class PianoRoll {
-    constructor(rollGridSelector, eventBus, state) {
-        this.rollGridSelector = rollGridSelector;
+    constructor(containerElement, eventBus, state) {
+        this.rollGrid = containerElement; // Accepts the direct element
         this.eventBus = eventBus;
         this.state = state;
         
-        // UI elements
-        this.rollGrid = null;
         this.scrollContainer = null;
         this.innerContent = null;
-
-        // Constants
         this.MIDI_LOW = 21;
         this.MIDI_HIGH = 108;
         this.CELL_H = 18;
-        
-        // State
         this.zoomX = 1;
         this.zoomY = 1;
         this.minZoomX = 0.25;
@@ -32,26 +26,22 @@ export class PianoRoll {
         this.dragNoteIndex = null;
         this.lastPreviewMidi = null;
         this._keyListener = null;
-        
-        // Quantization settings (will be updated via events)
         this.quantizeEnabled = false;
         this.quantizeGrid = 0.25;
-        
-        this.Tone = null; // Will be set when available
+        this.Tone = null;
+
+        if (!this.rollGrid) {
+            console.warn('[PianoRoll] Cannot initialize; a valid container element was not provided.');
+            return;
+        }
         
         this.init();
     }
     
     init() {
-        this.rollGrid = document.querySelector(this.rollGridSelector);
-        if (!this.rollGrid) {
-            console.warn(`[PianoRoll] Cannot initialize; element not found: ${this.rollGridSelector}`);
-            return;
-        }
-
         this.createUI();
         this.setupEventListeners();
-        this.draw(); // Initial draw
+        this.draw();
     }
     
     createUI() {
@@ -444,17 +434,13 @@ export class PianoRoll {
      */
     destroy() {
         this.stopPlayheadAnimation();
-        
         if (this._keyListener) {
             document.removeEventListener("keydown", this._keyListener);
             this._keyListener = null;
         }
-        
         if (this.rollGrid) {
             this.rollGrid.innerHTML = '';
         }
-        
-        // Event listeners will be cleaned up when eventBus is destroyed
     }
 }
 

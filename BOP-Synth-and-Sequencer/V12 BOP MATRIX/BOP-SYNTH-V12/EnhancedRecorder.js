@@ -1,7 +1,6 @@
 /**
  * @file EnhancedRecorder.js
  * @description Manages MIDI recording, sequence management, and transport state.
- * Implements an "arm to record" workflow.
  */
 
 export class EnhancedRecorder {
@@ -10,13 +9,10 @@ export class EnhancedRecorder {
         this.synthEngine = synthEngine;
         this.eventBus = eventBus;
         
-        // Internal state properties
         this.isRecording = false;
         this.isPlaying = false;
         this.isArmed = false;
-        this.recStartTime = 0; // The absolute time recording began
-        
-        // No need for setupEventListeners, the BopSynth controller wires this up.
+        this.recStartTime = 0;
     }
     
     // --- Primary Input Actions (called by BopSynth event bus) ---
@@ -239,9 +235,39 @@ export class EnhancedRecorder {
         }));
     }
     
-    // --- Unused / Redundant Methods Removed ---
-    // The `toggleArm` method is now handled by the more comprehensive `toggleRecording`.
-    // The `editNote` and `destroy` methods can be added back if needed but are omitted for clarity on the core recording logic fix.
+   /**
+     * [NEW METHOD] Returns the current sequence data.
+     * @returns {Array} The array of note events.
+     */
+   getSequence() {
+    // Ensure "stuck" notes are finalized before returning the sequence
+    if (this.isRecording) {
+        const heldNotes = Array.from(this.state.activeNotes);
+        const now = this.synthEngine.Tone.now() - this.recStartTime;
+        heldNotes.forEach(note => {
+            const noteId = this.state.activeNoteIds.get(note);
+            const noteObject = this.state.seq.find(n => n.id === noteId);
+            if (noteObject && noteObject.dur === 0) {
+                noteObject.dur = now - noteObject.start;
+            }
+        });
+    }
+    return this.state.seq;
+}
+
+/**
+ * [NEW METHOD] Sets the sequence data, replacing the existing sequence.
+ * @param {Array} sequenceArray The new array of note events.
+ */
+setSequence(sequenceArray) {
+    if (Array.isArray(sequenceArray)) {
+        this.state.seq = sequenceArray;
+        console.log('[Recorder] Sequence data set from patch.');
+        this.updateState(); // Update transport buttons etc.
+    } else {
+        console.error('[Recorder] Invalid sequence data provided.');
+    }
+}
 }
 
 export default EnhancedRecorder;

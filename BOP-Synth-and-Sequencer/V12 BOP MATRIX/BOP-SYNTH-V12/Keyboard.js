@@ -4,36 +4,42 @@
  * Refactored to use event-driven communication and true dependency injection.
  */
 
-// REMOVED: import { Tone } from './Tone.js'; // <<< FIX: This was causing the 404 error.
-
 export class Keyboard {
     // Static properties for note definitions
     static WHITE_NOTES = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
     static BLACK_NOTES = { 0: 'C#', 1: 'D#', 3: 'F#', 4: 'G#', 5: 'A#' };
 
     /**
-     * @param {string} containerSelector - The CSS selector for the keyboard container element.
+     * @param {HTMLElement} containerElement - The parent container element for the entire keyboard component (e.g., .keyboard-container).
      * @param {EventTarget} eventBus - The event bus for dispatching actions.
      * @param {object} state - The shared application state (for reading curOct).
-     * @param {object} Tone - The fully loaded Tone.js library instance. // <<< FIX: Added Tone as a dependency.
+     * @param {object} Tone - The fully loaded Tone.js library instance.
      */
-    constructor(containerSelector, eventBus, state, Tone) {
-        this.container = document.querySelector(containerSelector);
-        this.octaveUpBtn = document.getElementById('octaveUp');
-        this.octaveDownBtn = document.getElementById('octaveDown');
-        this.octaveLabel = document.getElementById('octaveLabel');
-        
-        if (!this.container || !this.octaveUpBtn || !this.octaveDownBtn || !this.octaveLabel) {
-            throw new Error('[Keyboard] A required DOM element was not found.');
+    constructor(containerElement, eventBus, state, Tone) {
+        this.parentContainer = containerElement; // The overall .keyboard-container
+        if (!this.parentContainer) {
+            console.error('[Keyboard] A valid parent container element was not provided.');
+            return;
         }
 
-        // <<< FIX: Store the injected dependencies.
         this.eventBus = eventBus;
         this.state = state;
-        this.Tone = Tone; 
-
+        this.Tone = Tone;
+        
         if (!this.Tone) {
             throw new Error('[Keyboard] Tone.js instance was not provided to the constructor.');
+        }
+
+        // --- FIX: Find child elements *within* the provided container ---
+        // This ensures the component is self-contained and doesn't rely on global IDs.
+        this.keyboardEl = this.parentContainer.querySelector('.keyboard');
+        this.octaveUpBtn = this.parentContainer.querySelector('#octaveUp');
+        this.octaveDownBtn = this.parentContainer.querySelector('#octaveDown');
+        this.octaveLabel = this.parentContainer.querySelector('#octaveLabel');
+
+        if (!this.keyboardEl || !this.octaveUpBtn || !this.octaveDownBtn || !this.octaveLabel) {
+            console.error('[Keyboard] Could not find required child elements (keyboard, octave controls) inside the provided container.');
+            return;
         }
         
         this.init();
@@ -52,7 +58,6 @@ export class Keyboard {
     }
 
     changeOctave(direction) {
-        // ... (this method is unchanged)
         const newOctave = this.state.curOct + direction;
         if (newOctave >= 0 && newOctave <= 7) {
             this.eventBus.dispatchEvent(new CustomEvent('octave-change', {
@@ -63,14 +68,13 @@ export class Keyboard {
     }
 
     draw() {
-        // <<< FIX: Check for the instance variable `this.Tone` instead of a global one.
         if (!this.Tone) { 
             console.warn('[Keyboard] Cannot draw; Tone.js is not ready.');
             return;
         }
 
-        this.container.innerHTML = '';
-        const kbWidth = this.container.offsetWidth || 800;
+        this.keyboardEl.innerHTML = ''; // Draw inside the specific keyboard element
+        const kbWidth = this.keyboardEl.offsetWidth || 800;
         const whiteKeyW = 100 / Math.floor(kbWidth / 38);
         const totalWhite = Math.floor(100 / whiteKeyW);
 
@@ -78,7 +82,6 @@ export class Keyboard {
         for (let i = 0; i < totalWhite; i++) {
             const wn = Keyboard.WHITE_NOTES[whiteIndex % 7];
             const octaveOffset = Math.floor(whiteIndex / 7);
-            // <<< FIX: Use `this.Tone`
             const note = this.Tone.Frequency(`${wn}${this.state.curOct + octaveOffset}`).toNote(); 
 
             const wkey = this.createKey('key-white', note);
@@ -91,7 +94,7 @@ export class Keyboard {
                 lbl.innerText = note;
                 wkey.appendChild(lbl);
             }
-            this.container.appendChild(wkey);
+            this.keyboardEl.appendChild(wkey);
             whiteIndex++;
         }
         
@@ -100,14 +103,13 @@ export class Keyboard {
             if (Keyboard.BLACK_NOTES.hasOwnProperty(whiteIndex % 7)) {
                 const octaveOffset = Math.floor(whiteIndex / 7);
                 const blackNoteName = Keyboard.BLACK_NOTES[whiteIndex % 7];
-                 // <<< FIX: Use `this.Tone`
                 const note = this.Tone.Frequency(`${blackNoteName}${this.state.curOct + octaveOffset}`).toNote();
                 
                 const bkey = this.createKey('key-black', note);
                 const leftPercent = (i + 0.7) * whiteKeyW - (whiteKeyW * 0.28);
                 bkey.style.left = leftPercent + '%';
                 bkey.style.width = (whiteKeyW * 0.62) + '%';
-                this.container.appendChild(bkey);
+                this.keyboardEl.appendChild(bkey);
             }
             whiteIndex++;
         }
@@ -123,33 +125,25 @@ export class Keyboard {
     }
 
     addKeyHandlers(el, note) {
-        const play = () => {
-            this.eventBus.dispatchEvent(new CustomEvent('keyboard-note-on', {
-                detail: { note, velocity: 1.0 }
-            }));
-        };
-        const release = () => {
-            this.eventBus.dispatchEvent(new CustomEvent('keyboard-note-off', {
-                detail: { note }
-            }));
-        };
+        const play = () => this.eventBus.dispatchEvent(new CustomEvent('keyboard-note-on', { detail: { note, velocity: 1.0 } }));
+        const release = () => this.eventBus.dispatchEvent(new CustomEvent('keyboard-note-off', { detail: { note } }));
 
         el.onmousedown = play;
         el.onmouseup = release;
-        el.onmouseleave = release; // Simplified: release on mouse leave
+        el.onmouseleave = release;
         el.ontouchstart = e => { e.preventDefault(); play(); };
         el.ontouchend = e => { e.preventDefault(); release(); };
     }
 
     updateKeyVisual(note, on) {
-        const keyElement = this.container.querySelector(`[data-note="${note}"]`);
+        const keyElement = this.keyboardEl.querySelector(`[data-note="${note}"]`);
         if (keyElement) {
             keyElement.classList.toggle('active', !!on);
         }
     }
 
     releaseAllKeys() {
-        this.container.querySelectorAll('.active').forEach(activeKey => {
+        this.keyboardEl.querySelectorAll('.active').forEach(activeKey => {
             activeKey.classList.remove('active');
         });
         console.log('[Keyboard] All visual keys released.');
@@ -157,4 +151,3 @@ export class Keyboard {
 }
 
 export default Keyboard;
-

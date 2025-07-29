@@ -28,27 +28,32 @@ export class BopSynthUI {
     init() {
         // --- Initialize all UI Modules ---
         this.modules.keyboard = new Keyboard(
-            this.uiElements.keyboard || '#keyboard',
+            this.uiElements.keyboard, // Element passed directly
             this.eventBus,
             this.state,
             this.Tone
         );
         this.modules.transport = new Transport(
-            this.uiElements.transport || '#transport-controls',
+            this.uiElements.transport, // Element passed directly
             this.eventBus
         );
         this.modules.pianoRoll = new PianoRoll(
-            this.uiElements.pianoRoll || '#rollGrid',
+            this.uiElements.pianoRoll, // Element passed directly
             this.eventBus,
             this.state
         );
         this.modules.enhancedControls = new EnhancedControls(
-            this.uiElements.controls || '#control-panel',
+            this.uiElements.controls, // Element passed directly
             this.eventBus,
-            this.logic.modules.synthEngine // Controls needs direct access to the engine
+            this.logic.modules.synthEngine
         );
         this.modules.midiControl = new MidiControl(this.eventBus);
-        this.modules.loopUI = new LoopUI(this.eventBus);
+        
+        // --- FIX: Pass the container element to LoopUI ---
+        this.modules.loopUI = new LoopUI(
+            this.uiElements.loopControls, // Pass the new element
+            this.eventBus
+        );
 
         this.wireUpEvents();
         console.log('[BopSynthUI] UI layer initialized.');

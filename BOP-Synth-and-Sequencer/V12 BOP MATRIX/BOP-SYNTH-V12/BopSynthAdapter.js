@@ -89,30 +89,63 @@ export class BopSynthAdapter {
 
         this.uiContainer = containerElement;
 
-        // The BOP Synth UI requires a specific internal structure.
-        // The adapter creates this structure inside the host's container.
+        // --- FIX: Add the complete HTML structure including loop-controls ---
         this.uiContainer.innerHTML = `
-            <div id="control-panel"></div>
-            <div id="transport-controls"></div>
-            <div class="keyboard-container">
-                <div class="octave-controls">
-                    <button id="octaveDown" class="octave-button">Octave -</button>
-                    <span id="octaveLabel">Octave: 4</span>
-                    <button id="octaveUp" class="octave-button">Octave +</button>
-                </div>
-                <div class="keyboard" id="keyboard"></div>
+            <div class="tabs">
+                <button class="tab-button active" data-tab="synth-view">Synthesizer</button>
+                <button class="tab-button" data-tab="midi-view">MIDI Editor</button>
             </div>
-            <!-- Add other necessary UI containers if needed, like status bar -->
+
+            <div id="synth-view" class="tab-content active">
+                <div id="control-panel"></div>
+                <div id="transport-controls"></div>
+                
+                <!-- NEW: Added loop-controls container -->
+                <div id="loop-controls"></div> 
+                
+                <div class="keyboard-container">
+                    <div class="octave-controls">
+                        <button id="octaveDown" class="octave-button">Octave -</button>
+                        <span id="octaveLabel">Octave: 4</span>
+                        <button id="octaveUp" class="octave-button">Octave +</button>
+                    </div>
+                    <div class="keyboard" id="keyboard"></div>
+                </div>
+                <div class="status-bar">
+                    <div><span class="status-indicator" id="midiInd"></span> <span id="midiStat">MIDI: Not supported</span></div>
+                    <div><span class="status-indicator" id="recInd"></span> <span id="recStat">Status: Inactive</span></div>
+                </div>
+            </div>
+
+            <div id="midi-view" class="tab-content">
+                <h3>Piano Roll Editor</h3>
+                <div class="piano-roll"><div class="roll-grid" id="rollGrid"></div></div>
+            </div>
         `;
 
+        // --- Now all querySelectors will succeed ---
         const uiElements = {
-            keyboard: this.uiContainer.querySelector('#keyboard'),
+            keyboard: this.uiContainer.querySelector('.keyboard-container'),
             transport: this.uiContainer.querySelector('#transport-controls'),
             controls: this.uiContainer.querySelector('#control-panel'),
+            pianoRoll: this.uiContainer.querySelector('#rollGrid'),
+            loopControls: this.uiContainer.querySelector('#loop-controls') // Add this line
         };
 
         this.uiController = new BopSynthUI(this.logicController, uiElements);
         console.log('[BopSynthAdapter] UI attached and rendered.');
+        
+        // Tab switching logic (unchanged)
+        this.uiContainer.querySelectorAll('.tab-button').forEach(btn => {
+            btn.addEventListener('click', () => {
+                this.uiContainer.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                this.uiContainer.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+                const tabId = btn.dataset.tab;
+                const tabContent = this.uiContainer.querySelector(`#${tabId}`);
+                if (tabContent) tabContent.classList.add('active');
+            });
+        });
     }
 
     /**

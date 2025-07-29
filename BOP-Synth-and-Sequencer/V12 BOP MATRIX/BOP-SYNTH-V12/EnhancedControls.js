@@ -1,7 +1,7 @@
 /**
  * @file EnhancedControls.js
  * @description Enhanced controls UI component for the BOP Synthesizer.
- * Refactored to use event-driven communication instead of direct synth engine calls.
+ * Refactored to accept a container element and use event-driven communication.
  */
 
 const effectsWithWet = [
@@ -9,8 +9,8 @@ const effectsWithWet = [
 ];
 
 export class EnhancedControls {
-    constructor(controlsSelector, eventBus, synthEngine) {
-        this.controlsSelector = controlsSelector;
+    constructor(containerElement, eventBus, synthEngine) {
+        this.panel = containerElement; // Accepts the direct element
         this.eventBus = eventBus;
         this.synthEngine = synthEngine;
         
@@ -36,22 +36,20 @@ export class EnhancedControls {
             master:      { volume: 0.7 }
         };
         
-        this.init();
-    }
+            if (!this.panel) {
+                console.warn('[EnhancedControls] A valid container element was not provided.');
+                return;
+            }
 
-    init() {
-        this.panel = document.querySelector(this.controlsSelector);
-        if (!this.panel) {
-            console.warn(`[EnhancedControls] Control panel element not found: ${this.controlsSelector}`);
-            return;
+            this.init();
         }
-        
-        this.panel.innerHTML = this.panelHTML();
-        this.setupAllControls();
-        this.setupEventListeners();
-        
-        console.log('[EnhancedControls] Initialized with 5-column collapsible UI.');
-    }
+
+        init() {
+            this.panel.innerHTML = this.panelHTML();
+            this.setupAllControls();
+            this.setupEventListeners();
+            console.log('[EnhancedControls] Initialized with 5-column collapsible UI.');
+        }
     
     setupEventListeners() {
         // Listen for parameter updates from other modules
@@ -344,7 +342,6 @@ export class EnhancedControls {
         if (this.panel) {
             this.panel.innerHTML = '';
         }
-        // Event listeners will be cleaned up when eventBus is destroyed
     }
 }
 

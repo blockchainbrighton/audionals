@@ -92,8 +92,7 @@ export class BopSynthLogic {
         // --- Save/Load Events ---
         bus.addEventListener('save-project', () => this.modules.saveLoad.saveState());
         bus.addEventListener('load-project', e => this.modules.saveLoad.loadState(e.detail.data));
-        bus.addEventListener('load-project-trigger', () => this.modules.saveLoad.triggerLoad());
-
+        
         // --- Piano Roll Editing Events ---
         bus.addEventListener('note-selected', e => {
             this.state.selNote = e.detail.noteIndex;
