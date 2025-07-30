@@ -1,3 +1,5 @@
+// BOP-Sequencer-V10-Modular/state.js
+
 import { INITIAL_INSTRUMENT_CHANNELS, INITIAL_SAMPLER_CHANNELS, INITIAL_SEQUENCES, TOTAL_STEPS } from './config.js';
 
 export const projectState = {
@@ -23,6 +25,11 @@ export const runtimeState = {
     },
     activeInstrumentTriggers: new Set()
 };
+
+// Order: Kick, Snare, Closed Hat, Clap, Crash, Cowbell, Synth Bass 1, Synth Bass 2
+export const defaultSampleOrder = [0, 1, 2, 3, 4, 13, 5, 6];
+// (13 is Cowbell, based on your ogSampleUrls list; adjust if needed)
+
 
 /**
  * ALWAYS assigns a unique instrumentId when creating an instrument channel.
@@ -52,10 +59,56 @@ export function createNewSequence(
         `and ${numInstruments} instrument channels.`
     );
 
-    const samplerChs    = Array.from({ length: numSamplers },    () => createNewChannel('sampler'));
+    const samplerChs = Array.from({ length: numSamplers }, (_, i) => {
+        const chan = createNewChannel('sampler');
+        // Assign default sample index per channel, cycling if needed
+        chan.selectedSampleIndex = defaultSampleOrder[i % defaultSampleOrder.length] ?? 0;
+        return chan;
+    });
+
     const instrumentChs = Array.from({ length: numInstruments }, () => createNewChannel('instrument'));
 
     return { channels: [...samplerChs, ...instrumentChs] };
+}
+
+// --- NEW FUNCTION ---
+/**
+ * Populates the first three channels of a sequence with a basic
+ * kick, snare, and hi-hat pattern. This function assumes the first three
+ * channels are samplers assigned to Kick, Snare, and Hat, respectively.
+ * @param {object} sequence The sequence object to modify.
+ */
+export function setupDefaultRhythm(sequence) {
+    if (!sequence || !sequence.channels) {
+        console.warn('[STATE] setupDefaultRhythm called with invalid sequence.');
+        return;
+    }
+    console.log('[STATE] Setting up default rhythm on sequence.');
+
+    const kickChannel = sequence.channels[0];
+    const snareChannel = sequence.channels[1];
+    const hatChannel = sequence.channels[2];
+
+    // Channel 1 (Kick): Four-on-the-floor pattern
+    if (kickChannel) {
+        for (let i = 0; i < TOTAL_STEPS; i += 4) {
+            kickChannel.steps[i] = true;
+        }
+    }
+
+    // Channel 2 (Snare): On the backbeats (2 and 4)
+    if (snareChannel) {
+        for (let i = 4; i < TOTAL_STEPS; i += 8) {
+            snareChannel.steps[i] = true;
+        }
+    }
+
+    // Channel 3 (Hat): On every 8th note
+    if (hatChannel) {
+        for (let i = 0; i < TOTAL_STEPS; i += 2) {
+            hatChannel.steps[i] = true;
+        }
+    }
 }
 
 export function initializeProject() {
@@ -65,6 +118,14 @@ export function initializeProject() {
         const seq = createNewSequence();
         projectState.sequences.push(seq);
     }
+    
+    // --- MODIFICATION ---
+    // Set up a default rhythm on the very first sequence
+    if (projectState.sequences[0]) {
+        setupDefaultRhythm(projectState.sequences[0]);
+    }
+    // --- END MODIFICATION ---
+
     projectState.currentSequenceIndex = 0;
     projectState.bpm = 120;
     projectState.isPlaying = false;

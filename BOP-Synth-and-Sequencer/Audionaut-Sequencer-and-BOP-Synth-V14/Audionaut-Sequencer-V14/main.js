@@ -7,7 +7,7 @@
 
 // main.js
 import { TONE_ORDINALS_URL } from './config.js';
-import { runtimeState, initializeProject } from './state.js';
+import { runtimeState, initializeProject, defaultSampleOrder } from './state.js';
 import { render, bindEventListeners, setLoaderStatus, updateStepRows } from './ui.js';
 import { SimpleSampleLoader } from './audional-base64-sample-loader.js';
 import { installStateProbeButton } from './stateProbe.js';
@@ -23,12 +23,14 @@ async function boot() {
             runtimeState.sampleMetadata.bpms[i] = item.bpm ?? null;
         });
 
-        const initialSampleIndices = [0]; // Just load the first sample initially
+        // Use the imported array to load all samples needed for the default channels.
+        const initialSampleIndices = defaultSampleOrder; 
         await Promise.all(initialSampleIndices.map(async idx => {
             if (!runtimeState.allSampleBuffers[idx]) {
                 runtimeState.allSampleBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
             }
         }));
+
 
         initializeProject();
         bindEventListeners();
