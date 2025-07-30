@@ -225,7 +225,7 @@ export function bindEventListeners() {
     elements.addSequenceBtn.onclick = () => {
         if (projectState.sequences.length < config.MAX_SEQUENCES) {
             const numChannels = getCurrentSequence()?.channels.length
-                              || config.INITIAL_CHANNELS_PER_SEQUENCE;
+                              || config.INITIAL_SAMPLER_CHANNELS;
             projectState.sequences.push({
                 channels: Array(numChannels).fill(null)
                           .map(() => createNewChannel('sampler'))
