@@ -40,6 +40,10 @@ export class LoopManager {
 
     setupEventListeners() {
         // Loop
+        this.eventBus.addEventListener('loop-toggle-enabled', (e) => {
+            this.setLoopEnabled(e.detail.enabled);
+            this.dispatchLoopState();
+        });
         this.eventBus.addEventListener('loop-toggle', () => this.toggleLoop());
         this.eventBus.addEventListener('loop-clear', () => this.clearLoop());
         this.eventBus.addEventListener('loop-bounds-set', (e) => {

@@ -85,9 +85,14 @@ export class LoopUI {
     bindUIToEvents() {
         const els = this.elements;
         const dispatch = (name, detail) => this.eventBus.dispatchEvent(new CustomEvent(name, { detail }));
-
-        if (els.loopEnabled) this._on(els.loopEnabled, 'change', () => dispatch('loop-toggle'));
+    
+        // FIX: Dispatch the correct event 'loop-toggle-enabled' and include the checkbox state.
+        if (els.loopEnabled) {
+            this._on(els.loopEnabled, 'change', e => dispatch('loop-toggle-enabled', { enabled: e.target.checked }));
+        }
+    
         if (els.quantizeEnabled) this._on(els.quantizeEnabled, 'change', e => dispatch('quantize-toggle', { enabled: e.target.checked }));
+        
         if (els.autoDetectBounds) this._on(els.autoDetectBounds, 'click', () => dispatch('loop-auto-detect'));
         
         // Only send when changed, for both fields
@@ -98,7 +103,7 @@ export class LoopUI {
         };
         if (els.loopStart) this._on(els.loopStart, 'change', updateBounds);
         if (els.loopEnd) this._on(els.loopEnd, 'change', updateBounds);
-
+    
         if (els.quantizeGrid) this._on(els.quantizeGrid, 'change', e => {
             dispatch('quantize-grid-set', { gridKey: e.target.value });
         });
