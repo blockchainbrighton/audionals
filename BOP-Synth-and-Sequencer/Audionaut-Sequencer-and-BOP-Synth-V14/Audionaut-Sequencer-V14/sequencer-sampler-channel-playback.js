@@ -1,115 +1,50 @@
 /**
  * Module: sequencer-sampler-channel-playback.js
- * Purpose: Sequencer step scheduling, sample and instrument playback, Tone.Sequence management.
- * Exports: startPlayback
- * Depends on: audio-handler.js for stopPlayback/setBPM
+ * Purpose: Contains the isolated logic for triggering a single sampler channel,
+ * including the safety envelope to prevent audio artifacts.
+ * Exports: playSamplerChannel
+ * Depends on: state.js
  */
 
-import { projectState, runtimeState, getCurrentSequence } from './state.js';
-import { setBPM } from './audio-manager.js';
+import { runtimeState } from './state.js';
 
-// Use this variable for sequence management
-runtimeState.toneSequence = null;
+/**
+ * Plays a sample for a given channel at a specific time, wrapped in a safety envelope.
+ * @param {number} time - The Tone.js transport time to schedule the playback.
+ * @param {object} channelData - The channel object from the project state.
+ */
+export function playSamplerChannel(time, channelData) {
+    const buffer = runtimeState.allSampleBuffers[channelData.selectedSampleIndex];
+    if (!buffer) return;
 
-function scheduleStep(time, stepIndex) {
-    runtimeState.currentStepIndex = stepIndex;
-    console.debug('[SEQ] step', stepIndex, 'time', time.toFixed(3));
-
-    const seqData = (projectState.playMode === 'all')
-        ? projectState.sequences[runtimeState.currentPlaybackSequenceIndex]
-        : getCurrentSequence();
-    if (!seqData) return;
-
-    seqData.channels.forEach((chan, chIdx) => {
-        if (!chan.steps[stepIndex]) return;
-
-        // Sampler track
-        if (chan.type === 'sampler') {
-            const buf = runtimeState.allSampleBuffers[chan.selectedSampleIndex];
-            if (buf) {
-                console.debug('   ├─ [SAMPLER]', chIdx, '→ start Player');
-                const player = new runtimeState.Tone.Player(buf)
-                    .toDestination()
-                    .start(time);
-                setTimeout(() => { try { player.dispose(); } catch {} }, 1000);
-            }
-            return;
-        }
-
-        // Instrument track (BOP synth)
-        if (chan.type === 'instrument' && chan.instrumentId) {
-            const inst = runtimeState.instrumentRack[chan.instrumentId];
-            if (!inst) return;
-            const rec = inst.logic?.modules?.recorder;
-            if (!rec?.isPlaying) {
-                console.debug('   ├─ [INST]', chIdx, '→ playInternalSequence (stand‑alone)', chan.instrumentId);
-                inst.playInternalSequence();
-            }
-        }
+    const ampEnv = new runtimeState.Tone.AmplitudeEnvelope({
+        attack: 0.005,
+        decay: 0,
+        sustain: 1.0,
+        release: 0.05
     });
-}
 
-function createToneSequence() {
-    const totalSteps = projectState.sequences[0]?.channels[0]?.steps.length || 64;
-    const stepArray  = [...Array(totalSteps).keys()];
+    const player = new runtimeState.Tone.Player(buffer).chain(ampEnv, runtimeState.Tone.Destination);
 
-    if (runtimeState.toneSequence) runtimeState.toneSequence.dispose();
-    runtimeState.toneSequence = new runtimeState.Tone.Sequence((t, i) => {
-        scheduleStep(t, i);
+    // --- START OF FIX ---
 
-        if (projectState.playMode === 'all' && i === totalSteps - 1) {
-            runtimeState.Tone.Transport.scheduleOnce(() => {
-                runtimeState.currentPlaybackSequenceIndex =
-                    (runtimeState.currentPlaybackSequenceIndex + 1) % projectState.sequences.length;
-                createToneSequence();
-            }, `+${totalSteps}*16n`);
-        }
-    }, stepArray, '16n').start(0);
-}
+    // 1. Tell the envelope to open and close at the scheduled time.
+    ampEnv.triggerAttackRelease('16n', time);
 
-export async function startPlayback(mode) {
-    if (!runtimeState.isToneStarted) {
-        await runtimeState.Tone.start();
-        runtimeState.isToneStarted = true;
-    }
-    projectState.isPlaying = true;
-    projectState.playMode  = mode;
-    if (mode === 'all') runtimeState.currentPlaybackSequenceIndex = projectState.currentSequenceIndex;
+    // 2. CRITICAL: Tell the player to start playing its buffer at the same scheduled time.
+    // This ensures audio is flowing when the envelope gate is open.
+    player.start(time);
 
-    setBPM(projectState.bpm);
-    createToneSequence();
-    runtimeState.Tone.Transport.start();
-}
+    // --- END OF FIX ---
 
-export function stopPlayback() {
-    const T = runtimeState.Tone;
-    if (!T?.Transport) return;
+    console.debug(`[AUDIO]   ├─ [SAMPLER] at ${time.toFixed(3)} → trigger with safe envelope`);
 
-    // 1. Stop transport and dispose sequence
-    T.Transport.stop();
-    if (runtimeState.toneSequence) {
-        runtimeState.toneSequence.dispose();
-        runtimeState.toneSequence = null;
-    }
-
-    // 2. Broadcast stop to instruments
-    console.log('[SEQ] Broadcasting transport-stop to all instruments.');
-    for (const id in runtimeState.instrumentRack) {
-        const instrument = runtimeState.instrumentRack[id];
-        if (instrument?.logic?.eventBus) {
-            try {
-                const stopEvent = new CustomEvent('transport-stop');
-                instrument.logic.eventBus.dispatchEvent(stopEvent);
-            } catch (e) {
-                console.error(`[SEQ] Error sending stop event to instrument ${id}:`, e);
-            }
-        }
-    }
-
-    runtimeState.activeInstrumentTriggers?.clear?.();
-
-    // 4. Reset state
-    projectState.isPlaying = false;
-    projectState.playMode  = null;
-    runtimeState.currentStepIndex = 0;
+    // Schedule disposal of the temporary nodes after they've fully finished.
+    // A 2-second delay is more than safe for any sample and its release tail.
+    setTimeout(() => {
+        try {
+            player.dispose();
+            ampEnv.dispose();
+        } catch {}
+    }, 2000);
 }
