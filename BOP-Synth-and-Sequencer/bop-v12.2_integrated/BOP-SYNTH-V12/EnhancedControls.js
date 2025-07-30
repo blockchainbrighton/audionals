@@ -147,29 +147,37 @@ export class EnhancedControls {
         `;
     }
 
-    createEffectSection(name, label, params, isLFO = false) {
-        let controls = '';
-        const d = this.defaults[name] || {};
-        params.forEach(p => {
-            if (typeof p === 'string') p = { param: p };
-            const { param, min = 0, max = 1, step = 0.01, type, options } = p;
-            const id = name + param.charAt(0).toUpperCase() + param.slice(1);
-            if (type === 'select' && options) {
-                controls += this.createSelectControl(id, this.formatLabel(param), options, d[param], `${name}.${param}`);
-            } else {
-                controls += this.createSliderControl(id, this.formatLabel(param), d[param], min, max, step, `${name}.${param}`);
-            }
-        });
-        const showToggle = effectsWithWet.includes(name);
-        return `
-            <div class="control-group collapsed">
-                <div class="group-header">
-                    <h3>${label}</h3>
-                    ${!isLFO && showToggle ? this.createToggleSwitch(`${name}Enable`, `${name}.wet`) : ''}
-                </div>
-                <div class="group-content">${controls}</div>
-            </div>`;
-    }
+    // REPLACE the entire function
+createEffectSection(name, label, params, isLFO = false) {
+    let controls = '';
+    const d = this.defaults[name] || {};
+    params.forEach(p => {
+        if (typeof p === 'string') p = { param: p };
+        const { param, min = 0, max = 1, step = 0.01, type, options } = p;
+        const id = name + param.charAt(0).toUpperCase() + param.slice(1);
+        if (type === 'select' && options) {
+            controls += this.createSelectControl(id, this.formatLabel(param), options, d[param], `${name}.${param}`);
+        } else {
+            controls += this.createSliderControl(id, this.formatLabel(param), d[param], min, max, step, `${name}.${param}`);
+        }
+    });
+
+    const showToggle       = effectsWithWet.includes(name) && !isLFO;
+    const isEnabledDefault = false;
+    const toggleMarkup     = showToggle
+        ? this.createToggleSwitch(`${name}Enable`, `${name}.wet`, isEnabledDefault)
+        : '';
+
+    return `
+        <div class="control-group collapsed">
+            <div class="group-header">
+                <h3>${label}</h3>
+                ${toggleMarkup}
+            </div>
+            <div class="group-content">${controls}</div>
+        </div>`;
+}
+
 
     createSliderControl(id, label, value, min, max, step, path) {
         const formatter = this.getFormatter(id);
@@ -194,14 +202,15 @@ export class EnhancedControls {
         `;
     }
 
-    createToggleSwitch(id, path) {
+    createToggleSwitch(id, path, isChecked = true) {
         return `
             <label class="enable-switch">
-                <input type="checkbox" id="${id}" data-path="${path}" checked>
+                <input type="checkbox" id="${id}" data-path="${path}" ${isChecked ? 'checked' : ''}>
                 <span class="slider"></span>
             </label>
         `;
     }
+
 
     getFormatter(id) {
         const pct = v => `${Math.round(v * 100)}%`;

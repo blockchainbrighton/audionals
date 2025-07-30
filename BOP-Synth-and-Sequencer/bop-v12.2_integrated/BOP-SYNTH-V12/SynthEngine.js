@@ -18,54 +18,71 @@ export class SynthEngine {
         console.log('[SynthEngine] Audio engine created and signal chain connected.');
     }
 
-    createAudioChain() {
-        const T = this.Tone;
-        this.nodes.master = new T.Gain(0.7);
-        this.nodes.limiter = new T.Limiter(-3);
-        this.nodes.reverb     = new T.Reverb({ decay: 2, preDelay: 0, wet: 0.3 });
-        this.nodes.delay      = new T.FeedbackDelay({ delayTime: 0.25, feedback: 0.3, wet: 0.2 });
-        this.nodes.filter     = new T.Filter({ frequency: 5000, Q: 1, type: 'lowpass' });
-        this.nodes.chorus     = new T.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0.5 });
-        this.nodes.distortion = new T.Distortion({ distortion: 0.4, oversample: 'none', wet: 0.3 });
-        this.nodes.phaser     = new T.Phaser({ frequency: 0.5, octaves: 3, baseFrequency: 350, wet: 0.5 });
-        this.nodes.tremolo    = new T.Tremolo({ frequency: 10, depth: 0.5, spread: 0, wet: 0.7 }).start();
-        this.nodes.vibrato    = new T.Vibrato({ frequency: 5, depth: 0.1, wet: 0.8 });
-        this.nodes.compressor = new T.Compressor({ threshold: -24, ratio: 12, attack: 0.003, release: 0.25, knee: 30 });
-        this.nodes.bitCrusher = new T.BitCrusher(4);
+    // REPLACE the whole function
+createAudioChain() {
+    const T = this.Tone;
 
-        this.nodes.filterLFO   = new T.LFO({ frequency: 0.5, min: 200, max: 2000, amplitude: 0 }).start();
-        this.nodes.tremoloLFO  = new T.LFO({ frequency: 4, min: 0, max: 1, amplitude: 0 }).start();
-        this.nodes.vibratoLFO  = new T.LFO({ frequency: 6, min: -0.02, max: 0.02, amplitude: 0 }).start();
-        this.nodes.phaserLFO   = new T.LFO({ frequency: 0.3, min: 0.1, max: 10, amplitude: 0 }).start();
+    this.nodes.master      = new T.Gain(0.7);
+    this.nodes.limiter     = new T.Limiter(-3);
 
-        this.nodes.oscillator = { type: 'sawtooth', detune: 0 };
-        this.nodes.envelope   = { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 };
-        this.polySynth = new T.PolySynth(T.Synth, {
-            oscillator: this.nodes.oscillator,
-            envelope:   this.nodes.envelope,
-        });
+    // Effects built with their intended mix amounts
+    this.nodes.reverb      = new T.Reverb     ({ decay: 2,  preDelay: 0,  wet: 0.3 });
+    this.nodes.delay       = new T.FeedbackDelay({ delayTime: 0.25, feedback: 0.3, wet: 0.2 });
+    this.nodes.filter      = new T.Filter     ({ frequency: 5000, Q: 1, type: 'lowpass' });
+    this.nodes.chorus      = new T.Chorus     ({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0.5 });
+    this.nodes.distortion  = new T.Distortion ({ distortion: 0.4, oversample: 'none', wet: 0.3 });
+    this.nodes.phaser      = new T.Phaser     ({ frequency: 0.5, octaves: 3, baseFrequency: 350, wet: 0.5 });
+    this.nodes.tremolo     = new T.Tremolo    ({ frequency: 10, depth: 0.5, spread: 0, wet: 0.7 }).start();
+    this.nodes.vibrato     = new T.Vibrato    ({ frequency: 5, depth: 0.1, wet: 0.8 });
+    this.nodes.compressor  = new T.Compressor ({ threshold: -24, ratio: 12, attack: 0.003, release: 0.25, knee: 30 });
+    this.nodes.bitCrusher  = new T.BitCrusher (4);
 
-        this.nodes.filterLFO.connect(this.nodes.filter.frequency);
-        this.nodes.tremoloLFO.connect(this.nodes.tremolo.depth);
-        this.nodes.vibratoLFO.connect(this.nodes.vibrato.depth);
-        this.nodes.phaserLFO.connect(this.nodes.phaser.frequency);
+    // LFOs (untouched)
+    this.nodes.filterLFO   = new T.LFO({ frequency: 0.5, min: 200,   max: 2000, amplitude: 0 }).start();
+    this.nodes.tremoloLFO  = new T.LFO({ frequency: 4,   min: 0,     max: 1,    amplitude: 0 }).start();
+    this.nodes.vibratoLFO  = new T.LFO({ frequency: 6,   min: -0.02, max: 0.02, amplitude: 0 }).start();
+    this.nodes.phaserLFO   = new T.LFO({ frequency: 0.3, min: 0.1,   max: 10,   amplitude: 0 }).start();
 
-        this.polySynth.chain(
-            this.nodes.bitCrusher,
-            this.nodes.distortion,
-            this.nodes.compressor,
-            this.nodes.filter,
-            this.nodes.chorus,
-            this.nodes.phaser,
-            this.nodes.tremolo,
-            this.nodes.vibrato,
-            this.nodes.delay,
-            this.nodes.reverb,
-            this.nodes.limiter,
-            this.nodes.master,
-            this.output
-        );
-    }
+    // Voice generator
+    this.nodes.oscillator  = { type: 'sawtooth', detune: 0 };
+    this.nodes.envelope    = { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 };
+    this.polySynth         = new T.PolySynth(T.Synth, {
+        oscillator: this.nodes.oscillator,
+        envelope:   this.nodes.envelope,
+    });
+
+    // Connect modulation sources
+    this.nodes.filterLFO.connect(this.nodes.filter.frequency);
+    this.nodes.tremoloLFO.connect(this.nodes.tremolo.depth);
+    this.nodes.vibratoLFO.connect(this.nodes.vibrato.depth);
+    this.nodes.phaserLFO.connect(this.nodes.phaser.frequency);
+
+    // Main signal chain
+    this.polySynth.chain(
+        this.nodes.bitCrusher,
+        this.nodes.distortion,
+        this.nodes.compressor,
+        this.nodes.filter,
+        this.nodes.chorus,
+        this.nodes.phaser,
+        this.nodes.tremolo,
+        this.nodes.vibrato,
+        this.nodes.delay,
+        this.nodes.reverb,
+        this.nodes.limiter,
+        this.nodes.master,
+        this.output
+    );
+
+    // --- NEW: start with every effect bypassed (wet=0) but remember the mix amount ---
+    [
+        'reverb','delay','chorus','phaser',
+        'tremolo','vibrato','distortion'
+    ].forEach(name => this.toggleEffect(name, false));
+
+    console.log('[SynthEngine] Audio engine created, all effects bypassed.');
+}
+
 
     noteOn(notes, velocity = 1.0) {
         if (this.polySynth) this.polySynth.triggerAttack(notes, this.Tone.now(), velocity);
