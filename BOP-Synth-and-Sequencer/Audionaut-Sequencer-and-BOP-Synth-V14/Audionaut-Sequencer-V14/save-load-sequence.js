@@ -7,7 +7,7 @@
 
 // save-load-sequence.js (Enhanced Debug/Diagnostic Version)
 
-import { projectState, runtimeState, initializeProject } from './state.js';
+import { projectState, runtimeState, initializeProject, syncNextInstrumentIdAfterLoad } from './state.js';
 import { createInstrumentForChannel } from './instrument.js';
 
 // === Optional: Track and clean up ALL Tone.js audio nodes for debug ===
@@ -44,7 +44,7 @@ export function saveProject() {
                             const instrument = runtimeState.instrumentRack[chan.instrumentId];
                             if (instrument) {
                                 try {
-                                    newChan.patch = instrument.getPatch();
+                                    newChan.patch = instrument.getAllParameters();
                                     console.log(`%c[SAVE]  -> Captured patch for ${chan.instrumentId}:`, 'color: blue;', JSON.stringify(newChan.patch));
                                 } catch (error) {
                                     console.error(`[SAVE]  -> FAILED to get patch for ${chan.instrumentId}`, error);
@@ -99,7 +99,7 @@ export async function loadProject(jsonString) {
         for (const id in runtimeState.instrumentRack) {
             const inst = runtimeState.instrumentRack[id];
             if (inst?.logic?.modules?.synthEngine) {
-                console.info(`[LOAD] Old Synth State:`, inst.logic.modules.synthEngine.getPatch());
+                console.info(`[LOAD] Old Synth State:`, inst.logic.modules.synthEngine.getAllParameters());
             }
         }
         console.groupEnd();
@@ -115,6 +115,8 @@ export async function loadProject(jsonString) {
         projectState.bpm = loadedData.bpm || 120;
         projectState.currentSequenceIndex = loadedData.currentSequenceIndex || 0;
         projectState.sequences = loadedData.sequences;
+        syncNextInstrumentIdAfterLoad(); // <-- always after setting projectState.sequences
+
 
         // Create a snapshot of the loaded patch for diffing after load
         window._lastLoadedPatch = JSON.parse(JSON.stringify(loadedData));
@@ -153,7 +155,7 @@ export async function loadProject(jsonString) {
         for (const id in runtimeState.instrumentRack) {
             const inst = runtimeState.instrumentRack[id];
             if (inst?.logic?.modules?.synthEngine) {
-                const patch = inst.logic.modules.synthEngine.getPatch();
+                const patch = inst.logic.modules.synthEngine.getAllParameters();
                 console.info(`[LIVE-SYNTH-STATE:${id}]`, patch);
                 // Deep compare to loadedData if patch exists
                 const loadedPatch = findLoadedPatchById(id, loadedData);

@@ -1,3 +1,12 @@
+// SYNTH ENGINE - V14
+
+// SynthEngine is the single, canonical source of truth for all parameter and patch data.
+
+// UI modules (EnhancedControls) only reflect and relay changes, never own state.
+
+// BopSynthUI orchestrates UI layout only, never sound state
+
+
 /**
  * @file SynthEngine.js
  * @description Schema-driven, core audio synthesis engine for BOP Synth.

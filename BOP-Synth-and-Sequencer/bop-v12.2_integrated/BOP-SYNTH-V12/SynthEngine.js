@@ -1,3 +1,12 @@
+// SYNTH ENGINE
+
+// SynthEngine is always the source of truth for sound parameters and patch data.
+// EnhancedControls only manages the UI for those parameters, and always syncs its controls from the engine, never vice versa.
+// BopSynthUI orchestrates the whole system and holds transient UI state like panel expansion, not sound state.
+// This separation ensures robust, predictable, and easily debuggable synth behavior.
+
+
+
 /**
  * @file SynthEngine.js
  * @description Core audio synthesis engine for BOP Synth.
