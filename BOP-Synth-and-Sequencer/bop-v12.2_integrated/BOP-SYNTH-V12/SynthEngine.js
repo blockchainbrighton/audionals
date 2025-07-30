@@ -94,9 +94,12 @@ createAudioChain() {
         console.log('[SynthEngine] noteOff:', notes);
     }
 
+    /**
+     * Scheduled from sequencer or recorder.
+     * Always use the scheduler's time arg, NOT Tone.now().
+     */
     triggerAttackRelease(notes, dur, time, vel) {
-        console.debug('[ENGINE] triggerAttackRelease', notes,
-                      'dur', dur, 'time', time.toFixed(3));
+        console.debug('[ENGINE] triggerAttackRelease', notes, 'dur', dur, 'time', time.toFixed(3));
         this.polySynth.triggerAttackRelease(notes, dur, time, vel);
     }
 
