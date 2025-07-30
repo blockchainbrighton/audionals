@@ -69,6 +69,40 @@ export class EnhancedControls {
         });
     }
 
+    // ADD these two new methods to the EnhancedControls class:
+    /**
+     * NEW: Gathers the IDs of all non-collapsed panels.
+     * @returns {string[]} An array of element IDs.
+     */
+    getExpandedState() {
+        const expandedIds = [];
+        // Query all elements that can be collapsed/expanded and have an ID
+        const allPanels = this.panel.querySelectorAll('.super-group[id], .control-group[id]');
+        allPanels.forEach(panel => {
+            if (!panel.classList.contains('collapsed')) {
+                expandedIds.push(panel.id);
+            }
+        });
+        console.log('[EnhancedControls] Getting expanded state:', expandedIds);
+        return expandedIds;
+    }
+
+    /**
+     * NEW: Applies a saved expanded state to the UI.
+     * @param {string[]} expandedIds - An array of element IDs to expand.
+     */
+    applyExpandedState(expandedIds = []) {
+        console.log('[EnhancedControls] Applying expanded state:', expandedIds);
+        const allPanels = this.panel.querySelectorAll('.super-group[id], .control-group[id]');
+        allPanels.forEach(panel => {
+            // If the panel's ID is in the array, ensure it's expanded (remove 'collapsed').
+            // Otherwise, ensure it's collapsed (add 'collapsed').
+            const shouldBeExpanded = expandedIds.includes(panel.id);
+            panel.classList.toggle('collapsed', !shouldBeExpanded);
+        });
+    }
+
+
     panelHTML() {
         const superGroups = [
             {
@@ -127,57 +161,67 @@ export class EnhancedControls {
             }
         ];
 
-        const html = superGroups.map(sg => `
-            <div class="super-group collapsed">
-                <div class="super-group-header"><h4>${sg.title}</h4></div>
-                <div class="super-group-content">
-                    ${sg.modules.join('')}
+        // MODIFIED to add a unique ID to each super-group
+        const html = superGroups.map(sg => {
+            const sgId = `super-group-${sg.title.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+            return `
+                <div class="super-group collapsed" id="${sgId}">
+                    <div class="super-group-header"><h4>${sg.title}</h4></div>
+                    <div class="super-group-content">
+                        ${sg.modules.join('')}
+                    </div>
                 </div>
-            </div>
-        `).join('');
+            `
+        }).join('');
 
         return `<div class="control-panel-grid">${html}</div>`;
-    }
+        }
 
-    createManualSection(label, controlsArray) {
-        return `
-            <div class="control-group collapsed">
-                <div class="group-header"><h3>${label}</h3></div>
-                <div class="group-content">${controlsArray.join('')}</div>
-            </div>
-        `;
-    }
+
+        createManualSection(label, controlsArray) {
+            const groupId = `control-group-${label.toLowerCase().replace(/[^a-z0-9]+/g, '-')}`;
+            return `
+                <div class="control-group collapsed" id="${groupId}">
+                    <div class="group-header"><h3>${label}</h3></div>
+                    <div class="group-content">${controlsArray.join('')}</div>
+                </div>
+            `;
+        }
+
 
     // REPLACE the entire function
-createEffectSection(name, label, params, isLFO = false) {
-    let controls = '';
-    const d = this.defaults[name] || {};
-    params.forEach(p => {
-        if (typeof p === 'string') p = { param: p };
-        const { param, min = 0, max = 1, step = 0.01, type, options } = p;
-        const id = name + param.charAt(0).toUpperCase() + param.slice(1);
-        if (type === 'select' && options) {
-            controls += this.createSelectControl(id, this.formatLabel(param), options, d[param], `${name}.${param}`);
-        } else {
-            controls += this.createSliderControl(id, this.formatLabel(param), d[param], min, max, step, `${name}.${param}`);
-        }
-    });
-
-    const showToggle       = effectsWithWet.includes(name) && !isLFO;
-    const isEnabledDefault = false;
-    const toggleMarkup     = showToggle
-        ? this.createToggleSwitch(`${name}Enable`, `${name}.wet`, isEnabledDefault)
-        : '';
-
-    return `
-        <div class="control-group collapsed">
-            <div class="group-header">
-                <h3>${label}</h3>
-                ${toggleMarkup}
-            </div>
-            <div class="group-content">${controls}</div>
-        </div>`;
-}
+    createEffectSection(name, label, params, isLFO = false) {
+        let controls = '';
+        const d = this.defaults[name] || {};
+        params.forEach(p => {
+            // ... (keep the inside of this loop the same)
+            if (typeof p === 'string') p = { param: p };
+            const { param, min = 0, max = 1, step = 0.01, type, options } = p;
+            const id = name + param.charAt(0).toUpperCase() + param.slice(1);
+            if (type === 'select' && options) {
+                controls += this.createSelectControl(id, this.formatLabel(param), options, d[param], `${name}.${param}`);
+            } else {
+                controls += this.createSliderControl(id, this.formatLabel(param), d[param], min, max, step, `${name}.${param}`);
+            }
+        });
+    
+        const showToggle = effectsWithWet.includes(name) && !isLFO;
+        const isEnabledDefault = false;
+        const toggleMarkup = showToggle
+            ? this.createToggleSwitch(`${name}Enable`, `${name}.wet`, isEnabledDefault)
+            : '';
+    
+        // MODIFIED to add a unique ID to the control-group
+        const groupId = `control-group-${name.toLowerCase()}`;
+        return `
+            <div class="control-group collapsed" id="${groupId}">
+                <div class="group-header">
+                    <h3>${label}</h3>
+                    ${toggleMarkup}
+                </div>
+                <div class="group-content">${controls}</div>
+            </div>`;
+    }
 
 
     createSliderControl(id, label, value, min, max, step, path) {

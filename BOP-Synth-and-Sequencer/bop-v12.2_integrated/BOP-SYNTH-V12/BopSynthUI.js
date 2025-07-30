@@ -59,7 +59,49 @@ export class BopSynthUI {
         );
 
         this.wireUpEvents();
+    
+        // NEW: Immediately request the current loop/quantize state to sync the UI on creation.
+        this.eventBus.dispatchEvent(new CustomEvent('request-loop-state'));
+        
         console.log('[BopSynthUI] UI layer initialized.');
+    }
+
+    // ADD these two new methods:
+    /**
+     * NEW: Gathers the state from all UI components.
+     * @returns {object} The complete UI state object.
+     */
+    getUIState() {
+        // The "source of truth" for checkbox state is the logic layer (LoopManager).
+        const loopStatus = this.logic.modules.loopManager.getLoopStatus();
+
+        return {
+            expandedPanels: this.modules.enhancedControls.getExpandedState(),
+            loopEnabled: loopStatus.enabled,
+            quantizeEnabled: loopStatus.quantizeEnabled
+        };
+    }
+
+    /**
+     * NEW: Applies a loaded state to all UI components.
+     * @param {object} uiState - The UI state object from a saved patch.
+     */
+    applyUIState(uiState) {
+        if (!uiState) {
+            console.warn('[BopSynthUI] applyUIState called with no state.');
+            return;
+        }
+        
+        console.log('[BopSynthUI] Applying UI state:', uiState);
+
+        // Restore expanded panels
+        if (uiState.expandedPanels) {
+            this.modules.enhancedControls.applyExpandedState(uiState.expandedPanels);
+        }
+        
+        // The core logic for loop/quantize is already loaded into LoopManager.
+        // We just need to tell the UI to refresh itself based on that now-loaded state.
+        this.eventBus.dispatchEvent(new CustomEvent('request-loop-state'));
     }
 
     /**

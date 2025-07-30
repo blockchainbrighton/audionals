@@ -2,7 +2,6 @@
  * @file BopSynthLogic.js
  * @description The "headless" core logic controller for the BOP Synthesizer.
  * Manages state, the audio engine, recording, and presets. It is UI-agnostic.
- * LOGS: Parameter/state changes, event wiring.
  */
 
 import { SynthEngine } from './SynthEngine.js';
@@ -14,6 +13,7 @@ export class BopSynthLogic {
     constructor(Tone) {
         this.Tone = Tone;
         this.eventBus = document.createElement('div');
+        this.uiController = null; // To hold a reference to the UI
 
         this.state = {
             seq: [],
@@ -46,17 +46,58 @@ export class BopSynthLogic {
         console.log('[BopSynthLogic] Headless logic core initialized.');
     }
 
+    /**
+     * Connects the logic core to its UI controller.
+     * @param {BopSynthUI} uiController - The instance of the UI controller.
+     */
+    connectUI(uiController) {
+        this.uiController = uiController;
+        console.log('[BopSynthLogic] UI controller connected.');
+    }
+
+    /**
+     * Disconnects the UI controller, breaking the reference.
+     */
+    disconnectUI() {
+        this.uiController = null;
+        console.log('[BopSynthLogic] UI controller disconnected.');
+    }
+
+    /**
+     * Gathers the full state, including logic and UI, for saving.
+     * @returns {object} The complete state object.
+     */
     getFullState() {
-        const state = this.modules.saveLoad.getFullState();
-        console.log('[BopSynthLogic] getFullState called:', JSON.stringify(state, null, 2));
-        return state;
+        const logicState = this.modules.saveLoad.getFullState(); 
+        const uiState = this.uiController ? this.uiController.getUIState() : {};
+
+        const fullState = {
+            ...logicState,
+            version: '2.2',
+            uiState: uiState
+        };
+
+        console.log('[BopSynthLogic] getFullState (v2.2) created:', JSON.parse(JSON.stringify(fullState)));
+        return fullState;
     }
 
-    loadFullState(stateObject) {
-        console.log('[BopSynthLogic] loadFullState called with:', stateObject);
-        this.modules.saveLoad.loadState(stateObject);
-    }
+    /**
+     * Loads a complete state object, applying logic and UI states.
+     * @param {object} state - The state object to load.
+     */
+    loadFullState(state) {
+        if (!state) return;
+        console.log('[BopSynthLogic] loadFullState called with:', state);
 
+        // Load the core logic state (synth params, sequence, etc.)
+        this.modules.saveLoad.loadState(state);
+
+        // If a UI is connected, tell it to apply its portion of the state.
+        if (state.uiState && this.uiController) {
+            this.uiController.applyUIState(state.uiState);
+        }
+    }
+    
     wireUpEvents() {
         const bus = this.eventBus;
         const recorder = this.modules.recorder;
@@ -71,7 +112,6 @@ export class BopSynthLogic {
         });
 
         bus.addEventListener('transport-play', e => {
-            console.debug('[LOGIC] transport-play received', 'start', e.detail?.startTime);
             recorder.startPlayback(e.detail?.startTime);
         });
         
@@ -88,11 +128,9 @@ export class BopSynthLogic {
             this.state.isRec = isRecording;
             this.state.isArmed = isArmed;
             this.state.isPlaying = isPlaying;
-            console.log('[BopSynthLogic] recording-state-changed:', e.detail);
         });
         bus.addEventListener('octave-change', e => {
             this.state.curOct = e.detail.octave;
-            console.log('[BopSynthLogic] octave-change:', e.detail.octave);
         });
 
         bus.addEventListener('save-project', () => this.modules.saveLoad.saveStateToFile());
@@ -103,13 +141,10 @@ export class BopSynthLogic {
             if (recorder.editNote) { recorder.editNote(e.detail.noteIndex, e.detail.changes); }
         });
 
-        // LOG: Parameter and effect changes
         bus.addEventListener('effect-toggle', e => {
-            console.log('[BopSynthLogic] effect-toggle:', e.detail);
             this.modules.synthEngine.toggleEffect(e.detail.effectName, e.detail.enabled);
         });
         bus.addEventListener('parameter-change', e => {
-            console.log('[BopSynthLogic] parameter-change event:', e.detail);
             this.modules.synthEngine.setParameter(e.detail.parameter, e.detail.value);
         });
 

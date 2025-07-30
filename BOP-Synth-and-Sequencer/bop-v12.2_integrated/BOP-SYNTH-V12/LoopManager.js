@@ -63,6 +63,12 @@ export class LoopManager {
             this.setSwing(e.detail.amount);
         });
 
+        // Add this to the list of event listeners:
+        this.eventBus.addEventListener('request-loop-state', () => {
+            // The UI is asking for the current state. Dispatch it.
+            this.dispatchLoopState();
+        });
+
         // Project/load logic
         this.eventBus.addEventListener('loop-settings-load', (e) => {
             const { enabled, start, end, quantize, grid, swing } = e.detail;
