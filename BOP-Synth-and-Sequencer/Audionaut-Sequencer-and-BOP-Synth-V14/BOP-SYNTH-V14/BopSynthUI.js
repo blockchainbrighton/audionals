@@ -1,7 +1,7 @@
 // BOP-SYNTH-V14/BopSynthUI.js
 
 import { Keyboard } from './Keyboard.js';
-import Transport from './Transport.js';
+import Transport from './SynthTransport.js';
 import PianoRoll from './PianoRoll.js';
 import EnhancedControls from './EnhancedControls.js';
 import { MidiControl } from './midi.js';

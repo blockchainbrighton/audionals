@@ -2,9 +2,10 @@
 
 import { projectState, runtimeState, getCurrentSequence, createNewChannel, initializeProject } from './state.js';
 import * as config from './config.js';
-import { startPlayback, stopPlayback, setBPM as setAudioBPM } from './audio.js';
+import { setBPM as setAudioBPM } from './audio-manager.js';
 import { loadProject, saveProject } from './save-load-sequence.js';
 import { createInstrumentForChannel, openSynthUI } from './instrument.js';
+import { startPlayback, stopPlayback } from './sequencer-sampler-channel-playback.js';
 
 // --- Element Cache Factory ---
 function getElements() {

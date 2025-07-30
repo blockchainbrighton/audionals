@@ -1,5 +1,5 @@
 /**
- * @file Transport.js
+ * @file SynthTransport.js
  * @description Transport UI component for the BOP Synthesizer.
  */
 

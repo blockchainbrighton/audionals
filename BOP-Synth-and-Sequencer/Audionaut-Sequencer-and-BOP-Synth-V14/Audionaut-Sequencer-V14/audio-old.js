@@ -1,5 +1,5 @@
 /**
- * Module: BOP-Sequencer-V10-Modular/audio.js
+ * Module: BOP-Sequencer-V14/audio-manager.js
  * Purpose: Audio processing and playback functionality
  * Exports: stopPlayback, setBPM, resetAudioEnvironment
  * Depends on: state.js

@@ -27,7 +27,7 @@ export const runtimeState = {
 };
 
 // Order: Kick, Snare, Closed Hat, Clap, Crash, Cowbell, Synth Bass 1, Synth Bass 2
-export const defaultSampleOrder = [0, 1, 2, 3, 4, 13, 5, 6];
+export const defaultSampleOrder = [8, 1, 2, 3, 4, 13, 5, 6];
 // (13 is Cowbell, based on your ogSampleUrls list; adjust if needed)
 
 
