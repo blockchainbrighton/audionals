@@ -1,5 +1,5 @@
 // state.js (Rewritten with light logging for context)
-import { INITIAL_SEQUENCES, INITIAL_CHANNELS_PER_SEQUENCE, TOTAL_STEPS } from './config.js';
+import { INITIAL_INSTRUMENT_CHANNELS, INITIAL_SAMPLER_CHANNELS, TOTAL_STEPS } from './config.js';
 
 export const projectState = {
     sequences: [],
@@ -42,12 +42,20 @@ export function createNewChannel(type = 'sampler') {
     return channel;
 }
 
-export function createNewSequence(numChannels = INITIAL_CHANNELS_PER_SEQUENCE) {
-    console.log(`[STATE] Creating new sequence with ${numChannels} channels.`);
-    return {
-        channels: Array(numChannels).fill(null).map(() => createNewChannel('sampler'))
-    };
-}
+export function createNewSequence(
+        numSamplers   = INITIAL_SAMPLER_CHANNELS,
+        numInstruments= INITIAL_INSTRUMENT_CHANNELS
+    ) {
+        console.log(
+            `[STATE] Creating new sequence with ${numSamplers} sampler ` +
+            `and ${numInstruments} instrument channels.`
+        );
+
+        const samplerChs   = Array(numSamplers)   .fill(null).map(() => createNewChannel('sampler'));
+        const instrumentChs= Array(numInstruments).fill(null).map(() => createNewChannel('instrument'));
+
+        return { channels: [...samplerChs, ...instrumentChs] };
+    }
 
 export function initializeProject() {
     console.log('[STATE] Initializing project state...');

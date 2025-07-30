@@ -6,7 +6,9 @@ export const BARS_PER_SEQUENCE = 4;
 export const TOTAL_STEPS = STEPS_PER_BAR * BARS_PER_SEQUENCE;
 
 export const INITIAL_SEQUENCES = 1;
-export const INITIAL_CHANNELS_PER_SEQUENCE = 8;
+export const INITIAL_SAMPLER_CHANNELS = 8;
+export const INITIAL_INSTRUMENT_CHANNELS = 4;  // synth tracks  ← NEW
+
 export const MAX_SEQUENCES = 32;
 export const MAX_CHANNELS = 32;
 
