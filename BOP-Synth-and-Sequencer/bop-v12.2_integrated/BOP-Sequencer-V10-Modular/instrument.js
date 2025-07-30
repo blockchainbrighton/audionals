@@ -34,7 +34,10 @@ export function createInstrumentForChannel(seqIndex, chanIndex) {
         runtimeState.instrumentRack[instrumentId] = {
             id: instrumentId,
             logic: logic,
-            playInternalSequence: (startTime) => logic.eventBus.dispatchEvent(new CustomEvent('transport-play', { detail: { startTime } })),
+            playInternalSequence: (startTime) => {
+                console.debug('[INST] dispatch transport-play', instrumentId, 'start', startTime);
+                logic.eventBus.dispatchEvent(new CustomEvent('transport-play', { detail: { startTime } }));
+            },
             stopInternalSequence: () => logic.eventBus.dispatchEvent(new CustomEvent('transport-stop')),
             getPatch: () => {
                 // This function is now the single source of truth for an instrument's state.

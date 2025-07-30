@@ -123,43 +123,35 @@ export class EnhancedRecorder {
     startPlayback(hostStartTime) {
         if (this.isPlaying || !this.state.seq?.length) return;
         this.isPlaying = true;
-
-        const isStandalone = typeof hostStartTime === 'undefined';
-
-        this.state.seq.forEach(noteEvent => {
-            if (noteEvent.dur > 0.01) {
-                const eventTime = isStandalone ? `+${noteEvent.start}` : hostStartTime + noteEvent.start;
-                
-                // --- FIX: Schedule the note and store its event ID ---
-                const noteEventId = this.synthEngine.Tone.Transport.schedule(time => {
-                    // We use triggerAttackRelease inside schedule to be sample-accurate
-                    this.synthEngine.triggerAttackRelease(noteEvent.note, noteEvent.dur, time, noteEvent.vel);
-                }, eventTime);
-                this.scheduledEventIds.push(noteEventId);
-
-                // --- FIX: Schedule visuals and store their IDs too ---
-                const visualOnId = this.synthEngine.Tone.Transport.scheduleOnce(time => {
-                    this.eventBus.dispatchEvent(new CustomEvent('note-visual-change', { detail: { note: noteEvent.note, active: true }}));
-                }, eventTime);
-                this.scheduledEventIds.push(visualOnId);
-
-                const visualOffId = this.synthEngine.Tone.Transport.scheduleOnce(time => {
-                    this.eventBus.dispatchEvent(new CustomEvent('note-visual-change', { detail: { note: noteEvent.note, active: false }}));
-                }, eventTime + noteEvent.dur);
-                this.scheduledEventIds.push(visualOffId);
-            }
+    
+        const isStandalone = hostStartTime === undefined;
+        console.debug('[REC] startPlayback',
+                      'events', this.state.seq.length,
+                      'mode', isStandalone ? 'stand‑alone' : 'host‑sync',
+                      'hostStart', hostStartTime);
+    
+        this.state.seq.forEach(evt => {
+            if (evt.dur <= 0.01) return;
+    
+            const at = isStandalone ? `+${evt.start}` : hostStartTime + evt.start;
+            console.debug('   schedule', evt.note, 'at', at, 'dur', evt.dur.toFixed(3));
+    
+            const id = this.synthEngine.Tone.Transport.schedule(t => {
+                this.synthEngine.triggerAttackRelease(evt.note, evt.dur, t, evt.vel);
+            }, at);
+            this.scheduledEventIds.push(id);
         });
-
-        // In standalone mode, we still manage the transport.
+    
         if (isStandalone) {
-            const sequenceDuration = this.getSequenceDuration();
-            const stopId = this.synthEngine.Tone.Transport.scheduleOnce(() => this.stopAll(), `+${sequenceDuration + 0.1}`);
-            this.scheduledEventIds.push(stopId);
+            const dur = this.getSequenceDuration() + 0.1;
+            this.scheduledEventIds.push(
+                this.synthEngine.Tone.Transport.scheduleOnce(() => this.stopAll(), `+${dur}`)
+            );
             this.synthEngine.Tone.Transport.start();
         }
-        
         this.updateState();
     }
+    
     
     /**
      * Stops all playback and recording activity, resetting state.

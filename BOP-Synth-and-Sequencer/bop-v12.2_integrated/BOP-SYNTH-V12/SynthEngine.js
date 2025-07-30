@@ -94,9 +94,10 @@ createAudioChain() {
         console.log('[SynthEngine] noteOff:', notes);
     }
 
-    triggerAttackRelease(notes, duration, time, velocity) {
-        if (this.polySynth) this.polySynth.triggerAttackRelease(notes, duration, time, velocity);
-        console.log('[SynthEngine] triggerAttackRelease:', notes, duration, time, velocity);
+    triggerAttackRelease(notes, dur, time, vel) {
+        console.debug('[ENGINE] triggerAttackRelease', notes,
+                      'dur', dur, 'time', time.toFixed(3));
+        this.polySynth.triggerAttackRelease(notes, dur, time, vel);
     }
 
     releaseAll() {

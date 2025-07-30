@@ -1,116 +1,104 @@
-// audio.js
 import { projectState, runtimeState, getCurrentSequence } from './state.js';
 
 let toneSequence;
 
+/* ───────────────────────────────────── BPM ────────────────────────────────── */
 export function setBPM(newBpm) {
     projectState.bpm = newBpm;
-    if (runtimeState.Tone && runtimeState.Tone.Transport) {
-        runtimeState.Tone.Transport.bpm.value = newBpm;
-    }
+    if (runtimeState.Tone?.Transport) runtimeState.Tone.Transport.bpm.value = newBpm;
 }
 
+/* ─────────────────────────── step‑scheduler core ──────────────────────────── */
 function scheduleStep(time, stepIndex) {
     runtimeState.currentStepIndex = stepIndex;
+    console.debug('[SEQ] step', stepIndex, 'time', time.toFixed(3));
 
     const seqData = projectState.playMode === 'all'
         ? projectState.sequences[runtimeState.currentPlaybackSequenceIndex]
         : getCurrentSequence();
-    
     if (!seqData) return;
 
-    // A Set to keep track of which instruments should be playing on THIS step
-    const instrumentsToPlayThisStep = new Set();
+    const instrumentsToPlay = new Set();   // instruments active on *this* step
 
-    seqData.channels.forEach((channel) => {
-        const instrument = channel.instrumentId ? runtimeState.instrumentRack[channel.instrumentId] : null;
+    seqData.channels.forEach((chan, chIdx) => {
+        if (!chan.steps[stepIndex]) return;       // silent step
 
-        if (channel.steps[stepIndex]) {
-            // --- This step IS active ---
-            if (channel.type === 'sampler') {
-                const buffer = runtimeState.allSampleBuffers[channel.selectedSampleIndex];
-                if (buffer) {
-                    new runtimeState.Tone.Player(buffer).toDestination().start(time);
-                }
-            } else if (channel.type === 'instrument' && instrument) {
-                if (!runtimeState.activeInstrumentTriggers.has(channel.instrumentId)) {
-                    // Pass the precise `time` from the host's clock
-                    instrument.playInternalSequence(time); 
-                }
-                instrumentsToPlayThisStep.add(channel.instrumentId);
+        if (chan.type === 'sampler') {
+            const buf = runtimeState.allSampleBuffers[chan.selectedSampleIndex];
+            if (buf) {
+                console.debug('   ├─ [SAMPLER]', chIdx, '→ start Player');
+                new runtimeState.Tone.Player(buf).toDestination().start(time);
             }
+        } else if (chan.type === 'instrument' && chan.instrumentId) {
+            const inst = runtimeState.instrumentRack[chan.instrumentId];
+            if (!inst) return;
+
+            if (!runtimeState.activeInstrumentTriggers.has(chan.instrumentId)) {
+                console.debug('   ├─ [INST]', chIdx, '→ playInternalSequence', chan.instrumentId);
+                inst.playInternalSequence(time);   // host‑sync start
+            }
+            instrumentsToPlay.add(chan.instrumentId);
         }
     });
 
-    // --- After checking all channels, see which instruments need to be STOPPED ---
-    // Iterate through the instruments that WERE playing before this step.
-    for (const previouslyActiveId of runtimeState.activeInstrumentTriggers) {
-        // If an instrument that was playing is NOT in the list for the current step, stop it.
-        if (!instrumentsToPlayThisStep.has(previouslyActiveId)) {
-            const instrumentToStop = runtimeState.instrumentRack[previouslyActiveId];
-            instrumentToStop?.stopInternalSequence();
+    /* stop any synths that were running but have no step this tick */
+    for (const id of runtimeState.activeInstrumentTriggers) {
+        if (!instrumentsToPlay.has(id)) {
+            console.debug('   └─ [INST]', id, '→ stopInternalSequence');
+            runtimeState.instrumentRack[id]?.stopInternalSequence();
         }
     }
-    
-    // Finally, update the master list of active triggers to reflect the current step's state.
-    runtimeState.activeInstrumentTriggers = instrumentsToPlayThisStep;
+    runtimeState.activeInstrumentTriggers = instrumentsToPlay;
 }
 
+/* ───────────────────────────── tone.Sequence ─────────────────────────────── */
 function createToneSequence() {
     const totalSteps = projectState.sequences[0]?.channels[0]?.steps.length || 64;
-    const sequenceSteps = Array.from({ length: totalSteps }, (_, i) => i);
+    const stepArray  = [...Array(totalSteps).keys()];
 
-    if (toneSequence) toneSequence.dispose();
+    toneSequence?.dispose();
+    toneSequence = new runtimeState.Tone.Sequence((t, i) => {
+        scheduleStep(t, i);
 
-    toneSequence = new runtimeState.Tone.Sequence((time, stepIndex) => {
-        scheduleStep(time, stepIndex);
-
-        if (projectState.playMode === 'all' && stepIndex === totalSteps - 1) {
+        if (projectState.playMode === 'all' && i === totalSteps - 1) {
             runtimeState.Tone.Transport.scheduleOnce(() => {
-                const nextSeqIndex = (runtimeState.currentPlaybackSequenceIndex + 1) % projectState.sequences.length;
-                runtimeState.currentPlaybackSequenceIndex = nextSeqIndex;
+                runtimeState.currentPlaybackSequenceIndex =
+                    (runtimeState.currentPlaybackSequenceIndex + 1) % projectState.sequences.length;
                 createToneSequence();
             }, `+${totalSteps}*16n`);
         }
-    }, sequenceSteps, "16n");
-
-    toneSequence.start(0);
+    }, stepArray, '16n').start(0);
 }
 
+/* ───────────────────────── public transport helpers ──────────────────────── */
 export async function startPlayback(mode) {
     if (!runtimeState.isToneStarted) {
         await runtimeState.Tone.start();
         runtimeState.isToneStarted = true;
     }
-
     projectState.isPlaying = true;
-    projectState.playMode = mode;
-    
-    if (mode === 'all') {
-        runtimeState.currentPlaybackSequenceIndex = projectState.currentSequenceIndex;
-    }
+    projectState.playMode  = mode;
+    if (mode === 'all') runtimeState.currentPlaybackSequenceIndex = projectState.currentSequenceIndex;
 
     setBPM(projectState.bpm);
     createToneSequence();
     runtimeState.Tone.Transport.start();
 }
 
-// When the main sequencer stops, we must also stop all triggered synths.
 export function stopPlayback() {
-    if (runtimeState.Tone && runtimeState.Tone.Transport) {
-        runtimeState.Tone.Transport.stop();
-        if (toneSequence) toneSequence.dispose();
-        toneSequence = null;
+    const T = runtimeState.Tone;
+    if (!T?.Transport) return;
 
-        // --- NEW: Stop all active instruments when the host stops ---
-        for (const instrumentId of runtimeState.activeInstrumentTriggers) {
-            const instrument = runtimeState.instrumentRack[instrumentId];
-            instrument?.stopInternalSequence();
-        }
-        runtimeState.activeInstrumentTriggers.clear(); // Clear the set
+    T.Transport.stop();
+    toneSequence?.dispose(); toneSequence = null;
 
-        projectState.isPlaying = false;
-        projectState.playMode = null;
-        runtimeState.currentStepIndex = 0;
+    /* stop any synth still ringing */
+    for (const id of runtimeState.activeInstrumentTriggers) {
+        runtimeState.instrumentRack[id]?.stopInternalSequence();
     }
+    runtimeState.activeInstrumentTriggers.clear();
+
+    projectState.isPlaying = false;
+    projectState.playMode  = null;
+    runtimeState.currentStepIndex = 0;
 }

@@ -70,7 +70,11 @@ export class BopSynthLogic {
             this.modules.synthEngine.triggerAttackRelease(note, duration, undefined, velocity);
         });
 
-        bus.addEventListener('transport-play', (e) => recorder.startPlayback(e.detail?.startTime));
+        bus.addEventListener('transport-play', e => {
+            console.debug('[LOGIC] transport-play received', 'start', e.detail?.startTime);
+            recorder.startPlayback(e.detail?.startTime);
+        });
+        
         bus.addEventListener('transport-stop', () => recorder.stopAll());
         bus.addEventListener('transport-record', () => recorder.toggleRecording());
         bus.addEventListener('transport-clear', () => recorder.clearSequence());
