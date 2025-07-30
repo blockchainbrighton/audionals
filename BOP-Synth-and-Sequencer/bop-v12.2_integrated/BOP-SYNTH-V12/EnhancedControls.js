@@ -50,6 +50,7 @@ export class EnhancedControls {
         init() {
             this.panel.innerHTML = this.panelHTML();
             this.setupAllControls();
+            this.syncControlsWithEngine();   // <-- NEW
             this.setupEventListeners();
             console.log('[EnhancedControls] Initialized with 5-column collapsible UI.');
         }
@@ -274,6 +275,30 @@ createEffectSection(name, label, params, isLFO = false) {
         });
     }
 
+    syncControlsWithEngine() {
+        Object.keys(this.synthEngine.nodes).forEach(name => {
+            const node = this.synthEngine.nodes[name];
+            if (!node) return;
+    
+            // 1️⃣  Sliders & selects
+            const params = node.get ? node.get() : {};
+            Object.entries(params).forEach(([param, val]) => {
+                const el = this.panel.querySelector(`[data-path="${name}.${param}"]`);
+                if (!el) return;
+                el.value = typeof val === 'object' && val.value !== undefined ? val.value : val;
+                const vd  = this.panel.querySelector(`span[data-value-for="${el.id}"]`);
+                if (vd) vd.textContent = this.getFormatter(el.id)(el.value);
+            });
+    
+            // 2️⃣  Enable toggle (if any)
+            if (node.wet) {
+                const chk = this.panel.querySelector(`#${name}Enable`);
+                if (chk) chk.checked = node.wet.value > 0.0001;
+            }
+        });
+    }
+    
+
     setupAllControls() {
         // Range and number inputs
         this.panel.querySelectorAll('input[type="range"], input[type="number"]').forEach(el => {
@@ -287,8 +312,10 @@ createEffectSection(name, label, params, isLFO = false) {
                 if (valueDisplay) valueDisplay.textContent = formatter(value);
             };
             el.addEventListener('input', e => update(e.target.value));
-            if(el.value) update(el.value);
-        });
+             if (el.value) {                      // only refresh the read‑out
+                if (valueDisplay) valueDisplay.textContent = formatter(el.value);
+                }       
+            });
 
         // Select inputs
         this.panel.querySelectorAll('select[data-path]').forEach(el => {
@@ -314,7 +341,7 @@ createEffectSection(name, label, params, isLFO = false) {
                 }
             };
             el.addEventListener('change', e => update(e.target.checked));
-            update(el.checked);
+            // update(el.checked);
         });
 
         // Emergency stop button
