@@ -54,6 +54,25 @@ export class PianoRoll {
         this.scrollContainer.appendChild(this.innerContent);
     }
 
+    getUIState() {
+        return {
+            zoomX: this.zoomX,
+            zoomY: this.zoomY,
+            scrollX: this.scrollContainer ? this.scrollContainer.scrollLeft : 0,
+            scrollY: this.scrollContainer ? this.scrollContainer.scrollTop : 0
+        };
+    }
+
+    applyUIState(state) {
+        if (!state) return;
+        if (typeof state.zoomX === 'number') this.setZoomX(state.zoomX);
+        if (typeof state.zoomY === 'number') this.setZoomY(state.zoomY);
+        if (this.scrollContainer) {
+            if (typeof state.scrollX === 'number') this.scrollContainer.scrollLeft = state.scrollX;
+            if (typeof state.scrollY === 'number') this.scrollContainer.scrollTop = state.scrollY;
+        }
+    }
+
     #setupEventListeners() {
         // Redraws
         ['pianoroll-redraw', 'sequence-changed'].forEach(type =>

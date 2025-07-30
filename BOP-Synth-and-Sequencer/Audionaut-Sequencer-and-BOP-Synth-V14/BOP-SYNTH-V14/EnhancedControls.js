@@ -1,16 +1,8 @@
 // BOP-SYNTH-V14/EnhancedControls.js
 
-/**
- * @file EnhancedControls.js
- * @description Enhanced controls UI component for the BOP Synthesizer.
- * Refactored: minimal duplication, maintainable, ES2024+, zero public API/behavior change.
- */
-
 const effectsWithWet = [
     'reverb', 'delay', 'chorus', 'phaser', 'tremolo', 'vibrato', 'distortion'
 ];
-
-// ---------- Shared Helpers ----------
 
 const pct = v => `${Math.round(v * 100)}%`;
 const plain = v => v;
@@ -36,37 +28,60 @@ const getFormatter = id => {
 const formatLabel = param =>
     labelMap[param] || param.charAt(0).toUpperCase() + param.slice(1);
 
-// ---------- Main Class ----------
+const DEFAULTS = {
+    reverb:      { wet: 0.3, decay: 2, preDelay: 0 },
+    delay:       { wet: 0.2, delayTime: 0.25, feedback: 0.3 },
+    filter:      { frequency: 5000, Q: 1, type: 'lowpass' },
+    chorus:      { wet: 0.5, frequency: 1.5, delayTime: 3.5, depth: 0.7 },
+    distortion:  { wet: 0.3, distortion: 0.4, oversample: 'none' },
+    phaser:      { wet: 0.5, frequency: 0.5, octaves: 3, baseFrequency: 350 },
+    tremolo:     { wet: 0.7, frequency: 10, depth: 0.5 },
+    vibrato:     { wet: 0.8, frequency: 5, depth: 0.1 },
+    compressor:  { threshold: -24, ratio: 12, attack: 0.003, release: 0.25, knee: 30 },
+    bitCrusher:  { bits: 4 },
+    filterLFO:   { frequency: 0.5, min: 200, max: 2000, depth: 0.5 },
+    tremoloLFO:  { frequency: 4, depth: 0.3 },
+    vibratoLFO:  { frequency: 6, depth: 0.02 },
+    phaserLFO:   { frequency: 0.3, depth: 0.5 },
+    envelope:    { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 },
+    oscillator:  { type: 'sawtooth', detune: 0 },
+    limiter:     { threshold: -3 },
+    master:      { volume: 0.7 }
+};
+
+function injectFallbackDefaults(obj) {
+    // Defensive: inject missing required defaults with fallback + log warning for debugging.
+    const required = {
+        master:    { volume: 0.7 },
+        limiter:   { threshold: -3 },
+        envelope:  { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 },
+        oscillator:{ type: 'sawtooth', detune: 0 }
+    };
+    for (const [k, fallback] of Object.entries(required)) {
+        if (!obj[k]) {
+            console.warn(
+                `[EnhancedControls] FALLBACK: defaults.${k} missing. Injecting fallback and logging for debugging. Align your source defaults for: ${k}`,
+                fallback
+            );
+            obj[k] = fallback;
+        }
+    }
+    return obj;
+}
 
 export class EnhancedControls {
     panel;
     eventBus;
     synthEngine;
-    defaults = {
-        reverb:      { wet: 0.3, decay: 2, preDelay: 0 },
-        delay:       { wet: 0.2, delayTime: 0.25, feedback: 0.3 },
-        filter:      { frequency: 5000, Q: 1, type: 'lowpass' },
-        chorus:      { wet: 0.5, frequency: 1.5, delayTime: 3.5, depth: 0.7 },
-        distortion:  { wet: 0.3, distortion: 0.4, oversample: 'none' },
-        phaser:      { wet: 0.5, frequency: 0.5, octaves: 3, baseFrequency: 350 },
-        tremolo:     { wet: 0.7, frequency: 10, depth: 0.5 },
-        vibrato:     { wet: 0.8, frequency: 5, depth: 0.1 },
-        compressor:  { threshold: -24, ratio: 12, attack: 0.003, release: 0.25, knee: 30 },
-        bitCrusher:  { bits: 4 },
-        filterLFO:   { frequency: 0.5, min: 200, max: 2000, depth: 0.5 },
-        tremoloLFO:  { frequency: 4, depth: 0.3 },
-        vibratoLFO:  { frequency: 6, depth: 0.02 },
-        phaserLFO:   { frequency: 0.3, depth: 0.5 },
-        envelope:    { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 },
-        oscillator:  { type: 'sawtooth', detune: 0 },
-        limiter:     { threshold: -3 },
-        master:      { volume: 0.7 }
-    };
 
     constructor(containerElement, eventBus, synthEngine) {
         this.panel = containerElement;
         this.eventBus = eventBus;
         this.synthEngine = synthEngine;
+        this._expandedIds = [];
+        this._controlValues = {};
+        // Ensure all required defaults are present, fallback+log if missing.
+        this.defaults = injectFallbackDefaults({...DEFAULTS});
         if (!this.panel) {
             console.warn('[EnhancedControls] A valid container element was not provided.');
             return;
@@ -74,15 +89,44 @@ export class EnhancedControls {
         this.init();
     }
 
+    // --- Stateful UI Contract ---
+
+    getUIState() {
+        const expandedIds = this.getExpandedState();
+        const controls = {};
+        this.panel.querySelectorAll('[data-path]').forEach(el => {
+            controls[el.dataset.path] = el.type === 'checkbox' ? el.checked : el.value;
+        });
+        return { expandedPanels: expandedIds, controls };
+    }
+
+    applyUIState(state) {
+        if (!state) {
+            // Fallback use, for debugging
+            console.warn('[EnhancedControls] applyUIState: No state provided (fallback used).');
+            return;
+        }
+        this.applyExpandedState(state.expandedPanels || []);
+        if (state.controls) {
+            Object.entries(state.controls).forEach(([path, val]) => {
+                const el = this.panel.querySelector(`[data-path="${path}"]`);
+                if (!el) return;
+                if (el.type === 'checkbox') el.checked = !!val;
+                else el.value = val;
+                const vd = this.panel.querySelector(`span[data-value-for="${el.id}"]`);
+                if (vd) vd.textContent = getFormatter(el.id)(val);
+            });
+        }
+    }
+
     init() {
         this.panel.innerHTML = this.panelHTML();
         this.setupAllControls();
         this.syncControlsWithEngine();
         this.setupEventListeners();
-        console.log('[EnhancedControls] Initialized with 5-column collapsible UI.');
+        this.applyExpandedState(this._expandedIds);
+        console.log('[EnhancedControls] Initialized with stateful UI.');
     }
-
-    // --------- Event System ---------
 
     setupEventListeners() {
         this.eventBus.addEventListener('control-update', e => {
@@ -94,8 +138,6 @@ export class EnhancedControls {
             this.loadPreset(preset);
         });
     }
-
-    // --------- Panel UI/HTML ---------
 
     panelHTML() {
         const superGroups = [
@@ -304,10 +346,7 @@ export class EnhancedControls {
         }
     }
 
-    // --------- Control Binding ---------
-
     setupAllControls() {
-        // Range/number inputs
         this.panel.querySelectorAll('input[type="range"], input[type="number"]').forEach(el => {
             const path = el.dataset.path;
             if (!path) return;
@@ -316,18 +355,20 @@ export class EnhancedControls {
             const update = rawValue => {
                 const value = parseFloat(rawValue);
                 this.setSynthParam(path, value);
+                this._controlValues[path] = value;
                 if (valueDisplay) valueDisplay.textContent = formatter(value);
             };
             el.addEventListener('input', e => update(e.target.value));
             if (el.value && valueDisplay) valueDisplay.textContent = formatter(el.value);
         });
 
-        // Select inputs
         this.panel.querySelectorAll('select[data-path]').forEach(el => {
-            el.addEventListener('change', e => this.setSynthParam(e.target.dataset.path, e.target.value));
+            el.addEventListener('change', e => {
+                this.setSynthParam(e.target.dataset.path, e.target.value);
+                this._controlValues[e.target.dataset.path] = e.target.value;
+            });
         });
 
-        // Checkbox effect toggles
         this.panel.querySelectorAll('input[type="checkbox"][data-path]').forEach(el => {
             const path = el.dataset.path;
             if (!path) return;
@@ -341,11 +382,11 @@ export class EnhancedControls {
                 } else {
                     this.setSynthParam(path, isChecked);
                 }
+                this._controlValues[path] = isChecked;
             };
             el.addEventListener('change', e => update(e.target.checked));
         });
 
-        // Emergency stop
         const stopBtn = this.panel.querySelector('#emergencyStop');
         if (stopBtn) {
             stopBtn.onclick = () => {
@@ -354,7 +395,6 @@ export class EnhancedControls {
             };
         }
 
-        // Collapsible sections
         this.panel.addEventListener('click', e => {
             const groupHeader = e.target.closest('.group-header');
             const superGroupHeader = e.target.closest('.super-group-header');
@@ -366,25 +406,21 @@ export class EnhancedControls {
         });
     }
 
-    // --------- Collapsible State Persistence ---------
-
     getExpandedState() {
         const expandedIds = [];
         this.panel.querySelectorAll('.super-group[id], .control-group[id]').forEach(panel => {
             if (!panel.classList.contains('collapsed')) expandedIds.push(panel.id);
         });
-        console.log('[EnhancedControls] Getting expanded state:', expandedIds);
+        this._expandedIds = expandedIds;
         return expandedIds;
     }
 
     applyExpandedState(expandedIds = []) {
-        console.log('[EnhancedControls] Applying expanded state:', expandedIds);
+        this._expandedIds = expandedIds;
         this.panel.querySelectorAll('.super-group[id], .control-group[id]').forEach(panel => {
             panel.classList.toggle('collapsed', !expandedIds.includes(panel.id));
         });
     }
-
-    // --------- Cleanup ---------
 
     destroy() {
         if (this.panel) this.panel.innerHTML = '';

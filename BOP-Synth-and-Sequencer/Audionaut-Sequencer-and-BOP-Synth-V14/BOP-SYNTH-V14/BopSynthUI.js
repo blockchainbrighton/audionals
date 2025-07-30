@@ -1,18 +1,4 @@
-/**
- * Module: BOP-SYNTH-V12/BopSynthUI.js
- * Purpose: User interface components and rendering
- * Exports: BopSynthUI
- * Depends on: Keyboard.js, Transport.js, midi.js, PianoRoll.js, EnhancedControls.js
- */
-
-// In BOP-SYNTH-V12/BopSynthUI.js
-
-
-/**
- * @file BopSynthUI.js
- * @description The UI controller for the BOP Synthesizer application.
- * Manages all visual components and their interaction with the logic core via the event bus.
- */
+// BOP-SYNTH-V12/BopSynthUI.js
 
 import { Keyboard } from './Keyboard.js';
 import Transport from './Transport.js';
@@ -21,138 +7,165 @@ import EnhancedControls from './EnhancedControls.js';
 import { MidiControl } from './midi.js';
 import { LoopUI } from './loop-ui.js';
 
+/**
+ * Default no-op destroy for UI modules
+ */
+function ensureDestroy(module) {
+    if (!module.destroy) module.destroy = () => {};
+    return module;
+}
+/**
+ * Default no-op for getUIState/applyUIState
+ */
+function ensureUIStateContract(module) {
+    if (!module.getUIState) module.getUIState = () => undefined;
+    if (!module.applyUIState) module.applyUIState = () => {};
+    return module;
+}
+
 export class BopSynthUI {
     constructor(logicController, uiElements) {
-        // Dependencies are passed in from the logic controller
         this.logic = logicController;
         this.Tone = logicController.Tone;
         this.state = logicController.state;
         this.eventBus = logicController.eventBus;
-
         this.uiElements = uiElements;
         this.modules = {};
-
         this.init();
     }
 
     init() {
-        // --- Initialize all UI Modules ---
-        this.modules.keyboard = new Keyboard(
-            this.uiElements.keyboard, // Element passed directly
-            this.eventBus,
-            this.state,
-            this.Tone
-        );
-        this.modules.transport = new Transport(
-            this.uiElements.transport, // Element passed directly
-            this.eventBus
-        );
-        this.modules.pianoRoll = new PianoRoll(
-            this.uiElements.pianoRoll, // Element passed directly
-            this.eventBus,
-            this.state
-        );
-        this.modules.enhancedControls = new EnhancedControls(
-            this.uiElements.controls, // Element passed directly
-            this.eventBus,
-            this.logic.modules.synthEngine
-        );
-        this.modules.midiControl = new MidiControl(this.eventBus);
-        
-        // --- FIX: Pass the container element to LoopUI ---
-        this.modules.loopUI = new LoopUI(
-            this.uiElements.loopControls, // Pass the new element
-            this.eventBus
-        );
+        this.modules.keyboard = ensureDestroy(new Keyboard(
+            this.uiElements.keyboard, this.eventBus, this.state, this.Tone
+        ));
+        this.modules.transport = ensureDestroy(new Transport(
+            this.uiElements.transport, this.eventBus
+        ));
+        this.modules.pianoRoll = ensureUIStateContract(ensureDestroy(new PianoRoll(
+            this.uiElements.pianoRoll, this.eventBus, this.state
+        )));
+        this.modules.enhancedControls = ensureUIStateContract(ensureDestroy(new EnhancedControls(
+            this.uiElements.controls, this.eventBus, this.logic.modules.synthEngine
+        )));
+        this.modules.midiControl = ensureDestroy(new MidiControl(this.eventBus));
+        this.modules.loopUI = ensureUIStateContract(ensureDestroy(new LoopUI(
+            this.uiElements.loopControls, this.eventBus
+        )));
 
         this.wireUpEvents();
-    
-        // NEW: Immediately request the current loop/quantize state to sync the UI on creation.
+
+        // Sync UI with logic (eg. loop/quantize state)
         this.eventBus.dispatchEvent(new CustomEvent('request-loop-state'));
-        
+
         console.log('[BopSynthUI] UI layer initialized.');
     }
 
-    // ADD these two new methods:
-    /**
-     * NEW: Gathers the state from all UI components.
-     * @returns {object} The complete UI state object.
+   /**
+     * Synth UI State Shape:
+     * {
+     *   keyboard: { ... },
+     *   transport: { ... },
+     *   pianoRoll: { ... },
+     *   enhancedControls: { ... },
+     *   loopUI: { ... }
+     * }
      */
-    getUIState() {
-        // The "source of truth" for checkbox state is the logic layer (LoopManager).
-        const loopStatus = this.logic.modules.loopManager.getLoopStatus();
 
-        return {
-            expandedPanels: this.modules.enhancedControls.getExpandedState(),
-            loopEnabled: loopStatus.enabled,
-            quantizeEnabled: loopStatus.quantizeEnabled
-        };
+    /**
+     * Attempts to get UI state from a module, with a warning if fallback is used.
+     */
+    tryGetUIState(module, key) {
+        if (module && typeof module.getUIState === 'function') {
+            return module.getUIState();
+        } else {
+            console.warn(`[BopSynthUI] getUIState fallback used for module "${key}". Please implement getUIState().`);
+            return undefined;
+        }
     }
 
     /**
-     * NEW: Applies a loaded state to all UI components.
-     * @param {object} uiState - The UI state object from a saved patch.
+     * Attempts to apply UI state to a module, with a warning if fallback is used.
+     */
+    tryApplyUIState(module, key, state) {
+        if (module && typeof module.applyUIState === 'function') {
+            module.applyUIState(state);
+        } else {
+            if (state !== undefined) {
+                console.warn(`[BopSynthUI] applyUIState fallback used for module "${key}". Please implement applyUIState().`);
+            }
+        }
+    }
+
+    /**
+     * Gathers state from all UI modules, using fallbacks with warnings.
+     */
+    getUIState() {
+        const uiState = {};
+        Object.entries(this.modules).forEach(([key, mod]) => {
+            // EnhancedControls uses a richer structure for UI state (expanded panels + control values)
+            if (key === 'enhancedControls' && typeof mod.getUIState === 'function') {
+                uiState[key] = mod.getUIState();
+            }
+            // Any other module with getUIState support
+            else if (typeof mod.getUIState === 'function') {
+                const state = mod.getUIState();
+                if (state !== undefined) uiState[key] = state;
+            }
+            // Fallback for debugging, in case a module lacks getUIState
+            else {
+                console.warn(`[BopSynthUI] Module "${key}" missing getUIState() method, fallback used.`);
+            }
+        });
+        return uiState;
+    }
+    
+
+    /**
+     * Applies loaded UI state to all modules, with fallback warnings.
      */
     applyUIState(uiState) {
         if (!uiState) {
             console.warn('[BopSynthUI] applyUIState called with no state.');
             return;
         }
-        
-        console.log('[BopSynthUI] Applying UI state:', uiState);
+        this.tryApplyUIState(this.modules.keyboard, 'keyboard', uiState.keyboard);
+        this.tryApplyUIState(this.modules.transport, 'transport', uiState.transport);
+        this.tryApplyUIState(this.modules.pianoRoll, 'pianoRoll', uiState.pianoRoll);
+        this.tryApplyUIState(this.modules.enhancedControls, 'enhancedControls', uiState.enhancedControls);
+        this.tryApplyUIState(this.modules.loopUI, 'loopUI', uiState.loopUI);
 
-        // Restore expanded panels
-        if (uiState.expandedPanels) {
-            this.modules.enhancedControls.applyExpandedState(uiState.expandedPanels);
-        }
-        
-        // The core logic for loop/quantize is already loaded into LoopManager.
-        // We just need to tell the UI to refresh itself based on that now-loaded state.
+        // Always resync loop/quantize with logic
         this.eventBus.dispatchEvent(new CustomEvent('request-loop-state'));
+        console.log('[BopSynthUI] Applied UI state:', uiState);
     }
 
+
     /**
-     * Wires up event handlers that bridge the logic core's events to UI updates.
+     * Event wiring (relay table to DRY repeated patterns)
      */
     wireUpEvents() {
         const bus = this.eventBus;
 
-        // --- Listen for Logic Events to Update UI ---
-
-        // When recording state changes, update the transport buttons' appearance
-        bus.addEventListener('recording-state-changed', e => {
-            const { isRecording, isArmed, isPlaying, hasSequence } = e.detail;
-            bus.dispatchEvent(new CustomEvent('transport-state-update', {
-                detail: { isRecording, isArmed, isPlaying, hasSequence }
-            }));
+        // Relay logic: { listen: eventName, forward: eventName }
+        [
+            { listen: 'recording-state-changed', forward: 'transport-state-update' },
+            { listen: 'sequence-changed', forward: 'pianoroll-redraw' },
+            { listen: 'note-visual-change', forward: 'keyboard-note-visual' },
+            { listen: 'octave-change', forward: 'keyboard-redraw' }
+        ].forEach(({ listen, forward }) => {
+            bus.addEventListener(listen, e => bus.dispatchEvent(
+                new CustomEvent(forward, { detail: e.detail })
+            ));
         });
 
-        // When the note sequence changes (e.g., loaded, cleared, recorded), redraw the piano roll
-        bus.addEventListener('sequence-changed', () => {
-            bus.dispatchEvent(new CustomEvent('pianoroll-redraw'));
-        });
-        
-        // When a note is played/released by the recorder, update the keyboard visuals
-        bus.addEventListener('note-visual-change', e => {
-            bus.dispatchEvent(new CustomEvent('keyboard-note-visual', {
-                detail: { note: e.detail.note, active: e.detail.active }
-            }));
-        });
-        
-        // When the octave changes in the logic, redraw the keyboard
-        bus.addEventListener('octave-change', e => {
-             bus.dispatchEvent(new CustomEvent('keyboard-redraw'));
-        });
-
-        // Listen for generic status updates to display them
+        // Status update handler
         bus.addEventListener('status-update', e => {
             this.updateStatus(e.detail.message, e.detail.type);
         });
     }
 
     updateStatus(message, type = 'info') {
-        // This method directly manipulates the DOM, so it belongs here.
-        const statusElement = document.getElementById('status'); // Assuming a status element exists
+        const statusElement = document.getElementById('status');
         if (statusElement) {
             statusElement.textContent = message;
             statusElement.className = `status ${type}`;
@@ -161,10 +174,8 @@ export class BopSynthUI {
     }
 
     destroy() {
-        Object.values(this.modules).forEach(module => {
-            if (module && typeof module.destroy === 'function') {
-                module.destroy();
-            }
+        Object.values(this.modules).forEach(mod => {
+            if (mod && typeof mod.destroy === 'function') mod.destroy();
         });
         console.log('[BopSynthUI] UI layer destroyed.');
     }

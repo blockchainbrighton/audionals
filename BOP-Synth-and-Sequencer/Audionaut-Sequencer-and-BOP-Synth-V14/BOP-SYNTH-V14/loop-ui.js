@@ -112,6 +112,28 @@ export class LoopUI {
     listenToSystemEvents() {
         this.eventBus.addEventListener('loop-state-update', e => this.updateUI(e.detail));
     }
+     // Returns the UI state (checkboxes, grid selection, input values)
+     getUIState() {
+        const els = this.elements;
+        return {
+            loopEnabled: els.loopEnabled?.checked || false,
+            quantizeEnabled: els.quantizeEnabled?.checked || false,
+            loopStart: parseFloat(els.loopStart?.value) || 0,
+            loopEnd: parseFloat(els.loopEnd?.value) || 4,
+            quantizeGrid: els.quantizeGrid?.value || 'sixteenth'
+        };
+    }
+
+    applyUIState(state) {
+        const els = this.elements;
+        if (!state) return;
+        if ('loopEnabled' in state && els.loopEnabled) els.loopEnabled.checked = !!state.loopEnabled;
+        if ('quantizeEnabled' in state && els.quantizeEnabled) els.quantizeEnabled.checked = !!state.quantizeEnabled;
+        if ('loopStart' in state && els.loopStart) els.loopStart.value = state.loopStart;
+        if ('loopEnd' in state && els.loopEnd) els.loopEnd.value = state.loopEnd;
+        if ('quantizeGrid' in state && els.quantizeGrid) els.quantizeGrid.value = state.quantizeGrid;
+        // Trigger updateUI to match logic-driven loop/quant state as well if needed
+    }
 
     updateUI(status) {
         if (!status) return;

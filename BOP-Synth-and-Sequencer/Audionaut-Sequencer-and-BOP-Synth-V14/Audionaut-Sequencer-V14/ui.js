@@ -1,44 +1,38 @@
-/**
- * Module: BOP-Sequencer-V10-Modular/ui.js
- * Purpose: User interface components and rendering
- * Exports: updateStepRows, render, bindEventListeners, setLoaderStatus
- * Depends on: instrument.js, config.js, state.js, save-load-sequence.js, audio.js
- */
-
-// ui.js (Rewritten with localStorage integration and enhanced logging)
+// BOP-Sequencer-V10-Modular/ui.js
 
 import { projectState, runtimeState, getCurrentSequence, createNewChannel, initializeProject } from './state.js';
 import * as config from './config.js';
 import { startPlayback, stopPlayback, setBPM as setAudioBPM } from './audio.js';
-// The import name is now correct, assuming your file is named 'saveload.js'
 import { loadProject, saveProject } from './save-load-sequence.js';
 import { createInstrumentForChannel, openSynthUI } from './instrument.js';
 
-// --- Element Cache --- (No changes)
-const elements = {
-    playSequenceBtn: document.getElementById('playSequenceBtn'),
-    playAllBtn: document.getElementById('playAllBtn'),
-    stopBtn: document.getElementById('stopBtn'),
-    bpmInput: document.getElementById('bpmInput'),
-    bpmSlider: document.getElementById('bpmSlider'),
-    loaderStatus: document.getElementById('loaderStatus'),
-    sequenceList: document.getElementById('sequenceList'),
-    addSequenceBtn: document.getElementById('addSequenceBtn'),
-    addSamplerChannelBtn: document.getElementById('addSamplerChannelBtn'),
-    addInstrumentChannelBtn: document.getElementById('addInstrumentChannelBtn'),
-    saveBtn: document.getElementById('saveBtn'),
-    loadBtn: document.getElementById('loadBtn'),
-    saveLoadField: document.getElementById('saveLoadField'),
-    sequencer: document.getElementById('sequencer'),
-    bpmWarning: document.getElementById('bpmWarning'),
-    modalContainer: document.getElementById('synth-modal-container'),
-};
+// --- Element Cache Factory ---
+function getElements() {
+    return {
+        playSequenceBtn: document.getElementById('playSequenceBtn'),
+        playAllBtn: document.getElementById('playAllBtn'),
+        stopBtn: document.getElementById('stopBtn'),
+        bpmInput: document.getElementById('bpmInput'),
+        bpmSlider: document.getElementById('bpmSlider'),
+        loaderStatus: document.getElementById('loaderStatus'),
+        sequenceList: document.getElementById('sequenceList'),
+        addSequenceBtn: document.getElementById('addSequenceBtn'),
+        addSamplerChannelBtn: document.getElementById('addSamplerChannelBtn'),
+        addInstrumentChannelBtn: document.getElementById('addInstrumentChannelBtn'),
+        saveBtn: document.getElementById('saveBtn'),
+        loadBtn: document.getElementById('loadBtn'),
+        saveLoadField: document.getElementById('saveLoadField'),
+        sequencer: document.getElementById('sequencer'),
+        bpmWarning: document.getElementById('bpmWarning'),
+        modalContainer: document.getElementById('synth-modal-container')
+    };
+}
+const elements = getElements();
 
-const PROJECT_STORAGE_KEY = 'myBopMachineProject'; // Define a consistent key for localStorage
+const PROJECT_STORAGE_KEY = 'myBopMachineProject';
 
 let STEP_ROWS = 1, STEPS_PER_ROW = 64;
 
-// --- BPM Controls --- (No changes)
 function renderBPM(val) {
     elements.bpmInput.value = val.toFixed(2).replace(/\.00$/, '');
     elements.bpmSlider.value = Math.round(val);
@@ -51,7 +45,7 @@ function setBPM(val) {
     checkAllSelectedLoopsBPM();
 }
 
-// --- Responsive Layout --- (No changes)
+// --- Responsive Layout ---
 export function updateStepRows() {
     const width = Math.min(window.innerWidth, document.body.offsetWidth);
     const layout = config.ROWS_LAYOUTS.find(l => width <= l.maxWidth) || config.ROWS_LAYOUTS[0];
@@ -65,7 +59,7 @@ export function updateStepRows() {
     document.documentElement.style.setProperty('--step-size', stepSize + 'px');
 }
 
-// --- Core Rendering --- (No changes needed in most functions)
+// --- Channel Rendering (pure functions, can be moved to a separate file) ---
 function renderSamplerChannel(channel, channelData, chIndex) {
     const { names, isLoop, bpms } = runtimeState.sampleMetadata;
     const label = document.createElement('div');
@@ -97,7 +91,7 @@ function renderInstrumentChannel(channel, channelData, chIndex) {
     const label = document.createElement('div');
     label.className = 'channel-label';
     instrumentControls.appendChild(label);
-    
+
     if (channelData.instrumentId && runtimeState.instrumentRack[channelData.instrumentId]) {
         label.textContent = 'BOP Synth';
         const openBtn = document.createElement('button');
@@ -111,7 +105,7 @@ function renderInstrumentChannel(channel, channelData, chIndex) {
         loadBtn.onclick = () => {
             createInstrumentForChannel(projectState.currentSequenceIndex, chIndex);
             render();
-        }
+        };
         instrumentControls.appendChild(loadBtn);
     }
     channel.appendChild(instrumentControls);
@@ -175,7 +169,7 @@ function highlightPlayhead() {
     allStepElements.forEach(stepEl => {
         const stepIndex = parseInt(stepEl.dataset.step);
         if (stepIndex === runtimeState.currentStepIndex) {
-             stepEl.classList.add('playing');
+            stepEl.classList.add('playing');
         }
     });
 }
@@ -210,13 +204,7 @@ export function setLoaderStatus(text, isError = false) {
     elements.loaderStatus.style.color = isError ? '#f00' : '#0f0';
 }
 
-// --- Event Binding ---
-// -----------------------------------------------------------------------------
-// REPLACE THE WHOLE bindEventListeners FUNCTION WITH THE VERSION BELOW
-// -----------------------------------------------------------------------------
 export function bindEventListeners() {
-
-    /* ---------- BPM & transport (unchanged code kept) ---------- */
     let isSliderActive = false;
     elements.bpmInput.oninput  = e => !isSliderActive && setBPM(e.target.value);
     elements.bpmInput.onblur   = e => setBPM(e.target.value);
@@ -228,7 +216,6 @@ export function bindEventListeners() {
     elements.playAllBtn.onclick      = () => startPlayback('all').then(render);
     elements.stopBtn.onclick         = () => { stopPlayback(); render(); };
 
-    /* ---------- Channel / sequence creation (unchanged) ---------- */
     elements.addSequenceBtn.onclick = () => {
         if (projectState.sequences.length < config.MAX_SEQUENCES) {
             const numChannels = getCurrentSequence()?.channels.length
@@ -253,15 +240,12 @@ export function bindEventListeners() {
         }
     };
 
-    /* -----------------------------------------------------------------
-       SAVE & LOAD  (re‑worked; loadBtn is now *only* for loading)
-    ------------------------------------------------------------------*/
     elements.saveBtn.onclick = () => {
         console.log('[UI] Save button clicked.');
         try {
-            const projectJson = saveProject();                    // 1) gather
-            localStorage.setItem(PROJECT_STORAGE_KEY, projectJson); // 2) persist
-            elements.saveLoadField.value = projectJson;             // 3) show
+            const projectJson = saveProject();
+            localStorage.setItem(PROJECT_STORAGE_KEY, projectJson);
+            elements.saveLoadField.value = projectJson;
             elements.saveLoadField.select();
             setLoaderStatus('Project saved successfully to browser storage!');
         } catch (error) {
@@ -270,7 +254,6 @@ export function bindEventListeners() {
         }
     };
 
-    /* -- NEW: Load button truly loads the JSON from the text field -- */
     elements.loadBtn.textContent = 'Load Project';
     elements.loadBtn.onclick = () => {
         const json = elements.saveLoadField.value.trim();
@@ -283,17 +266,12 @@ export function bindEventListeners() {
             .catch(err => { console.error(err); setLoaderStatus('Load failed.', true); });
     };
 
-    /* -----------------------------------------------------------------
-       CLEAR STORAGE button is now a *separate* element, placed *below*
-       the save‑load row so there is no CSS collision.
-    ------------------------------------------------------------------*/
+    // Clear Storage button logic
     const clearBtn = document.createElement('button');
     clearBtn.id          = 'clearBtn';
     clearBtn.textContent = 'Clear Storage & Reset';
-    clearBtn.style.marginTop = '8px';              // small visual spacing
-    // Insert right after the .save-load div
+    clearBtn.style.marginTop = '8px';
     elements.saveLoadField.parentElement.insertAdjacentElement('afterend', clearBtn);
-
     clearBtn.onclick = () => {
         if (confirm('This will clear the saved project and reset the app. Continue?')) {
             console.log('[UI] Clearing localStorage and resetting project.');
@@ -304,17 +282,15 @@ export function bindEventListeners() {
         }
     };
 
-    /* ---------- Auto‑load on startup (unchanged) ---------- */
     document.addEventListener('DOMContentLoaded', () => {
         console.log('[UI] DOMContentLoaded: Checking for saved project in localStorage...');
         const saved = localStorage.getItem(PROJECT_STORAGE_KEY);
-        if (!saved) return;                               // nothing to load
+        if (!saved) return;
         loadProject(saved)
             .then(() => { console.log('[UI] Auto‑load ok'); render(); })
             .catch(err => { console.error(err); initializeProject(); render(); });
     });
 
-    /* ---------- Window resize & playhead animation (unchanged) ---------- */
     window.onresize = () => { updateStepRows(); render(); };
 
     function animatePlayhead() {
@@ -324,7 +300,6 @@ export function bindEventListeners() {
     }
     animatePlayhead();
 
-    /* ---------- Synth UI command listeners (unchanged) ---------- */
     document.addEventListener('bop:request-record-toggle', () => {
         projectState.isRecording = !projectState.isRecording;
         document.dispatchEvent(new CustomEvent('sequencer:status-update', {
@@ -338,3 +313,6 @@ export function bindEventListeners() {
         if (chan) { chan.steps.fill(false); render(); }
     });
 }
+
+// No-op destroy for future modularity (not used now, but pattern-compliant)
+export function destroy() {}
