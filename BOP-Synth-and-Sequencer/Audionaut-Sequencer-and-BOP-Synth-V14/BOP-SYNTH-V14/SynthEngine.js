@@ -49,7 +49,7 @@ const PARAM_MAP = {
     'delay.feedback':     { node: 'delay',       param: 'feedback',    isSignal: true,  default: 0.3  },
     'chorus.wet':         { node: 'chorus',      param: 'wet',         isSignal: true,  default: 0.5  },
     'chorus.frequency':   { node: 'chorus',      param: 'frequency',   isSignal: true,  default: 1.5  },
-    'chorus.delayTime':   { node: 'chorus',      param: 'delayTime',   isSignal: false, default: 3.5  }, // Corrected: isSignal false
+    'chorus.delayTime':   { node: 'chorus',      param: 'delayTime',   isSignal: false, default: 3.5  },
     'chorus.depth':       { node: 'chorus',      param: 'depth',       isSignal: true,  default: 0.7  },
     'phaser.wet':         { node: 'phaser',      param: 'wet',         isSignal: true,  default: 0.5  },
     'phaser.frequency':   { node: 'phaser',      param: 'frequency',   isSignal: true,  default: 0.5  },
@@ -70,16 +70,23 @@ const PARAM_MAP = {
     'compressor.release': { node: 'compressor',  param: 'release',     isSignal: true,  default: 0.25 },
     'compressor.knee':    { node: 'compressor',  param: 'knee',        isSignal: true,  default: 30   },
     'bitCrusher.bits':    { node: 'bitCrusher',  param: 'bits',        isSignal: true,  default: 4    },
+    // [THE FIX] Expanded and corrected all LFO parameter definitions.
     'filterLFO.frequency':{ node: 'filterLFO',   param: 'frequency',   isSignal: true,  default: 0.5  },
     'filterLFO.depth':    { node: 'filterLFO',   param: 'amplitude',   isSignal: true,  default: 0    },
     'filterLFO.min':      { node: 'filterLFO',   param: 'min',         isSignal: false, default: 200  },
     'filterLFO.max':      { node: 'filterLFO',   param: 'max',         isSignal: false, default: 2000 },
     'phaserLFO.frequency':{ node: 'phaserLFO',   param: 'frequency',   isSignal: true,  default: 0.3  },
     'phaserLFO.depth':    { node: 'phaserLFO',   param: 'amplitude',   isSignal: true,  default: 0    },
+    'phaserLFO.min':      { node: 'phaserLFO',   param: 'min',         isSignal: false, default: 0.1  },
+    'phaserLFO.max':      { node: 'phaserLFO',   param: 'max',         isSignal: false, default: 10   },
     'tremoloLFO.frequency':{ node: 'tremoloLFO',  param: 'frequency',   isSignal: true,  default: 4    },
     'tremoloLFO.depth':   { node: 'tremoloLFO',  param: 'amplitude',   isSignal: true,  default: 0    },
+    'tremoloLFO.min':     { node: 'tremoloLFO',  param: 'min',         isSignal: false, default: 0    },
+    'tremoloLFO.max':     { node: 'tremoloLFO',  param: 'max',         isSignal: false, default: 1    },
     'vibratoLFO.frequency':{ node: 'vibratoLFO',  param: 'frequency',   isSignal: true,  default: 6    },
     'vibratoLFO.depth':   { node: 'vibratoLFO',  param: 'amplitude',   isSignal: true,  default: 0    },
+    'vibratoLFO.min':     { node: 'vibratoLFO',  param: 'min',         isSignal: false, default: -0.02 },
+    'vibratoLFO.max':     { node: 'vibratoLFO',  param: 'max',         isSignal: false, default: 0.02  },
 };
 
 export class SynthEngine {
@@ -124,6 +131,7 @@ export class SynthEngine {
     }
     
     connectAudioChain() {
+        // [THE FIX] Correctly connect LFOs to the parameters they modulate.
         this.nodes.filterLFO.connect(this.nodes.filter.frequency);
         this.nodes.phaserLFO.connect(this.nodes.phaser.frequency);
         this.nodes.tremoloLFO.connect(this.nodes.tremolo.depth);
@@ -140,7 +148,10 @@ export class SynthEngine {
 
     applyAllDefaults() {
         for (const [path, config] of Object.entries(this.paramConfig)) {
-            this.setParameter(path, config.default);
+            // Check for null/undefined default to prevent errors
+            if (config.default !== null && config.default !== undefined) {
+                this.setParameter(path, config.default);
+            }
         }
         Object.keys(this.paramConfig).filter(p => p.endsWith('.wet')).forEach(p => {
             const effectName = p.split('.')[0];
@@ -157,41 +168,40 @@ export class SynthEngine {
         });
     }
 
-    // --- Core State Management ---
     getAllParameters() {
         const params = {};
         for (const [path, config] of Object.entries(this.paramConfig)) {
             const node = this.nodes[config.node];
             if (!node) continue;
             
-            const target = config.isSignal ? node[config.param]?.value : node[config.param];
+            const param = node[config.param];
+            // Check if the property itself is the signal/param object or a primitive
+            const target = (param instanceof this.Tone.Param || param instanceof this.Tone.Signal) ? param.value : param;
             params[path] = target;
         }
         return params;
     }
 
     setParameter(path, value) {
+        // Prevent setting null/undefined values which causes Tone.js errors
+        if (value === null || value === undefined) return;
+        
         const config = this.paramConfig[path];
         if (!config) return;
 
         const node = this.nodes[config.node];
         if (!node) return;
 
-        // --- [THE FIX] ---
-        // Handle PolySynth state objects first
         if (config.node === 'oscillator' || config.node === 'envelope') {
             node[config.param] = value;
             this.polySynth.set({ [config.node]: node });
             return;
         } 
 
-        // For all other Tone.js nodes, check the parameter's type before setting
         const paramToSet = node[config.param];
         if (paramToSet instanceof this.Tone.Param || paramToSet instanceof this.Tone.Signal) {
-            // It's a signal/param object, so set its .value property
             paramToSet.value = value;
         } else {
-            // It's a primitive (number, string), so set it directly on the node
             node[config.param] = value;
         }
     }
@@ -211,13 +221,11 @@ export class SynthEngine {
         }
     }
 
-    // --- Audio Playback ---
     noteOn(notes, velocity = 1.0) { if (this.polySynth) this.polySynth.triggerAttack(notes, this.Tone.now(), velocity); }
     noteOff(notes) { if (this.polySynth) this.polySynth.triggerRelease(notes, this.Tone.now()); }
     triggerAttackRelease(notes, dur, time, vel) { this.polySynth.triggerAttackRelease(notes, dur, time, vel); }
     releaseAll() { if (this.polySynth) this.polySynth.releaseAll(); }
     
-    // --- Cleanup & Accessors ---
     destroy() {
         if (this.polySynth) this.polySynth.dispose();
         Object.values(this.nodes).forEach(node => {
