@@ -1,333 +1,229 @@
-// ui.js (Rewritten with localStorage integration and enhanced logging)
-
 import { projectState, runtimeState, getCurrentSequence, createNewChannel, initializeProject } from './state.js';
 import * as config from './config.js';
 import { startPlayback, stopPlayback, setBPM as setAudioBPM } from './audio.js';
-// The import name is now correct, assuming your file is named 'saveload.js'
 import { loadProject, saveProject } from './save-load-sequence.js';
 import { createInstrumentForChannel, openSynthUI } from './instrument.js';
 
-// --- Element Cache --- (No changes)
 const elements = {
-    playSequenceBtn: document.getElementById('playSequenceBtn'),
-    playAllBtn: document.getElementById('playAllBtn'),
-    stopBtn: document.getElementById('stopBtn'),
-    bpmInput: document.getElementById('bpmInput'),
-    bpmSlider: document.getElementById('bpmSlider'),
-    loaderStatus: document.getElementById('loaderStatus'),
-    sequenceList: document.getElementById('sequenceList'),
-    addSequenceBtn: document.getElementById('addSequenceBtn'),
-    addSamplerChannelBtn: document.getElementById('addSamplerChannelBtn'),
-    addInstrumentChannelBtn: document.getElementById('addInstrumentChannelBtn'),
-    saveBtn: document.getElementById('saveBtn'),
-    loadBtn: document.getElementById('loadBtn'),
-    saveLoadField: document.getElementById('saveLoadField'),
-    sequencer: document.getElementById('sequencer'),
-    bpmWarning: document.getElementById('bpmWarning'),
-    modalContainer: document.getElementById('synth-modal-container'),
+  playSequenceBtn: document.getElementById('playSequenceBtn'),
+  playAllBtn: document.getElementById('playAllBtn'),
+  stopBtn: document.getElementById('stopBtn'),
+  bpmInput: document.getElementById('bpmInput'),
+  bpmSlider: document.getElementById('bpmSlider'),
+  loaderStatus: document.getElementById('loaderStatus'),
+  sequenceList: document.getElementById('sequenceList'),
+  addSequenceBtn: document.getElementById('addSequenceBtn'),
+  addSamplerChannelBtn: document.getElementById('addSamplerChannelBtn'),
+  addInstrumentChannelBtn: document.getElementById('addInstrumentChannelBtn'),
+  saveBtn: document.getElementById('saveBtn'),
+  loadBtn: document.getElementById('loadBtn'),
+  saveLoadField: document.getElementById('saveLoadField'),
+  sequencer: document.getElementById('sequencer'),
+  bpmWarning: document.getElementById('bpmWarning'),
+  modalContainer: document.getElementById('synth-modal-container'),
 };
 
-const PROJECT_STORAGE_KEY = 'myBopMachineProject'; // Define a consistent key for localStorage
+const PROJECT_STORAGE_KEY = 'myBopMachineProject';
 
 let STEP_ROWS = 1, STEPS_PER_ROW = 64;
 
-// --- BPM Controls --- (No changes)
+// --- Shared Helpers ---
+const clamp = (n, min, max) => Math.max(min, Math.min(max, n));
+
+// --- BPM Controls ---
 function renderBPM(val) {
-    elements.bpmInput.value = val.toFixed(2).replace(/\.00$/, '');
-    elements.bpmSlider.value = Math.round(val);
+  elements.bpmInput.value = val.toFixed(2).replace(/\.00$/, '');
+  elements.bpmSlider.value = Math.round(val);
 }
-
 function setBPM(val) {
-    const newBPM = Math.max(60, Math.min(180, Math.round(parseFloat(val || projectState.bpm) * 100) / 100));
-    setAudioBPM(newBPM);
-    renderBPM(newBPM);
-    checkAllSelectedLoopsBPM();
+  const newBPM = clamp(Math.round(parseFloat(val || projectState.bpm) * 100) / 100, 60, 180);
+  setAudioBPM(newBPM); renderBPM(newBPM); checkAllSelectedLoopsBPM();
 }
 
-// --- Responsive Layout --- (No changes)
+// --- Responsive Layout ---
 export function updateStepRows() {
-    const width = Math.min(window.innerWidth, document.body.offsetWidth);
-    const layout = config.ROWS_LAYOUTS.find(l => width <= l.maxWidth) || config.ROWS_LAYOUTS[0];
-    STEP_ROWS = layout.rows;
-    STEPS_PER_ROW = layout.stepsPerRow;
-    document.documentElement.style.setProperty('--steps-per-row', STEPS_PER_ROW);
-
-    const channelWidth = Math.min(width * 0.9, 1100);
-    let stepSize = Math.floor((channelWidth - 160 - 220 - 40 - (STEPS_PER_ROW - 1) * 3) / STEPS_PER_ROW);
-    stepSize = Math.max(8, Math.min(stepSize, 34));
-    document.documentElement.style.setProperty('--step-size', stepSize + 'px');
+  const width = Math.min(window.innerWidth, document.body.offsetWidth);
+  const layout = config.ROWS_LAYOUTS.find(l => width <= l.maxWidth) || config.ROWS_LAYOUTS[0];
+  STEP_ROWS = layout.rows; STEPS_PER_ROW = layout.stepsPerRow;
+  document.documentElement.style.setProperty('--steps-per-row', STEPS_PER_ROW);
+  const channelWidth = Math.min(width * 0.9, 1100);
+  let stepSize = clamp(Math.floor((channelWidth - 420 - (STEPS_PER_ROW - 1) * 3) / STEPS_PER_ROW), 8, 34);
+  document.documentElement.style.setProperty('--step-size', `${stepSize}px`);
 }
 
-// --- Core Rendering --- (No changes needed in most functions)
+// --- Channel Renderers ---
 function renderSamplerChannel(channel, channelData, chIndex) {
-    const { names, isLoop, bpms } = runtimeState.sampleMetadata;
-    const label = document.createElement('div');
-    label.className = 'channel-label';
-    label.textContent = names[channelData.selectedSampleIndex] || `Sample ${channelData.selectedSampleIndex}`;
-    channel.appendChild(label);
-
-    const select = document.createElement('select');
-    select.className = 'sample-select';
-    names.forEach((name, j) => {
-        const opt = document.createElement('option');
-        opt.value = j;
-        opt.textContent = isLoop[j] ? `${name} (${bpms[j]} BPM)` : name;
-        select.appendChild(opt);
-    });
-    select.value = channelData.selectedSampleIndex;
-    select.onchange = () => {
-        const idx = parseInt(select.value, 10);
-        getCurrentSequence().channels[chIndex].selectedSampleIndex = idx;
-        label.textContent = names[idx];
-        checkAllSelectedLoopsBPM();
-    };
-    channel.appendChild(select);
+  const { names, isLoop, bpms } = runtimeState.sampleMetadata;
+  const label = Object.assign(document.createElement('div'), { className: 'channel-label', textContent: names[channelData.selectedSampleIndex] ?? `Sample ${channelData.selectedSampleIndex}` });
+  channel.appendChild(label);
+  const select = Object.assign(document.createElement('select'), { className: 'sample-select' });
+  names.forEach((name, j) => {
+    const opt = new Option(isLoop[j] ? `${name} (${bpms[j]} BPM)` : name, j); select.appendChild(opt);
+  });
+  select.value = channelData.selectedSampleIndex;
+  select.onchange = () => {
+    getCurrentSequence().channels[chIndex].selectedSampleIndex = +select.value;
+    label.textContent = names[+select.value]; checkAllSelectedLoopsBPM();
+  };
+  channel.appendChild(select);
 }
-
 function renderInstrumentChannel(channel, channelData, chIndex) {
-    const instrumentControls = document.createElement('div');
-    instrumentControls.className = 'instrument-controls';
-    const label = document.createElement('div');
-    label.className = 'channel-label';
-    instrumentControls.appendChild(label);
-    
-    if (channelData.instrumentId && runtimeState.instrumentRack[channelData.instrumentId]) {
-        label.textContent = 'BOP Synth';
-        const openBtn = document.createElement('button');
-        openBtn.textContent = 'Open Editor';
-        openBtn.onclick = () => openSynthUI(chIndex);
-        instrumentControls.appendChild(openBtn);
-    } else {
-        label.textContent = 'Empty Instrument';
-        const loadBtn = document.createElement('button');
-        loadBtn.textContent = 'Load';
-        loadBtn.onclick = () => {
-            createInstrumentForChannel(projectState.currentSequenceIndex, chIndex);
-            render();
-        }
-        instrumentControls.appendChild(loadBtn);
-    }
-    channel.appendChild(instrumentControls);
+  const wrap = Object.assign(document.createElement('div'), { className: 'instrument-controls' });
+  const label = Object.assign(document.createElement('div'), { className: 'channel-label' });
+  wrap.appendChild(label);
+  if (channelData.instrumentId && runtimeState.instrumentRack[channelData.instrumentId]) {
+    label.textContent = 'BOP Synth';
+    const openBtn = Object.assign(document.createElement('button'), { textContent: 'Open Editor', onclick: () => openSynthUI(chIndex) });
+    wrap.appendChild(openBtn);
+  } else {
+    label.textContent = 'Empty Instrument';
+    const loadBtn = Object.assign(document.createElement('button'), { textContent: 'Load', onclick: () => { createInstrumentForChannel(projectState.currentSequenceIndex, chIndex); render(); } });
+    wrap.appendChild(loadBtn);
+  }
+  channel.appendChild(wrap);
 }
-
 function renderStepGrid(channel, channelData, chIndex) {
-    const stepsContainer = document.createElement('div');
-    stepsContainer.className = 'steps';
-    for (let row = 0; row < STEP_ROWS; row++) {
-        const rowDiv = document.createElement('div');
-        rowDiv.className = 'step-row';
-        for (let col = 0; col < STEPS_PER_ROW; col++) {
-            const stepIndex = row * STEPS_PER_ROW + col;
-            if (stepIndex >= config.TOTAL_STEPS) break;
-
-            const stepEl = document.createElement('div');
-            stepEl.className = 'step';
-            stepEl.dataset.step = stepIndex;
-            if (channelData.steps[stepIndex]) stepEl.classList.add('active');
-
-            if (stepIndex === runtimeState.currentStepIndex && projectState.isPlaying) {
-                stepEl.classList.add('playing');
-            }
-
-            stepEl.onclick = () => {
-                const currentSeq = getCurrentSequence();
-                currentSeq.channels[chIndex].steps[stepIndex] = !currentSeq.channels[chIndex].steps[stepIndex];
-                stepEl.classList.toggle('active');
-            };
-            rowDiv.appendChild(stepEl);
-        }
-        stepsContainer.appendChild(rowDiv);
+  const stepsContainer = Object.assign(document.createElement('div'), { className: 'steps' });
+  for (let row = 0; row < STEP_ROWS; row++) {
+    const rowDiv = Object.assign(document.createElement('div'), { className: 'step-row' });
+    for (let col = 0; col < STEPS_PER_ROW; col++) {
+      const stepIndex = row * STEPS_PER_ROW + col;
+      if (stepIndex >= config.TOTAL_STEPS) break;
+      const stepEl = document.createElement('div');
+      stepEl.className = 'step' +
+        (channelData.steps[stepIndex] ? ' active' : '') +
+        (stepIndex === runtimeState.currentStepIndex && projectState.isPlaying ? ' playing' : '');
+      stepEl.dataset.step = stepIndex;
+      
+      stepEl.onclick = () => {
+        const seq = getCurrentSequence(); seq.channels[chIndex].steps[stepIndex] = !seq.channels[chIndex].steps[stepIndex];
+        stepEl.classList.toggle('active');
+      };
+      rowDiv.appendChild(stepEl);
     }
-    channel.appendChild(stepsContainer);
+    stepsContainer.appendChild(rowDiv);
+  }
+  channel.appendChild(stepsContainer);
 }
 
+// --- Core Render/Updates ---
 export function render() {
-    elements.sequencer.innerHTML = '';
-    const currentSeq = getCurrentSequence();
-    if (!currentSeq) return;
-
-    currentSeq.channels.forEach((channelData, chIndex) => {
-        const channelEl = document.createElement('div');
-        channelEl.className = 'channel';
-        if (channelData.type === 'sampler') {
-            renderSamplerChannel(channelEl, channelData, chIndex);
-        } else if (channelData.type === 'instrument') {
-            renderInstrumentChannel(channelEl, channelData, chIndex);
-        }
-        renderStepGrid(channelEl, channelData, chIndex);
-        elements.sequencer.appendChild(channelEl);
-    });
-
-    updateSequenceListUI();
-    updatePlaybackControls();
+  elements.sequencer.innerHTML = '';
+  const seq = getCurrentSequence(); if (!seq) return;
+  seq.channels.forEach((c, i) => {
+    const el = Object.assign(document.createElement('div'), { className: 'channel' });
+    (c.type === 'sampler' ? renderSamplerChannel : renderInstrumentChannel)(el, c, i);
+    renderStepGrid(el, c, i); elements.sequencer.appendChild(el);
+  });
+  updateSequenceListUI(); updatePlaybackControls();
 }
-
 function highlightPlayhead() {
-    document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
-    const allStepElements = elements.sequencer.querySelectorAll('.step');
-    allStepElements.forEach(stepEl => {
-        const stepIndex = parseInt(stepEl.dataset.step);
-        if (stepIndex === runtimeState.currentStepIndex) {
-             stepEl.classList.add('playing');
-        }
-    });
+  document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
+  elements.sequencer.querySelectorAll('.step').forEach(el => +el.dataset.step === runtimeState.currentStepIndex && el.classList.add('playing'));
 }
-
 function updateSequenceListUI() {
-    elements.sequenceList.innerHTML = '';
-    projectState.sequences.forEach((_, index) => {
-        const btn = document.createElement('button');
-        btn.className = 'sequence-btn';
-        btn.textContent = `Seq ${index + 1}`;
-        if (index === projectState.currentSequenceIndex) btn.classList.add('active');
-        btn.onclick = () => {
-            projectState.currentSequenceIndex = index;
-            render();
-        };
-        elements.sequenceList.appendChild(btn);
-    });
+  elements.sequenceList.innerHTML = '';
+  projectState.sequences.forEach((_, i) => {
+    const btn = Object.assign(document.createElement('button'), { className: `sequence-btn${i === projectState.currentSequenceIndex ? ' active' : ''}`, textContent: `Seq ${i + 1}`, onclick: () => { projectState.currentSequenceIndex = i; render(); } });
+    elements.sequenceList.appendChild(btn);
+  });
 }
-
 function updatePlaybackControls() {
-    elements.playSequenceBtn.disabled = projectState.isPlaying;
-    elements.playAllBtn.disabled = projectState.isPlaying;
-    elements.stopBtn.disabled = !projectState.isPlaying;
+  elements.playSequenceBtn.disabled = elements.playAllBtn.disabled = projectState.isPlaying;
+  elements.stopBtn.disabled = !projectState.isPlaying;
 }
 
-function checkAllSelectedLoopsBPM() {
-    // ... (logic for bpmWarning)
-}
-
+// --- UX feedback / Save/Load ---
+function checkAllSelectedLoopsBPM() { /* unchanged - just reference here */ }
 export function setLoaderStatus(text, isError = false) {
-    elements.loaderStatus.textContent = text;
-    elements.loaderStatus.style.color = isError ? '#f00' : '#0f0';
+  elements.loaderStatus.textContent = text;
+  elements.loaderStatus.style.color = isError ? '#f00' : '#0f0';
 }
 
-// --- Event Binding ---
-// -----------------------------------------------------------------------------
-// REPLACE THE WHOLE bindEventListeners FUNCTION WITH THE VERSION BELOW
-// -----------------------------------------------------------------------------
+// --- Events: Everything in one place, minified/clear structure ---
 export function bindEventListeners() {
+  let isSliderActive = false;
+  elements.bpmInput.oninput  = e => !isSliderActive && setBPM(e.target.value);
+  elements.bpmInput.onblur   = e => setBPM(e.target.value);
+  elements.bpmSlider.onmousedown = () => isSliderActive = true;
+  elements.bpmSlider.oninput = e => isSliderActive && setBPM(e.target.value);
+  elements.bpmSlider.onmouseup = () => isSliderActive = false;
 
-    /* ---------- BPM & transport (unchanged code kept) ---------- */
-    let isSliderActive = false;
-    elements.bpmInput.oninput  = e => !isSliderActive && setBPM(e.target.value);
-    elements.bpmInput.onblur   = e => setBPM(e.target.value);
-    elements.bpmSlider.onmousedown = () => isSliderActive = true;
-    elements.bpmSlider.oninput = e => { if (isSliderActive) setBPM(e.target.value); };
-    elements.bpmSlider.onmouseup = () => isSliderActive = false;
+  elements.playSequenceBtn.onclick = () => startPlayback('sequence').then(render);
+  elements.playAllBtn.onclick      = () => startPlayback('all').then(render);
+  elements.stopBtn.onclick         = () => { stopPlayback(); render(); };
 
-    elements.playSequenceBtn.onclick = () => startPlayback('sequence').then(render);
-    elements.playAllBtn.onclick      = () => startPlayback('all').then(render);
-    elements.stopBtn.onclick         = () => { stopPlayback(); render(); };
-
-    /* ---------- Channel / sequence creation (unchanged) ---------- */
-    elements.addSequenceBtn.onclick = () => {
-        if (projectState.sequences.length < config.MAX_SEQUENCES) {
-            const numChannels = getCurrentSequence()?.channels.length
-                              || config.INITIAL_SAMPLER_CHANNELS;
-            projectState.sequences.push({
-                channels: Array(numChannels).fill(null)
-                          .map(() => createNewChannel('sampler'))
-            });
-            render();
-        }
-    };
-    elements.addSamplerChannelBtn.onclick    = () => {
-        if (getCurrentSequence().channels.length < config.MAX_CHANNELS) {
-            getCurrentSequence().channels.push(createNewChannel('sampler'));
-            render();
-        }
-    };
-    elements.addInstrumentChannelBtn.onclick = () => {
-        if (getCurrentSequence().channels.length < config.MAX_CHANNELS) {
-            getCurrentSequence().channels.push(createNewChannel('instrument'));
-            render();
-        }
-    };
-
-    /* -----------------------------------------------------------------
-       SAVE & LOAD  (re‑worked; loadBtn is now *only* for loading)
-    ------------------------------------------------------------------*/
-    elements.saveBtn.onclick = () => {
-        console.log('[UI] Save button clicked.');
-        try {
-            const projectJson = saveProject();                    // 1) gather
-            localStorage.setItem(PROJECT_STORAGE_KEY, projectJson); // 2) persist
-            elements.saveLoadField.value = projectJson;             // 3) show
-            elements.saveLoadField.select();
-            setLoaderStatus('Project saved successfully to browser storage!');
-        } catch (error) {
-            console.error('[UI] Save failed:', error);
-            setLoaderStatus('Error saving project. See console.', true);
-        }
-    };
-
-    /* -- NEW: Load button truly loads the JSON from the text field -- */
-    elements.loadBtn.textContent = 'Load Project';
-    elements.loadBtn.onclick = () => {
-        const json = elements.saveLoadField.value.trim();
-        if (!json) {
-            alert('Paste a project JSON string into the field first.');
-            return;
-        }
-        loadProject(json)
-            .then(() => { render(); setLoaderStatus('Project loaded!'); })
-            .catch(err => { console.error(err); setLoaderStatus('Load failed.', true); });
-    };
-
-    /* -----------------------------------------------------------------
-       CLEAR STORAGE button is now a *separate* element, placed *below*
-       the save‑load row so there is no CSS collision.
-    ------------------------------------------------------------------*/
-    const clearBtn = document.createElement('button');
-    clearBtn.id          = 'clearBtn';
-    clearBtn.textContent = 'Clear Storage & Reset';
-    clearBtn.style.marginTop = '8px';              // small visual spacing
-    // Insert right after the .save-load div
-    elements.saveLoadField.parentElement.insertAdjacentElement('afterend', clearBtn);
-
-    clearBtn.onclick = () => {
-        if (confirm('This will clear the saved project and reset the app. Continue?')) {
-            console.log('[UI] Clearing localStorage and resetting project.');
-            localStorage.removeItem(PROJECT_STORAGE_KEY);
-            initializeProject();
-            render();
-            setLoaderStatus('Cleared storage. App has been reset.');
-        }
-    };
-
-    /* ---------- Auto‑load on startup (unchanged) ---------- */
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('[UI] DOMContentLoaded: Checking for saved project in localStorage...');
-        const saved = localStorage.getItem(PROJECT_STORAGE_KEY);
-        if (!saved) return;                               // nothing to load
-        loadProject(saved)
-            .then(() => { console.log('[UI] Auto‑load ok'); render(); })
-            .catch(err => { console.error(err); initializeProject(); render(); });
-    });
-
-    /* ---------- Window resize & playhead animation (unchanged) ---------- */
-    window.onresize = () => { updateStepRows(); render(); };
-
-    function animatePlayhead() {
-        if (projectState.isPlaying) highlightPlayhead();
-        else document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
-        requestAnimationFrame(animatePlayhead);
+  elements.addSequenceBtn.onclick = () => {
+    if (projectState.sequences.length < config.MAX_SEQUENCES) {
+      const n = getCurrentSequence()?.channels.length ?? config.INITIAL_SAMPLER_CHANNELS;
+      projectState.sequences.push({ channels: Array(n).fill().map(() => createNewChannel('sampler')) });
+      render();
     }
-    animatePlayhead();
+  };
+  const addChannel = type => () => {
+    const seq = getCurrentSequence();
+    if (seq.channels.length < config.MAX_CHANNELS) { seq.channels.push(createNewChannel(type)); render(); }
+  };
+  elements.addSamplerChannelBtn.onclick    = addChannel('sampler');
+  elements.addInstrumentChannelBtn.onclick = addChannel('instrument');
 
-    /* ---------- Synth UI command listeners (unchanged) ---------- */
-    document.addEventListener('bop:request-record-toggle', () => {
-        projectState.isRecording = !projectState.isRecording;
-        document.dispatchEvent(new CustomEvent('sequencer:status-update', {
-            detail: { isRecording: projectState.isRecording }
-        }));
-    });
-    document.addEventListener('bop:request-clear', e => {
-        const { instrumentId } = e.detail;
-        const seq  = getCurrentSequence();
-        const chan = seq.channels.find(c => c.instrumentId === instrumentId);
-        if (chan) { chan.steps.fill(false); render(); }
-    });
+  elements.saveBtn.onclick = () => {
+    try {
+      const json = saveProject();
+      localStorage.setItem(PROJECT_STORAGE_KEY, json);
+      elements.saveLoadField.value = json;
+      elements.saveLoadField.select();
+      setLoaderStatus('Project saved successfully to browser storage!');
+    } catch (error) {
+      console.error('[UI] Save failed:', error); setLoaderStatus('Error saving project. See console.', true);
+    }
+  };
+
+  elements.loadBtn.textContent = 'Load Project';
+  elements.loadBtn.onclick = () => {
+    const json = elements.saveLoadField.value.trim();
+    if (!json) return alert('Paste a project JSON string into the field first.');
+    loadProject(json)
+      .then(() => { render(); setLoaderStatus('Project loaded!'); })
+      .catch(err => { console.error(err); setLoaderStatus('Load failed.', true); });
+  };
+
+  // --- Clear Storage/Reset ---
+  let clearBtn = document.getElementById('clearBtn');
+  if (!clearBtn) {
+    clearBtn = Object.assign(document.createElement('button'), { id: 'clearBtn', textContent: 'Clear Storage & Reset', style: 'margin-top:8px' });
+    elements.saveLoadField.parentElement.insertAdjacentElement('afterend', clearBtn);
+  }
+  clearBtn.onclick = () => {
+    if (confirm('This will clear the saved project and reset the app. Continue?')) {
+      localStorage.removeItem(PROJECT_STORAGE_KEY); initializeProject(); render();
+      setLoaderStatus('Cleared storage. App has been reset.');
+    }
+  };
+
+  // --- Auto-load ---
+  document.addEventListener('DOMContentLoaded', () => {
+    const saved = localStorage.getItem(PROJECT_STORAGE_KEY);
+    if (!saved) return;
+    loadProject(saved).then(() => { render(); setLoaderStatus('Project loaded from storage.'); })
+      .catch(err => { console.error(err); initializeProject(); render(); });
+  });
+
+  // --- Resize & Playhead ---
+  window.onresize = () => { updateStepRows(); render(); };
+  (function animatePlayhead() {
+    projectState.isPlaying ? highlightPlayhead() : document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
+    requestAnimationFrame(animatePlayhead);
+  })();
+
+  // --- Synth UI / Command listeners ---
+  document.addEventListener('bop:request-record-toggle', () => {
+    projectState.isRecording = !projectState.isRecording;
+    document.dispatchEvent(new CustomEvent('sequencer:status-update', { detail: { isRecording: projectState.isRecording } }));
+  });
+  document.addEventListener('bop:request-clear', e => {
+    const { instrumentId } = e.detail;
+    const chan = getCurrentSequence().channels.find(c => c.instrumentId === instrumentId);
+    if (chan) { chan.steps.fill(false); render(); }
+  });
 }
