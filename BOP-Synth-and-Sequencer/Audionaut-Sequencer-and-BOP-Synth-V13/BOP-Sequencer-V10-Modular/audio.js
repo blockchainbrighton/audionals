@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-Sequencer-V10-Modular/audio.js
+ * Purpose: Audio processing and playback functionality
+ * Exports: stopPlayback, setBPM, resetAudioEnvironment
+ * Depends on: state.js
+ */
+
 import { projectState, runtimeState, getCurrentSequence } from './state.js';
 
 let toneSequence;

@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-Sequencer-V10-Modular/audional-base64-sample-loader.js
+ * Purpose: audional-base64-sample-loader module
+ * Exports: ogSampleUrls, SimpleSampleLoader
+ * Depends on: sampleLoader.js
+ */
+
 // audional-base64-sample-loader.js (Optimized, with by-index API and caching)
 
 

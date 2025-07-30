@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-Sequencer-V10-Modular/main.js
+ * Purpose: Main module entry point and bootstrapping
+ * Exports: boot
+ * Depends on: audional-base64-sample-loader.js, state.js, config.js, stateProbe.js, ui.js
+ */
+
 // main.js
 import { TONE_ORDINALS_URL } from './config.js';
 import { runtimeState, initializeProject } from './state.js';

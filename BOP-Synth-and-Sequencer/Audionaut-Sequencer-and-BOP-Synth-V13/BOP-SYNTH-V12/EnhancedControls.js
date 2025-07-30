@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-SYNTH-V12/EnhancedControls.js
+ * Purpose: EnhancedControls class implementation
+ * Exports: EnhancedControls
+ * Depends on: none
+ */
+
 // In BOP-SYNTH-V12/EnhancedControls.js
 
 

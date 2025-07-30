@@ -1,9 +1,9 @@
-// In BOP-SYNTH-V12/BopSynthUIComponent.js (NEW FILE)
+// BOP-SYNTH-V12/BopSynthUIComponent.js
 
 import { BopSynthUI } from './BopSynthUI.js';
 
-// Define the HTML structure and CSS styles as strings.
-// This is the key: they are now part of the component's JS.
+// --- SHARED TEMPLATE ---
+
 const auiTemplate = document.createElement('template');
 auiTemplate.innerHTML = `
     <style>
@@ -462,43 +462,41 @@ auiTemplate.innerHTML = `
     </div>
 `;
 
-// Define the new custom element class
+// --- ELEMENT QUERIES MAP ---
+const ELEMENT_QUERIES = {
+    keyboard: '.keyboard-container',
+    transport: '#transport-controls',
+    controls: '#control-panel',
+    pianoRoll: '#rollGrid',
+    loopControls: '#loop-controls',
+};
+
+// --- COMPONENT CLASS ---
+
 export class BopSynthUIComponent extends HTMLElement {
+    #ui = null;
+
     constructor() {
         super();
-        // Create the Shadow DOM root
-        this.attachShadow({ mode: 'open' });
-        // Stamp the template's content into the shadow root
-        this.shadowRoot.appendChild(auiTemplate.content.cloneNode(true));
-        
-        this.uiController = null;
+        const root = this.attachShadow({ mode: 'open' });
+        root.appendChild(auiTemplate.content.cloneNode(true));
     }
 
-    // A new method to connect the component to the synth's brain
     connect(logicController) {
-        if (!logicController) {
-            throw new Error("A valid logicController must be provided to connect().");
-        }
-
-        // Now, initialize the BopSynthUI, but tell it to look for elements
-        // INSIDE this component's shadow root.
-        this.uiController = new BopSynthUI(logicController, {
-            keyboard: this.shadowRoot.querySelector('.keyboard-container'),
-            transport: this.shadowRoot.querySelector('#transport-controls'),
-            controls: this.shadowRoot.querySelector('#control-panel'),
-            pianoRoll: this.shadowRoot.querySelector('#rollGrid'),
-            loopControls: this.shadowRoot.querySelector('#loop-controls'),
-        });
+        if (!logicController) throw new Error("A valid logicController must be provided to connect().");
+        // Query elements only once, directly from shadowRoot, using the static map.
+        const refs = Object.fromEntries(
+            Object.entries(ELEMENT_QUERIES).map(
+                ([k, sel]) => [k, this.shadowRoot.querySelector(sel)]
+            )
+        );
+        this.#ui = new BopSynthUI(logicController, refs);
     }
 
-    // Standard Web Component lifecycle method
     disconnectedCallback() {
-        // Clean up the UI controller when the element is removed from the DOM
-        if (this.uiController) {
-            this.uiController.destroy();
-        }
+        this.#ui?.destroy();
     }
 }
 
-// Register the custom element with the browser
+// Register the custom element
 window.customElements.define('bop-synth-ui', BopSynthUIComponent);

@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-Sequencer-V10-Modular/instrument.js
+ * Purpose: Instrument creation and management
+ * Exports: createInstrumentForChannel
+ * Depends on: BOP-SYNTH-V12/BopSynthLogic.js, ui.js, state.js
+ */
+
 // instrument.js (Refactored for clarity and correct UI state management)
 
 import { projectState, runtimeState, getCurrentSequence } from './state.js';

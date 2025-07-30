@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-Sequencer-V10-Modular/stateProbe.js
+ * Purpose: stateProbe module
+ * Exports: installStateProbeButton
+ * Depends on: state.js
+ */
+
 // stateProbe.js (Rewritten with enhanced logging)
 import { getCurrentSequence } from './state.js';
 import { runtimeState } from './state.js';

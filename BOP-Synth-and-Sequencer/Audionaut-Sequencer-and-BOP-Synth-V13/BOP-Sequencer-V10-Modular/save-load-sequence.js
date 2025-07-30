@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-Sequencer-V10-Modular/save-load-sequence.js
+ * Purpose: save-load-sequence module
+ * Exports: saveProject
+ * Depends on: instrument.js, state.js
+ */
+
 // save-load-sequence.js (Enhanced Debug/Diagnostic Version)
 
 import { projectState, runtimeState, initializeProject } from './state.js';

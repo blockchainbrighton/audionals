@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-Sequencer-V10-Modular/config.js
+ * Purpose: Configuration constants and settings
+ * Exports: TOTAL_STEPS, INITIAL_INSTRUMENT_CHANNELS, INITIAL_SEQUENCES, TONE_ORDINALS_URL, MAX_SEQUENCES
+ * Depends on: none
+ */
+
 export const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
 export const SYNTH_PATH = '../BOP-SYNTH-V12/'; // Relative path to the synth project
 

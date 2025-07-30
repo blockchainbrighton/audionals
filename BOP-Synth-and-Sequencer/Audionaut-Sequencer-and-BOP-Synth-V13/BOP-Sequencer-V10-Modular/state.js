@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-Sequencer-V10-Modular/state.js
+ * Purpose: Application state management
+ * Exports: initializeProject, projectState, getCurrentSequence, runtimeState, createNewSequence
+ * Depends on: config.js
+ */
+
 // state.js (Rewritten with light logging for context)
 import { INITIAL_INSTRUMENT_CHANNELS, INITIAL_SAMPLER_CHANNELS, TOTAL_STEPS } from './config.js';
 

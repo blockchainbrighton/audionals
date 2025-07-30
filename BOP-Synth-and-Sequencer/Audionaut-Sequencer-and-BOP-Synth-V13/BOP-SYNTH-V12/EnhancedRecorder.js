@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-SYNTH-V12/EnhancedRecorder.js
+ * Purpose: Audio recording functionality
+ * Exports: EnhancedRecorder
+ * Depends on: none
+ */
+
 export class EnhancedRecorder {
     constructor(state, synthEngine, eventBus) {
         this.state = state;

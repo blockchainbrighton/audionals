@@ -1,3 +1,10 @@
+/**
+ * Module: BOP-SYNTH-V12/BopSynthUI.js
+ * Purpose: User interface components and rendering
+ * Exports: BopSynthUI
+ * Depends on: Keyboard.js, Transport.js, midi.js, PianoRoll.js, EnhancedControls.js
+ */
+
 // In BOP-SYNTH-V12/BopSynthUI.js
 
 
