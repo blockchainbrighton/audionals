@@ -1,5 +1,5 @@
 /**
- * Module: BOP-Sequencer-V10-Modular/state.js
+ * Module: BOP-Sequencer-V14-Modular/state.js
  * Purpose: Application state management
  * Exports: initializeProject, projectState, getCurrentSequence, runtimeState, createNewSequence
  * Depends on: config.js

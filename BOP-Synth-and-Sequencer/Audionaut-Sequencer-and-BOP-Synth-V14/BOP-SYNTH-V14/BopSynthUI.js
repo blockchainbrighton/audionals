@@ -7,6 +7,9 @@ import EnhancedControls from './EnhancedControls.js';
 import { MidiControl } from './midi.js';
 import { LoopUI } from './loop-ui.js';
 
+
+const statefulModules = ['pianoRoll', 'enhancedControls', 'loopUI'];
+
 /**
  * Default no-op destroy for UI modules
  */
@@ -96,49 +99,34 @@ export class BopSynthUI {
         }
     }
 
-    /**
-     * Gathers state from all UI modules, using fallbacks with warnings.
-     */
+   // Only capture layout UI state, not parameters!
     getUIState() {
         const uiState = {};
-        Object.entries(this.modules).forEach(([key, mod]) => {
-            // EnhancedControls uses a richer structure for UI state (expanded panels + control values)
-            if (key === 'enhancedControls' && typeof mod.getUIState === 'function') {
-                uiState[key] = mod.getUIState();
-            }
-            // Any other module with getUIState support
-            else if (typeof mod.getUIState === 'function') {
+        statefulModules.forEach(key => {
+            const mod = this.modules[key];
+            if (mod && typeof mod.getUIState === 'function') {
                 const state = mod.getUIState();
                 if (state !== undefined) uiState[key] = state;
-            }
-            // Fallback for debugging, in case a module lacks getUIState
-            else {
-                console.warn(`[BopSynthUI] Module "${key}" missing getUIState() method, fallback used.`);
             }
         });
         return uiState;
     }
-    
 
-    /**
-     * Applies loaded UI state to all modules, with fallback warnings.
-     */
+    // Restore UI layout (zoom, panel collapse), then sync parameters from engine to UI.
     applyUIState(uiState) {
-        if (!uiState) {
-            console.warn('[BopSynthUI] applyUIState called with no state.');
-            return;
+        if (!uiState) return;
+        statefulModules.forEach(key => {
+            const mod = this.modules[key];
+            if (mod && typeof mod.applyUIState === 'function' && uiState[key] !== undefined) {
+                mod.applyUIState(uiState[key]);
+            }
+        });
+        // Always sync EnhancedControls after state is loaded from patch
+        if (this.modules.enhancedControls && typeof this.modules.enhancedControls.syncControlsWithEngine === 'function') {
+            this.modules.enhancedControls.syncControlsWithEngine();
         }
-        this.tryApplyUIState(this.modules.keyboard, 'keyboard', uiState.keyboard);
-        this.tryApplyUIState(this.modules.transport, 'transport', uiState.transport);
-        this.tryApplyUIState(this.modules.pianoRoll, 'pianoRoll', uiState.pianoRoll);
-        this.tryApplyUIState(this.modules.enhancedControls, 'enhancedControls', uiState.enhancedControls);
-        this.tryApplyUIState(this.modules.loopUI, 'loopUI', uiState.loopUI);
-
-        // Always resync loop/quantize with logic
         this.eventBus.dispatchEvent(new CustomEvent('request-loop-state'));
-        console.log('[BopSynthUI] Applied UI state:', uiState);
     }
-
 
     /**
      * Event wiring (relay table to DRY repeated patterns)

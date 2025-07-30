@@ -5,18 +5,11 @@
  */
 
 export class Keyboard {
-    // Static properties for note definitions
     static WHITE_NOTES = ['C', 'D', 'E', 'F', 'G', 'A', 'B'];
     static BLACK_NOTES = { 0: 'C#', 1: 'D#', 3: 'F#', 4: 'G#', 5: 'A#' };
 
-    /**
-     * @param {HTMLElement} containerElement - The parent container element for the entire keyboard component (e.g., .keyboard-container).
-     * @param {EventTarget} eventBus - The event bus for dispatching actions.
-     * @param {object} state - The shared application state (for reading curOct).
-     * @param {object} Tone - The fully loaded Tone.js library instance.
-     */
     constructor(containerElement, eventBus, state, Tone) {
-        this.parentContainer = containerElement; // The overall .keyboard-container
+        this.parentContainer = containerElement;
         if (!this.parentContainer) {
             console.error('[Keyboard] A valid parent container element was not provided.');
             return;
@@ -25,13 +18,8 @@ export class Keyboard {
         this.eventBus = eventBus;
         this.state = state;
         this.Tone = Tone;
-        
-        if (!this.Tone) {
-            throw new Error('[Keyboard] Tone.js instance was not provided to the constructor.');
-        }
+        if (!this.Tone) throw new Error('[Keyboard] Tone.js instance was not provided to the constructor.');
 
-        // --- FIX: Find child elements *within* the provided container ---
-        // This ensures the component is self-contained and doesn't rely on global IDs.
         this.keyboardEl = this.parentContainer.querySelector('.keyboard');
         this.octaveUpBtn = this.parentContainer.querySelector('#octaveUp');
         this.octaveDownBtn = this.parentContainer.querySelector('#octaveDown');
@@ -41,18 +29,18 @@ export class Keyboard {
             console.error('[Keyboard] Could not find required child elements (keyboard, octave controls) inside the provided container.');
             return;
         }
-        
+
         this.init();
     }
 
     init() {
         this.octaveUpBtn.onclick = () => this.changeOctave(1);
         this.octaveDownBtn.onclick = () => this.changeOctave(-1);
-        
+
         this.eventBus.addEventListener('keyboard-redraw', () => this.draw());
         this.eventBus.addEventListener('keyboard-note-visual', (e) => this.updateKeyVisual(e.detail.note, e.detail.active));
         this.eventBus.addEventListener('release-all-keys', () => this.releaseAllKeys());
-        
+
         this.draw();
         console.log('[Keyboard] UI Component Initialized.');
     }
@@ -73,7 +61,7 @@ export class Keyboard {
             return;
         }
 
-        this.keyboardEl.innerHTML = ''; // Draw inside the specific keyboard element
+        this.keyboardEl.innerHTML = '';
         const kbWidth = this.keyboardEl.offsetWidth || 800;
         const whiteKeyW = 100 / Math.floor(kbWidth / 38);
         const totalWhite = Math.floor(100 / whiteKeyW);
@@ -97,14 +85,14 @@ export class Keyboard {
             this.keyboardEl.appendChild(wkey);
             whiteIndex++;
         }
-        
+
         whiteIndex = 0;
         for (let i = 0; i < totalWhite; i++) {
             if (Keyboard.BLACK_NOTES.hasOwnProperty(whiteIndex % 7)) {
                 const octaveOffset = Math.floor(whiteIndex / 7);
                 const blackNoteName = Keyboard.BLACK_NOTES[whiteIndex % 7];
                 const note = this.Tone.Frequency(`${blackNoteName}${this.state.curOct + octaveOffset}`).toNote();
-                
+
                 const bkey = this.createKey('key-black', note);
                 const leftPercent = (i + 0.7) * whiteKeyW - (whiteKeyW * 0.28);
                 bkey.style.left = leftPercent + '%';
@@ -137,9 +125,7 @@ export class Keyboard {
 
     updateKeyVisual(note, on) {
         const keyElement = this.keyboardEl.querySelector(`[data-note="${note}"]`);
-        if (keyElement) {
-            keyElement.classList.toggle('active', !!on);
-        }
+        if (keyElement) keyElement.classList.toggle('active', !!on);
     }
 
     releaseAllKeys() {
@@ -148,6 +134,7 @@ export class Keyboard {
         });
         console.log('[Keyboard] All visual keys released.');
     }
+
 }
 
 export default Keyboard;

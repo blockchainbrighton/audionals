@@ -91,34 +91,18 @@ export class EnhancedControls {
 
     // --- Stateful UI Contract ---
 
+    // Only save UI layout (expanded panels)
     getUIState() {
-        const expandedIds = this.getExpandedState();
-        const controls = {};
-        this.panel.querySelectorAll('[data-path]').forEach(el => {
-            controls[el.dataset.path] = el.type === 'checkbox' ? el.checked : el.value;
-        });
-        return { expandedPanels: expandedIds, controls };
+        return { expandedPanels: this.getExpandedState() };
     }
 
     applyUIState(state) {
-        if (!state) {
-            // Fallback use, for debugging
-            console.warn('[EnhancedControls] applyUIState: No state provided (fallback used).');
-            return;
-        }
+        if (!state) return;
         this.applyExpandedState(state.expandedPanels || []);
-        if (state.controls) {
-            Object.entries(state.controls).forEach(([path, val]) => {
-                const el = this.panel.querySelector(`[data-path="${path}"]`);
-                if (!el) return;
-                if (el.type === 'checkbox') el.checked = !!val;
-                else el.value = val;
-                const vd = this.panel.querySelector(`span[data-value-for="${el.id}"]`);
-                if (vd) vd.textContent = getFormatter(el.id)(val);
-            });
-        }
+        // After restoring UI, always reflect real synth values:
+        this.syncControlsWithEngine();
     }
-
+    
     init() {
         this.panel.innerHTML = this.panelHTML();
         this.setupAllControls();

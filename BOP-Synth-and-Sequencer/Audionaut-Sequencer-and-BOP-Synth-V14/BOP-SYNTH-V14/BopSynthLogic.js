@@ -134,7 +134,7 @@ export class BopSynthLogic {
         });
 
         bus.addEventListener('save-project', () => this.modules.saveLoad.saveStateToFile());
-        bus.addEventListener('load-project', e => this.modules.saveLoad.loadStateFromFile(e.detail.data));
+        bus.addEventListener('load-project', e => this.modules.saveLoad.loadState(e.detail.data));
 
         bus.addEventListener('note-selected', e => { this.state.selNote = e.detail.noteIndex; });
         bus.addEventListener('note-edited', e => {
