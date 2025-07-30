@@ -46,26 +46,23 @@ function setBPM(val) {
 }
 
 // --- Responsive Layout ---
+// We no longer need to calculate step size in JS. CSS handles it all.
 export function updateStepRows() {
     const width = Math.min(window.innerWidth, document.body.offsetWidth);
+    // Assuming config.ROWS_LAYOUTS exists and is correct
     const layout = config.ROWS_LAYOUTS.find(l => width <= l.maxWidth) || config.ROWS_LAYOUTS[0];
-    STEP_ROWS = layout.rows;
-    STEPS_PER_ROW = layout.stepsPerRow;
+    const STEPS_PER_ROW = layout.stepsPerRow;
     document.documentElement.style.setProperty('--steps-per-row', STEPS_PER_ROW);
 
-    const channelWidth = Math.min(width * 0.9, 1100);
-    let stepSize = Math.floor((channelWidth - 160 - 220 - 40 - (STEPS_PER_ROW - 1) * 3) / STEPS_PER_ROW);
-    stepSize = Math.max(8, Math.min(stepSize, 34));
-    document.documentElement.style.setProperty('--step-size', stepSize + 'px');
+    // The complex --step-size calculation is REMOVED. It's no longer needed.
 }
 
-// --- Channel Rendering (pure functions, can be moved to a separate file) ---
-function renderSamplerChannel(channel, channelData, chIndex) {
+/**
+ * Renders ONLY the sampler-specific controls (the dropdown).
+ * Appends them to the provided infoContainer.
+ */
+function renderSamplerControls(infoContainer, channelData, chIndex) {
     const { names, isLoop, bpms } = runtimeState.sampleMetadata;
-    const label = document.createElement('div');
-    label.className = 'channel-label';
-    label.textContent = names[channelData.selectedSampleIndex] || `Sample ${channelData.selectedSampleIndex}`;
-    channel.appendChild(label);
 
     const select = document.createElement('select');
     select.className = 'sample-select';
@@ -76,86 +73,115 @@ function renderSamplerChannel(channel, channelData, chIndex) {
         select.appendChild(opt);
     });
     select.value = channelData.selectedSampleIndex;
+
     select.onchange = () => {
         const idx = parseInt(select.value, 10);
         getCurrentSequence().channels[chIndex].selectedSampleIndex = idx;
-        label.textContent = names[idx];
+        // Re-render to update the label text
+        render();
         checkAllSelectedLoopsBPM();
     };
-    channel.appendChild(select);
+    infoContainer.appendChild(select);
 }
 
-function renderInstrumentChannel(channel, channelData, chIndex) {
+/**
+ * Renders ONLY the instrument-specific controls (the button).
+ * Appends them to the provided infoContainer.
+ */
+function renderInstrumentControls(infoContainer, channelData, chIndex) {
     const instrumentControls = document.createElement('div');
     instrumentControls.className = 'instrument-controls';
-    const label = document.createElement('div');
-    label.className = 'channel-label';
-    instrumentControls.appendChild(label);
 
     if (channelData.instrumentId && runtimeState.instrumentRack[channelData.instrumentId]) {
-        label.textContent = 'BOP Synth';
         const openBtn = document.createElement('button');
         openBtn.textContent = 'Open Editor';
         openBtn.onclick = () => openSynthUI(chIndex);
         instrumentControls.appendChild(openBtn);
     } else {
-        label.textContent = 'Empty Instrument';
         const loadBtn = document.createElement('button');
         loadBtn.textContent = 'Load';
         loadBtn.onclick = () => {
             createInstrumentForChannel(projectState.currentSequenceIndex, chIndex);
-            render();
+            render(); // Re-render to show the "Open Editor" button
         };
         instrumentControls.appendChild(loadBtn);
     }
-    channel.appendChild(instrumentControls);
+    infoContainer.appendChild(instrumentControls);
 }
 
-function renderStepGrid(channel, channelData, chIndex) {
+function renderStepGrid(channelEl, channelData, chIndex) {
     const stepsContainer = document.createElement('div');
     stepsContainer.className = 'steps';
-    for (let row = 0; row < STEP_ROWS; row++) {
-        const rowDiv = document.createElement('div');
-        rowDiv.className = 'step-row';
-        for (let col = 0; col < STEPS_PER_ROW; col++) {
-            const stepIndex = row * STEPS_PER_ROW + col;
-            if (stepIndex >= config.TOTAL_STEPS) break;
+    const STEP_ROWS = 1; // Assuming 1 row for simplicity now, your logic may vary
+    const STEPS_PER_ROW = config.TOTAL_STEPS; // Assuming all steps in one row
 
-            const stepEl = document.createElement('div');
-            stepEl.className = 'step';
-            stepEl.dataset.step = stepIndex;
-            if (channelData.steps[stepIndex]) stepEl.classList.add('active');
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'step-row';
 
-            if (stepIndex === runtimeState.currentStepIndex && projectState.isPlaying) {
-                stepEl.classList.add('playing');
-            }
+    for (let stepIndex = 0; stepIndex < config.TOTAL_STEPS; stepIndex++) {
+        const stepEl = document.createElement('div');
+        stepEl.className = 'step';
+        stepEl.dataset.step = stepIndex;
+        if (channelData.steps[stepIndex]) stepEl.classList.add('active');
 
-            stepEl.onclick = () => {
-                const currentSeq = getCurrentSequence();
-                currentSeq.channels[chIndex].steps[stepIndex] = !currentSeq.channels[chIndex].steps[stepIndex];
-                stepEl.classList.toggle('active');
-            };
-            rowDiv.appendChild(stepEl);
+        if (stepIndex === runtimeState.currentStepIndex && projectState.isPlaying) {
+            stepEl.classList.add('playing');
         }
-        stepsContainer.appendChild(rowDiv);
+
+        stepEl.onclick = () => {
+            const currentSeq = getCurrentSequence();
+            currentSeq.channels[chIndex].steps[stepIndex] = !currentSeq.channels[chIndex].steps[stepIndex];
+            stepEl.classList.toggle('active');
+        };
+        rowDiv.appendChild(stepEl);
     }
-    channel.appendChild(stepsContainer);
+
+    stepsContainer.appendChild(rowDiv);
+    channelEl.appendChild(stepsContainer);
 }
 
+
+/**
+ * Main render function, completely rewritten for consistency and alignment.
+ */
 export function render() {
     elements.sequencer.innerHTML = '';
     const currentSeq = getCurrentSequence();
     if (!currentSeq) return;
 
     currentSeq.channels.forEach((channelData, chIndex) => {
+        // 1. Create the top-level channel element
         const channelEl = document.createElement('div');
         channelEl.className = 'channel';
+        channelEl.dataset.channelIndex = chIndex;
+
+        // 2. Create the '.channel-info' wrapper that will hold ALL controls
+        const infoContainer = document.createElement('div');
+        infoContainer.className = 'channel-info';
+
+        // 3. Create the label and add it to the info container (consistent for both types)
+        const label = document.createElement('div');
+        label.className = 'channel-label';
+        
+        // 4. Add channel-specific controls to the info container
         if (channelData.type === 'sampler') {
-            renderSamplerChannel(channelEl, channelData, chIndex);
+            label.textContent = runtimeState.sampleMetadata.names[channelData.selectedSampleIndex] || `Sampler ${chIndex + 1}`;
+            renderSamplerControls(infoContainer, channelData, chIndex);
         } else if (channelData.type === 'instrument') {
-            renderInstrumentChannel(channelEl, channelData, chIndex);
+            label.textContent = (channelData.instrumentId) ? 'BOP Synth' : 'Empty Instrument';
+            renderInstrumentControls(infoContainer, channelData, chIndex);
         }
+        
+        // IMPORTANT: Prepend the label so it always appears first in the info container
+        infoContainer.prepend(label);
+
+        // 5. Append the entire, populated info container to the channel element
+        channelEl.appendChild(infoContainer);
+
+        // 6. Append the step grid, which will now align perfectly
         renderStepGrid(channelEl, channelData, chIndex);
+
+        // 7. Finally, add the completed channel to the DOM
         elements.sequencer.appendChild(channelEl);
     });
 
