@@ -2,6 +2,7 @@
  * @file midi.js
  * @description MIDI input controller for the BOP Synthesizer.
  * Listens for MIDI messages and dispatches events via the event bus.
+ * Now robust against double binding and double triggering.
  */
 
 export class MidiControl {
@@ -12,11 +13,11 @@ export class MidiControl {
         console.log('[MIDI] Initializing MidiControl...');
         this.eventBus = eventBus;
         this.midi = null;
-        
-        // Find UI elements once
+        this.attachedInputs = new Set();
+
         this.midiInd = document.getElementById('midiInd');
         this.midiStat = document.getElementById('midiStat');
-        
+
         this.initMIDI();
     }
 
@@ -47,16 +48,22 @@ export class MidiControl {
 
     updateConnectedDevices() {
         if (!this.midi) return;
-        
+
         const inputs = this.midi.inputs;
         console.log(`[MIDI] Found ${inputs.size} input(s).`);
+
+        // Detach any old handlers first, then attach fresh
+        this.attachedInputs.forEach(input => {
+            input.onmidimessage = null;
+        });
+        this.attachedInputs.clear();
 
         if (inputs.size > 0) {
             this.setMidiStatus(`Connected (${inputs.size})`);
             inputs.forEach(input => {
                 console.log(`[MIDI] Attaching listener to: ${input.name} (State: ${input.state})`);
-                // Important: Ensure onmidimessage is bound correctly to this instance
                 input.onmidimessage = this.onMIDI.bind(this);
+                this.attachedInputs.add(input);
             });
         } else {
             this.setMidiStatus('No devices connected');
@@ -75,24 +82,31 @@ export class MidiControl {
 
     onMIDI(ev) {
         const [cmd, note, vel] = ev.data;
-        // Use Tone.js, which is globally available after loading
         const n = window.Tone.Frequency(note, 'midi').toNote();
 
         // Note On (Command 144, velocity > 0)
         if (cmd === 144 && vel > 0) {
             console.log(`[MIDI] Note On: ${n} (Vel: ${vel}). Dispatching midi-note-on.`);
-            // **FIX:** Dispatch an event instead of calling another module directly
             this.eventBus.dispatchEvent(new CustomEvent('midi-note-on', {
                 detail: { note: n, velocity: vel }
             }));
-        } 
+        }
         // Note Off (Command 128, or Command 144 with velocity 0)
         else if (cmd === 128 || (cmd === 144 && vel === 0)) {
             console.log(`[MIDI] Note Off: ${n}. Dispatching midi-note-off.`);
-            // **FIX:** Dispatch an event
             this.eventBus.dispatchEvent(new CustomEvent('midi-note-off', {
                 detail: { note: n }
             }));
         }
+    }
+
+    /** Optional: Call this if you ever want to fully clean up */
+    destroy() {
+        this.attachedInputs.forEach(input => {
+            input.onmidimessage = null;
+        });
+        this.attachedInputs.clear();
+        if (this.midi) this.midi.onstatechange = null;
+        console.log('[MIDI] MidiControl destroyed and listeners removed.');
     }
 }
