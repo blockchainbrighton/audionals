@@ -13,43 +13,45 @@ function scheduleStep(time, stepIndex) {
     runtimeState.currentStepIndex = stepIndex;
     console.debug('[SEQ] step', stepIndex, 'time', time.toFixed(3));
 
-    const seqData = projectState.playMode === 'all'
+    /* Which sequence are we reading this tick? */
+    const seqData = (projectState.playMode === 'all')
         ? projectState.sequences[runtimeState.currentPlaybackSequenceIndex]
         : getCurrentSequence();
     if (!seqData) return;
 
-    const instrumentsToPlay = new Set();   // instruments active on *this* step
-
     seqData.channels.forEach((chan, chIdx) => {
-        if (!chan.steps[stepIndex]) return;       // silent step
+        if (!chan.steps[stepIndex]) return;            // un‑lit grid cell
 
+        /* ── Sampler track ─────────────────────────────────────────────── */
         if (chan.type === 'sampler') {
             const buf = runtimeState.allSampleBuffers[chan.selectedSampleIndex];
             if (buf) {
                 console.debug('   ├─ [SAMPLER]', chIdx, '→ start Player');
-                new runtimeState.Tone.Player(buf).toDestination().start(time);
+                new runtimeState.Tone.Player(buf)
+                    .toDestination()
+                    .start(time);                      // one‑shot
             }
-        } else if (chan.type === 'instrument' && chan.instrumentId) {
+            return;
+        }
+
+        /* ── Instrument track (BOP synth) ─────────────────────────────── */
+        if (chan.type === 'instrument' && chan.instrumentId) {
             const inst = runtimeState.instrumentRack[chan.instrumentId];
             if (!inst) return;
 
-            if (!runtimeState.activeInstrumentTriggers.has(chan.instrumentId)) {
-                console.debug('   ├─ [INST]', chIdx, '→ playInternalSequence', chan.instrumentId);
-                inst.playInternalSequence(time);   // host‑sync start
+            const rec = inst.logic?.modules?.recorder;
+            /* fire ONLY if it’s currently idle */
+            if (!rec?.isPlaying) {
+                console.debug('   ├─ [INST]', chIdx,
+                              '→ playInternalSequence (stand‑alone)', chan.instrumentId);
+                inst.playInternalSequence();           // no startTime ⇒ stand‑alone
             }
-            instrumentsToPlay.add(chan.instrumentId);
         }
     });
-
-    /* stop any synths that were running but have no step this tick */
-    for (const id of runtimeState.activeInstrumentTriggers) {
-        if (!instrumentsToPlay.has(id)) {
-            console.debug('   └─ [INST]', id, '→ stopInternalSequence');
-            runtimeState.instrumentRack[id]?.stopInternalSequence();
-        }
-    }
-    runtimeState.activeInstrumentTriggers = instrumentsToPlay;
 }
+
+
+
 
 /* ───────────────────────────── tone.Sequence ─────────────────────────────── */
 function createToneSequence() {
