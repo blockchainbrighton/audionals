@@ -204,58 +204,58 @@ export function setLoaderStatus(text, isError = false) {
 }
 
 // --- Event Binding ---
+// -----------------------------------------------------------------------------
+// REPLACE THE WHOLE bindEventListeners FUNCTION WITH THE VERSION BELOW
+// -----------------------------------------------------------------------------
 export function bindEventListeners() {
-    let isSliderActive = false;
-    elements.bpmInput.oninput = e => !isSliderActive && setBPM(e.target.value);
-    elements.bpmInput.onblur = e => setBPM(e.target.value);
-    elements.bpmSlider.onmousedown = () => isSliderActive = true;
-    elements.bpmSlider.oninput = e => { if(isSliderActive) setBPM(e.target.value); };
-    elements.bpmSlider.onmouseup = () => isSliderActive = false;
-    
-    elements.playSequenceBtn.onclick = () => startPlayback('sequence').then(render);
-    elements.playAllBtn.onclick = () => startPlayback('all').then(render);
-    elements.stopBtn.onclick = () => { stopPlayback(); render(); };
 
+    /* ---------- BPM & transport (unchanged code kept) ---------- */
+    let isSliderActive = false;
+    elements.bpmInput.oninput  = e => !isSliderActive && setBPM(e.target.value);
+    elements.bpmInput.onblur   = e => setBPM(e.target.value);
+    elements.bpmSlider.onmousedown = () => isSliderActive = true;
+    elements.bpmSlider.oninput = e => { if (isSliderActive) setBPM(e.target.value); };
+    elements.bpmSlider.onmouseup = () => isSliderActive = false;
+
+    elements.playSequenceBtn.onclick = () => startPlayback('sequence').then(render);
+    elements.playAllBtn.onclick      = () => startPlayback('all').then(render);
+    elements.stopBtn.onclick         = () => { stopPlayback(); render(); };
+
+    /* ---------- Channel / sequence creation (unchanged) ---------- */
     elements.addSequenceBtn.onclick = () => {
         if (projectState.sequences.length < config.MAX_SEQUENCES) {
-            const numChannels = getCurrentSequence()?.channels.length || config.INITIAL_CHANNELS_PER_SEQUENCE;
-            projectState.sequences.push({ channels: Array(numChannels).fill(null).map(() => createNewChannel('sampler'))});
+            const numChannels = getCurrentSequence()?.channels.length
+                              || config.INITIAL_CHANNELS_PER_SEQUENCE;
+            projectState.sequences.push({
+                channels: Array(numChannels).fill(null)
+                          .map(() => createNewChannel('sampler'))
+            });
             render();
         }
     };
-    
-    elements.addSamplerChannelBtn.onclick = () => {
+    elements.addSamplerChannelBtn.onclick    = () => {
         if (getCurrentSequence().channels.length < config.MAX_CHANNELS) {
             getCurrentSequence().channels.push(createNewChannel('sampler'));
             render();
         }
     };
-
     elements.addInstrumentChannelBtn.onclick = () => {
         if (getCurrentSequence().channels.length < config.MAX_CHANNELS) {
             getCurrentSequence().channels.push(createNewChannel('instrument'));
             render();
         }
     };
-    
-    // ==========================================================
-    // --- MODIFIED SAVE/LOAD EVENT HANDLERS ---
-    // ==========================================================
-    
-    // Note: The text field is now primarily for *exporting* data, not loading.
+
+    /* -----------------------------------------------------------------
+       SAVE & LOAD  (re‑worked; loadBtn is now *only* for loading)
+    ------------------------------------------------------------------*/
     elements.saveBtn.onclick = () => {
         console.log('[UI] Save button clicked.');
         try {
-            // 1. Get the JSON string from our logged save function.
-            const projectJson = saveProject();
-            
-            // 2. Save it to localStorage for persistence.
-            localStorage.setItem(PROJECT_STORAGE_KEY, projectJson);
-            
-            // 3. (Optional) Put it in the text field for manual backup/export.
-            elements.saveLoadField.value = projectJson;
+            const projectJson = saveProject();                    // 1) gather
+            localStorage.setItem(PROJECT_STORAGE_KEY, projectJson); // 2) persist
+            elements.saveLoadField.value = projectJson;             // 3) show
             elements.saveLoadField.select();
-            
             setLoaderStatus('Project saved successfully to browser storage!');
         } catch (error) {
             console.error('[UI] Save failed:', error);
@@ -263,73 +263,71 @@ export function bindEventListeners() {
         }
     };
 
-    // This button is now effectively a "Clear Storage" button for testing purposes.
-    // The main loading happens automatically on page start.
-    elements.loadBtn.textContent = 'Clear Storage & Reset'; // Let's rename the button for clarity
+    /* -- NEW: Load button truly loads the JSON from the text field -- */
+    elements.loadBtn.textContent = 'Load Project';
     elements.loadBtn.onclick = () => {
-        if (confirm('This will clear the saved project from browser storage and reset the app. Are you sure?')) {
+        const json = elements.saveLoadField.value.trim();
+        if (!json) {
+            alert('Paste a project JSON string into the field first.');
+            return;
+        }
+        loadProject(json)
+            .then(() => { render(); setLoaderStatus('Project loaded!'); })
+            .catch(err => { console.error(err); setLoaderStatus('Load failed.', true); });
+    };
+
+    /* -----------------------------------------------------------------
+       CLEAR STORAGE button is now a *separate* element, placed *below*
+       the save‑load row so there is no CSS collision.
+    ------------------------------------------------------------------*/
+    const clearBtn = document.createElement('button');
+    clearBtn.id          = 'clearBtn';
+    clearBtn.textContent = 'Clear Storage & Reset';
+    clearBtn.style.marginTop = '8px';              // small visual spacing
+    // Insert right after the .save-load div
+    elements.saveLoadField.parentElement.insertAdjacentElement('afterend', clearBtn);
+
+    clearBtn.onclick = () => {
+        if (confirm('This will clear the saved project and reset the app. Continue?')) {
             console.log('[UI] Clearing localStorage and resetting project.');
             localStorage.removeItem(PROJECT_STORAGE_KEY);
-            // Re-initialize to a blank slate and re-render
             initializeProject();
             render();
             setLoaderStatus('Cleared storage. App has been reset.');
         }
     };
 
-    // --- NEW: AUTO-LOAD ON STARTUP ---
+    /* ---------- Auto‑load on startup (unchanged) ---------- */
     document.addEventListener('DOMContentLoaded', () => {
         console.log('[UI] DOMContentLoaded: Checking for saved project in localStorage...');
-        const savedProjectJson = localStorage.getItem(PROJECT_STORAGE_KEY);
-        if (savedProjectJson) {
-            console.log('[UI] Found saved project. Attempting to load...');
-            // The loadProject function is async, so we handle it with .then()
-            loadProject(savedProjectJson)
-                .then(() => {
-                    console.log('[UI] Project loaded successfully from auto-load.');
-                    render(); // Render the fully loaded state
-                })
-                .catch(error => {
-                    console.error('[UI] Auto-load failed. Initializing a new project.', error);
-                    initializeProject();
-                    render();
-                });
-        } else {
-            console.log('[UI] No saved project found. Initializing a new project.');
-            // This path is taken on the very first run or after clearing storage.
-            // initializeProject is already called by default in state.js, so this can be a no-op or a log.
-        }
+        const saved = localStorage.getItem(PROJECT_STORAGE_KEY);
+        if (!saved) return;                               // nothing to load
+        loadProject(saved)
+            .then(() => { console.log('[UI] Auto‑load ok'); render(); })
+            .catch(err => { console.error(err); initializeProject(); render(); });
     });
 
+    /* ---------- Window resize & playhead animation (unchanged) ---------- */
     window.onresize = () => { updateStepRows(); render(); };
-    
+
     function animatePlayhead() {
-        if (projectState.isPlaying) {
-             highlightPlayhead();
-        } else {
-            document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
-        }
+        if (projectState.isPlaying) highlightPlayhead();
+        else document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
         requestAnimationFrame(animatePlayhead);
     }
     animatePlayhead();
-    
-    // --- Synth UI Command Listeners (No changes) ---
+
+    /* ---------- Synth UI command listeners (unchanged) ---------- */
     document.addEventListener('bop:request-record-toggle', () => {
         projectState.isRecording = !projectState.isRecording;
-        console.log("Sequencer recording armed:", projectState.isRecording);
         document.dispatchEvent(new CustomEvent('sequencer:status-update', {
-             detail: { isRecording: projectState.isRecording }
+            detail: { isRecording: projectState.isRecording }
         }));
     });
-
-    document.addEventListener('bop:request-clear', (e) => {
+    document.addEventListener('bop:request-clear', e => {
         const { instrumentId } = e.detail;
-        const sequence = getCurrentSequence();
-        const channel = sequence.channels.find(c => c.instrumentId === instrumentId);
-        if (channel) {
-            channel.steps.fill(false);
-            render();
-            console.log(`Cleared steps for instrument: ${instrumentId}`);
-        }
+        const seq  = getCurrentSequence();
+        const chan = seq.channels.find(c => c.instrumentId === instrumentId);
+        if (chan) { chan.steps.fill(false); render(); }
     });
 }
