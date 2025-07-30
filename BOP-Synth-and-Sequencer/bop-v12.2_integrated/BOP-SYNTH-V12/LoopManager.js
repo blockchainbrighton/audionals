@@ -1,70 +1,65 @@
 /**
  * @file LoopManager.js
  * @description Manages loop functionality, quantization, and tempo.
- * Refactored to use dependency injection and event-driven communication.
+ * Refactored for non-destructive quantization and robust UI sync.
  */
 
 export class LoopManager {
     constructor(state, eventBus) {
         this.state = state;
         this.eventBus = eventBus;
-        
-        // Loop state properties
+
+        // Loop state
         this.isLoopEnabled = false;
         this.isLooping = false;
         this.loopStart = 0;
         this.loopEnd = 4;
         this.maxLoops = -1;
         this.currentLoopIteration = 0;
-        
-        // Quantization properties
+
+        // Quantize
         this.quantizeEnabled = false;
-        this.quantizeGridValue = 0.125; // Default to 1/32 note
+        this.quantizeGridValue = 0.125; // Default 1/32
         this.swingAmount = 0;
-        
-        // Tempo properties
+
+        // Tempo
         this.originalTempo = 120;
         this.targetTempo = 120;
-        
+
+        // For non-destructive quantize:
+        this.originalSeq = null; // Always keep the original!
         this.scheduledEvents = [];
-        
+
         this.init();
     }
-    
+
     init() {
         console.log('[LoopManager] Initializing loop system...');
         this.setupEventListeners();
     }
-    
+
     setupEventListeners() {
-        // Listen for loop control events
-        this.eventBus.addEventListener('loop-toggle', () => {
-            this.toggleLoop();
-        });
-        
-        this.eventBus.addEventListener('loop-clear', () => {
-            this.clearLoop();
-        });
-        
+        // Loop
+        this.eventBus.addEventListener('loop-toggle', () => this.toggleLoop());
+        this.eventBus.addEventListener('loop-clear', () => this.clearLoop());
         this.eventBus.addEventListener('loop-bounds-set', (e) => {
             const { start, end } = e.detail;
             this.setLoopBounds(start, end);
         });
-        
-        this.eventBus.addEventListener('loop-auto-detect', () => {
-            this.autoDetectLoopBounds();
-        });
-        
+        this.eventBus.addEventListener('loop-auto-detect', () => this.autoDetectLoopBounds());
+
+        // Quantize events
         this.eventBus.addEventListener('quantize-toggle', (e) => {
-            const { enabled, gridValue } = e.detail;
-            this.setQuantization(enabled, gridValue);
+            this.setQuantization(e.detail.enabled);
         });
-        
+        this.eventBus.addEventListener('quantize-grid-set', (e) => {
+            this.setQuantization(true, this.getGridValueFromKey(e.detail.gridKey));
+        });
         this.eventBus.addEventListener('swing-change', (e) => {
-            const { amount } = e.detail;
-            this.setSwing(amount);
+            this.setSwing(e.detail.amount);
         });
-        
+
+        // Project/load logic
         this.eventBus.addEventListener('loop-settings-load', (e) => {
             const { enabled, start, end, quantize, grid, swing } = e.detail;
             this.setLoopEnabled(enabled);
@@ -72,19 +67,43 @@ export class LoopManager {
             this.setQuantization(quantize, grid);
             this.setSwing(swing || 0);
         });
+
+        // When the sequence is replaced externally (new recording/load), update originalSeq:
+        this.eventBus.addEventListener('sequence-changed', () => {
+            this.ensureOriginalSeq();
+            if (this.quantizeEnabled) {
+                this.applyQuantizeView();
+            }
+        });
     }
 
-    // --- Public API Methods ---
+    // Non-destructive quantize: always maintain a clean original array
+    ensureOriginalSeq() {
+        if (!this.state.seq) this.state.seq = [];
+        // Only update originalSeq if state.seq is NOT already a quantized version!
+        if (
+            !this.originalSeq ||
+            this.originalSeq.length !== this.state.seq.length ||
+            this.state.seq.some((n, i) => !this.originalSeq[i] || n.id !== this.originalSeq[i].id)
+        ) {
+            this.originalSeq = this.state.seq.map(n => ({ ...n }));
+        }
+    }
 
     toggleLoop() {
         this.setLoopEnabled(!this.isLoopEnabled);
+        this.dispatchLoopState();
+    }
+
+    dispatchLoopState() {
+        this.eventBus.dispatchEvent(new CustomEvent('loop-state-update', {
+            detail: this.getLoopStatus()
+        }));
     }
 
     setLoopEnabled(enabled) {
         this.isLoopEnabled = enabled;
         console.log(`[LoopManager] Loop ${enabled ? 'enabled' : 'disabled'}`);
-        
-        // Emit loop state change event
         this.eventBus.dispatchEvent(new CustomEvent('loop-state-changed', {
             detail: {
                 enabled: this.isLoopEnabled,
@@ -95,38 +114,58 @@ export class LoopManager {
     }
 
     setQuantization(enabled, gridValue) {
+        // Save new settings
         this.quantizeEnabled = enabled;
-        if (gridValue !== undefined) {
-            this.quantizeGridValue = gridValue;
+        if (gridValue !== undefined) this.quantizeGridValue = gridValue;
+
+        // Ensure original sequence is always present
+        this.ensureOriginalSeq();
+
+        // Derive quantized view or revert
+        this.applyQuantizeView();
+
+        this.dispatchLoopState();
+        this.eventBus.dispatchEvent(new CustomEvent('sequence-changed'));
+    }
+
+    applyQuantizeView() {
+        if (this.quantizeEnabled) {
+            this.state.seq = this.quantizeSequenceArray(
+                this.originalSeq,
+                this.quantizeGridValue,
+                this.swingAmount
+            );
+        } else {
+            // Restore original sequence
+            this.state.seq = this.originalSeq ? this.originalSeq.map(n => ({ ...n })) : [];
         }
-        console.log(`[LoopManager] Quantization ${enabled ? 'enabled' : 'disabled'}`);
-        
-        // Emit quantization change event
-        this.eventBus.dispatchEvent(new CustomEvent('quantization-changed', {
-            detail: {
-                enabled: this.quantizeEnabled,
-                gridValue: this.quantizeGridValue
+    }
+
+    quantizeSequenceArray(seq, grid, swing) {
+        if (!Array.isArray(seq)) return [];
+        return seq.map(note => {
+            let snapped = Math.round(note.start / grid) * grid;
+            if (swing > 0) {
+                const beatPos = (snapped / grid) % 2;
+                if (beatPos === 1) snapped += grid * swing * 0.1;
             }
-        }));
+            // Always return a new note object (deep copy)
+            return { ...note, start: snapped };
+        });
     }
 
     setLoopBounds(start, end) {
         this.loopStart = Math.max(0, start);
         this.loopEnd = Math.max(this.loopStart, end);
         console.log(`[LoopManager] Loop bounds set: ${this.loopStart.toFixed(2)}s - ${this.loopEnd.toFixed(2)}s`);
-        
-        // Emit loop bounds change event
         this.eventBus.dispatchEvent(new CustomEvent('loop-bounds-changed', {
-            detail: {
-                start: this.loopStart,
-                end: this.loopEnd
-            }
+            detail: { start: this.loopStart, end: this.loopEnd }
         }));
     }
 
     autoDetectLoopBounds() {
         const seq = this.state.seq || [];
-        if (seq.length === 0) {
+        if (!seq.length) {
             this.setLoopBounds(0, 4);
             return { start: 0, end: 4 };
         }
@@ -140,8 +179,6 @@ export class LoopManager {
         this.setLoopEnabled(false);
         this.setLoopBounds(0, 4);
         this.currentLoopIteration = 0;
-        
-        // Emit loop cleared event
         this.eventBus.dispatchEvent(new CustomEvent('loop-cleared'));
     }
 
@@ -150,48 +187,42 @@ export class LoopManager {
     }
 
     setQuantizationGrid(gridKey) {
-        const gridMap = { 
-            'whole': 4, 
-            'half': 2, 
-            'quarter': 1, 
-            'eighth': 0.5, 
-            'sixteenth': 0.25, 
-            'thirtysecond': 0.125 
-        };
-        this.quantizeGridValue = gridMap[gridKey] || 0.125;
-        
-        // Emit grid change event
+        this.quantizeGridValue = this.getGridValueFromKey(gridKey);
+        this.dispatchLoopState();
         this.eventBus.dispatchEvent(new CustomEvent('quantization-grid-changed', {
             detail: { gridValue: this.quantizeGridValue, gridKey }
         }));
     }
 
     getQuantizeGridKey() {
-        const keyMap = { 
-            4: 'whole', 
-            2: 'half', 
-            1: 'quarter', 
-            0.5: 'eighth', 
-            0.25: 'sixteenth', 
-            0.125: 'thirtysecond' 
+        const keyMap = {
+            4: 'whole', 2: 'half', 1: 'quarter',
+            0.5: 'eighth', 0.25: 'sixteenth', 0.125: 'thirtysecond'
         };
         return keyMap[this.quantizeGridValue] || 'thirtysecond';
     }
 
+    getGridValueFromKey(gridKey) {
+        const gridMap = {
+            'whole': 4, 'half': 2, 'quarter': 1,
+            'eighth': 0.5, 'sixteenth': 0.25, 'thirtysecond': 0.125
+        };
+        return gridMap[gridKey] || 0.125;
+    }
+
     setSwing(amount) {
         this.swingAmount = Math.max(0, Math.min(1, amount));
-        
-        // Emit swing change event
-        this.eventBus.dispatchEvent(new CustomEvent('swing-changed', {
-            detail: { amount: this.swingAmount }
-        }));
+        // On swing change, re-quantize if needed
+        if (this.quantizeEnabled) {
+            this.applyQuantizeView();
+            this.eventBus.dispatchEvent(new CustomEvent('sequence-changed'));
+        }
+        this.eventBus.dispatchEvent(new CustomEvent('swing-changed', { detail: { amount: this.swingAmount } }));
     }
 
     setTempoConversion(original, target) {
         this.originalTempo = original;
         this.targetTempo = target;
-        
-        // Emit tempo change event
         this.eventBus.dispatchEvent(new CustomEvent('tempo-changed', {
             detail: { original, target }
         }));
@@ -209,30 +240,18 @@ export class LoopManager {
             swingAmount: this.swingAmount
         };
     }
-    
-    /**
-     * Quantize a time value to the current grid
-     */
+
     quantizeTime(time) {
         if (!this.quantizeEnabled) return time;
-        
         const grid = this.quantizeGridValue;
         let quantized = Math.round(time / grid) * grid;
-        
-        // Apply swing if enabled
         if (this.swingAmount > 0) {
             const beatPosition = (quantized / grid) % 2;
-            if (beatPosition === 1) { // Off-beat
-                quantized += grid * this.swingAmount * 0.1;
-            }
+            if (beatPosition === 1) quantized += grid * this.swingAmount * 0.1;
         }
-        
         return quantized;
     }
-    
-    /**
-     * Get current loop settings for saving
-     */
+
     getLoopSettings() {
         return {
             enabled: this.isLoopEnabled,
@@ -243,10 +262,7 @@ export class LoopManager {
             swing: this.swingAmount
         };
     }
-    
-    /**
-     * Cleanup method
-     */
+
     destroy() {
         this.scheduledEvents = [];
         // Event listeners will be cleaned up when eventBus is destroyed
@@ -254,4 +270,3 @@ export class LoopManager {
 }
 
 export default LoopManager;
-

@@ -1,8 +1,3 @@
-/**
- * @file EnhancedRecorder.js
- * @description Manages MIDI recording, sequence management, and transport state.
- */
-
 export class EnhancedRecorder {
     constructor(state, synthEngine, eventBus) {
         this.state = state;
@@ -13,13 +8,17 @@ export class EnhancedRecorder {
         this.isArmed = false;
         this.recStartTime = 0;
         this.scheduledEventIds = [];
+        this.isFirstNote = false; // <-- ADD
     }
 
-    // --- Primary Input Actions (called by BopSynth event bus) ---
     playNote(note, velocity = 0.8) {
         if (this.state.activeNotes.has(note)) return; // Prevent re-triggering
 
-        if (this.isArmed) this.startRecording();
+        // If armed, start recording and record the note as the first at t=0
+        if (this.isArmed) {
+            this.startRecording(note, velocity); // <-- Pass note/vel!
+            return; // All first-note logic happens inside startRecording
+        }
 
         this.state.activeNotes.add(note);
         this.eventBus.dispatchEvent(new CustomEvent('note-visual-change', { detail: { note, active: true } }));
@@ -58,7 +57,8 @@ export class EnhancedRecorder {
         else { this.isArmed = true; this.updateState(); }
     }
 
-    startRecording() {
+    // --- Major Change: Accept first note (if present) and record at t=0
+    startRecording(firstNote = null, velocity = 0.8) {
         if (this.isRecording) return;
         this.isRecording = true;
         this.isArmed = false;
@@ -67,12 +67,17 @@ export class EnhancedRecorder {
         this.state.activeNoteIds.clear();
         this.updateState();
         this.eventBus.dispatchEvent(new CustomEvent('sequence-changed'));
+        if (firstNote) {
+            // Immediately record the first note at start: 0
+            const noteId = `${firstNote}_0.0000`;
+            this.state.activeNotes.add(firstNote); // Also visually mark as held
+            this.state.activeNoteIds.set(firstNote, noteId);
+            this.state.seq.push({ id: noteId, note: firstNote, start: 0, dur: 0, vel: velocity });
+            this.synthEngine.noteOn(firstNote, velocity);
+            this.eventBus.dispatchEvent(new CustomEvent('note-visual-change', { detail: { note: firstNote, active: true } }));
+        }
     }
 
-    /**
-     * Schedules the playback of the recorded sequence on the main transport.
-     * @param {number} [hostStartTime] - The precise Tone.js time to start playback, provided by a host.
-     */
     startPlayback(hostStartTime) {
         if (this.isPlaying || !this.state.seq?.length) return;
         this.isPlaying = true;
@@ -81,13 +86,9 @@ export class EnhancedRecorder {
 
         this.state.seq.forEach(evt => {
             if (evt.dur <= 0.01) return;
-
-            // --- CRITICAL: If in host sync, schedule at absolute transport time (not "+"), else use relative "+"
             const at = isStandalone ? `+${evt.start}` : hostStartTime + evt.start;
             console.debug('   schedule', evt.note, 'at', at, 'dur', evt.dur.toFixed(3));
-
             const id = this.synthEngine.Tone.Transport.schedule((t) => {
-                // CRITICAL: Always use `t` for timing!
                 this.synthEngine.triggerAttackRelease(evt.note, evt.dur, t, evt.vel);
             }, at);
             this.scheduledEventIds.push(id);

@@ -106,20 +106,39 @@ export function stopPlayback() {
     const T = runtimeState.Tone;
     if (!T?.Transport) return;
 
+    // 1. Stop the master transport and dispose the sequencer's own sequence. This is correct.
     T.Transport.stop();
-    toneSequence?.dispose(); toneSequence = null;
+    toneSequence?.dispose();
+    toneSequence = null;
 
-    // stop any synth still ringing
-    for (const id of runtimeState.activeInstrumentTriggers) {
-        runtimeState.instrumentRack[id]?.stopInternalSequence();
+    // 2. NEW: Broadcast a universal 'transport-stop' event to ALL instruments.
+    // This is far more reliable than tracking "active" triggers.
+    console.log('[SEQ] Broadcasting transport-stop to all instruments.');
+    for (const id in runtimeState.instrumentRack) {
+        const instrument = runtimeState.instrumentRack[id];
+        // Ensure the instrument and its logic/event bus exist before trying to send the event
+        if (instrument?.logic?.eventBus) {
+            try {
+                // The BopSynthLogic is designed to listen for this event.
+                const stopEvent = new CustomEvent('transport-stop');
+                instrument.logic.eventBus.dispatchEvent(stopEvent);
+            } catch (e) {
+                console.error(`[SEQ] Error sending stop event to instrument ${id}:`, e);
+            }
+        }
     }
+
+    // 3. Clear the trigger list (can still be useful for other logic, but not as the primary stop mechanism)
     runtimeState.activeInstrumentTriggers.clear();
 
+    // 4. Reset the sequencer's own state. This is correct.
     projectState.isPlaying = false;
     projectState.playMode  = null;
     runtimeState.currentStepIndex = 0;
-}
 
+    // Optional but recommended: Update UI to reflect the stopped state immediately
+    // e.g., clearAllPlayingIndicators();
+}
 /* ─────────────── instrument teardown before reset/load ─────────────── */
 export function resetAudioEnvironment() {
     disposeAllInstrumentNodes();

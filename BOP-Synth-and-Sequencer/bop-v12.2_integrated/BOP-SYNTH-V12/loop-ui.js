@@ -1,13 +1,13 @@
 /**
  * @file loop-ui.js
- * @description UI controls for the LoopManager. Refactored to accept a container element
- * and communicate via the central event bus.
+ * @description UI controls for the LoopManager. Accepts a container element
+ * and communicates via the central event bus.
  */
 
 export class LoopUI {
     constructor(containerElement, eventBus) {
         console.log('[LoopUI] Initializing loop controls...');
-        this.container = containerElement; // Accepts the direct element
+        this.container = containerElement;
         this.eventBus = eventBus;
         this.elements = {};
 
@@ -22,7 +22,7 @@ export class LoopUI {
     }
 
     createUI() {
-        // --- FIX: Build UI inside the provided container ---
+        // Provide full controls for both loop and quantize sections
         this.container.innerHTML = `
             <div class="loop-panel">
                 <div class="loop-section" style="display:flex;gap:32px;">
@@ -40,16 +40,34 @@ export class LoopUI {
                         </label>
                     </div>
                 </div>
-                <div id="loopSettingsSection" style="display:none">
-                    <!-- ... rest of your inner HTML for loop settings ... -->
+                <div id="loopSettingsSection" style="display:none; margin-top:16px;">
+                    <label>
+                        Start:
+                        <input type="number" id="loopStart" min="0" step="0.01" value="0" style="width: 60px;">
+                    </label>
+                    <label>
+                        End:
+                        <input type="number" id="loopEnd" min="0" step="0.01" value="4" style="width: 60px;">
+                    </label>
+                    <button id="autoDetectBounds" type="button">Auto-Detect</button>
                 </div>
-                <div id="quantizeSettingsSection" style="display:none">
-                    <!-- ... rest of your inner HTML for quantize settings ... -->
+                <div id="quantizeSettingsSection" style="display:none; margin-top:16px;">
+                    <label>
+                        Quantize Grid:
+                        <select id="quantizeGrid">
+                            <option value="whole">Whole Note (1)</option>
+                            <option value="half">Half Note (1/2)</option>
+                            <option value="quarter">Quarter Note (1/4)</option>
+                            <option value="eighth">Eighth Note (1/8)</option>
+                            <option value="sixteenth">Sixteenth Note (1/16)</option>
+                            <option value="thirtysecond">Thirty-Second (1/32)</option>
+                        </select>
+                    </label>
                 </div>
             </div>
         `;
-        
-        // --- FIX: Scope element lookups to the container ---
+
+        // Only query for controls now guaranteed in the DOM
         const el = id => this.container.querySelector(`#${id}`);
         this.elements = {
             loopEnabled: el('loopEnabled'),
@@ -64,72 +82,63 @@ export class LoopUI {
         };
     }
 
-    
-    /**
-     * Binds UI element interactions to dispatch events on the event bus.
-     * This decouples the UI from the logic modules.
-     */
     bindUIToEvents() {
         const els = this.elements;
         const dispatch = (name, detail) => this.eventBus.dispatchEvent(new CustomEvent(name, { detail }));
 
-        this._on(els.loopEnabled, 'change', () => dispatch('loop-toggle'));
-        this._on(els.quantizeEnabled, 'change', e => dispatch('quantize-toggle', { enabled: e.target.checked }));
-        this._on(els.autoDetectBounds, 'click', () => dispatch('loop-auto-detect'));
+        if (els.loopEnabled) this._on(els.loopEnabled, 'change', () => dispatch('loop-toggle'));
+        if (els.quantizeEnabled) this._on(els.quantizeEnabled, 'change', e => dispatch('quantize-toggle', { enabled: e.target.checked }));
+        if (els.autoDetectBounds) this._on(els.autoDetectBounds, 'click', () => dispatch('loop-auto-detect'));
         
-        const updateBounds = () => dispatch('loop-bounds-set', { start: +els.loopStart.value, end: +els.loopEnd.value });
-        this._on(els.loopStart, 'change', updateBounds);
-        this._on(els.loopEnd, 'change', updateBounds);
-        
-        this._on(els.quantizeGrid, 'change', e => {
-            const gridKey = e.target.value;
-            // The logic for converting key to value should be in LoopManager
-            dispatch('quantize-grid-set', { gridKey });
+        // Only send when changed, for both fields
+        const updateBounds = () => {
+            if (!isNaN(+els.loopStart.value) && !isNaN(+els.loopEnd.value)) {
+                dispatch('loop-bounds-set', { start: +els.loopStart.value, end: +els.loopEnd.value });
+            }
+        };
+        if (els.loopStart) this._on(els.loopStart, 'change', updateBounds);
+        if (els.loopEnd) this._on(els.loopEnd, 'change', updateBounds);
+
+        if (els.quantizeGrid) this._on(els.quantizeGrid, 'change', e => {
+            dispatch('quantize-grid-set', { gridKey: e.target.value });
         });
     }
 
-    /**
-     * Listens for state change events from the system to keep the UI in sync.
-     */
     listenToSystemEvents() {
-        // LoopManager will dispatch this event with its current status
         this.eventBus.addEventListener('loop-state-update', e => this.updateUI(e.detail));
     }
-    
-    /**
-     * Centralized function to update all UI elements from a state object.
-     * @param {object} status - The complete status object from LoopManager.
-     */
+
     updateUI(status) {
         if (!status) return;
         const { elements: els } = this;
         
-        els.loopEnabled.checked = status.enabled;
-        els.quantizeEnabled.checked = status.quantizeEnabled;
-        
+        if (els.loopEnabled) els.loopEnabled.checked = !!status.enabled;
+        if (els.quantizeEnabled) els.quantizeEnabled.checked = !!status.quantizeEnabled;
+
         this._toggleSection(els.loopSettingsSection, status.enabled);
         this._toggleSection(els.quantizeSettingsSection, status.quantizeEnabled);
 
-        els.loopStart.value = status.start.toFixed(1);
-        els.loopEnd.value = status.end.toFixed(1);
+        if (els.loopStart && !isNaN(status.start)) els.loopStart.value = status.start.toFixed(2);
+        if (els.loopEnd && !isNaN(status.end)) els.loopEnd.value = status.end.toFixed(2);
 
-        if (status.enabled) {
-            const stateText = status.active ? 'Active' : 'Ready';
-            els.loopStatus.textContent = `Loop: ${stateText} (${status.duration.toFixed(1)}s)`;
-            els.loopStatus.className = `loop-status ${status.active ? 'active' : 'ready'}`;
-        } else {
-            els.loopStatus.textContent = 'Loop: Disabled';
-            els.loopStatus.className = 'loop-status disabled';
+        if (els.loopStatus) {
+            if (status.enabled) {
+                const stateText = status.active ? 'Active' : 'Ready';
+                els.loopStatus.textContent = `Loop: ${stateText} (${(status.duration ?? 0).toFixed(2)}s)`;
+                els.loopStatus.className = `loop-status ${status.active ? 'active' : 'ready'}`;
+            } else {
+                els.loopStatus.textContent = 'Loop: Disabled';
+                els.loopStatus.className = 'loop-status disabled';
+            }
         }
-        
-        // Ensure the dropdown reflects the actual state
-        const gridKey = this.getQuantizeGridKey(status.quantizeGridValue);
-        if (els.quantizeGrid.value !== gridKey) {
-            els.quantizeGrid.value = gridKey;
+
+        if (els.quantizeGrid) {
+            const gridKey = this.getQuantizeGridKey(status.quantizeGridValue);
+            if (els.quantizeGrid.value !== gridKey) els.quantizeGrid.value = gridKey;
         }
     }
-    
-    // Helper methods
+
+    // --- Helpers ---
     _on(el, ev, fn) { if (el) el.addEventListener(ev, fn); }
     _toggleSection(el, show) { if (el) el.style.display = show ? '' : 'none'; }
     getQuantizeGridKey(value) {
@@ -137,3 +146,4 @@ export class LoopUI {
         return keyMap[value] || 'thirtysecond';
     }
 }
+
