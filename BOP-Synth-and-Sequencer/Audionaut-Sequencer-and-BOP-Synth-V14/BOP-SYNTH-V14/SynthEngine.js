@@ -1,260 +1,228 @@
 /**
  * @file SynthEngine.js
- * @description Core audio synthesis engine for BOP Synth.
- * LOGS: Parameter/state changes at the audio engine level.
+ * @description Schema-driven, core audio synthesis engine for BOP Synth.
+ * This version uses a robust, multi-stage initialization process and an intelligent
+ * setParameter function to prevent timing and type errors.
  */
+
+// This engine is designed to be instantiated with a dynamically loaded Tone.js object.
+
+// =========================================================================
+//  NODE & PARAMETER SCHEMAS
+// =========================================================================
+const NODE_MAP = {
+    master:     { className: 'Gain' },
+    limiter:    { className: 'Limiter' },
+    reverb:     { className: 'Reverb' },
+    delay:      { className: 'FeedbackDelay' },
+    filter:     { className: 'Filter' },
+    chorus:     { className: 'Chorus' },
+    distortion: { className: 'Distortion' },
+    phaser:     { className: 'Phaser' },
+    tremolo:    { className: 'Tremolo' },
+    vibrato:    { className: 'Vibrato' },
+    compressor: { className: 'Compressor' },
+    bitCrusher: { className: 'BitCrusher' },
+    filterLFO:  { className: 'LFO' },
+    phaserLFO:  { className: 'LFO' },
+    tremoloLFO: { className: 'LFO' },
+    vibratoLFO: { className: 'LFO' },
+};
+
+const PARAM_MAP = {
+    'master.volume':      { node: 'master',      param: 'gain',        isSignal: true,  default: 0.7  },
+    'limiter.threshold':  { node: 'limiter',     param: 'threshold',   isSignal: true,  default: -3   },
+    'oscillator.type':    { node: 'oscillator',  param: 'type',        isSignal: false, default: 'sawtooth' },
+    'oscillator.detune':  { node: 'oscillator',  param: 'detune',      isSignal: false, default: 0    },
+    'envelope.attack':    { node: 'envelope',    param: 'attack',      isSignal: false, default: 0.01 },
+    'envelope.decay':     { node: 'envelope',    param: 'decay',       isSignal: false, default: 0.1  },
+    'envelope.sustain':   { node: 'envelope',    param: 'sustain',     isSignal: false, default: 0.7  },
+    'envelope.release':   { node: 'envelope',    param: 'release',     isSignal: false, default: 0.3  },
+    'filter.frequency':   { node: 'filter',      param: 'frequency',   isSignal: true,  default: 5000 },
+    'filter.Q':           { node: 'filter',      param: 'Q',           isSignal: true,  default: 1    },
+    'filter.type':        { node: 'filter',      param: 'type',        isSignal: false, default: 'lowpass' },
+    'reverb.wet':         { node: 'reverb',      param: 'wet',         isSignal: true,  default: 0.3  },
+    'reverb.decay':       { node: 'reverb',      param: 'decay',       isSignal: true,  default: 2    },
+    'reverb.preDelay':    { node: 'reverb',      param: 'preDelay',    isSignal: true,  default: 0    },
+    'delay.wet':          { node: 'delay',       param: 'wet',         isSignal: true,  default: 0.2  },
+    'delay.delayTime':    { node: 'delay',       param: 'delayTime',   isSignal: true,  default: 0.25 },
+    'delay.feedback':     { node: 'delay',       param: 'feedback',    isSignal: true,  default: 0.3  },
+    'chorus.wet':         { node: 'chorus',      param: 'wet',         isSignal: true,  default: 0.5  },
+    'chorus.frequency':   { node: 'chorus',      param: 'frequency',   isSignal: true,  default: 1.5  },
+    'chorus.delayTime':   { node: 'chorus',      param: 'delayTime',   isSignal: false, default: 3.5  }, // Corrected: isSignal false
+    'chorus.depth':       { node: 'chorus',      param: 'depth',       isSignal: true,  default: 0.7  },
+    'phaser.wet':         { node: 'phaser',      param: 'wet',         isSignal: true,  default: 0.5  },
+    'phaser.frequency':   { node: 'phaser',      param: 'frequency',   isSignal: true,  default: 0.5  },
+    'phaser.octaves':     { node: 'phaser',      param: 'octaves',     isSignal: true,  default: 3    },
+    'phaser.baseFrequency':{ node: 'phaser',     param: 'baseFrequency',isSignal: true, default: 350  },
+    'tremolo.wet':        { node: 'tremolo',     param: 'wet',         isSignal: true,  default: 0.7  },
+    'tremolo.frequency':  { node: 'tremolo',     param: 'frequency',   isSignal: true,  default: 10   },
+    'tremolo.depth':      { node: 'tremolo',     param: 'depth',       isSignal: true,  default: 0.5  },
+    'vibrato.wet':        { node: 'vibrato',     param: 'wet',         isSignal: true,  default: 0.8  },
+    'vibrato.frequency':  { node: 'vibrato',     param: 'frequency',   isSignal: true,  default: 5    },
+    'vibrato.depth':      { node: 'vibrato',     param: 'depth',       isSignal: true,  default: 0.1  },
+    'distortion.wet':     { node: 'distortion',  param: 'wet',         isSignal: true,  default: 0.3  },
+    'distortion.distortion':{ node: 'distortion',  param: 'distortion',  isSignal: true,  default: 0.4  },
+    'distortion.oversample':{ node: 'distortion',  param: 'oversample',  isSignal: false, default: 'none' },
+    'compressor.threshold':{ node: 'compressor', param: 'threshold',   isSignal: true,  default: -24  },
+    'compressor.ratio':   { node: 'compressor',  param: 'ratio',       isSignal: true,  default: 12   },
+    'compressor.attack':  { node: 'compressor',  param: 'attack',      isSignal: true,  default: 0.003},
+    'compressor.release': { node: 'compressor',  param: 'release',     isSignal: true,  default: 0.25 },
+    'compressor.knee':    { node: 'compressor',  param: 'knee',        isSignal: true,  default: 30   },
+    'bitCrusher.bits':    { node: 'bitCrusher',  param: 'bits',        isSignal: true,  default: 4    },
+    'filterLFO.frequency':{ node: 'filterLFO',   param: 'frequency',   isSignal: true,  default: 0.5  },
+    'filterLFO.depth':    { node: 'filterLFO',   param: 'amplitude',   isSignal: true,  default: 0    },
+    'filterLFO.min':      { node: 'filterLFO',   param: 'min',         isSignal: false, default: 200  },
+    'filterLFO.max':      { node: 'filterLFO',   param: 'max',         isSignal: false, default: 2000 },
+    'phaserLFO.frequency':{ node: 'phaserLFO',   param: 'frequency',   isSignal: true,  default: 0.3  },
+    'phaserLFO.depth':    { node: 'phaserLFO',   param: 'amplitude',   isSignal: true,  default: 0    },
+    'tremoloLFO.frequency':{ node: 'tremoloLFO',  param: 'frequency',   isSignal: true,  default: 4    },
+    'tremoloLFO.depth':   { node: 'tremoloLFO',  param: 'amplitude',   isSignal: true,  default: 0    },
+    'vibratoLFO.frequency':{ node: 'vibratoLFO',  param: 'frequency',   isSignal: true,  default: 6    },
+    'vibratoLFO.depth':   { node: 'vibratoLFO',  param: 'amplitude',   isSignal: true,  default: 0    },
+};
+
 export class SynthEngine {
     constructor(Tone, config = {}) {
         this.Tone = Tone;
         if (!this.Tone) throw new Error('SynthEngine requires a loaded Tone.js instance.');
+        
+        this.nodeConfig = NODE_MAP;
+        this.paramConfig = PARAM_MAP;
         this.output = config.outputNode || this.Tone.getDestination();
-        this.effectState = {};
         this.nodes = {};
+        this.polySynth = null;
+        this._bypassedEffectState = {};
+        
         this.init();
     }
 
     init() {
-        this.createAudioChain();
-        console.log('[SynthEngine] Audio engine created and signal chain connected.');
+        this.createAudioNodes();
+        this.applyAllDefaults();
+        this.connectAudioChain();
+        this.startSources();
+        
+        console.log('[SynthEngine] Schema-driven audio engine created successfully.');
     }
 
-    // REPLACE the whole function
-createAudioChain() {
-    const T = this.Tone;
+    createAudioNodes() {
+        const T = this.Tone;
+        
+        for(const [name, config] of Object.entries(this.nodeConfig)) {
+            const NodeClass = T[config.className];
+            if (NodeClass) {
+                this.nodes[name] = new NodeClass();
+            } else {
+                console.error(`[SynthEngine] Tone.js class not found: ${config.className}`);
+            }
+        }
 
-    this.nodes.master      = new T.Gain(0.7);
-    this.nodes.limiter     = new T.Limiter(-3);
-
-    // Effects built with their intended mix amounts
-    this.nodes.reverb      = new T.Reverb     ({ decay: 2,  preDelay: 0,  wet: 0.3 });
-    this.nodes.delay       = new T.FeedbackDelay({ delayTime: 0.25, feedback: 0.3, wet: 0.2 });
-    this.nodes.filter      = new T.Filter     ({ frequency: 5000, Q: 1, type: 'lowpass' });
-    this.nodes.chorus      = new T.Chorus     ({ frequency: 1.5, delayTime: 3.5, depth: 0.7, wet: 0.5 });
-    this.nodes.distortion  = new T.Distortion ({ distortion: 0.4, oversample: 'none', wet: 0.3 });
-    this.nodes.phaser      = new T.Phaser     ({ frequency: 0.5, octaves: 3, baseFrequency: 350, wet: 0.5 });
-    this.nodes.tremolo     = new T.Tremolo    ({ frequency: 10, depth: 0.5, spread: 0, wet: 0.7 }).start();
-    this.nodes.vibrato     = new T.Vibrato    ({ frequency: 5, depth: 0.1, wet: 0.8 });
-    this.nodes.compressor  = new T.Compressor ({ threshold: -24, ratio: 12, attack: 0.003, release: 0.25, knee: 30 });
-    this.nodes.bitCrusher  = new T.BitCrusher (4);
-
-    // LFOs (untouched)
-    this.nodes.filterLFO   = new T.LFO({ frequency: 0.5, min: 200,   max: 2000, amplitude: 0 }).start();
-    this.nodes.tremoloLFO  = new T.LFO({ frequency: 4,   min: 0,     max: 1,    amplitude: 0 }).start();
-    this.nodes.vibratoLFO  = new T.LFO({ frequency: 6,   min: -0.02, max: 0.02, amplitude: 0 }).start();
-    this.nodes.phaserLFO   = new T.LFO({ frequency: 0.3, min: 0.1,   max: 10,   amplitude: 0 }).start();
-
-    // Voice generator
-    this.nodes.oscillator  = { type: 'sawtooth', detune: 0 };
-    this.nodes.envelope    = { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.3 };
-    this.polySynth         = new T.PolySynth(T.Synth, {
-        oscillator: this.nodes.oscillator,
-        envelope:   this.nodes.envelope,
-    });
-
-    // Connect modulation sources
-    this.nodes.filterLFO.connect(this.nodes.filter.frequency);
-    this.nodes.tremoloLFO.connect(this.nodes.tremolo.depth);
-    this.nodes.vibratoLFO.connect(this.nodes.vibrato.depth);
-    this.nodes.phaserLFO.connect(this.nodes.phaser.frequency);
-
-    // Main signal chain
-    this.polySynth.chain(
-        this.nodes.bitCrusher,
-        this.nodes.distortion,
-        this.nodes.compressor,
-        this.nodes.filter,
-        this.nodes.chorus,
-        this.nodes.phaser,
-        this.nodes.tremolo,
-        this.nodes.vibrato,
-        this.nodes.delay,
-        this.nodes.reverb,
-        this.nodes.limiter,
-        this.nodes.master,
-        this.output
-    );
-
-    // --- NEW: start with every effect bypassed (wet=0) but remember the mix amount ---
-    [
-        'reverb','delay','chorus','phaser',
-        'tremolo','vibrato','distortion'
-    ].forEach(name => this.toggleEffect(name, false));
-
-    console.log('[SynthEngine] Audio engine created, all effects bypassed.');
-}
-
-
-    noteOn(notes, velocity = 1.0) {
-        if (this.polySynth) this.polySynth.triggerAttack(notes, this.Tone.now(), velocity);
-        console.log('[SynthEngine] noteOn:', notes, velocity);
-    }
-
-    noteOff(notes) {
-        if (this.polySynth) this.polySynth.triggerRelease(notes, this.Tone.now());
-        console.log('[SynthEngine] noteOff:', notes);
-    }
-
-    /**
-     * Scheduled from sequencer or recorder.
-     * Always use the scheduler's time arg, NOT Tone.now().
-     */
-    triggerAttackRelease(notes, dur, time, vel) {
-        console.debug('[ENGINE] triggerAttackRelease', notes, 'dur', dur, 'time', time.toFixed(3));
-        this.polySynth.triggerAttackRelease(notes, dur, time, vel);
-    }
-
-    releaseAll() {
-        if (this.polySynth) this.polySynth.releaseAll();
-        console.log('[SynthEngine] All notes released.');
+        this.nodes.oscillator = {};
+        this.nodes.envelope = {};
+        this.polySynth = new T.PolySynth(T.Synth);
     }
     
-    getOutputNode() {
-        return this.nodes.master;
+    connectAudioChain() {
+        this.nodes.filterLFO.connect(this.nodes.filter.frequency);
+        this.nodes.phaserLFO.connect(this.nodes.phaser.frequency);
+        this.nodes.tremoloLFO.connect(this.nodes.tremolo.depth);
+        this.nodes.vibratoLFO.connect(this.nodes.vibrato.depth);
+
+        this.polySynth.chain(
+            this.nodes.bitCrusher, this.nodes.distortion, this.nodes.compressor,
+            this.nodes.filter, this.nodes.chorus, this.nodes.phaser,
+            this.nodes.tremolo, this.nodes.vibrato, this.nodes.delay,
+            this.nodes.reverb, this.nodes.limiter, this.nodes.master,
+            this.output
+        );
+    }
+
+    applyAllDefaults() {
+        for (const [path, config] of Object.entries(this.paramConfig)) {
+            this.setParameter(path, config.default);
+        }
+        Object.keys(this.paramConfig).filter(p => p.endsWith('.wet')).forEach(p => {
+            const effectName = p.split('.')[0];
+            this.toggleEffect(effectName, false);
+        });
+    }
+
+    startSources() {
+        ['chorus', 'phaser', 'tremolo', 'filterLFO', 'phaserLFO', 'tremoloLFO', 'vibratoLFO'].forEach(name => {
+            const node = this.nodes[name];
+            if (node && typeof node.start === 'function') {
+                node.start();
+            }
+        });
+    }
+
+    // --- Core State Management ---
+    getAllParameters() {
+        const params = {};
+        for (const [path, config] of Object.entries(this.paramConfig)) {
+            const node = this.nodes[config.node];
+            if (!node) continue;
+            
+            const target = config.isSignal ? node[config.param]?.value : node[config.param];
+            params[path] = target;
+        }
+        return params;
     }
 
     setParameter(path, value) {
-        console.log('[SynthEngine] setParameter:', path, value);
-        const [root, ...rest] = path.split('.');
-        const prop = rest[0];
-        let target;
-        const hasProp = (node, property) => node && typeof node[property] !== 'undefined';
-        switch (root) {
-            case 'master': if (prop === 'volume') this.nodes.master.gain.value = value; break;
-            case 'limiter': if (prop === 'threshold') this.nodes.limiter.threshold.value = value; break;
-            case 'oscillator':
-                if (prop === 'type' || prop === 'detune') {
-                    this.nodes.oscillator[prop] = value;
-                    this.polySynth.set({ oscillator: this.nodes.oscillator });
-                    console.log('[SynthEngine] oscillator updated:', this.nodes.oscillator);
-                }
-                break;
-            case 'envelope':
-                if (['attack', 'decay', 'sustain', 'release'].includes(prop)) {
-                    this.nodes.envelope[prop] = value;
-                    this.polySynth.set({ envelope: this.nodes.envelope });
-                    console.log('[SynthEngine] envelope updated:', this.nodes.envelope);
-                }
-                break;
-            case 'filterLFO': case 'tremoloLFO': case 'vibratoLFO': case 'phaserLFO':
-                target = this.nodes[root]; if (!target) break;
-                if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'depth') target.amplitude.value = value;
-                else if (prop === 'min') target.min = value;
-                else if (prop === 'max') target.max = value;
-                break;
-            case 'reverb': target = this.nodes.reverb; if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'decay') target.decay = value;
-                else if (prop === 'preDelay') target.preDelay = value;
-                break;
-            case 'delay': target = this.nodes.delay; if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'delayTime') target.delayTime.value = value;
-                else if (prop === 'feedback') target.feedback.value = value;
-                break;
-            case 'filter': target = this.nodes.filter; if (!hasProp(target, prop)) break;
-                if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'Q') target.Q.value = value;
-                else if (prop === 'type') target.type = value;
-                else if (prop === 'rolloff') target.rolloff = value;
-                break;
-            case 'chorus': target = this.nodes.chorus; if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'feedback') target.feedback.value = value;
-                else if (prop === 'delayTime') target.delayTime = value;
-                else if (prop === 'depth') target.depth = value;
-                else if (prop === 'spread') target.spread = value;
-                break;
-            case 'distortion': target = this.nodes.distortion; if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'distortion') target.distortion = value;
-                else if (prop === 'oversample') target.oversample = value;
-                break;
-            case 'phaser': target = this.nodes.phaser; if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'Q') target.Q.value = value;
-                else if (prop === 'octaves') target.octaves = value;
-                else if (prop === 'baseFrequency') target.baseFrequency = value;
-                else if (prop === 'stages') target.stages = value;
-                break;
-            case 'tremolo': target = this.nodes.tremolo; if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'depth') target.depth.value = value;
-                else if (prop === 'spread') target.spread = value;
-                break;
-            case 'vibrato': target = this.nodes.vibrato; if (!hasProp(target, prop)) break;
-                if (prop === 'wet') target.wet.value = value;
-                else if (prop === 'frequency') target.frequency.value = value;
-                else if (prop === 'depth') target.depth.value = value;
-                break;
-            case 'compressor': target = this.nodes.compressor; if (!hasProp(target, prop)) break;
-                if (prop === 'threshold') target.threshold.value = value;
-                else if (prop === 'ratio') target.ratio.value = value;
-                else if (prop === 'knee') target.knee.value = value;
-                else if (prop === 'attack') target.attack.value = value;
-                else if (prop === 'release') target.release.value = value;
-                break;
-            case 'bitCrusher': target = this.nodes.bitCrusher; if (!hasProp(target, prop)) break;
-                if (prop === 'bits') target.bits.value = value;
-                break;
-            default: 
-                console.warn(`[SynthEngine] Invalid root in path: ${path}`);
-                break;
-        }
-    }
+        const config = this.paramConfig[path];
+        if (!config) return;
 
-    getPatch() {
-        const patch = {
-            polySynth: this.polySynth ? this.polySynth.get() : {},
-            effects: Object.fromEntries(Object.entries(this.nodes)
-                .filter(([k, node]) => typeof node.get === 'function')
-                .map(([k, node]) => [k, node.get()]))
-        };
-        console.log('[SynthEngine] getPatch:', patch);
-        return patch;
-    }
+        const node = this.nodes[config.node];
+        if (!node) return;
 
-    setPatch(patch) {
-        if (!patch || !this.polySynth) return;
-        if (patch.polySynth) this.polySynth.set(patch.polySynth);
-        if (patch.effects) {
-            for (const effectName in patch.effects) {
-                if (this.nodes[effectName] && typeof this.nodes[effectName].set === 'function' && patch.effects[effectName]) {
-                    this.nodes[effectName].set(patch.effects[effectName]);
-                }
-            }
+        // --- [THE FIX] ---
+        // Handle PolySynth state objects first
+        if (config.node === 'oscillator' || config.node === 'envelope') {
+            node[config.param] = value;
+            this.polySynth.set({ [config.node]: node });
+            return;
+        } 
+
+        // For all other Tone.js nodes, check the parameter's type before setting
+        const paramToSet = node[config.param];
+        if (paramToSet instanceof this.Tone.Param || paramToSet instanceof this.Tone.Signal) {
+            // It's a signal/param object, so set its .value property
+            paramToSet.value = value;
+        } else {
+            // It's a primitive (number, string), so set it directly on the node
+            node[config.param] = value;
         }
-        console.log('[SynthEngine] Patch loaded:', patch);
     }
 
     toggleEffect(effectName, enabled) {
-        const effectNode = this.nodes[effectName];
-        if (!effectNode || !effectNode.wet) {
-            console.warn(`[SynthEngine] Cannot toggle unknown or non-wettable effect: ${effectName}`);
-            return;
-        }
+        const wetPath = `${effectName}.wet`;
+        const config = this.paramConfig[wetPath];
+        if (!config) return;
+
         if (enabled) {
-            const wetValue = this.effectState[effectName] ?? effectNode.get().wet ?? 0.5;
-            effectNode.wet.value = wetValue;
-            console.log(`[SynthEngine] Enabled ${effectName}, wet set to ${wetValue.toFixed(2)}`);
+            const wetValue = this._bypassedEffectState[effectName] ?? config.default;
+            this.setParameter(wetPath, wetValue > 0 ? wetValue : 0.5);
         } else {
-            this.effectState[effectName] = effectNode.wet.value;
-            effectNode.wet.value = 0;
-            console.log(`[SynthEngine] Disabled ${effectName}, stored wet value ${this.effectState[effectName].toFixed(2)}`);
+            const currentState = this.getAllParameters();
+            this._bypassedEffectState[effectName] = currentState[wetPath];
+            this.setParameter(wetPath, 0);
         }
     }
+
+    // --- Audio Playback ---
+    noteOn(notes, velocity = 1.0) { if (this.polySynth) this.polySynth.triggerAttack(notes, this.Tone.now(), velocity); }
+    noteOff(notes) { if (this.polySynth) this.polySynth.triggerRelease(notes, this.Tone.now()); }
+    triggerAttackRelease(notes, dur, time, vel) { this.polySynth.triggerAttackRelease(notes, dur, time, vel); }
+    releaseAll() { if (this.polySynth) this.polySynth.releaseAll(); }
+    
+    // --- Cleanup & Accessors ---
     destroy() {
-        this.dispose();
-    }
-    dispose() {
         if (this.polySynth) this.polySynth.dispose();
-        Object.values(this.nodes).forEach(node => node?.dispose?.());
-        console.log('[SynthEngine] All nodes disposed.');
+        Object.values(this.nodes).forEach(node => {
+            if (node && typeof node.dispose === 'function') node.dispose();
+        });
     }
-    getOutputNode() {
-        return this.nodes.master;
-    }
+    getOutputNode() { return this.nodes.master; }
 }

@@ -11,9 +11,9 @@ import LoopManager from './LoopManager.js';
 
 export class BopSynthLogic {
     constructor(Tone) {
-        this.Tone = Tone;
+        this.Tone = Tone; // Receives the main Tone.js object
         this.eventBus = document.createElement('div');
-        this.uiController = null; // To hold a reference to the UI
+        this.uiController = null;
 
         this.state = {
             seq: [],
@@ -34,7 +34,9 @@ export class BopSynthLogic {
     }
 
     init() {
-        this.modules.synthEngine = new SynthEngine(this.Tone);
+        // [THE FIX] Pass the `this.Tone` object to the SynthEngine constructor.
+        this.modules.synthEngine = new SynthEngine(this.Tone); 
+        
         this.modules.saveLoad = new SaveLoad(this.state, this.eventBus); 
         this.modules.recorder = new EnhancedRecorder(this.state, this.modules.synthEngine, this.eventBus);
         this.modules.loopManager = new LoopManager(this.state, this.eventBus);
@@ -46,53 +48,30 @@ export class BopSynthLogic {
         console.log('[BopSynthLogic] Headless logic core initialized.');
     }
 
-    /**
-     * Connects the logic core to its UI controller.
-     * @param {BopSynthUI} uiController - The instance of the UI controller.
-     */
     connectUI(uiController) {
         this.uiController = uiController;
-        console.log('[BopSynthLogic] UI controller connected.');
     }
 
-    /**
-     * Disconnects the UI controller, breaking the reference.
-     */
     disconnectUI() {
         this.uiController = null;
-        console.log('[BopSynthLogic] UI controller disconnected.');
     }
 
-    /**
-     * Gathers the full state, including logic and UI, for saving.
-     * @returns {object} The complete state object.
-     */
     getFullState() {
+        // This assumes your SaveLoad module is also updated to use synthEngine.getAllParameters()
         const logicState = this.modules.saveLoad.getFullState(); 
         const uiState = this.uiController ? this.uiController.getUIState() : {};
 
         const fullState = {
             ...logicState,
-            version: '2.2',
+            version: '3.1-schema-fixed',
             uiState: uiState
         };
-
-        console.log('[BopSynthLogic] getFullState (v2.2) created:', JSON.parse(JSON.stringify(fullState)));
         return fullState;
     }
 
-    /**
-     * Loads a complete state object, applying logic and UI states.
-     * @param {object} state - The state object to load.
-     */
     loadFullState(state) {
         if (!state) return;
-        console.log('[BopSynthLogic] loadFullState called with:', state);
-
-        // Load the core logic state (synth params, sequence, etc.)
         this.modules.saveLoad.loadState(state);
-
-        // If a UI is connected, tell it to apply its portion of the state.
         if (state.uiState && this.uiController) {
             this.uiController.applyUIState(state.uiState);
         }
@@ -110,11 +89,7 @@ export class BopSynthLogic {
             const { note, duration, velocity } = e.detail;
             this.modules.synthEngine.triggerAttackRelease(note, duration, undefined, velocity);
         });
-
-        bus.addEventListener('transport-play', e => {
-            recorder.startPlayback(e.detail?.startTime);
-        });
-        
+        bus.addEventListener('transport-play', e => recorder.startPlayback(e.detail?.startTime));
         bus.addEventListener('transport-stop', () => recorder.stopAll());
         bus.addEventListener('transport-record', () => recorder.toggleRecording());
         bus.addEventListener('transport-clear', () => recorder.clearSequence());
@@ -122,45 +97,30 @@ export class BopSynthLogic {
             recorder.stopAll();
             this.modules.synthEngine.releaseAll();
         });
-
         bus.addEventListener('recording-state-changed', e => {
-            const { isRecording, isArmed, isPlaying } = e.detail;
-            this.state.isRec = isRecording;
-            this.state.isArmed = isArmed;
-            this.state.isPlaying = isPlaying;
+            Object.assign(this.state, e.detail);
         });
-        bus.addEventListener('octave-change', e => {
-            this.state.curOct = e.detail.octave;
-        });
-
+        bus.addEventListener('octave-change', e => { this.state.curOct = e.detail.octave; });
         bus.addEventListener('save-project', () => this.modules.saveLoad.saveStateToFile());
         bus.addEventListener('load-project', e => this.modules.saveLoad.loadState(e.detail.data));
-
         bus.addEventListener('note-selected', e => { this.state.selNote = e.detail.noteIndex; });
         bus.addEventListener('note-edited', e => {
             if (recorder.editNote) { recorder.editNote(e.detail.noteIndex, e.detail.changes); }
         });
-
         bus.addEventListener('effect-toggle', e => {
             this.modules.synthEngine.toggleEffect(e.detail.effectName, e.detail.enabled);
         });
         bus.addEventListener('parameter-change', e => {
             this.modules.synthEngine.setParameter(e.detail.parameter, e.detail.value);
         });
-
         bus.addEventListener('loop-toggle', () => this.modules.loopManager.toggleLoop());
         bus.addEventListener('loop-clear', () => this.modules.loopManager.clearLoop());
     }
 
     destroy() {
-        if (this.modules.synthEngine) {
-            this.modules.synthEngine.destroy();
-        }
+        if (this.modules.synthEngine) this.modules.synthEngine.destroy();
         Object.values(this.modules).forEach(module => {
-            if (module && typeof module.destroy === 'function') {
-                module.destroy();
-            }
+            if (module?.destroy) module.destroy();
         });
-        console.log('[BopSynthLogic] Logic core destroyed.');
     }
 }
