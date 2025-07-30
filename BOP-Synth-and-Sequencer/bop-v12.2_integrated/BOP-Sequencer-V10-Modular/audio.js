@@ -2,10 +2,27 @@ import { projectState, runtimeState, getCurrentSequence } from './state.js';
 
 let toneSequence;
 
-/* ───────────────────────────────────── BPM ────────────────────────────────── */
+/* ─────────────────────────────── BPM ─────────────────────────────── */
 export function setBPM(newBpm) {
     projectState.bpm = newBpm;
     if (runtimeState.Tone?.Transport) runtimeState.Tone.Transport.bpm.value = newBpm;
+}
+
+/* ──────────────── Dispose/cleanup for audio nodes ──────────────── */
+function disposeAllInstrumentNodes() {
+    if (!runtimeState.instrumentRack) return;
+    for (const id in runtimeState.instrumentRack) {
+        const logic = runtimeState.instrumentRack[id]?.logic;
+        if (logic?.modules?.synthEngine?.dispose) {
+            try {
+                logic.modules.synthEngine.dispose();
+                console.log(`[AUDIO][DEBUG] Disposed synthEngine for instrument ${id}`);
+            } catch (e) {
+                console.warn(`[AUDIO][DEBUG] Could not dispose synthEngine for instrument ${id}:`, e);
+            }
+        }
+    }
+    runtimeState.instrumentRack = {};
 }
 
 /* ─────────────────────────── step‑scheduler core ──────────────────────────── */
@@ -20,38 +37,36 @@ function scheduleStep(time, stepIndex) {
     if (!seqData) return;
 
     seqData.channels.forEach((chan, chIdx) => {
-        if (!chan.steps[stepIndex]) return;            // un‑lit grid cell
+        if (!chan.steps[stepIndex]) return; // un‑lit grid cell
 
-        /* ── Sampler track ─────────────────────────────────────────────── */
+        // Sampler track
         if (chan.type === 'sampler') {
             const buf = runtimeState.allSampleBuffers[chan.selectedSampleIndex];
             if (buf) {
                 console.debug('   ├─ [SAMPLER]', chIdx, '→ start Player');
-                new runtimeState.Tone.Player(buf)
+                const player = new runtimeState.Tone.Player(buf)
                     .toDestination()
-                    .start(time);                      // one‑shot
+                    .start(time);
+                // Immediately dispose Player node after scheduled playback
+                setTimeout(() => {
+                    try { player.dispose(); } catch {}
+                }, 1000);
             }
             return;
         }
 
-        /* ── Instrument track (BOP synth) ─────────────────────────────── */
+        // Instrument track (BOP synth)
         if (chan.type === 'instrument' && chan.instrumentId) {
             const inst = runtimeState.instrumentRack[chan.instrumentId];
             if (!inst) return;
-
             const rec = inst.logic?.modules?.recorder;
-            /* fire ONLY if it’s currently idle */
             if (!rec?.isPlaying) {
-                console.debug('   ├─ [INST]', chIdx,
-                              '→ playInternalSequence (stand‑alone)', chan.instrumentId);
-                inst.playInternalSequence();           // no startTime ⇒ stand‑alone
+                console.debug('   ├─ [INST]', chIdx, '→ playInternalSequence (stand‑alone)', chan.instrumentId);
+                inst.playInternalSequence();
             }
         }
     });
 }
-
-
-
 
 /* ───────────────────────────── tone.Sequence ─────────────────────────────── */
 function createToneSequence() {
@@ -72,7 +87,7 @@ function createToneSequence() {
     }, stepArray, '16n').start(0);
 }
 
-/* ───────────────────────── public transport helpers ──────────────────────── */
+/* ────────────── public transport helpers ────────────── */
 export async function startPlayback(mode) {
     if (!runtimeState.isToneStarted) {
         await runtimeState.Tone.start();
@@ -94,7 +109,7 @@ export function stopPlayback() {
     T.Transport.stop();
     toneSequence?.dispose(); toneSequence = null;
 
-    /* stop any synth still ringing */
+    // stop any synth still ringing
     for (const id of runtimeState.activeInstrumentTriggers) {
         runtimeState.instrumentRack[id]?.stopInternalSequence();
     }
@@ -103,4 +118,10 @@ export function stopPlayback() {
     projectState.isPlaying = false;
     projectState.playMode  = null;
     runtimeState.currentStepIndex = 0;
+}
+
+/* ─────────────── instrument teardown before reset/load ─────────────── */
+export function resetAudioEnvironment() {
+    disposeAllInstrumentNodes();
+    // ...add other audio-related resets as needed
 }
