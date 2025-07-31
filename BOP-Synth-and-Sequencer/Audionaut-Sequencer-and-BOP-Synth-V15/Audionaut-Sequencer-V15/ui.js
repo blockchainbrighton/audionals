@@ -2,7 +2,7 @@
 
 import { projectState, runtimeState, getCurrentSequence, createNewChannel, initializeProject } from './state.js';
 import * as config from './config.js';
-import { startPlayback, stopPlayback, setBPM as setAudioBPM } from './audio-manager.js';
+import { startPlayback, stopPlayback, setBPM as setAudioBPM } from './audio-time-scheduling-managment.js';
 import { loadProject, saveProject } from './save-load-sequence.js';
 import { createInstrumentForChannel, openSynthUI } from './instrument.js';
 
