@@ -1,0 +1,234 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Turbo Laser Eyes Wallet Debugger</title>
+    <style>
+        body {
+            font-family: monospace;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 20px;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+        }
+        button {
+            padding: 10px 15px;
+            margin: 5px 0;
+            font-family: monospace;
+            cursor: pointer;
+            background: #007bff;
+            color: white;
+            border: none;
+            border-radius: 3px;
+        }
+        button:disabled {
+            background: #cccccc;
+            cursor: not-allowed;
+        }
+        #logArea {
+            height: 400px;
+            overflow-y: auto;
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+            font-size: 14px;
+            white-space: pre-wrap;
+            font-family: monospace;
+        }
+        .status {
+            padding: 10px;
+            margin: 10px 0;
+            border-radius: 4px;
+            font-weight: bold;
+        }
+        .connected {
+            background: #d4edda;
+            color: #155724;
+            border: 1px solid #c3e6cb;
+        }
+        .disconnected {
+            background: #f8d7da;
+            color: #721c24;
+            border: 1px solid #f5c6cb;
+        }
+        .config-section {
+            background: #e9ecef;
+            padding: 15px;
+            border-radius: 4px;
+            margin: 15px 0;
+        }
+        input {
+            width: 100%;
+            padding: 8px;
+            margin: 5px 0;
+            box-sizing: border-box;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Turbo Laser Eyes Wallet Debugger</h1>
+        
+        <div class="config-section">
+            <h3>Configuration</h3>
+            <label>API Key (if required):</label>
+            <input type="text" id="apiKey" placeholder="Enter Laser Eyes API key if needed">
+        </div>
+
+        <button id="connectBtn">Connect Wallet</button>
+        <button id="copyLogsBtn">Copy Logs</button>
+        
+        <div id="status" class="status disconnected">Status: Disconnected</div>
+        <div id="walletInfo"></div>
+        
+        <div id="logArea"></div>
+    </div>
+
+    <!-- Laser Eyes SDK -->
+    <script src="https://cdn.jsdelivr.net/npm/laser-eyes@latest/dist/index.min.js"></script>
+    
+    <script>
+        // DOM Elements
+        const connectBtn = document.getElementById('connectBtn');
+        const copyLogsBtn = document.getElementById('copyLogsBtn');
+        const logArea = document.getElementById('logArea');
+        const statusDiv = document.getElementById('status');
+        const walletInfoDiv = document.getElementById('walletInfo');
+        const apiKeyInput = document.getElementById('apiKey');
+
+        // Global variables
+        let laserEyes = null;
+        let isConnected = false;
+
+        // Logger utility
+        function log(message, type = 'info') {
+            const timestamp = new Date().toISOString();
+            const formattedMessage = `[${timestamp}] ${type.toUpperCase()}: ${message}`;
+            logArea.textContent += formattedMessage + '\n';
+            logArea.scrollTop = logArea.scrollHeight;
+            console.log(formattedMessage);
+        }
+
+        // Update connection status UI
+        function updateStatus(connected, address = null) {
+            isConnected = connected;
+            if (connected) {
+                statusDiv.className = 'status connected';
+                statusDiv.textContent = 'Status: Connected';
+                walletInfoDiv.innerHTML = `<strong>Address:</strong> ${address || 'Unknown'}`;
+                connectBtn.textContent = 'Disconnect Wallet';
+            } else {
+                statusDiv.className = 'status disconnected';
+                statusDiv.textContent = 'Status: Disconnected';
+                walletInfoDiv.innerHTML = '';
+                connectBtn.textContent = 'Connect Wallet';
+            }
+            connectBtn.disabled = false;
+        }
+
+        // Initialize Laser Eyes
+        async function initializeLaserEyes() {
+            try {
+                log('Initializing Laser Eyes...');
+                
+                // Get API key from input
+                const apiKey = apiKeyInput.value || undefined;
+                
+                // Initialize with configuration
+                laserEyes = new LaserEyes.LaserEyes({
+                    ...(apiKey && { apiKey })
+                });
+                
+                log('Laser Eyes initialized successfully');
+                
+                // Register event listeners
+                laserEyes.on('connect', (address) => {
+                    log(`Wallet connected: ${address}`);
+                    updateStatus(true, address);
+                });
+                
+                laserEyes.on('disconnect', () => {
+                    log('Wallet disconnected');
+                    updateStatus(false);
+                });
+                
+                laserEyes.on('error', (error) => {
+                    log(`Error: ${error.message || error}`, 'error');
+                    updateStatus(false);
+                });
+                
+                laserEyes.on('accountChanged', (address) => {
+                    log(`Account changed: ${address}`);
+                    updateStatus(true, address);
+                });
+                
+                log('Event listeners registered');
+                return true;
+            } catch (error) {
+                log(`Initialization failed: ${error.message || error}`, 'error');
+                return false;
+            }
+        }
+
+        // Handle connection/disconnection
+        async function toggleConnection() {
+            if (!laserEyes) {
+                log('Laser Eyes not initialized', 'error');
+                return;
+            }
+
+            connectBtn.disabled = true;
+            
+            try {
+                if (isConnected) {
+                    log('Disconnecting wallet...');
+                    await laserEyes.disconnect();
+                    updateStatus(false);
+                } else {
+                    log('Connecting to wallet...');
+                    await laserEyes.connect();
+                }
+            } catch (error) {
+                log(`Connection error: ${error.message || error}`, 'error');
+                updateStatus(false);
+                connectBtn.disabled = false;
+            }
+        }
+
+        // Copy logs to clipboard
+        function copyLogs() {
+            try {
+                navigator.clipboard.writeText(logArea.textContent);
+                log('Logs copied to clipboard');
+            } catch (error) {
+                log(`Copy failed: ${error.message || error}`, 'error');
+            }
+        }
+
+        // Setup event listeners
+        connectBtn.addEventListener('click', toggleConnection);
+        copyLogsBtn.addEventListener('click', copyLogs);
+
+        // Initialize when page loads
+        window.addEventListener('load', async () => {
+            log('Page loaded - Initializing Laser Eyes...');
+            const success = await initializeLaserEyes();
+            if (success) {
+                log('Ready for wallet connection');
+            } else {
+                log('Failed to initialize - check configuration', 'error');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,286 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Xverse Desktop Wallet Connect</title>
+    <script src="https://unpkg.com/@walletconnect/client@1.7.8/dist/umd/index.min.js"></script>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 600px;
+            margin: 0 auto;
+            background: white;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+        }
+        button {
+            background-color: #0066cc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 16px;
+            border-radius: 5px;
+            cursor: pointer;
+            transition: background-color 0.3s;
+            width: 100%;
+            margin: 10px 0;
+        }
+        button:hover {
+            background-color: #0052a3;
+        }
+        button:disabled {
+            background-color: #cccccc;
+            cursor: not-allowed;
+        }
+        #status {
+            margin: 15px 0;
+            font-weight: bold;
+            text-align: center;
+        }
+        #address {
+            font-family: monospace;
+            word-break: break-all;
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+        }
+        .logs-container {
+            margin-top: 20px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            padding: 15px;
+        }
+        #logs {
+            background: #000;
+            color: #00ff00;
+            padding: 15px;
+            border-radius: 5px;
+            height: 200px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 14px;
+            margin-bottom: 10px;
+            white-space: pre-wrap;
+        }
+        .copy-btn {
+            width: auto;
+            padding: 8px 15px;
+            background-color: #28a745;
+        }
+        .copy-btn:hover {
+            background-color: #218838;
+        }
+        .hidden {
+            display: none;
+        }
+        .error {
+            color: #ff4444;
+            font-weight: bold;
+        }
+        .instructions {
+            background: #e7f3ff;
+            padding: 15px;
+            border-radius: 5px;
+            margin: 15px 0;
+            border-left: 4px solid #0066cc;
+        }
+        .uri-display {
+            background: #f0f0f0;
+            padding: 10px;
+            border-radius: 5px;
+            font-family: monospace;
+            word-break: break-all;
+            margin: 10px 0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Xverse Desktop Wallet Connect</h1>
+        
+        <div class="instructions">
+            <h3>Instructions:</h3>
+            <ol>
+                <li>Click "Connect Wallet" below</li>
+                <li>If Xverse desktop is installed, it should open automatically</li>
+                <li>If not, copy the connection URI and paste it in Xverse desktop</li>
+                <li>Approve the connection in Xverse</li>
+            </ol>
+        </div>
+        
+        <button id="connectButton">Connect Wallet</button>
+        <div id="status">Not connected</div>
+        <div id="address" class="hidden"></div>
+        
+        <div id="uriSection" class="hidden">
+            <h3>Connection URI:</h3>
+            <div id="uriDisplay" class="uri-display"></div>
+            <button id="copyUriButton" class="copy-btn">Copy URI</button>
+        </div>
+        
+        <div class="logs-container">
+            <h3>Connection Logs</h3>
+            <div id="logs">[Logs will appear here...]</div>
+            <button id="copyButton" class="copy-btn">Copy Logs</button>
+        </div>
+    </div>
+
+    <script>
+        let connector;
+        let logs = [];
+
+        function addLog(message) {
+            const timestamp = new Date().toLocaleTimeString();
+            const logEntry = `[${timestamp}] ${message}`;
+            logs.push(logEntry);
+            document.getElementById("logs").textContent = logs.join("\n");
+            document.getElementById("logs").scrollTop = document.getElementById("logs").scrollHeight;
+        }
+
+        function updateUIOnConnect() {
+            const { accounts } = connector;
+            document.getElementById("status").textContent = "✅ Connected";
+            document.getElementById("address").textContent = accounts[0] || "No address";
+            document.getElementById("address").classList.remove("hidden");
+            document.getElementById("connectButton").disabled = true;
+            document.getElementById("uriSection").classList.add("hidden");
+            addLog(`Connected to wallet: ${accounts[0] || 'No address'}`);
+        }
+
+        async function initWalletConnect() {
+            addLog("Initializing WalletConnect for Desktop...");
+            
+            try {
+                connector = new WalletConnect.default({
+                    bridge: "https://bridge.walletconnect.org"
+                });
+
+                addLog("WalletConnect client created successfully");
+
+                if (connector.connected) {
+                    addLog("Already connected - restoring session");
+                    updateUIOnConnect();
+                }
+
+                connector.on("connect", (error, payload) => {
+                    if (error) {
+                        addLog(`Connect error: ${error.message}`);
+                        return;
+                    }
+                    addLog("Wallet connected event received");
+                    updateUIOnConnect();
+                });
+
+                connector.on("session_update", (error, payload) => {
+                    if (error) {
+                        addLog(`Session update error: ${error.message}`);
+                        return;
+                    }
+                    addLog("Session updated");
+                    updateUIOnConnect();
+                });
+
+                connector.on("disconnect", (error, payload) => {
+                    if (error) {
+                        addLog(`Disconnect error: ${error.message}`);
+                    } else {
+                        addLog("Wallet disconnected");
+                    }
+                    document.getElementById("status").textContent = "❌ Disconnected";
+                    document.getElementById("address").classList.add("hidden");
+                    document.getElementById("connectButton").disabled = false;
+                    document.getElementById("uriSection").classList.add("hidden");
+                });
+
+                addLog("Event listeners registered");
+            } catch (error) {
+                addLog(`Initialization error: ${error.message}`);
+                document.getElementById("status").textContent = "Initialization failed";
+            }
+        }
+
+        document.getElementById("connectButton").addEventListener("click", async () => {
+            try {
+                if (!connector) {
+                    addLog("ERROR: Connector not initialized!");
+                    document.getElementById("status").textContent = "Initialization failed";
+                    return;
+                }
+                
+                addLog("Creating new session...");
+                document.getElementById("status").textContent = "Creating connection...";
+                
+                // Create session
+                await connector.createSession();
+                addLog("Session creation requested");
+                addLog(`Connection URI: ${connector.uri}`);
+                
+                // Display URI for manual connection
+                document.getElementById("uriDisplay").textContent = connector.uri;
+                document.getElementById("uriSection").classList.remove("hidden");
+                
+                // Try to open Xverse desktop with deep link
+                addLog("Attempting to open Xverse desktop...");
+                try {
+                    window.open(`xverse://wc?uri=${encodeURIComponent(connector.uri)}`, '_blank');
+                    addLog("Xverse desktop launch requested");
+                } catch (e) {
+                    addLog("Could not auto-launch Xverse desktop");
+                }
+                
+            } catch (error) {
+                addLog(`Connection error: ${error.message}`);
+                document.getElementById("status").textContent = "Connection failed";
+            }
+        });
+
+        document.getElementById("copyUriButton").addEventListener("click", () => {
+            const uri = document.getElementById("uriDisplay").textContent;
+            navigator.clipboard.writeText(uri)
+                .then(() => {
+                    addLog("URI copied to clipboard!");
+                    const btn = document.getElementById("copyUriButton");
+                    const originalText = btn.textContent;
+                    btn.textContent = "Copied!";
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                    }, 2000);
+                })
+                .catch(err => {
+                    addLog(`Copy URI failed: ${err.message}`);
+                });
+        });
+
+        document.getElementById("copyButton").addEventListener("click", () => {
+            const logsText = logs.join("\n");
+            navigator.clipboard.writeText(logsText)
+                .then(() => {
+                    addLog("Logs copied to clipboard!");
+                    const btn = document.getElementById("copyButton");
+                    const originalText = btn.textContent;
+                    btn.textContent = "Copied!";
+                    setTimeout(() => {
+                        btn.textContent = originalText;
+                    }, 2000);
+                })
+                .catch(err => {
+                    addLog(`Copy logs failed: ${err.message}`);
+                });
+        });
+
+        window.addEventListener("load", initWalletConnect);
+    </script>
+</body>
+</html>

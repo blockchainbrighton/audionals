@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Laser Eyes Wallet Connect Debugger</title>
+  <script src="https://cdn.jsdelivr.net/npm/@laserheads/laser-eyes@latest/dist/index.js" crossorigin="anonymous"></script>
+  <style>
+    body {
+      font-family: monospace;
+      padding: 16px;
+      background: #f5f5f5;
+      color: #000;
+      font-size: 14px;
+    }
+    .container {
+      max-width: 900px;
+      margin: 0 auto;
+    }
+    button {
+      padding: 10px 16px;
+      font-size: 14px;
+      cursor: pointer;
+      background: #000;
+      color: #fff;
+      border: none;
+      border-radius: 4px;
+    }
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+    #logArea {
+      width: 100%;
+      height: 300px;
+      margin-top: 20px;
+      padding: 10px;
+      background: #eee;
+      border: 1px solid #ccc;
+      overflow-y: auto;
+      white-space: pre-wrap;
+      font-size: 12px;
+      border-radius: 4px;
+    }
+    .status {
+      margin: 10px 0;
+      padding: 8px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 4px;
+    }
+    .copy-btn {
+      margin-top: 10px;
+    }
+    .section {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Turbo Laser Eyes Wallet Connect Debugger</h1>
+
+    <!-- Configuration Placeholder -->
+    <!-- Replace with your Laser Eyes config if needed (e.g., API keys, network) -->
+    <!-- Currently, Laser Eyes SDK defaults to mainnet and doesn't require a key for basic wallet connect -->
+
+    <div class="section">
+      <button id="connectBtn" disabled>Connect Wallet</button>
+      <div class="status" id="status">Loading Laser Eyes SDK...</div>
+    </div>
+
+    <div class="section">
+      <h2>Log Output</h2>
+      <div id="logArea"></div>
+      <button class="copy-btn" id="copyLogsBtn">Copy Logs</button>
+    </div>
+  </div>
+
+  <script>
+    // ========================
+    // CONFIGURATION (PLACEHOLDER)
+    // ========================
+    // If Laser Eyes ever requires an API key or network override, set it here.
+    // As of current docs (laserheads), no key is needed for wallet connection.
+    const LASER_EYES_CONFIG = {
+      network: 'mainnet', // or 'testnet'
+      // apiKey: 'your-api-key', // if required in future
+    };
+
+    // ========================
+    // DOM REFERENCES
+    // ========================
+    const connectBtn = document.getElementById('connectBtn');
+    const copyLogsBtn = document.getElementById('copyLogsBtn');
+    const logArea = document.getElementById('logArea');
+    const statusEl = document.getElementById('status');
+
+    // ========================
+    // HELPER: Log to UI
+    // ========================
+    function log(message) {
+      const timestamp = new Date().toISOString().replace('T', ' ').substring(0, 19);
+      const entry = `[${timestamp}] ${message}`;
+      console.log(entry); // Also log to console
+      logArea.textContent += entry + '\n';
+      logArea.scrollTop = logArea.scrollHeight; // Auto-scroll
+    }
+
+    // ========================
+    // COPY LOGS TO CLIPBOARD
+    // ========================
+    copyLogsBtn.addEventListener('click', () => {
+      navigator.clipboard.writeText(logArea.textContent)
+        .then(() => {
+          log('✅ Logs copied to clipboard');
+          alert('Logs copied to clipboard!');
+        })
+        .catch(err => {
+          log(`❌ Failed to copy logs: ${err.message}`);
+          alert(`Copy failed: ${err.message}`);
+        });
+    });
+
+    // ========================
+    // LASER EYES INITIALIZATION
+    // ========================
+    let laserEyes;
+    let isInitializing = false;
+
+    async function initLaserEyes() {
+      if (isInitializing) return;
+      isInitializing = true;
+
+      try {
+        log('🔧 Initializing Laser Eyes SDK...');
+        // Laser Eyes is exposed globally as `LaserEyes` after script loads
+        if (typeof LaserEyes === 'undefined') {
+          throw new Error('Laser Eyes SDK failed to load from CDN');
+        }
+
+        laserEyes = new LaserEyes();
+        laserEyes.network(LASER_EYES_CONFIG.network);
+
+        log(`✅ Laser Eyes SDK initialized (network: ${LASER_EYES_CONFIG.network})`);
+
+        // Check if wallet is already connected
+        const provider = laserEyes.getProvider();
+        if (provider?.isConnected) {
+          log('🔍 Existing wallet connection detected');
+          await handleConnected(provider);
+        } else {
+          log('ℹ️ No active wallet connection. Awaiting user action.');
+        }
+
+        // Enable connect button
+        connectBtn.disabled = false;
+        connectBtn.textContent = 'Connect Wallet';
+        statusEl.textContent = 'Ready to connect wallet.';
+      } catch (err) {
+        log(`❌ Initialization failed: ${err.message}`);
+        statusEl.textContent = `Init error: ${err.message}`;
+      } finally {
+        isInitializing = false;
+      }
+    }
+
+    // ========================
+    // HANDLE WALLET CONNECTION
+    // ========================
+    async function connectWallet() {
+      log('🖱️ Connect button clicked');
+      if (!laserEyes) {
+        log('❌ Laser Eyes not initialized yet');
+        return;
+      }
+
+      try {
+        log('🚀 Starting wallet connection...');
+        const provider = await laserEyes.enable();
+
+        log('🎉 Wallet connected successfully');
+        await handleConnected(provider);
+      } catch (err) {
+        log(`❌ Wallet connection failed: ${err.message || err.toString()}`);
+        statusEl.textContent = `Connection failed: ${err.message?.substring(0, 100)}`;
+      }
+    }
+
+    // ========================
+    // HANDLE CONNECTED STATE
+    // ========================
+    async function handleConnected(provider) {
+      try {
+        log(`✅ Wallet connected: ${provider.wallet}`);
+        log(`📡 Provider: ${provider.name} (version: ${provider.version})`);
+        log(`🧾 Raw provider object: ${JSON.stringify(provider, null, 2)}`);
+
+        // Get address
+        const address = await provider.getAddress();
+        log(`🏦 Connected Address: ${address}`);
+        statusEl.innerHTML = `Connected: ${address.substring(0, 10)}...${address.slice(-8)}`;
+
+        // Attach event listeners for debugging
+        attachEventListeners(provider);
+
+        // Update button state
+        connectBtn.textContent = 'Disconnect Wallet';
+        connectBtn.removeEventListener('click', connectWallet);
+        connectBtn.addEventListener('click', disconnectWallet);
+      } catch (err) {
+        log(`❌ Error fetching wallet info: ${err.message}`);
+        statusEl.textContent = `Error: ${err.message}`;
+      }
+    }
+
+    // ========================
+    // DISCONNECT HANDLER
+    // ========================
+    function disconnectWallet() {
+      log('🔌 User requested disconnect');
+      if (laserEyes) {
+        laserEyes.disable();
+      }
+      statusEl.textContent = 'Disconnected';
+      connectBtn.textContent = 'Connect Wallet';
+      connectBtn.removeEventListener('click', disconnectWallet);
+      connectBtn.addEventListener('click', connectWallet);
+    }
+
+    // ========================
+    // ATTACH EVENT LISTENERS FOR DEBUGGING
+    // ========================
+    function attachEventListeners(provider) {
+      // Note: As of current Laser Eyes, events may not be fully exposed.
+      // But we attempt to bind known events if supported.
+      const supportedEvents = ['accountChanged', 'networkChanged', 'disconnect'];
+      supportedEvents.forEach(event => {
+        if (provider.on) {
+          provider.on(event, (data) => {
+            log(`🔔 Wallet event: ${event} | Data: ${JSON.stringify(data, null, 2)}`);
+          });
+        } else {
+          log(`ℹ️ Provider does not support event listening (missing .on method) for ${event}`);
+        }
+      });
+    }
+
+    // ========================
+    // STARTUP: Wait for SDK to load
+    // ========================
+    // Check for LaserEyes global every 100ms
+    const checkInterval = setInterval(() => {
+      if (typeof LaserEyes !== 'undefined') {
+        clearInterval(checkInterval);
+        log('✅ Laser Eyes SDK loaded from CDN');
+        initLaserEyes();
+      }
+    }, 100);
+
+    // Fallback in case SDK fails to load
+    setTimeout(() => {
+      if (typeof LaserEyes === 'undefined') {
+        log('❌ Failed to load Laser Eyes SDK from CDN. Check your internet or CDN URL.');
+        statusEl.textContent = 'SDK load failed. See logs.';
+        connectBtn.disabled = true;
+      }
+    }, 10000);
+
+    // ========================
+    // EVENT LISTENERS
+    // ========================
+    connectBtn.addEventListener('click', connectWallet);
+  </script>
+</body>
+</html>
