@@ -6,8 +6,8 @@
  */
 
 // stateProbe.js (Rewritten with enhanced logging)
-import { getCurrentSequence } from './state.js';
-import { runtimeState } from './state.js';
+import { getCurrentSequence } from './sequencer-state.js';
+import { runtimeState } from './sequencer-state.js';
 
 // Call this once after DOMContentLoaded, or in main.js after the app loads
 export function installStateProbeButton() {

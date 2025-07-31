@@ -1,11 +1,4 @@
-/**
- * Module: BOP-Sequencer-V10-Modular/main.js
- * Purpose: Main module entry point and bootstrapping
- * Exports: boot
- * Depends on: audional-base64-sample-loader.js, state.js, config.js, stateProbe.js, ui.js
- */
-
-// main.js
+// BOP-Sequencer-V10-Modular/main.js  (drop-in)
 import { TONE_ORDINALS_URL } from './sequencer-config.js';
 import { runtimeState, initializeProject, defaultSampleOrder } from './sequencer-state.js';
 import { render, bindEventListeners, setLoaderStatus, updateStepRows } from './sequencer-ui.js';
@@ -23,37 +16,35 @@ async function boot() {
             runtimeState.sampleMetadata.bpms[i] = item.bpm ?? null;
         });
 
-        // Use the imported array to load all samples needed for the default channels.
-        const initialSampleIndices = defaultSampleOrder; 
+        const initialSampleIndices = defaultSampleOrder;
         await Promise.all(initialSampleIndices.map(async idx => {
             if (!runtimeState.allSampleBuffers[idx]) {
                 runtimeState.allSampleBuffers[idx] = await SimpleSampleLoader.getSampleByIndex(idx);
             }
         }));
 
-
         initializeProject();
         bindEventListeners();
         updateStepRows();
         render();
-
         setLoaderStatus('Ready!', false);
-
     } catch (err) {
         setLoaderStatus('Initialization failed: ' + err.message, true);
         console.error(err);
     }
 }
 
-// --- Dynamic Tone.js Loader ---
+// --- SINGLE TONE LOADER & GLOBAL EXPORT ---
 setLoaderStatus('Loading Audio Engine...');
 import(TONE_ORDINALS_URL)
-    .then(module => {
+    .then(() => {
         runtimeState.Tone = window.Tone;
+        // Ensure globally reachable so synth-logic.js can import it
+        window.BOP_TONE = runtimeState.Tone;
         console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
         boot();
     })
     .catch(err => {
-        setLoader-status('Failed to load Tone.js. App cannot start.', true);
+        setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
         console.error('[BOP Matrix] Critical Tone.js load error:', err);
     });
