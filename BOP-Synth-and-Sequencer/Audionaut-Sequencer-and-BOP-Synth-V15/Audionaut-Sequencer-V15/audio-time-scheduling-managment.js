@@ -1,5 +1,5 @@
 /**
- * Module: audio-manager.js
+ * Module: audio-time-scheduling-managment.js
  * Purpose: Manages global audio context, transport controls (play, stop, BPM),
  * and the main Tone.Sequence scheduler.
  * Exports: setBPM, startPlayback, stopPlayback, resetAudioEnvironment
