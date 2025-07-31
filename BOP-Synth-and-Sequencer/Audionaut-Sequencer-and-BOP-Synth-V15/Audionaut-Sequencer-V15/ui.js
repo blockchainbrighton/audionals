@@ -6,6 +6,10 @@ import { startPlayback, stopPlayback, setBPM as setAudioBPM } from './audio-time
 import { loadProject, saveProject } from './save-load-sequence.js';
 import { createInstrumentForChannel, openSynthUI } from './instrument.js';
 
+
+let previousStepIndex = null;
+let allChannels = [];
+
 // --- Element Cache Factory ---
 function getElements() {
     return {
@@ -149,8 +153,10 @@ export function render() {
     const currentSeq = getCurrentSequence();
     if (!currentSeq) return;
 
-    currentSeq.channels.forEach((channelData, chIndex) => {
-        // 1. Create the top-level channel element
+        // --- REBUILD CHANNEL CACHE ---
+        allChannels = currentSeq.channels.map(() => ({ stepElements: [] }));
+
+        currentSeq.channels.forEach((channelData, chIndex) => {        // 1. Create the top-level channel element
         const channelEl = document.createElement('div');
         channelEl.className = 'channel';
         channelEl.dataset.channelIndex = chIndex;
@@ -179,7 +185,34 @@ export function render() {
         channelEl.appendChild(infoContainer);
 
         // 6. Append the step grid, which will now align perfectly
-        renderStepGrid(channelEl, channelData, chIndex);
+        const stepElements = [];
+        // Instead of calling renderStepGrid, do this inline to populate stepElements:
+        const stepsContainer = document.createElement('div');
+        stepsContainer.className = 'steps';
+        const rowDiv = document.createElement('div');
+        rowDiv.className = 'step-row';
+
+        for (let stepIndex = 0; stepIndex < config.TOTAL_STEPS; stepIndex++) {
+            const stepEl = document.createElement('div');
+            stepEl.className = 'step';
+            stepEl.dataset.step = stepIndex;
+            if (channelData.steps[stepIndex]) stepEl.classList.add('active');
+
+            stepEl.onclick = () => {
+                const currentSeq = getCurrentSequence();
+                currentSeq.channels[chIndex].steps[stepIndex] = !currentSeq.channels[chIndex].steps[stepIndex];
+                stepEl.classList.toggle('active');
+            };
+
+            rowDiv.appendChild(stepEl);
+            stepElements.push(stepEl);
+        }
+
+        stepsContainer.appendChild(rowDiv);
+        channelEl.appendChild(stepsContainer);
+
+        // --- Cache stepElements for highlightPlayhead ---
+        allChannels[chIndex].stepElements = stepElements;
 
         // 7. Finally, add the completed channel to the DOM
         elements.sequencer.appendChild(channelEl);
@@ -189,22 +222,20 @@ export function render() {
     updatePlaybackControls();
 }
 
-// This assumes you have a way to access all channel objects, 
-// each with a cached `stepElements` array.
+
 
 function highlightPlayhead(currentStep, previousStep) {
     // Iterate over your cached channel objects
     allChannels.forEach(channel => {
         if (previousStep !== null && channel.stepElements[previousStep]) {
-            // INSTANT: No DOM query needed
-            channel.stepElements[previousStep].classList.remove('playing');
+            channel.stepElements[previousStep].classList.remove('playhead');
         }
         if (currentStep !== null && channel.stepElements[currentStep]) {
-            // INSTANT: No DOM query needed
-            channel.stepElements[currentStep].classList.add('playing');
+            channel.stepElements[currentStep].classList.add('playhead');
         }
     });
 }
+
 
 function updateSequenceListUI() {
     elements.sequenceList.innerHTML = '';
@@ -325,19 +356,11 @@ export function bindEventListeners() {
 
     window.onresize = () => { updateStepRows(); render(); };
 
-    function animatePlayhead() {
-        // This part of the logic needs to be tied to your actual audio scheduler,
-        // not just a free-running rAF loop.
-        // The scheduler would call highlightPlayhead(newStep, oldStep) when the step changes.
-        
-        // For now, let's assume runtimeState is updated by the audio engine
-        if (projectState.isPlaying && runtimeState.stepChanged) {
-            highlightPlayhead(runtimeState.currentStepIndex, runtimeState.previousStepIndex);
-            runtimeState.stepChanged = false; // Prevent re-running without a change
-        }
-        
-        requestAnimationFrame(animatePlayhead);
-    }
+    window.addEventListener('step', e => {
+        const stepIndex = e.detail.stepIndex;
+        highlightPlayhead(stepIndex, previousStepIndex);
+        previousStepIndex = stepIndex;
+    });
 
     document.addEventListener('bop:request-record-toggle', () => {
         projectState.isRecording = !projectState.isRecording;

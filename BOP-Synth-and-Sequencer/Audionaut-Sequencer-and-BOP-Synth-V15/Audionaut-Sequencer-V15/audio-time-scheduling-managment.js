@@ -7,9 +7,8 @@
  */
 
 import { projectState, runtimeState, getCurrentSequence } from './state.js';
-import { playSamplerChannel } from './sequencer-sampler-channel-playback.js'; // <-- Correctly imports the player
+import { playSamplerChannel } from './sequencer-sampler-channel-playback.js';
 
-// This variable is now in the correct scope for all functions inside this file.
 let toneSequence;
 
 /* ─────────────────────────────── BPM ─────────────────────────────── */
@@ -38,6 +37,9 @@ function disposeAllInstrumentNodes() {
 function scheduleStep(time, stepIndex) {
     runtimeState.currentStepIndex = stepIndex;
 
+    // --- ADD THIS: Dispatch event to UI
+    window.dispatchEvent(new CustomEvent('step', { detail: { stepIndex } }));
+
     const seqData = (projectState.playMode === 'all')
         ? projectState.sequences[runtimeState.currentPlaybackSequenceIndex]
         : getCurrentSequence();
@@ -47,9 +49,7 @@ function scheduleStep(time, stepIndex) {
         if (!chan.steps[stepIndex]) return;
 
         if (chan.type === 'sampler') {
-            // CORRECT: Delegate the actual playback logic to the specialized module
             playSamplerChannel(time, chan);
-
         } else if (chan.type === 'instrument' && chan.instrumentId) {
             const inst = runtimeState.instrumentRack[chan.instrumentId];
             if (!inst) return;
@@ -67,7 +67,7 @@ function createToneSequence() {
     const totalSteps = projectState.sequences[0]?.channels[0]?.steps.length || 64;
     const stepArray  = [...Array(totalSteps).keys()];
 
-    toneSequence?.dispose(); // Safely disposes the old sequence if it exists
+    toneSequence?.dispose();
     toneSequence = new runtimeState.Tone.Sequence((t, i) => {
         scheduleStep(t, i);
 
@@ -101,7 +101,6 @@ export function stopPlayback() {
     if (!T?.Transport) return;
 
     T.Transport.stop();
-    // CORRECT: toneSequence is in scope here and can be safely disposed.
     toneSequence?.dispose();
     toneSequence = null;
 
