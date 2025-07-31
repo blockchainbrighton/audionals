@@ -189,13 +189,19 @@ export function render() {
     updatePlaybackControls();
 }
 
-function highlightPlayhead() {
-    document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
-    const allStepElements = elements.sequencer.querySelectorAll('.step');
-    allStepElements.forEach(stepEl => {
-        const stepIndex = parseInt(stepEl.dataset.step);
-        if (stepIndex === runtimeState.currentStepIndex) {
-            stepEl.classList.add('playing');
+// This assumes you have a way to access all channel objects, 
+// each with a cached `stepElements` array.
+
+function highlightPlayhead(currentStep, previousStep) {
+    // Iterate over your cached channel objects
+    allChannels.forEach(channel => {
+        if (previousStep !== null && channel.stepElements[previousStep]) {
+            // INSTANT: No DOM query needed
+            channel.stepElements[previousStep].classList.remove('playing');
+        }
+        if (currentStep !== null && channel.stepElements[currentStep]) {
+            // INSTANT: No DOM query needed
+            channel.stepElements[currentStep].classList.add('playing');
         }
     });
 }
@@ -320,11 +326,18 @@ export function bindEventListeners() {
     window.onresize = () => { updateStepRows(); render(); };
 
     function animatePlayhead() {
-        if (projectState.isPlaying) highlightPlayhead();
-        else document.querySelectorAll('.step.playing').forEach(el => el.classList.remove('playing'));
+        // This part of the logic needs to be tied to your actual audio scheduler,
+        // not just a free-running rAF loop.
+        // The scheduler would call highlightPlayhead(newStep, oldStep) when the step changes.
+        
+        // For now, let's assume runtimeState is updated by the audio engine
+        if (projectState.isPlaying && runtimeState.stepChanged) {
+            highlightPlayhead(runtimeState.currentStepIndex, runtimeState.previousStepIndex);
+            runtimeState.stepChanged = false; // Prevent re-running without a change
+        }
+        
         requestAnimationFrame(animatePlayhead);
     }
-    animatePlayhead();
 
     document.addEventListener('bop:request-record-toggle', () => {
         projectState.isRecording = !projectState.isRecording;
