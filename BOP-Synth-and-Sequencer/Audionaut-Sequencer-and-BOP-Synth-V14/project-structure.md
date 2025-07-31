@@ -5,7 +5,7 @@ A web-based synthesizer and sequencer application built with vanilla JavaScript,
 ## Project Structure
 
 ### BOP-SYNTH-V12/
-- `BOP-V14.html` - Main synthesizer HTML interface
+- `BOP-V12.html` - Main synthesizer HTML interface
 - `app.js` - Main application entry point and initialization
 - `BopSynth.js` - Core synthesizer class implementation
 - `BopSynthLogic.js` - Synthesizer business logic and state management
