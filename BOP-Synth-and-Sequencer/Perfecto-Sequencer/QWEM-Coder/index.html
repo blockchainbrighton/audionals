@@ -1,0 +1,148 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ordinal-Sequencer</title>
+  <!--
+    Make sure styles.css exists in the same directory as this index.html file.
+    If it's in a different location, adjust the href path accordingly.
+    Ensure your local server is configured to serve CSS files with the correct MIME type.
+  -->
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <noscript>
+    <div style="text-align: center; padding: 2rem;">
+      <h2>JavaScript Required</h2>
+      <p>Please enable JavaScript to use the Ordinal-Sequencer application.</p>
+    </div>
+  </noscript>
+
+  <header>
+    <h1>Ordinal-Sequencer</h1>
+  </header>
+
+  <main id="app">
+    <section id="transport-controls" role="region" aria-label="Transport Controls">
+      <button id="play-button" aria-label="Play">Play</button>
+      <button id="stop-button" aria-label="Stop">Stop</button>
+      <label for="bpm-input">BPM:
+        <input type="number" id="bpm-input" min="20" max="300" value="120">
+      </label>
+    </section>
+
+    <section id="sequencer" role="region" aria-label="Sequencer Grid"></section>
+
+    <section id="presets" role="region" aria-label="Preset Management">
+      <button id="save-preset-button">Save Preset</button>
+      <select id="preset-selector" aria-label="Select Preset"></select>
+      <button id="load-preset-button">Load Preset</button>
+    </section>
+
+    <section id="blockchain" role="region" aria-label="Blockchain Controls">
+      <button id="save-blockchain-button">Save to Blockchain</button>
+      <input type="text" id="load-tx-input" placeholder="Enter Transaction ID" aria-label="Transaction ID">
+      <button id="load-blockchain-button">Load from Blockchain</button>
+    </section>
+  </main>
+
+  <footer>
+    <p>Ordinal-Sequencer &copy; 2023</p>
+  </footer>
+
+  <script type="module">
+    // Corrected URL: Removed trailing space(s)
+    const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+
+    import(TONE_ORDINALS_URL)
+      .then(() => {
+        // Tone.js exports itself as 'Tone' in the global scope when imported this way
+        window.Tone = Tone;
+        console.log('[Ordinal-Sequencer] Tone.js loaded:', Tone?.version ?? 'Unknown');
+
+        // Now load and bootstrap the rest of the application
+        initializeApp();
+      })
+      .catch(err => {
+        console.error('[Ordinal-Sequencer] Critical Tone.js load error:', err);
+        // Improve error message display
+        const errorDiv = document.createElement('div');
+        errorDiv.style.textAlign = 'center';
+        errorDiv.style.padding = '2rem';
+        errorDiv.style.color = 'red';
+        errorDiv.innerHTML = `
+          <h2>Failed to load Tone.js</h2>
+          <p>The application cannot start. Please check your connection and try again.</p>
+          <p><small>Error: ${err.message}</small></p>
+        `;
+        // Replace the entire body content or append to a specific error container
+        document.body.innerHTML = ''; // Clear body
+        document.body.appendChild(errorDiv);
+      });
+
+    async function initializeApp() {
+      try {
+        // Dynamically import all modules
+        await import('./stateManager.js');
+        await import('./eventBus.js');
+        await import('./audioEngine.js');
+        await import('./playbackScheduler.js');
+        await import('./sequencerGrid.js');
+        await import('./transportController.js');
+        await import('./midiInput.js');
+        await import('./blockchainPersistence.js');
+        await import('./presetManager.js');
+        const appBootstrap = await import('./appBootstrap.js'); // We need the bootstrap function
+
+        // Function to perform the actual bootstrapping
+        function bootstrapApp() {
+          // Ensure elements exist before passing them
+          const gridContainer = document.getElementById('sequencer');
+          const playButton = document.getElementById('play-button');
+          const stopButton = document.getElementById('stop-button');
+          const bpmInput = document.getElementById('bpm-input');
+
+          if (!gridContainer || !playButton || !stopButton || !bpmInput) {
+              console.error('[Ordinal-Sequencer] Required DOM elements not found.');
+              // Optionally display an error in the UI
+              document.body.innerHTML += '<p style="color: red; text-align: center;">Error: Required UI elements are missing in the HTML.</p>';
+              return;
+          }
+
+          // Pass required elements to bootstrap
+          appBootstrap.bootstrap({
+            gridContainer: gridContainer,
+            playButton: playButton,
+            stopButton: stopButton,
+            bpmInput: bpmInput
+          });
+        }
+
+        // Bootstrap the application after DOM is fully loaded
+        if (document.readyState === 'loading') {
+          document.addEventListener('DOMContentLoaded', bootstrapApp);
+        } else {
+          // DOM is already loaded
+          bootstrapApp();
+        }
+
+      } catch (error) {
+        console.error('[Ordinal-Sequencer] Failed to initialize application:', error);
+        // Improve error message display for initialization errors
+        const errorDiv = document.createElement('div');
+        errorDiv.style.textAlign = 'center';
+        errorDiv.style.padding = '2rem';
+        errorDiv.style.color = 'red';
+        errorDiv.innerHTML = `
+          <h2>Application Initialization Error</h2>
+          <p>Failed to load required modules.</p>
+          <p><small>Error: ${error.message}</small></p>
+        `;
+        document.body.innerHTML = ''; // Clear body
+        document.body.appendChild(errorDiv);
+      }
+    }
+  </script>
+</body>
+</html>

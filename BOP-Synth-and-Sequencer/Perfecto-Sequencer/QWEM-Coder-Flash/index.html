@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ordinal-Sequencer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>Ordinal-Sequencer</h1>
+  </header>
+  
+  <main id="app">
+    <!-- transport controls go here -->
+    <section id="sequencer"></section>
+  </main>
+  
+  <footer>
+    <!-- optional credits -->
+  </footer>
+
+  <noscript>
+    <style>
+      body { font-family: sans-serif; text-align: center; padding: 2rem; }
+    </style>
+    <p>This application requires JavaScript to function. Please enable JavaScript in your browser.</p>
+  </noscript>
+
+  <script type="module">
+    const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+    
+    import(TONE_ORDINALS_URL)
+      .then(module => {
+        window.Tone = module.default || module;
+        console.log('[Ordinal-Sequencer] Tone.js loaded:', window.Tone?.version ?? 'Unknown');
+        // Boot the application after Tone.js is loaded
+        bootApplication();
+      })
+      .catch(err => {
+        console.error('[Ordinal-Sequencer] Critical Tone.js load error:', err);
+        document.body.innerHTML = '<p>Failed to load Tone.js. Please check your connection and try again.</p>';
+      });
+
+    async function bootApplication() {
+      try {
+        // Import all modules
+        const [
+          stateManagerModule,
+          eventBusModule,
+          audioEngineModule,
+          playbackSchedulerModule,
+          sequencerGridModule,
+          transportControllerModule,
+          midiInputModule,
+          blockchainPersistenceModule,
+          presetManagerModule,
+          appBootstrapModule
+        ] = await Promise.all([
+          import('./stateManager.js'),
+          import('./eventBus.js'),
+          import('./audioEngine.js'),
+          import('./playbackScheduler.js'),
+          import('./sequencerGrid.js'),
+          import('./transportController.js'),
+          import('./midiInput.js'),
+          import('./blockchainPersistence.js'),
+          import('./presetManager.js'),
+          import('./appBootstrap.js')
+        ]);
+
+        // Extract required functions
+        const { getState, dispatch, subscribe } = stateManagerModule;
+        const { EventBus } = eventBusModule;
+        const { AudioEngine } = audioEngineModule;
+        const { playbackScheduler } = playbackSchedulerModule;
+        const { sequencerGrid } = sequencerGridModule;
+        const { transportController } = transportControllerModule;
+        const { midiInput } = midiInputModule;
+        const { blockchainPersistence } = blockchainPersistenceModule;
+        const { presetManager } = presetManagerModule;
+        
+        // Create the bootstrap function by calling appBootstrap with modules
+        const bootstrapFunction = appBootstrapModule.default(getState, dispatch, EventBus.emit, subscribe);
+
+        // Wire up modules with shared dependencies
+        const modules = {
+          getState,
+          dispatch,
+          emit: EventBus.emit,
+          subscribe,
+          audioEngine: AudioEngine,
+          playbackScheduler: playbackScheduler(getState, dispatch, EventBus.emit),
+          sequencerGrid: sequencerGrid(getState, dispatch, EventBus.emit),
+          transportController: transportController(getState, dispatch, EventBus.emit),
+          midiInput: midiInput(getState, dispatch, EventBus.emit),
+          blockchainPersistence: blockchainPersistence(getState, dispatch, EventBus.emit),
+          presetManager: presetManager(getState, dispatch, EventBus.emit)
+        };
+
+        // Bootstrap the application
+        bootstrapFunction.bootstrap(modules);
+      } catch (err) {
+        console.error('[Ordinal-Sequencer] Bootstrap error:', err);
+      }
+    }
+  </script>
+</body>
+</html>

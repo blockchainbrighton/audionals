@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Ordinal-Sequencer</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <noscript>
+    <h1>JavaScript is required to run this application.</h1>
+    <p>Please enable JavaScript in your browser to use the Ordinal-Sequencer.</p>
+  </noscript>
+
+  <header>
+    <h1>Ordinal-Sequencer</h1>
+  </header>
+
+  <main id="app">
+    <div id="transport-controls">
+      <button id="play" aria-label="Play">Play</button>
+      <button id="stop" aria-label="Stop">Stop</button>
+      <label for="bpm">BPM:</label>
+      <input type="number" id="bpm" value="120" min="1" max="300">
+    </div>
+    <section id="sequencer" aria-label="Sequencer Grid"></section>
+  </main>
+
+  <footer>
+    <!-- Optional credits can go here -->
+  </footer>
+
+  <script>
+    const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+
+    const runtimeState = {};
+
+    function setLoaderStatus(message, isError = false) {
+      console[isError ? 'error' : 'log']('[Ordinal-Sequencer]', message);
+    }
+
+    function boot() {
+      // Dynamically import all modules and start the app
+      import('./appBootstrap.js')
+        .then(({ bootstrap }) => {
+          window.addEventListener('DOMContentLoaded', () => {
+            const appElement = document.getElementById('app');
+            const sequencerElement = document.getElementById('sequencer');
+            const playButton = document.getElementById('play');
+            const stopButton = document.getElementById('stop');
+            const bpmInput = document.getElementById('bpm');
+
+            bootstrap({
+              gridContainer: sequencerElement,
+              transportControls: {
+                playButton,
+                stopButton,
+                bpmInput
+              }
+            });
+          });
+        })
+        .catch(err => {
+          setLoaderStatus('Failed to initialize application.', true);
+          console.error('[Ordinal-Sequencer] Bootstrap error:', err);
+        });
+    }
+
+    // Load Tone.js from the Ordinals URL
+    import(TONE_ORDINALS_URL)
+      .then(module => {
+        // The module default export is the Tone object
+        runtimeState.Tone = module.default || module;
+        window.Tone = runtimeState.Tone;
+        console.log('[Ordinal-Sequencer] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+        boot();
+      })
+      .catch(err => {
+        setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+        console.error('[Ordinal-Sequencer] Critical Tone.js load error:', err);
+      });
+  </script>
+</body>
+</html>
