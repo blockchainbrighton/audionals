@@ -4,10 +4,441 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>BOP Matrix - Web3 DAW</title>
-  <link rel="stylesheet" href="modules/sequencer-styles.css">
-  <!-- LINK TO BOP SYNTH STYLESHEET - Must update generic model
-     to avoid this in future-->
+  <link rel="stylesheet" href="sequencer-styles.css">
+  <style>
+    /* Enhanced styles for synth interface */
+    :root {
+      --steps-per-row: 64;
+      --step-rows: 1;
+      --step-size: 36px;
+      --primary-color: #00ff88;
+      --secondary-color: #ff6b35;
+      --background-dark: #1a1a1a;
+      --background-medium: #2d2d2d;
+      --background-light: #404040;
+      --text-primary: #ffffff;
+      --text-secondary: #cccccc;
+      --border-color: #555555;
+    }
 
+    /* Channel styling */
+    .channel {
+      background: var(--background-medium);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      margin-bottom: 12px;
+      padding: 16px;
+      transition: all 0.2s ease;
+    }
+
+    .channel:hover {
+      border-color: var(--primary-color);
+      box-shadow: 0 2px 8px rgba(0, 255, 136, 0.1);
+    }
+
+    .channel-sampler {
+      border-left: 4px solid var(--primary-color);
+    }
+
+    .channel-instrument {
+      border-left: 4px solid var(--secondary-color);
+    }
+
+    /* Channel header */
+    .channel-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      margin-bottom: 12px;
+      padding-bottom: 8px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .channel-title {
+      font-weight: bold;
+      color: var(--text-primary);
+      font-size: 14px;
+    }
+
+    .channel-type {
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 10px;
+      font-weight: bold;
+      text-transform: uppercase;
+    }
+
+    .channel-type-sampler {
+      background: rgba(0, 255, 136, 0.2);
+      color: var(--primary-color);
+    }
+
+    .channel-type-instrument {
+      background: rgba(255, 107, 53, 0.2);
+      color: var(--secondary-color);
+    }
+
+    .channel-delete-btn {
+      background: #ff4444;
+      color: white;
+      border: none;
+      border-radius: 50%;
+      width: 24px;
+      height: 24px;
+      cursor: pointer;
+      font-size: 16px;
+      line-height: 1;
+      transition: all 0.2s ease;
+    }
+
+    .channel-delete-btn:hover {
+      background: #ff6666;
+      transform: scale(1.1);
+    }
+
+    /* Channel controls */
+    .channel-controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      margin-bottom: 16px;
+      align-items: center;
+    }
+
+    .sample-selector-container,
+    .volume-control-container,
+    .instrument-selector-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .control-label {
+      font-size: 12px;
+      color: var(--text-secondary);
+      min-width: 40px;
+    }
+
+    .sample-selector,
+    .instrument-selector {
+      background: var(--background-dark);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      padding: 4px 8px;
+      font-size: 12px;
+      min-width: 120px;
+    }
+
+    .volume-slider {
+      width: 80px;
+      height: 4px;
+      background: var(--background-dark);
+      border-radius: 2px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .volume-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 16px;
+      height: 16px;
+      background: var(--primary-color);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .volume-display {
+      font-size: 11px;
+      color: var(--text-secondary);
+      min-width: 30px;
+    }
+
+    /* Synth interface */
+    .synth-interface {
+      background: var(--background-dark);
+      border: 1px solid var(--border-color);
+      border-radius: 6px;
+      padding: 12px;
+      margin-top: 8px;
+      width: 100%;
+    }
+
+    .parameter-group {
+      margin-bottom: 16px;
+    }
+
+    .parameter-group-header {
+      font-size: 12px;
+      font-weight: bold;
+      color: var(--text-primary);
+      margin-bottom: 8px;
+      padding-bottom: 4px;
+      border-bottom: 1px solid var(--border-color);
+    }
+
+    .parameter-group-params {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+      gap: 12px;
+    }
+
+    .parameter-control {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .parameter-label {
+      font-size: 11px;
+      color: var(--text-secondary);
+    }
+
+    .parameter-slider {
+      width: 100%;
+      height: 4px;
+      background: var(--background-medium);
+      border-radius: 2px;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    .parameter-slider::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      width: 14px;
+      height: 14px;
+      background: var(--secondary-color);
+      border-radius: 50%;
+      cursor: pointer;
+    }
+
+    .parameter-select {
+      background: var(--background-medium);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      padding: 2px 4px;
+      font-size: 11px;
+    }
+
+    .parameter-toggle {
+      width: 14px;
+      height: 14px;
+      accent-color: var(--secondary-color);
+    }
+
+    .parameter-value {
+      font-size: 10px;
+      color: var(--text-secondary);
+      text-align: center;
+    }
+
+    .patch-selector-container {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 12px;
+      padding-top: 8px;
+      border-top: 1px solid var(--border-color);
+    }
+
+    .patch-selector {
+      background: var(--background-medium);
+      color: var(--text-primary);
+      border: 1px solid var(--border-color);
+      border-radius: 3px;
+      padding: 4px 8px;
+      font-size: 11px;
+      flex: 1;
+    }
+
+    .save-preset-btn {
+      background: var(--secondary-color);
+      color: white;
+      border: none;
+      border-radius: 3px;
+      padding: 4px 8px;
+      font-size: 11px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+    }
+
+    .save-preset-btn:hover {
+      background: #ff8555;
+    }
+
+    /* Step grid responsive design */
+    .steps-container {
+      display: grid;
+      gap: 2px;
+      margin-top: 8px;
+    }
+
+    .step-row {
+      display: grid;
+      grid-template-columns: repeat(var(--steps-per-row), var(--step-size));
+      gap: 2px;
+      justify-content: start;
+    }
+
+    .step {
+      width: var(--step-size);
+      height: var(--step-size);
+      background: var(--background-dark);
+      border: 1px solid var(--border-color);
+      border-radius: 4px;
+      cursor: pointer;
+      transition: all 0.1s ease;
+      font-size: 10px;
+      color: transparent;
+    }
+
+    .step:hover {
+      border-color: var(--primary-color);
+      background: rgba(0, 255, 136, 0.1);
+    }
+
+    .step.active {
+      background: var(--primary-color);
+      border-color: var(--primary-color);
+      box-shadow: 0 0 8px rgba(0, 255, 136, 0.4);
+    }
+
+    .step.playhead {
+      border-color: #ffff00;
+      box-shadow: 0 0 12px rgba(255, 255, 0, 0.6);
+    }
+
+    .step.beat-1 {
+      border-width: 2px;
+      border-color: #ffffff;
+    }
+
+    .step.beat-strong {
+      border-color: #cccccc;
+    }
+
+    /* Responsive breakpoints */
+    @media (max-width: 1250px) {
+      :root {
+        --steps-per-row: 32;
+        --step-rows: 2;
+      }
+    }
+
+    @media (max-width: 820px) {
+      :root {
+        --steps-per-row: 16;
+        --step-rows: 4;
+        --step-size: 32px;
+      }
+      
+      .parameter-group-params {
+        grid-template-columns: 1fr;
+      }
+      
+      .channel-controls {
+        flex-direction: column;
+        align-items: stretch;
+      }
+    }
+
+    @media (max-width: 540px) {
+      :root {
+        --steps-per-row: 8;
+        --step-rows: 8;
+        --step-size: 28px;
+      }
+      
+      .channel {
+        padding: 12px;
+      }
+      
+      .synth-interface {
+        padding: 8px;
+      }
+    }
+
+    /* BPM display enhancement */
+    .bpm-control {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    #bpm-display {
+      font-family: monospace;
+      font-weight: bold;
+      color: var(--primary-color);
+      min-width: 60px;
+      text-align: center;
+    }
+
+    /* Loading and status */
+    .loading {
+      text-align: center;
+      color: var(--text-secondary);
+      font-style: italic;
+    }
+
+    .no-sequence {
+      text-align: center;
+      color: var(--text-secondary);
+      padding: 40px;
+      font-style: italic;
+    }
+
+    /* Enhanced transport controls */
+    .transport-bar {
+      background: var(--background-medium);
+      border: 1px solid var(--border-color);
+      border-radius: 8px;
+      padding: 16px;
+      margin-bottom: 20px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 16px;
+    }
+
+    .playback-controls {
+      display: flex;
+      gap: 8px;
+    }
+
+    .playback-controls button {
+      padding: 8px 16px;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-weight: bold;
+      transition: all 0.2s ease;
+    }
+
+    #playSequenceBtn, #playAllBtn {
+      background: var(--primary-color);
+      color: var(--background-dark);
+    }
+
+    #playSequenceBtn:hover, #playAllBtn:hover {
+      background: #00cc6a;
+    }
+
+    #stopBtn {
+      background: #ff4444;
+      color: white;
+    }
+
+    #stopBtn:hover {
+      background: #ff6666;
+    }
+
+    button:disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+    }
+  </style>
 </head>
 <body>
   <h1>BOP Matrix - Web3 DAW</h1>
@@ -21,6 +452,7 @@
         <button id="saveBtn" title="Copy project data to clipboard">Save Project</button>
         <input type="text" id="saveLoadField" placeholder="Paste project data here" spellcheck="false" autocomplete="off">
         <button id="loadBtn" title="Load project from data">Load Project</button>
+        <input type="file" id="file-input" accept=".json" style="display: none;">
       </div>
       <div id="bpmWarning"></div>
       <div class="sequence-controls">
@@ -42,6 +474,7 @@
       <label for="bpmInput">BPM:</label>
       <input type="range" id="bpmSlider" min="60" max="180" value="120" step="1" />
       <input type="number" id="bpmInput" min="60" max="180" value="120" step="0.01" style="text-align:center;" />
+      <span id="bpm-display">120.00</span>
     </div>
     <div class="playback-controls">
       <button id="playSequenceBtn" disabled>Play Sequence</button>
@@ -56,7 +489,7 @@
   <div id="synth-modal-container"></div>
 
   <!-- Main application script -->
-  <script type="module" src="./modules/sequencer-main.js"></script>
+  <script type="module" src="./sequencer-main.js"></script>
   <script>
     // Simple toggle for advanced controls (starts collapsed)
     const btn = document.getElementById('toggleControlsBtn');
@@ -74,6 +507,7 @@
       btn.setAttribute('aria-expanded', expanded);
       btn.innerText = expanded ? '▲ Show Fewer Controls' : '▼ Show More Controls';
     };
+    
     window.addEventListener('DOMContentLoaded', () => {
       adv.style.transition = 'max-height 0.3s cubic-bezier(.4,0,.2,1)';
       adv.style.maxHeight = '0';
@@ -82,3 +516,4 @@
   </script>
   
 </body>
+</html>
