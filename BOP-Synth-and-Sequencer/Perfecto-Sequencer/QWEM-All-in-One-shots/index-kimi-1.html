@@ -1,0 +1,181 @@
+<!-- 4-bar 64-step sequencer – open this file and press play!
+     • Drag-and-drop or click “Load” to put samples on the four upper rows
+     • Click any step to toggle on/off (synth rows also store the last
+       piano-key note that was auditioned)
+     • Per-row mute/clear and global BPM control
+     • Only external dependency: Tone.js (loaded from CDN) -->
+     <!doctype html>
+     <html lang="en">
+     <head>
+       <meta charset="utf-8"/>
+       <title>4×64 Sequencer</title>
+       <style>
+         /* Ultra-simple layout; feel free to tweak */
+         :root {
+           --step-size: 24px;
+           --gap: 2px;
+           font-family: system-ui, sans-serif;
+           background: #111;
+           color: #eee;
+         }
+         body { margin: 0; padding: .5rem; }
+         #app { display: flex; flex-direction: column; gap: .5rem; }
+         .row {
+           display: flex;
+           align-items: center;
+           gap: .25rem;
+         }
+         label { width: 70px; font-size: .75rem; }
+         button {
+           cursor: pointer;
+           border: none;
+           border-radius: 2px;
+           font-size: .65rem;
+         }
+         .step {
+           width: var(--step-size);
+           height: var(--step-size);
+           background: #222;
+         }
+         .step.active            { background: #0f0; }
+         .step.playhead          { outline: 2px solid #fff; }
+         .sample-row .step       { border-radius: 50%; }
+         .synth-row .step        { border-radius: 0; }
+         .controls {
+           display: flex;
+           gap: .5rem;
+           align-items: center;
+         }
+         .piano {
+           display: flex;
+           gap: 1px;
+           margin-left: .5rem;
+         }
+         .piano-key {
+           width: 18px;
+           height: 40px;
+           background: #444;
+         }
+         .piano-key.active { background: #ff0; }
+       </style>
+     </head>
+     <body>
+        <script type="module">
+            /* =========================================================
+               Dynamic Tone.js loader from ordinals + sequencer boot
+               ========================================================= */
+            export const TONE_ORDINALS_URL =
+              'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+            
+            // --- Loader feedback helpers (tiny, no extra CSS) ----------
+            function setLoaderStatus(msg, isError = false) {
+              const el = document.getElementById('loader') || (() => {
+                const d = document.createElement('div');
+                d.id = 'loader';
+                d.style.cssText =
+                  'position:fixed;top:0;left:0;right:0;padding:4px 8px;font-size:12px;color:#eee;background:#000;z-index:1000';
+                document.body.appendChild(d);
+                return d;
+              })();
+              el.textContent = msg;
+              el.style.background = isError ? '#b00' : '#222';
+              if (isError) el.style.animation = 'none';
+            }
+            
+            /* 1. Load Tone.js from the ordinal inscription */
+            setLoaderStatus('Loading Audio Engine...');
+            import(TONE_ORDINALS_URL)
+              .then(() => {
+                /* Tone.js UMD build attaches itself to window.Tone */
+                const Tone = window.Tone;
+                console.log('[Sequencer] Tone.js loaded:', Tone?.version ?? 'Unknown');
+                setLoaderStatus(''); // hide loader
+                bootSequencer(Tone); // continue with existing logic
+              })
+              .catch(err => {
+                setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                console.error(err);
+              });
+            
+            /* 2. Everything below is identical to the original sequencer logic,
+                  except that we now pass the Tone instance explicitly. */
+            function bootSequencer(Tone) {
+              Tone.Transport.scheduleRepeat(onStep, '16n');
+            
+              function onStep(time) {
+                const [m, b, s] = Tone.Transport.position.split(':').map(Number);
+                const step = m * 16 + b * 4 + s;
+                setState(s => ({ ...s, step }));
+            
+                state.rows.forEach((row, idx) => {
+                  if (row.muted || !row.steps[step]) return;
+            
+                  if (row.type === 'sample' && row.source) {
+                    row.source.start(time);
+                  } else if (row.type === 'synth' && row.synth) {
+                    const note = row.notes[step];
+                    row.synth.triggerAttackRelease(note, '16n', time);
+                  }
+                });
+              }
+            
+              /* Original render loop, unchanged */
+              function render() {
+                const app = document.getElementById('app') || (() => {
+                  const el = document.createElement('div');
+                  el.id = 'app';
+                  document.body.appendChild(el);
+                  return el;
+                })();
+            
+                app.innerHTML = '';
+                const grid = document.createElement('div');
+                renderGrid(grid);
+                app.appendChild(grid);
+            
+                document.querySelectorAll('.row').forEach((rowEl, idx) => {
+                  if (state.rows[idx].type === 'sample') attachSampleUI(rowEl, idx);
+                  else attachSynthUI(rowEl, idx);
+            
+                  ['Mute', 'Clear'].forEach(label => {
+                    const btn = document.createElement('button');
+                    btn.textContent = label;
+                    btn.addEventListener('click', () => {
+                      label === 'Mute' ? muteRow(idx, !state.rows[idx].muted) : clearRow(idx);
+                    });
+                    rowEl.appendChild(btn);
+                  });
+                });
+            
+                const transp = document.createElement('div');
+                renderTransport(transp);
+                app.appendChild(transp);
+            
+                /* Recreate synths when params change */
+                state.rows.forEach((row, idx) => {
+                  if (row.type === 'synth') {
+                    if (row.synth) row.synth.dispose();
+                    const { waveform, adsr } = row;
+                    const synth = new Tone.MonoSynth({
+                      oscillator: { type: waveform },
+                      envelope: adsr
+                    }).toDestination();
+                    state.rows[idx].synth = synth;
+                  }
+                });
+              }
+            
+              /* Start the original 30 ms diff loop */
+              render();
+              let lastState = JSON.stringify(state);
+              setInterval(() => {
+                const curr = JSON.stringify(state);
+                if (curr !== lastState) {
+                  lastState = curr;
+                  render();
+                }
+              }, 30);
+            }
+            </script>
+     </body>
+     </html>

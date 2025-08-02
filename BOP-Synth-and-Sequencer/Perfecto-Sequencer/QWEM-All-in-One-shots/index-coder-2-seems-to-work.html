@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>4-Bar Sequencer</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 20px;
+      background: #1e1e1e;
+      color: #f0f0f0;
+    }
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 20px;
+    }
+    .transport-controls {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(64, 15px);
+      grid-auto-rows: 40px;
+      gap: 2px;
+    }
+    .step {
+      background: #444;
+      border: none;
+      border-radius: 3px;
+    }
+    .step.active {
+      background: #4caf50;
+    }
+    .step.playing {
+      background: #ff9800;
+    }
+    .channel-header {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      padding: 5px;
+      background: #333;
+    }
+    .channel-controls {
+      display: flex;
+      gap: 5px;
+    }
+    .piano-keys {
+      display: flex;
+      margin-top: 5px;
+    }
+    .key {
+      flex: 1;
+      height: 20px;
+      background: #666;
+      border: 1px solid #444;
+      cursor: pointer;
+    }
+    .key.active {
+      background: #999;
+    }
+    input, button, select {
+      padding: 5px;
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+      border-radius: 3px;
+    }
+    #loader {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100%;
+      height: 100%;
+      background: rgba(0, 0, 0, 0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+    }
+    #loader.hidden {
+      display: none;
+    }
+    #loader-status {
+      margin-top: 20px;
+      font-size: 18px;
+    }
+  </style>
+</head>
+<body>
+  <!--
+    Usage:
+    1. Load audio files using the file inputs for sample rows
+    2. Click steps to activate/deactivate them
+    3. For synth rows, click piano keys to select notes
+    4. Adjust ADSR parameters and waveform for synth rows
+    5. Use transport controls to play/pause and set BPM
+    6. Mute rows or clear entire rows
+  -->
+  <div id="loader">
+    <div>Loading Audio Engine...</div>
+    <div id="loader-status">Initializing...</div>
+  </div>
+  
+  <div class="container">
+    <div class="transport-controls" id="transportControls"></div>
+    <div class="grid" id="sequencerGrid"></div>
+  </div>
+  
+  <script>
+    // Loader status management
+    const loaderElement = document.getElementById('loader');
+    const loaderStatusElement = document.getElementById('loader-status');
+    
+    function setLoaderStatus(message, isError = false) {
+      loaderStatusElement.textContent = message;
+      loaderStatusElement.style.color = isError ? 'red' : 'white';
+    }
+    
+    function hideLoader() {
+      loaderElement.classList.add('hidden');
+    }
+    
+    // Runtime state
+    const runtimeState = {
+      Tone: null
+    };
+    
+    // Tone.js ordinals URL
+    const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+    
+    // State management
+    const initialState = {
+      isPlaying: false,
+      bpm: 120,
+      currentStep: -1,
+      channels: Array(8).fill().map((_, i) => ({
+        id: i,
+        type: i < 4 ? 'sample' : 'synth',
+        muted: false,
+        steps: Array(64).fill(false),
+        ...(i < 4 
+          ? { 
+              file: null,
+              player: null
+            }
+          : { 
+              note: 'C4',
+              waveform: 'sine',
+              attack: 0.1,
+              decay: 0.3,
+              sustain: 0.5,
+              release: 0.8,
+              synth: null,
+              filterFrequency: 20000
+            })
+      }))
+    };
+
+    // Actions
+    const ACTIONS = {
+      TOGGLE_PLAY: 'TOGGLE_PLAY',
+      SET_BPM: 'SET_BPM',
+      SET_CURRENT_STEP: 'SET_CURRENT_STEP',
+      TOGGLE_STEP: 'TOGGLE_STEP',
+      LOAD_SAMPLE: 'LOAD_SAMPLE',
+      SET_NOTE: 'SET_NOTE',
+      SET_WAVEFORM: 'SET_WAVEFORM',
+      SET_ADSR: 'SET_ADSR',
+      TOGGLE_MUTE: 'TOGGLE_MUTE',
+      CLEAR_CHANNEL: 'CLEAR_CHANNEL'
+    };
+
+    const togglePlay = () => ({ type: ACTIONS.TOGGLE_PLAY });
+    const setBpm = (bpm) => ({ type: ACTIONS.SET_BPM, payload: bpm });
+    const setCurrentStep = (step) => ({ type: ACTIONS.SET_CURRENT_STEP, payload: step });
+    const toggleStep = (channelId, stepIndex) => ({ 
+      type: ACTIONS.TOGGLE_STEP, 
+      payload: { channelId, stepIndex } 
+    });
+    const loadSample = (channelId, file) => ({ 
+      type: ACTIONS.LOAD_SAMPLE, 
+      payload: { channelId, file } 
+    });
+    const setNote = (channelId, note) => ({ 
+      type: ACTIONS.SET_NOTE, 
+      payload: { channelId, note } 
+    });
+    const setWaveform = (channelId, waveform) => ({ 
+      type: ACTIONS.SET_WAVEFORM, 
+      payload: { channelId, waveform } 
+    });
+    const setAdsr = (channelId, param, value) => ({ 
+      type: ACTIONS.SET_ADSR, 
+      payload: { channelId, param, value } 
+    });
+    const toggleMute = (channelId) => ({ 
+      type: ACTIONS.TOGGLE_MUTE, 
+      payload: { channelId } 
+    });
+    const clearChannel = (channelId) => ({ 
+      type: ACTIONS.CLEAR_CHANNEL, 
+      payload: { channelId } 
+    });
+
+    // Reducer
+    const reducer = (state, action) => {
+      switch (action.type) {
+        case ACTIONS.TOGGLE_PLAY:
+          return { ...state, isPlaying: !state.isPlaying };
+        
+        case ACTIONS.SET_BPM:
+          return { ...state, bpm: action.payload };
+        
+        case ACTIONS.SET_CURRENT_STEP:
+          return { ...state, currentStep: action.payload };
+        
+        case ACTIONS.TOGGLE_STEP:
+          const { channelId, stepIndex } = action.payload;
+          const newChannels = [...state.channels];
+          const channel = { ...newChannels[channelId] };
+          const steps = [...channel.steps];
+          steps[stepIndex] = !steps[stepIndex];
+          channel.steps = steps;
+          newChannels[channelId] = channel;
+          return { ...state, channels: newChannels };
+        
+        case ACTIONS.LOAD_SAMPLE:
+          const { channelId: sampleChannelId, file } = action.payload;
+          const updatedChannels = [...state.channels];
+          const sampleChannel = { ...updatedChannels[sampleChannelId] };
+          sampleChannel.file = file;
+          
+          // Create new player if needed
+          if (sampleChannel.player) {
+            sampleChannel.player.dispose();
+          }
+          sampleChannel.player = new runtimeState.Tone.Player(file).toDestination();
+          updatedChannels[sampleChannelId] = sampleChannel;
+          return { ...state, channels: updatedChannels };
+        
+        case ACTIONS.SET_NOTE:
+          const { channelId: noteChannelId, note } = action.payload;
+          const modifiedChannels = [...state.channels];
+          modifiedChannels[noteChannelId] = { 
+            ...modifiedChannels[noteChannelId], 
+            note 
+          };
+          return { ...state, channels: modifiedChannels };
+        
+        case ACTIONS.SET_WAVEFORM:
+          const { channelId: wfChannelId, waveform } = action.payload;
+          const chans = [...state.channels];
+          const chan = { ...chans[wfChannelId] };
+          
+          // Update synth if exists
+          if (chan.synth) {
+            chan.synth.oscillator.type = waveform;
+          }
+          chan.waveform = waveform;
+          chans[wfChannelId] = chan;
+          return { ...state, channels: chans };
+        
+        case ACTIONS.SET_ADSR:
+          const { channelId: adsrChannelId, param, value } = action.payload;
+          const chs = [...state.channels];
+          const ch = { ...chs[adsrChannelId] };
+          
+          // Update synth if exists
+          if (ch.synth) {
+            ch.synth.envelope[param] = value;
+          }
+          ch[param] = value;
+          chs[adsrChannelId] = ch;
+          return { ...state, channels: chs };
+        
+        case ACTIONS.TOGGLE_MUTE:
+          const { channelId: muteChannelId } = action.payload;
+          const chansMute = [...state.channels];
+          chansMute[muteChannelId] = { 
+            ...chansMute[muteChannelId], 
+            muted: !chansMute[muteChannelId].muted 
+          };
+          return { ...state, channels: chansMute };
+        
+        case ACTIONS.CLEAR_CHANNEL:
+          const { channelId: clearChannelId } = action.payload;
+          const chsClear = [...state.channels];
+          chsClear[clearChannelId] = { 
+            ...chsClear[clearChannelId], 
+            steps: Array(64).fill(false) 
+          };
+          return { ...state, channels: chsClear };
+        
+        default:
+          return state;
+      }
+    };
+
+    // Store implementation
+    const createStore = (reducer, initialState) => {
+      let state = initialState;
+      const listeners = [];
+      
+      const getState = () => state;
+      
+      const dispatch = (action) => {
+        state = reducer(state, action);
+        listeners.forEach(listener => listener());
+        return action;
+      };
+      
+      const subscribe = (listener) => {
+        listeners.push(listener);
+        return () => {
+          const index = listeners.indexOf(listener);
+          if (index > -1) listeners.splice(index, 1);
+        };
+      };
+      
+      return { getState, dispatch, subscribe };
+    };
+
+    // Transport Controls
+    const renderTransportControls = (state, dispatch) => {
+      const container = document.getElementById('transportControls');
+      container.innerHTML = '';
+      
+      const playButton = document.createElement('button');
+      playButton.textContent = state.isPlaying ? 'Stop' : 'Play';
+      playButton.addEventListener('click', () => dispatch(togglePlay()));
+      
+      const bpmInput = document.createElement('input');
+      bpmInput.type = 'number';
+      bpmInput.min = 20;
+      bpmInput.max = 300;
+      bpmInput.value = state.bpm;
+      bpmInput.addEventListener('change', (e) => {
+        dispatch(setBpm(parseInt(e.target.value)));
+      });
+      
+      const bpmLabel = document.createElement('label');
+      bpmLabel.textContent = 'BPM: ';
+      
+      container.appendChild(playButton);
+      container.appendChild(bpmLabel);
+      container.appendChild(bpmInput);
+    };
+
+    // Sample Channel
+    const renderSampleChannel = (channel, channelId, dispatch) => {
+      const container = document.createElement('div');
+      container.className = 'channel';
+      
+      const header = document.createElement('div');
+      header.className = 'channel-header';
+      
+      const fileInput = document.createElement('input');
+      fileInput.type = 'file';
+      fileInput.accept = 'audio/*';
+      fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+          dispatch(loadSample(channelId, URL.createObjectURL(e.target.files[0])));
+        }
+      });
+      
+      const muteButton = document.createElement('button');
+      muteButton.textContent = channel.muted ? 'Unmute' : 'Mute';
+      muteButton.addEventListener('click', () => {
+        dispatch(toggleMute(channelId));
+      });
+      
+      const clearButton = document.createElement('button');
+      clearButton.textContent = 'Clear';
+      clearButton.addEventListener('click', () => {
+        dispatch(clearChannel(channelId));
+      });
+      
+      header.appendChild(fileInput);
+      header.appendChild(muteButton);
+      header.appendChild(clearButton);
+      container.appendChild(header);
+      
+      return container;
+    };
+
+    // Synth Channel
+    const NOTES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+    const OCTAVES = [3, 4, 5];
+
+    const renderSynthChannel = (channel, channelId, dispatch) => {
+      const container = document.createElement('div');
+      container.className = 'channel';
+      
+      const header = document.createElement('div');
+      header.className = 'channel-header';
+      
+      // Waveform selector
+      const waveformSelect = document.createElement('select');
+      ['sine', 'square', 'sawtooth', 'triangle'].forEach(wave => {
+        const option = document.createElement('option');
+        option.value = wave;
+        option.textContent = wave;
+        if (wave === channel.waveform) option.selected = true;
+        waveformSelect.appendChild(option);
+      });
+      waveformSelect.addEventListener('change', (e) => {
+        dispatch(setWaveform(channelId, e.target.value));
+      });
+      
+      // ADSR controls
+      const adsrControls = document.createElement('div');
+      ['attack', 'decay', 'sustain', 'release'].forEach(param => {
+        const label = document.createElement('label');
+        label.textContent = `${param}: `;
+        
+        const input = document.createElement('input');
+        input.type = 'range';
+        input.min = 0;
+        input.max = 2;
+        input.step = 0.01;
+        input.value = channel[param];
+        input.addEventListener('input', (e) => {
+          dispatch(setAdsr(channelId, param, parseFloat(e.target.value)));
+        });
+        
+        adsrControls.appendChild(label);
+        adsrControls.appendChild(input);
+      });
+      
+      // Piano keys
+      const piano = document.createElement('div');
+      piano.className = 'piano-keys';
+      
+      NOTES.forEach(note => {
+        OCTAVES.forEach(octave => {
+          const keyName = `${note}${octave}`;
+          const key = document.createElement('div');
+          key.className = 'key';
+          key.textContent = keyName;
+          key.dataset.note = keyName;
+          
+          if (channel.note === keyName) {
+            key.classList.add('active');
+          }
+          
+          key.addEventListener('click', () => {
+            dispatch(setNote(channelId, keyName));
+            
+            // Update active key
+            piano.querySelectorAll('.key').forEach(k => k.classList.remove('active'));
+            key.classList.add('active');
+          });
+          
+          piano.appendChild(key);
+        });
+      });
+      
+      header.appendChild(waveformSelect);
+      header.appendChild(adsrControls);
+      container.appendChild(header);
+      container.appendChild(piano);
+      
+      return container;
+    };
+
+    // Sequencer Grid
+    const renderSequencerGrid = (state, dispatch) => {
+      const grid = document.getElementById('sequencerGrid');
+      grid.innerHTML = '';
+      
+      state.channels.forEach((channel, channelId) => {
+        channel.steps.forEach((isActive, stepIndex) => {
+          const stepButton = document.createElement('button');
+          stepButton.className = 'step';
+          if (isActive) stepButton.classList.add('active');
+          if (stepIndex === state.currentStep) stepButton.classList.add('playing');
+          
+          stepButton.addEventListener('click', () => {
+            dispatch(toggleStep(channelId, stepIndex));
+            
+            // Update button state
+            stepButton.classList.toggle('active');
+          });
+          
+          grid.appendChild(stepButton);
+        });
+      });
+    };
+
+    // Main Application
+    const initApp = () => {
+      let state = initialState;
+      let dispatch;
+      
+      const render = () => {
+        renderTransportControls(state, dispatch);
+        renderSequencerGrid(state, dispatch);
+      };
+      
+      const store = createStore(reducer, initialState);
+      dispatch = store.dispatch;
+      store.subscribe(render);
+      
+      // Initialize Tone.js transport
+      const transport = runtimeState.Tone.Transport;
+      transport.bpm.value = state.bpm;
+      transport.loop = true;
+      transport.loopStart = 0;
+      transport.loopEnd = '4m';
+      
+      // Create sequence
+      const sequence = new runtimeState.Tone.Sequence((time, step) => {
+        store.dispatch({ type: 'SET_CURRENT_STEP', payload: step });
+        
+        state.channels.forEach((channel, channelId) => {
+          if (channel.muted || !channel.steps[step]) return;
+          
+          if (channel.type === 'sample' && channel.player) {
+            channel.player.start(time);
+          } else if (channel.type === 'synth') {
+            // Create synth if needed
+            if (!channel.synth) {
+              const synth = new runtimeState.Tone.Synth({
+                oscillator: { type: channel.waveform },
+                envelope: {
+                  attack: channel.attack,
+                  decay: channel.decay,
+                  sustain: channel.sustain,
+                  release: channel.release
+                }
+              }).toDestination();
+              
+              // Update state with synth reference
+              const newState = store.getState();
+              const updatedChannels = [...newState.channels];
+              updatedChannels[channelId] = { ...updatedChannels[channelId], synth };
+              state = { ...newState, channels: updatedChannels };
+            }
+            
+            channel.synth.triggerAttackRelease(channel.note, '16n', time);
+          }
+        });
+      }, [...Array(64).keys()], '16n');
+      
+      transport.on('start', () => {
+        sequence.start(0);
+      });
+      
+      transport.on('stop', () => {
+        sequence.stop();
+        store.dispatch({ type: 'SET_CURRENT_STEP', payload: -1 });
+      });
+      
+      // Handle play/pause
+      store.subscribe(() => {
+        const newState = store.getState();
+        if (newState.isPlaying && transport.state !== 'started') {
+          transport.start();
+        } else if (!newState.isPlaying && transport.state === 'started') {
+          transport.stop();
+        }
+        
+        // Update BPM
+        if (newState.bpm !== transport.bpm.value) {
+          transport.bpm.value = newState.bpm;
+        }
+        
+        // Update UI for current step
+        const grid = document.getElementById('sequencerGrid');
+        const steps = grid.querySelectorAll('.step');
+        steps.forEach((step, index) => {
+          step.classList.remove('playing');
+          if (Math.floor(index % 64) === newState.currentStep) {
+            step.classList.add('playing');
+          }
+        });
+        
+        state = newState;
+      });
+      
+      render();
+      hideLoader();
+    };
+    
+    // Boot function
+    function boot() {
+      // Initialize when Tone.js is ready
+      runtimeState.Tone.loaded().then(() => {
+        initApp();
+      });
+    }
+    
+    // Dynamic Tone.js Loader
+    setLoaderStatus('Loading Audio Engine...');
+    import(TONE_ORDINALS_URL)
+      .then(() => {
+        runtimeState.Tone = window.Tone;
+        console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+        boot();
+      })
+      .catch(err => {
+        setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+        console.error('[BOP Matrix] Critical Tone.js load error:', err);
+      });
+  </script>
+</body>
+</html>

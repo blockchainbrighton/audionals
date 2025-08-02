@@ -1,0 +1,628 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>4-Bar 64-Step Sequencer</title>
+  <script type="module">
+    // === CONFIGURATION ===
+    const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+
+    // === STATE MODULE ===
+    const initialState = {
+      bpm: 120,
+      isPlaying: false,
+      grid: Array(8).fill().map(() => Array(64).fill().map(() => ({
+        isActive: false,
+        note: 'C4',
+        waveform: 'sine',
+        attack: 0.1,
+        decay: 0.2,
+        sustain: 0.7,
+        release: 0.5
+      }))),
+      samples: Array(4).fill(null),
+      synths: Array(4).fill(null),
+      muted: Array(4).fill(false).concat(Array(4).fill(false)),
+      playHead: -1
+    };
+
+    function reducer(state, action) {
+      switch (action.type) {
+        case 'SET_BPM':
+          return { ...state, bpm: action.payload };
+        case 'TOGGLE_PLAY':
+          return { ...state, isPlaying: !state.isPlaying };
+        case 'STOP':
+          return { ...state, isPlaying: false };
+        case 'TOGGLE_STEP':
+          const [rowIndex, stepIndex] = action.payload;
+          const updatedGrid = [...state.grid];
+          const step = updatedGrid[rowIndex][stepIndex];
+          const newIsActive = !step.isActive;
+          if (rowIndex >= 4) {
+            updatedGrid[rowIndex][stepIndex] = { ...step, isActive: newIsActive };
+          } else {
+            updatedGrid[rowIndex][stepIndex] = { ...step, isActive: newIsActive };
+          }
+          return { ...state, grid: updatedGrid };
+        case 'MUTE_ROW':
+          const [rowIdx] = action.payload;
+          const muted = [...state.muted];
+          muted[rowIdx] = !muted[rowIdx];
+          return { ...state, muted };
+        case 'CLEAR_ROW':
+          const [clearRowIdx] = action.payload;
+          const clearedGrid = [...state.grid];
+          clearedGrid[clearRowIdx] = Array(64).fill().map(() => ({
+            isActive: false,
+            note: 'C4',
+            waveform: 'sine',
+            attack: 0.1,
+            decay: 0.2,
+            sustain: 0.7,
+            release: 0.5
+          }));
+          return { ...state, grid: clearedGrid };
+        case 'UPDATE_NOTE':
+          const [noteRow, noteStep, note] = action.payload;
+          const updatedNotes = [...state.grid];
+          updatedNotes[noteRow][noteStep] = { ...updatedNotes[noteRow][noteStep], note };
+          return { ...state, grid: updatedNotes };
+        case 'UPDATE_WAVEFORM':
+          const [waveformRow, waveformStep, wave] = action.payload;
+          const updatedWave = [...state.grid];
+          updatedWave[waveformRow][waveformStep] = { ...updatedWave[waveformRow][waveformStep], waveform: wave };
+          return { ...state, grid: updatedWave };
+        case 'UPDATE_ADSR':
+          const [adsrRow, adsrStep, params] = action.payload;
+          const updatedAdsr = [...state.grid];
+          updatedAdsr[adsrRow][adsrStep] = { ...updatedAdsr[adsrRow][adsrStep], ...params };
+          return { ...state, grid: updatedAdsr };
+        case 'SET_PLAYHEAD':
+          return { ...state, playHead: action.payload };
+        default:
+          throw new Error(`Unknown action: ${action.type}`);
+      }
+    }
+
+    // Action creators
+    const setBpm = (bpm) => ({ type: 'SET_BPM', payload: bpm });
+    const togglePlay = () => ({ type: 'TOGGLE_PLAY' });
+    const stop = () => ({ type: 'STOP' });
+    const toggleStep = (row, step) => ({ type: 'TOGGLE_STEP', payload: [row, step] });
+    const muteRow = (row) => ({ type: 'MUTE_ROW', payload: [row] });
+    const clearRow = (row) => ({ type: 'CLEAR_ROW', payload: [row] });
+    const updateNote = (row, step, note) => ({ type: 'UPDATE_NOTE', payload: [row, step, note] });
+    const updateWaveform = (row, step, wave) => ({ type: 'UPDATE_WAVEFORM', payload: [row, step, wave] });
+    const updateAdsr = (row, step, params) => ({ type: 'UPDATE_ADSR', payload: [row, step, params] });
+    const setPlayHead = (step) => ({ type: 'SET_PLAYHEAD', payload: step });
+
+    // === HELPER FUNCTIONS ===
+    function setLoaderStatus(message, isError = false) {
+      const statusEl = document.getElementById('loader-status');
+      if (statusEl) {
+        statusEl.textContent = message;
+        statusEl.style.color = isError ? '#ff6b6b' : '#00bfff';
+      }
+    }
+
+    // === SEQUENCER GRID MODULE ===
+    function renderGrid(container, grid, dispatch) {
+      container.innerHTML = '';
+      for (let row = 0; row < 8; row++) {
+        const rowEl = document.createElement('div');
+        rowEl.className = 'row';
+        rowEl.dataset.row = row;
+        const label = document.createElement('div');
+        label.className = 'label';
+        label.textContent = row < 4 ? `Sample ${row + 1}` : `Synth ${row - 3}`;
+        rowEl.appendChild(label);
+        for (let step = 0; step < 64; step++) {
+          const btn = document.createElement('button');
+          btn.className = 'step-btn';
+          btn.dataset.row = row;
+          btn.dataset.step = step;
+          const stepData = grid[row][step];
+          if (stepData.isActive) btn.classList.add('active');
+          if (row >= 4 && stepData.note !== 'C4') btn.title = stepData.note;
+          if (step === 0) btn.style.marginLeft = '0.2rem';
+          btn.addEventListener('click', () => {
+            dispatch(toggleStep(row, step));
+            renderGrid(container, grid, dispatch);
+          });
+          rowEl.appendChild(btn);
+        }
+        container.appendChild(rowEl);
+      }
+      const playHead = document.querySelector('#gridContainer .row .step-btn[data-step="' + (window.appState.playHead) + '"]');
+      if (playHead) {
+        playHead.classList.add('playing');
+      } else {
+        document.querySelectorAll('.step-btn.playing').forEach(el => el.classList.remove('playing'));
+      }
+    }
+
+    // === SAMPLE CHANNEL MODULE ===
+    async function createSampleChannel(rowIndex, container, dispatch, state) {
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'row';
+      rowDiv.dataset.row = rowIndex;
+      const input = document.createElement('input');
+      input.type = 'file';
+      input.accept = '.wav,.mp3,.ogg';
+      input.className = 'file-input';
+      input.id = `sample-${rowIndex}`;
+      const dropZone = document.createElement('div');
+      dropZone.className = 'file-input';
+      dropZone.style.padding = '1rem';
+      dropZone.style.textAlign = 'center';
+      dropZone.style.border = '2px dashed #666';
+      dropZone.style.cursor = 'pointer';
+      dropZone.textContent = 'Drag & drop audio here or click to select';
+      ['dragenter', 'dragover'].forEach(e => {
+        dropZone.addEventListener(e, (ev) => {
+          ev.preventDefault();
+          dropZone.style.borderColor = '#00bfff';
+        });
+      });
+      ['dragleave', 'drop'].forEach(e => {
+        dropZone.addEventListener(e, (ev) => {
+          ev.preventDefault();
+          dropZone.style.borderColor = '#666';
+        });
+      });
+      dropZone.addEventListener('drop', async (ev) => {
+        ev.preventDefault();
+        const file = ev.dataTransfer.files[0];
+        if (!file) return;
+        try {
+          const url = URL.createObjectURL(file);
+          const player = new Tone.Player(url).toDestination();
+          const newState = { ...state };
+          newState.samples[rowIndex] = player;
+          dispatch({ type: 'UPDATE_STATE', payload: newState });
+          renderSampleControls(rowIndex, container, dispatch, newState);
+        } catch (err) {
+          console.error('Failed to load sample:', err);
+        }
+      });
+      input.addEventListener('change', async (ev) => {
+        const file = ev.target.files[0];
+        if (!file) return;
+        try {
+          const url = URL.createObjectURL(file);
+          const player = new Tone.Player(url).toDestination();
+          const newState = { ...state };
+          newState.samples[rowIndex] = player;
+          dispatch({ type: 'UPDATE_STATE', payload: newState });
+          renderSampleControls(rowIndex, container, dispatch, newState);
+        } catch (err) {
+          console.error('Failed to load sample:', err);
+        }
+      });
+      rowDiv.appendChild(input);
+      rowDiv.appendChild(dropZone);
+      container.appendChild(rowDiv);
+    }
+
+    function renderSampleControls(rowIndex, container, dispatch, state) {
+      const rowEl = container.querySelector(`[data-row="${rowIndex}"]`);
+      if (!rowEl) return;
+      while (rowEl.children.length > 2) {
+        rowEl.removeChild(rowEl.lastChild);
+      }
+      const muteBtn = document.createElement('button');
+      muteBtn.textContent = state.muted[rowIndex] ? 'Unmute' : 'Mute';
+      muteBtn.onclick = () => dispatch(muteRow(rowIndex));
+      const clearBtn = document.createElement('button');
+      clearBtn.textContent = 'Clear';
+      clearBtn.onclick = () => dispatch(clearRow(rowIndex));
+      rowEl.appendChild(muteBtn);
+      rowEl.appendChild(clearBtn);
+    }
+
+    // === SYNTH CHANNEL MODULE ===
+    function createSynthChannel(rowIndex, container, dispatch, state) {
+      const rowDiv = document.createElement('div');
+      rowDiv.className = 'row';
+      rowDiv.dataset.row = rowIndex;
+      const label = document.createElement('div');
+      label.className = 'label';
+      label.textContent = `Synth ${rowIndex - 3}`;
+      rowDiv.appendChild(label);
+      const waveSelect = document.createElement('select');
+      waveSelect.innerHTML = `
+        <option value="sine">Sine</option>
+        <option value="square">Square</option>
+        <option value="saw">Saw</option>
+        <option value="triangle">Triangle</option>
+      `;
+      waveSelect.value = state.grid[rowIndex][0].waveform;
+      waveSelect.onchange = (e) => {
+        const wave = e.target.value;
+        dispatch(updateWaveform(rowIndex, 0, wave));
+      };
+      rowDiv.appendChild(waveSelect);
+      const adsrLabels = ['Attack', 'Decay', 'Sustain', 'Release'];
+      const adsrValues = ['attack', 'decay', 'sustain', 'release'];
+      for (let i = 0; i < 4; i++) {
+        const label = document.createElement('div');
+        label.textContent = adsrLabels[i];
+        label.style.width = '50px';
+        label.style.fontSize = '0.7rem';
+        label.style.textAlign = 'center';
+        rowDiv.appendChild(label);
+        const slider = document.createElement('input');
+        slider.type = 'range';
+        slider.min = '0';
+        slider.max = '2';
+        slider.step = '0.01';
+        slider.value = state.grid[rowIndex][0][adsrValues[i]];
+        slider.oninput = (e) => {
+          const val = parseFloat(e.target.value);
+          dispatch(updateAdsr(rowIndex, 0, { [adsrValues[i]]: val }));
+        };
+        rowDiv.appendChild(slider);
+      }
+      const pianoKeys = document.createElement('div');
+      pianoKeys.className = 'piano-keys';
+      const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+      const octave = 4;
+      notes.forEach((note, idx) => {
+        const key = document.createElement('div');
+        key.className = 'piano-key' + (note.includes('#') ? ' black' : '');
+        key.textContent = note + octave;
+        key.dataset.note = note + octave;
+        key.dataset.index = idx;
+        key.addEventListener('mousedown', () => {
+          const selectedNote = key.dataset.note;
+          dispatch(updateNote(rowIndex, 0, selectedNote));
+          key.classList.add('active');
+          setTimeout(() => key.classList.remove('active'), 100);
+        });
+        pianoKeys.appendChild(key);
+      });
+      rowDiv.appendChild(pianoKeys);
+      container.appendChild(rowDiv);
+    }
+
+    // === TRANSPORT CONTROLS MODULE ===
+    function setupTransportControls(container, dispatch, state) {
+      const bpmInput = container.querySelector('#bpm');
+      bpmInput.value = state.bpm;
+      bpmInput.addEventListener('change', (e) => {
+        const bpm = parseInt(e.target.value);
+        dispatch(setBpm(bpm));
+        Tone.Transport.bpm.value = bpm;
+      });
+      const playBtn = container.querySelector('#playBtn');
+      const stopBtn = container.querySelector('#stopBtn');
+      playBtn.addEventListener('click', () => {
+        dispatch(togglePlay());
+        if (Tone.Transport.state === 'stopped') {
+          Tone.Transport.start();
+        } else {
+          Tone.Transport.pause();
+        }
+      });
+      stopBtn.addEventListener('click', () => {
+        dispatch(stop());
+        Tone.Transport.stop();
+      });
+    }
+
+    // === MAIN APP BOOTSTRAP ===
+    let appState = { ...initialState };
+
+    const dispatch = (action) => {
+      appState = reducer(appState, action);
+      renderAll();
+    };
+
+    function renderAll() {
+      const gridContainer = document.getElementById('gridContainer');
+      const sampleRows = document.getElementById('sampleRows');
+      const synthRows = document.getElementById('synthRows');
+
+      renderGrid(gridContainer, appState.grid, dispatch);
+      setupTransportControls(document.querySelector('.controls'), dispatch, appState);
+
+      sampleRows.innerHTML = '';
+      for (let i = 0; i < 4; i++) {
+        createSampleChannel(i, sampleRows, dispatch, appState);
+      }
+
+      synthRows.innerHTML = '';
+      for (let i = 4; i < 8; i++) {
+        createSynthChannel(i, synthRows, dispatch, appState);
+      }
+    }
+
+    // === AUDIO ENGINE LOADER ===
+    setLoaderStatus('Loading Audio Engine...');
+    
+    // --- Dynamic Tone.js Loader ---
+    import(TONE_ORDINALS_URL)
+        .then(module => {
+            window.runtimeState = window.runtimeState || {};
+            window.runtimeState.Tone = window.Tone;
+            console.log('[BOP Matrix] Tone.js loaded:', window.runtimeState.Tone?.version ?? 'Unknown');
+            boot();
+        })
+        .catch(err => {
+            setLoader-status('Failed to load Tone.js. App cannot start.', true);
+            console.error('[BOP Matrix] Critical Tone.js load error:', err);
+        });
+
+    function boot() {
+      // Initialize app state
+      appState = { ...initialState };
+
+      // Set up transport
+      Tone.Transport.bpm.value = appState.bpm;
+
+      // Set up playback loop
+      Tone.Transport.scheduleRepeat((time) => {
+        const step = Math.floor(Tone.Transport.position % 64);
+        dispatch(setPlayHead(step));
+
+        for (let row = 0; row < 8; row++) {
+          const stepData = appState.grid[row][step];
+          if (stepData.isActive && !appState.muted[row]) {
+            if (row < 4) {
+              const player = appState.samples[row];
+              if (player) {
+                player.start(time);
+              }
+            } else {
+              const synth = appState.synths[row] || new Tone.Synth({
+                oscillator: { type: stepData.waveform },
+                envelope: {
+                  attack: stepData.attack,
+                  decay: stepData.decay,
+                  sustain: stepData.sustain,
+                  release: stepData.release
+                }
+              }).toDestination();
+
+              const newSynths = [...appState.synths];
+              newSynths[row] = synth;
+              appState = { ...appState, synths: newSynths };
+
+              synth.triggerAttackRelease(stepData.note, '16n', time);
+            }
+          }
+        }
+      }, '16n');
+
+      // Initial render
+      renderAll();
+      
+      // Remove loader status after successful boot
+      const statusEl = document.getElementById('loader-status');
+      if (statusEl) {
+        statusEl.remove();
+      }
+    }
+
+    // Create loader status element if it doesn't exist
+    if (!document.getElementById('loader-status')) {
+      const statusEl = document.createElement('div');
+      statusEl.id = 'loader-status';
+      statusEl.style.position = 'fixed';
+      statusEl.style.top = '10px';
+      statusEl.style.left = '50%';
+      statusEl.style.transform = 'translateX(-50%)';
+      statusEl.style.padding = '10px 20px';
+      statusEl.style.backgroundColor = '#2d2d44';
+      statusEl.style.color = '#00bfff';
+      statusEl.style.borderRadius = '4px';
+      statusEl.style.fontFamily = 'sans-serif';
+      statusEl.style.fontSize = '14px';
+      statusEl.style.zIndex = '1000';
+      statusEl.textContent = 'Loading Audio Engine...';
+      document.body.appendChild(statusEl);
+    }
+  </script>
+  <style>
+    :root {
+      --bg: #1a1a2e;
+      --fg: #f8f8f2;
+      --grid: #2d2d44;
+      --active: #ff6b6b;
+      --mute: #6c757d;
+      --highlight: #00bfff;
+      --btn: #4d5169;
+      --piano-key: #ffffff;
+      --piano-key-active: #00bfff;
+    }
+
+    body {
+      margin: 0;
+      font-family: 'Segoe UI', sans-serif;
+      background-color: var(--bg);
+      color: var(--fg);
+      padding: 1rem;
+    }
+
+    header {
+      text-align: center;
+      margin-bottom: 1rem;
+    }
+
+    .container {
+      display: flex;
+      gap: 1rem;
+      flex-wrap: wrap;
+      justify-content: center;
+    }
+
+    .controls {
+      flex: 1;
+      min-width: 300px;
+      background-color: var(--grid);
+      border-radius: 8px;
+      padding: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .sequencer {
+      flex: 2;
+      min-width: 400px;
+      background-color: var(--grid);
+      border-radius: 8px;
+      padding: 1rem;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    }
+
+    .row {
+      display: flex;
+      gap: 0.2rem;
+      margin-bottom: 0.2rem;
+      align-items: center;
+      height: 30px;
+    }
+
+    .label {
+      width: 60px;
+      font-size: 0.8rem;
+      text-align: right;
+      padding-right: 0.5rem;
+      white-space: nowrap;
+    }
+
+    .step-btn {
+      width: 24px;
+      height: 24px;
+      border: none;
+      border-radius: 4px;
+      background-color: transparent;
+      cursor: pointer;
+      transition: background-color 0.1s;
+    }
+
+    .step-btn.active {
+      background-color: var(--active);
+    }
+
+    .step-btn.muted {
+      background-color: var(--mute);
+    }
+
+    .step-btn.playing {
+      background-color: var(--highlight);
+    }
+
+    .piano-keys {
+      display: flex;
+      gap: 0.2rem;
+      margin-top: 0.5rem;
+      justify-content: center;
+    }
+
+    .piano-key {
+      width: 30px;
+      height: 80px;
+      background-color: var(--piano-key);
+      border: 1px solid #ccc;
+      border-radius: 0 0 4px 4px;
+      position: relative;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      font-size: 0.7rem;
+      padding-bottom: 0.2rem;
+      color: #333;
+    }
+
+    .piano-key.active {
+      background-color: var(--piano-key-active);
+    }
+
+    .piano-key.black {
+      width: 20px;
+      height: 50px;
+      background-color: #333;
+      color: #fff;
+      position: absolute;
+      top: 0;
+      z-index: 1;
+      border-radius: 0 0 2px 2px;
+      left: 50%;
+      transform: translateX(-50%);
+    }
+
+    .control-group {
+      margin-bottom: 1rem;
+    }
+
+    button {
+      background-color: var(--btn);
+      color: var(--fg);
+      border: none;
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 0.9rem;
+    }
+
+    button:hover {
+      background-color: #5d6179;
+    }
+
+    input[type="number"] {
+      width: 60px;
+      padding: 0.3rem;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background-color: #333;
+      color: var(--fg);
+    }
+
+    .file-input {
+      width: 100%;
+      padding: 0.3rem;
+      border-radius: 4px;
+      border: 1px dashed #666;
+      background-color: #2d2d44;
+    }
+
+    .file-input:focus {
+      outline: none;
+      border-color: var(--highlight);
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>4-Bar 64-Step Audio Sequencer</h1>
+    <p>Drag & drop audio files or use file inputs. Play/Stop, adjust BPM, toggle mute.</p>
+  </header>
+
+  <div class="container">
+    <div class="controls">
+      <div class="control-group">
+        <label for="bpm">BPM:</label>
+        <input type="number" id="bpm" value="120" min="40" max="240" />
+      </div>
+      <div class="control-group">
+        <button id="playBtn">Play</button>
+        <button id="stopBtn">Stop</button>
+      </div>
+      <div class="control-group">
+        <h3>Sample Rows</h3>
+        <div id="sampleRows"></div>
+      </div>
+      <div class="control-group">
+        <h3>Instrument Rows</h3>
+        <div id="synthRows"></div>
+      </div>
+    </div>
+
+    <div class="sequencer">
+      <div id="gridContainer"></div>
+    </div>
+  </div>
+</body>
+</html>

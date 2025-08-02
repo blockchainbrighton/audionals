@@ -1,0 +1,602 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>4-Bar 64-Step Sequencer (Tone.js from Ordinals)</title>
+  <style>
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #1a1a1e;
+      color: #e0e0e0;
+      margin: 0;
+      padding: 20px;
+    }
+
+    h1 {
+      text-align: center;
+      color: #ffffff;
+    }
+
+    #loader {
+      text-align: center;
+      font-size: 18px;
+      margin: 30px 0;
+      color: #bb86fc;
+    }
+
+    .controls, .grid-container {
+      display: none;
+    }
+
+    .loaded .controls,
+    .loaded .grid-container {
+      display: inherit;
+    }
+
+    .controls {
+      display: flex;
+      justify-content: center;
+      gap: 15px;
+      margin-bottom: 20px;
+      flex-wrap: wrap;
+    }
+
+    button {
+      background: #3a3a3a;
+      color: white;
+      border: none;
+      padding: 8px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 14px;
+    }
+
+    button:hover {
+      background: #505050;
+    }
+
+    button.playing {
+      background: #4caf50;
+    }
+
+    input[type="number"] {
+      padding: 8px;
+      width: 60px;
+      background: #3a3a3a;
+      color: white;
+      border: 1px solid #555;
+      border-radius: 4px;
+    }
+
+    .grid-container {
+      display: grid;
+      grid-template-columns: 150px repeat(64, 1fr);
+      gap: 2px;
+      margin: 0 auto;
+      max-width: 100%;
+      overflow-x: auto;
+      padding: 10px;
+      background: #252529;
+      border-radius: 8px;
+    }
+
+    .row-label {
+      background: #333;
+      padding: 10px;
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      font-size: 14px;
+      border-radius: 4px;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      gap: 5px;
+    }
+
+    .row-label button {
+      padding: 4px 8px;
+      font-size: 12px;
+      margin-left: 5px;
+    }
+
+    .step {
+      aspect-ratio: 1;
+      background: #3a3a3a;
+      border: 1px solid #555;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+
+    .step.active {
+      background: #bb86fc;
+    }
+
+    .step.playhead {
+      box-shadow: 0 0 8px 2px #03dac6;
+    }
+
+    .channel-controls {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      padding: 8px;
+      background: #2d2d30;
+      border-radius: 6px;
+      margin-top: 4px;
+      font-size: 12px;
+    }
+
+    .control-group {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .control-group label {
+      width: 30px;
+    }
+
+    select, input[type="range"] {
+      background: #3a3a3a;
+      color: white;
+      border: 1px solid #555;
+      padding: 2px;
+    }
+
+    .piano {
+      display: flex;
+      height: 40px;
+      margin-top: 8px;
+    }
+
+    .key {
+      flex: 1;
+      background: white;
+      border: 1px solid #ccc;
+      border-radius: 0 0 4px 4px;
+      cursor: pointer;
+    }
+
+    .key.black {
+      background: black;
+      color: white;
+      margin: 0 -15%;
+      width: 30%;
+      z-index: 1;
+      border-color: #333;
+    }
+
+    .key.active {
+      background: #bb86fc;
+    }
+  </style>
+</head>
+<body>
+  <!-- 
+  Quick Usage Notes:
+  1. Open in modern browser (Chrome/Firefox/Safari).
+  2. Waits for Tone.js to load from Ordinals content URL.
+  3. Drag/drop audio into Sample rows.
+  4. Use piano keys to audition synth notes.
+  5. Click steps to toggle, adjust ADSR, change BPM.
+  6. Play/Stop with button or Space.
+  -->
+
+  <h1>4-Bar 64-Step Sequencer</h1>
+  <div id="loader">Loading Audio Engine...</div>
+
+  <div class="controls">
+    <button id="playButton">Play</button>
+    <label>
+      BPM:
+      <input type="number" id="bpmInput" value="120" min="40" max="240" />
+    </label>
+  </div>
+  <div class="grid-container" id="gridContainer"></div>
+
+  <script type="module">
+    // --- Configuration ---
+    const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+
+    // DOM loader element
+    const loader = document.getElementById('loader');
+    const setLoaderStatus = (msg, isError = false) => {
+      loader.textContent = msg;
+      loader.style.color = isError ? '#cf6679' : '#bb86fc';
+    };
+
+    // Runtime state
+    const runtimeState = {};
+
+    // --- Dynamic Tone.js Loader ---
+    setLoaderStatus('Loading Audio Engine...');
+    import(TONE_ORDINALS_URL)
+      .then(module => {
+        runtimeState.Tone = window.Tone;
+        console.log('[Sequencer] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+        boot();
+      })
+      .catch(err => {
+        setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+        console.error('[Sequencer] Critical Tone.js load error:', err);
+      });
+
+    // --- App Boot Sequence ---
+    function boot() {
+      setLoaderStatus('');
+      document.body.classList.add('loaded');
+      initApp();
+    }
+
+    // === App Modules ===
+    function initApp() {
+      const Tone = window.Tone;
+
+      // --- State Management ---
+      function initState() {
+        return {
+          transport: {
+            isPlaying: false,
+            bpm: 120,
+            currentStep: 0,
+          },
+          channels: Array(8).fill().map((_, i) => ({
+            id: i,
+            type: i < 4 ? 'sample' : 'synth',
+            muted: false,
+            name: i < 4 ? `Sample ${i + 1}` : `Synth ${i - 3}`,
+            steps: Array(64).fill(false),
+            note: 'C4',
+            samplePlayer: null,
+            synth: null,
+            waveform: 'sine',
+            attack: 0.01,
+            decay: 0.1,
+            sustain: 0.7,
+            release: 0.3,
+            filterFreq: 1000,
+          })),
+        };
+      }
+
+      let state = initState();
+
+      function reducer(state, action) {
+        switch (action.type) {
+          case 'SET_PLAYING':
+            return { ...state, transport: { ...state.transport, isPlaying: action.isPlaying } };
+          case 'SET_BPM':
+            return { ...state, transport: { ...state.transport, bpm: action.bpm } };
+          case 'SET_CURRENT_STEP':
+            return { ...state, transport: { ...state.transport, currentStep: action.step } };
+          case 'TOGGLE_STEP':
+            return {
+              ...state,
+              channels: state.channels.map((ch, i) =>
+                i === action.channelId
+                  ? { ...ch, steps: ch.steps.with(action.stepIndex, !ch.steps[action.stepIndex]) }
+                  : ch
+              ),
+            };
+          case 'TOGGLE_MUTE':
+            return {
+              ...state,
+              channels: state.channels.map((ch, i) =>
+                i === action.channelId ? { ...ch, muted: !ch.muted } : ch
+              ),
+            };
+          case 'CLEAR_CHANNEL':
+            return {
+              ...state,
+              channels: state.channels.map((ch, i) =>
+                i === action.channelId ? { ...ch, steps: Array(64).fill(false) } : ch
+              ),
+            };
+          case 'SET_CHANNEL_NAME':
+            return {
+              ...state,
+              channels: state.channels.map((ch, i) =>
+                i === action.channelId ? { ...ch, name: action.name } : ch
+              ),
+            };
+          case 'SET_SYNTH_PARAM':
+            return {
+              ...state,
+              channels: state.channels.map((ch, i) =>
+                i === action.channelId
+                  ? { ...ch, [action.param]: action.value }
+                  : ch
+              ),
+            };
+          case 'SET_NOTE':
+            return {
+              ...state,
+              channels: state.channels.map((ch, i) =>
+                i === action.channelId ? { ...ch, note: action.note } : ch
+              ),
+            };
+          default:
+            return state;
+        }
+      }
+
+      // --- Render Grid ---
+      function render(state) {
+        const container = document.getElementById('gridContainer');
+        container.innerHTML = '';
+
+        state.channels.forEach((channel, channelId) => {
+          const labelDiv = document.createElement('div');
+          labelDiv.className = 'row-label';
+          labelDiv.textContent = channel.name;
+
+          const muteBtn = document.createElement('button');
+          muteBtn.textContent = channel.muted ? 'Unmute' : 'Mute';
+          muteBtn.onclick = () => dispatch({ type: 'TOGGLE_MUTE', channelId });
+
+          const clearBtn = document.createElement('button');
+          clearBtn.textContent = 'Clear';
+          clearBtn.onclick = () => dispatch({ type: 'CLEAR_CHANNEL', channelId });
+
+          labelDiv.append(muteBtn, clearBtn);
+          container.appendChild(labelDiv);
+
+          for (let step = 0; step < 64; step++) {
+            const stepBtn = document.createElement('button');
+            stepBtn.className = 'step';
+            if (channel.steps[step]) stepBtn.classList.add('active');
+            if (state.transport.currentStep === step) stepBtn.classList.add('playhead');
+
+            stepBtn.addEventListener('click', () =>
+              dispatch({ type: 'TOGGLE_STEP', channelId, stepIndex: step })
+            );
+
+            container.appendChild(stepBtn);
+          }
+
+          const controlsDiv = document.createElement('div');
+          controlsDiv.className = 'channel-controls';
+
+          if (channel.type === 'sample') {
+            new SampleChannel(channelId).render(controlsDiv);
+          } else {
+            new SynthChannel(channelId).render(controlsDiv);
+          }
+
+          container.appendChild(controlsDiv);
+        });
+      }
+
+      // --- Sample Channel ---
+      class SampleChannel {
+        constructor(channelId) {
+          this.channelId = channelId;
+        }
+
+        render(parent) {
+          const fileInput = document.createElement('input');
+          fileInput.type = 'file';
+          fileInput.accept = 'audio/*';
+          fileInput.style.width = '100%';
+
+          fileInput.addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const url = URL.createObjectURL(file);
+            const player = new Tone.Player(url).toDestination();
+
+            dispatch({
+              type: 'SET_CHANNEL_NAME',
+              channelId: this.channelId,
+              name: file.name,
+            });
+
+            const ch = state.channels[this.channelId];
+            ch.samplePlayer = player;
+          });
+
+          parent.appendChild(fileInput);
+          parent.innerHTML += `<div>Drag or select audio file</div>`;
+        }
+      }
+
+      // --- Synth Channel ---
+      class SynthChannel {
+        constructor(channelId) {
+          this.channelId = channelId;
+        }
+
+        createControlGroup(labelText) {
+          const div = document.createElement('div');
+          div.className = 'control-group';
+
+          const label = document.createElement('label');
+          label.textContent = labelText;
+
+          const input = document.createElement('input');
+          div.append(label, input);
+          return { div, label, input };
+        }
+
+        addSlider(parent, label, param, value, min, max, step) {
+          const group = this.createControlGroup(label + ':');
+          group.input.type = 'range';
+          group.input.min = min;
+          group.input.max = max;
+          group.input.step = step;
+          group.input.value = value;
+
+          group.input.addEventListener('input', (e) => {
+            dispatch({
+              type: 'SET_SYNTH_PARAM',
+              channelId: this.channelId,
+              param,
+              value: parseFloat(e.target.value),
+            });
+          });
+
+          parent.appendChild(group.div);
+        }
+
+        render(parent) {
+          const channel = state.channels[this.channelId];
+
+          // Waveform selector
+          const waveDiv = document.createElement('div');
+          waveDiv.className = 'control-group';
+
+          const waveLabel = document.createElement('label');
+          waveLabel.textContent = 'Wave:';
+
+          const select = document.createElement('select');
+          select.innerHTML = `
+            <option value="sine" ${channel.waveform === 'sine' ? 'selected' : ''}>Sine</option>
+            <option value="square" ${channel.waveform === 'square' ? 'selected' : ''}>Square</option>
+            <option value="sawtooth" ${channel.waveform === 'sawtooth' ? 'selected' : ''}>Saw</option>
+            <option value="triangle" ${channel.waveform === 'triangle' ? 'selected' : ''}>Triangle</option>
+          `;
+
+          select.addEventListener('change', (e) => {
+            dispatch({
+              type: 'SET_SYNTH_PARAM',
+              channelId: this.channelId,
+              param: 'waveform',
+              value: e.target.value,
+            });
+          });
+
+          waveDiv.append(waveLabel, select);
+          parent.appendChild(waveDiv);
+
+          // ADSR sliders
+          this.addSlider(parent, 'Attack', 'attack', channel.attack, 0, 1, 0.01);
+          this.addSlider(parent, 'Decay', 'decay', channel.decay, 0, 1, 0.01);
+          this.addSlider(parent, 'Sustain', 'sustain', channel.sustain, 0, 1, 0.01);
+          this.addSlider(parent, 'Release', 'release', channel.release, 0, 3, 0.01);
+
+          // Piano keys
+          const piano = document.createElement('div');
+          piano.className = 'piano';
+          const notes = ['C4', 'C#4', 'D4', 'D#4', 'E4', 'F4', 'F#4', 'G4', 'G#4', 'A4', 'A#4', 'B4', 'C5'];
+          const blackKeys = new Set(['C#4', 'D#4', 'F#4', 'G#4', 'A#4']);
+
+          notes.forEach((note) => {
+            const key = document.createElement('div');
+            key.className = `key ${blackKeys.has(note) ? 'black' : ''}`;
+            key.dataset.note = note;
+
+            key.addEventListener('mousedown', () => {
+              dispatch({ type: 'SET_NOTE', channelId: this.channelId, note });
+              this.triggerNote(note, 0.5);
+              key.classList.add('active');
+            });
+
+            key.addEventListener('mouseup', () => key.classList.remove('active'));
+            key.addEventListener('mouseleave', () => key.classList.remove('active'));
+
+            piano.appendChild(key);
+          });
+
+          parent.appendChild(piano);
+        }
+
+        triggerNote(note, vel = 0.5) {
+          const channel = state.channels[this.channelId];
+
+          if (!channel.synth) {
+            channel.synth = new Tone.Synth({
+              oscillator: { type: channel.waveform },
+              envelope: {
+                attack: channel.attack,
+                decay: channel.decay,
+                sustain: channel.sustain,
+                release: channel.release,
+              },
+              filter: { frequency: channel.filterFreq },
+            }).toDestination();
+          }
+
+          channel.synth.oscillator.type = channel.waveform;
+          channel.synth.envelope.attack = channel.attack;
+          channel.synth.envelope.decay = channel.decay;
+          channel.synth.envelope.sustain = channel.sustain;
+          channel.synth.envelope.release = channel.release;
+
+          channel.synth.triggerAttackRelease(note, '16n');
+        }
+      }
+
+      // --- Transport Controls ---
+      function setupTransportControls() {
+        const playButton = document.getElementById('playButton');
+        const bpmInput = document.getElementById('bpmInput');
+
+        Tone.Transport.bpm.value = state.transport.bpm;
+        bpmInput.value = state.transport.bpm;
+
+        bpmInput.addEventListener('change', () => {
+          const bpm = parseFloat(bpmInput.value);
+          if (bpm >= 40 && bpm <= 240) {
+            Tone.Transport.bpm.value = bpm;
+            dispatch({ type: 'SET_BPM', bpm });
+          }
+        });
+
+        playButton.addEventListener('click', toggleTransport);
+        document.addEventListener('keydown', (e) => {
+          if (e.code === 'Space') {
+            e.preventDefault();
+            toggleTransport();
+          }
+        });
+
+        const loop = new Tone.Loop((time) => {
+          const step = Tone.Transport.position.split(':')[2];
+          const stepIndex = parseInt(step);
+          dispatch({ type: 'SET_CURRENT_STEP', step: stepIndex });
+
+          state.channels.forEach((ch, i) => {
+            if (ch.muted || !ch.steps[stepIndex]) return;
+
+            if (ch.type === 'sample' && ch.samplePlayer) {
+              ch.samplePlayer.start(time);
+            } else if (ch.type === 'synth' && ch.synth) {
+              ch.synth.triggerAttackRelease(ch.note, '16n', time);
+            }
+          });
+        }, '16n');
+
+        loop.start(0);
+
+        function toggleTransport() {
+          if (Tone.Transport.state === 'started') {
+            Tone.Transport.stop();
+            playButton.textContent = 'Play';
+            playButton.classList.remove('playing');
+            dispatch({ type: 'SET_PLAYING', isPlaying: false });
+          } else {
+            Tone.start();
+            Tone.Transport.start();
+            playButton.textContent = 'Stop';
+            playButton.classList.add('playing');
+            dispatch({ type: 'SET_PLAYING', isPlaying: true });
+          }
+        }
+      }
+
+      // --- Dispatch & Render Loop ---
+      function dispatch(action) {
+        state = reducer(state, action);
+        render(state);
+      }
+
+      // --- Initialize App ---
+      render(state);
+      setupTransportControls();
+    }
+  </script>
+</body>
+</html>
