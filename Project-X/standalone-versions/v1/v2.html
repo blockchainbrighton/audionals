@@ -1,0 +1,437 @@
+<!-- index.html -->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Minimal Web3 Oscilloscope Music</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background-color: #121212;
+      color: #ffffff;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+      overflow: hidden;
+    }
+    body {
+      display: grid;
+      place-items: center;
+      gap: 2rem;
+    }
+    #scope {
+      border-radius: 8px;
+      border: 1px solid #333;
+      background-color: #000;
+    }
+    #controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      justify-content: center;
+      flex-wrap: wrap;
+    }
+    #controls button, #controls select {
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      border: 1px solid #555;
+      background-color: #222;
+      color: #fff;
+      font-size: 1rem;
+    }
+    #controls button:hover {
+      background-color: #333;
+    }
+    #loader {
+      text-align: center;
+      font-size: 0.9rem;
+      color: #aaa;
+      min-height: 1.2rem;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Start Audio + Draw</button>
+    <button id="muteBtn">Mute</button> <!-- New Mute Button -->
+    <select id="shapeSelect">
+      <option value="circle">Circle</option>
+      <option value="square">Square</option>
+      <option value="butterfly">Butterfly</option>
+    </select>
+  </section>
+  <div id="loader">Initializing...</div>
+  <script type="module">
+    // toneLoader.js (embedded)
+    export function loadToneJSAndBoot({
+        toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+        setLoaderStatus = () => { },
+        runtimeState = {},
+        boot = () => { }
+    } = {}) {
+        setLoaderStatus('Loading Audio Engine...');
+        import(/* @vite-ignore */ toneUrl)
+            .then(mod => {
+                // Tone.js might be attached to window or available as a module export
+                runtimeState.Tone = window.Tone ?? mod?.default ?? mod;
+                if (runtimeState.Tone) {
+                    setLoaderStatus(`Tone.js v${runtimeState.Tone?.version ?? '?'} ready.`);
+                    boot();
+                } else {
+                    throw new Error('Tone.js loaded but namespace not found.');
+                }
+            })
+            .catch(err => {
+                setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                console.error(err);
+            });
+    }
+    // main.js (separate file content below, but loaded as module)
+    // import { loadToneJSAndBoot } from './toneLoader.js'; // This will resolve to the function above in this single-file setup
+    // --- 1. State & DOM Elements ---
+    const state = {
+        isPlaying: false,
+        isMuted: false, // Track mute state
+        analyser: null,
+        animationId: null,
+        currentShape: 'circle', // default shape
+        Tone: null, // Will be populated by the loader
+        activeSynthNodes: null // Store references to the currently active nodes for the selected shape
+    };
+
+    // --- Define musical key and shape sounds ---
+    // Frequencies for C Major scale (Octave 3 to 5) - Root C4 = 261.63 Hz
+    const scaleFrequencies = {
+        C3: 130.81,
+        D3: 146.83,
+        E3: 164.81,
+        F3: 174.61,
+        G3: 196.00,
+        A3: 220.00,
+        B3: 246.94,
+        C4: 261.63,
+        D4: 293.66,
+        E4: 329.63,
+        F4: 349.23,
+        G4: 392.00,
+        A4: 440.00,
+        B4: 493.88,
+        C5: 523.25
+    };
+
+    // Define unique oscillator pairs for each shape using the scale
+    const shapeSounds = {
+        circle: {
+            osc1Freq: scaleFrequencies.C4, // Root
+            osc1Type: "sine",
+            osc2Freq: scaleFrequencies.E4, // Major 3rd
+            osc2Type: "sine",
+            filterBase: 2500,
+            filterModMin: 1500,
+            filterModMax: 4000
+        },
+        square: {
+            osc1Freq: scaleFrequencies.G3, // Fifth
+            osc1Type: "square", // Different waveform
+            osc2Freq: scaleFrequencies.B3, // Major 7th
+            osc2Type: "sine",
+            filterBase: 1800,
+            filterModMin: 800,
+            filterModMax: 3000
+        },
+        butterfly: {
+            osc1Freq: scaleFrequencies.E4, // Third
+            osc1Type: "sawtooth", // Different waveform
+            osc2Freq: scaleFrequencies.G4, // Fifth
+            osc2Type: "triangle", // Different waveform
+            filterBase: 3000,
+            filterModMin: 2000,
+            filterModMax: 6000
+        }
+    };
+    // --- End musical definitions ---
+
+    const canvas = document.getElementById('scope');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const muteBtn = document.getElementById('muteBtn'); // Reference to Mute Button
+    const shapeSelect = document.getElementById('shapeSelect');
+    const loaderDiv = document.getElementById('loader');
+    // --- 2. Drawing Functions ---
+    const drawFunctions = {
+        circle: (data, time) => {
+            const size = Math.min(canvas.width, canvas.height) * 0.8;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; i++) {
+                const angle = (i / data.length) * Math.PI * 2;
+                const amplitude = (data[i] + 1) / 2; // Map from [-1, 1] to [0, 1]
+                const radius = (size / 2) * amplitude;
+                const x = centerX + Math.cos(angle + time) * radius;
+                const y = centerY + Math.sin(angle + time) * radius;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        },
+        square: (data, time) => {
+            const size = Math.min(canvas.width, canvas.height) * 0.8;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            const side = size / Math.sqrt(2);
+            const offsetX = (canvas.width - side) / 2;
+            const offsetY = (canvas.height - side) / 2;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; i++) {
+                const progress = i / data.length;
+                let x, y;
+                if (progress < 0.25) {
+                    // Top side
+                    x = offsetX + (progress / 0.25) * side;
+                    y = offsetY;
+                } else if (progress < 0.5) {
+                    // Right side
+                    x = offsetX + side;
+                    y = offsetY + ((progress - 0.25) / 0.25) * side;
+                } else if (progress < 0.75) {
+                    // Bottom side
+                    x = offsetX + side - ((progress - 0.5) / 0.25) * side;
+                    y = offsetY + side;
+                } else {
+                    // Left side
+                    x = offsetX;
+                    y = offsetY + side - ((progress - 0.75) / 0.25) * side;
+                }
+                const amplitude = (data[i] + 1) / 2;
+                const distX = x - centerX;
+                const distY = y - centerY;
+                const finalX = centerX + distX * (0.8 + 0.2 * amplitude);
+                const finalY = centerY + distY * (0.8 + 0.2 * amplitude);
+                if (i === 0) ctx.moveTo(finalX, finalY);
+                else ctx.lineTo(finalX, finalY);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        },
+        butterfly: (data, time) => {
+            const size = Math.min(canvas.width, canvas.height) * 0.4;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; i++) {
+                const t = (i / data.length) * Math.PI * 24; // 12 "wings"
+                // Butterfly parametric equations
+                const scale = Math.pow(Math.E, Math.cos(t)) - 2 * Math.cos(4 * t) + Math.pow(Math.sin(t / 12), 5);
+                let x = Math.sin(t) * scale;
+                let y = Math.cos(t) * scale;
+                // Use audio data to modulate the shape
+                const amplitude = (data[i] + 1) / 2;
+                x *= size * (0.5 + 0.5 * amplitude);
+                y *= size * (0.5 + 0.5 * amplitude);
+                x += centerX;
+                y += centerY;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+    };
+    // --- 3. Animation Loop ---
+    function animate() {
+        if (!state.analyser || !state.isPlaying) return;
+        const bufferLength = state.analyser.fftSize;
+        const dataArray = new Float32Array(bufferLength);
+        state.analyser.getFloatTimeDomainData(dataArray);
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        // Styling
+        ctx.strokeStyle = `hsl(${(performance.now() / 50) % 360}, 100%, 70%)`;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = 'round';
+        ctx.lineCap = 'round';
+        const currentTime = performance.now() / 1000;
+        const drawFunc = drawFunctions[state.currentShape] || drawFunctions.circle;
+        drawFunc(dataArray, currentTime);
+        state.animationId = requestAnimationFrame(animate);
+    }
+
+    // --- Helper to toggle mute state ---
+    function toggleMute() {
+        if (!state.Tone) return;
+        state.isMuted = !state.isMuted;
+        state.Tone.Destination.mute = state.isMuted;
+        muteBtn.textContent = state.isMuted ? 'Unmute' : 'Mute';
+    }
+
+    // --- Helper to stop and dispose of currently active synth nodes ---
+    function stopAndDisposeActiveSynth() {
+        if (state.activeSynthNodes) {
+            // Stop and dispose of all nodes in the active set
+            Object.values(state.activeSynthNodes).forEach(node => {
+                if (node && typeof node.dispose === 'function') {
+                    try {
+                        node.dispose();
+                    } catch (e) {
+                        console.warn("Error disposing node:", e);
+                    }
+                }
+            });
+            state.activeSynthNodes = null;
+        }
+    }
+
+    // --- Helper to create synth nodes for a given shape ---
+    function createSynthForShape(shapeName) {
+        if (!state.Tone) return null;
+        const soundConfig = shapeSounds[shapeName];
+        if (!soundConfig) {
+            console.warn(`No sound configuration found for shape: ${shapeName}`);
+            return null;
+        }
+
+        try {
+            // Create oscillators
+            const oscillator1 = new state.Tone.Oscillator(soundConfig.osc1Freq, soundConfig.osc1Type).start();
+            const oscillator2 = new state.Tone.Oscillator(soundConfig.osc2Freq, soundConfig.osc2Type).start();
+
+            // Create filter and LFO
+            const filter = new state.Tone.Filter(soundConfig.filterBase, "lowpass");
+            const lfo = new state.Tone.LFO("8n", soundConfig.filterModMin, soundConfig.filterModMax).start(); // Slower LFO
+
+            // Create a gain node to mix the oscillators before filtering
+            const mixer = new state.Tone.Gain(0.5); // Reduce volume to prevent clipping
+
+            // Connect oscillators to mixer
+            oscillator1.connect(mixer);
+            oscillator2.connect(mixer);
+
+            // Connect mixer to filter
+            mixer.connect(filter);
+
+            // Connect LFO to filter frequency
+            lfo.connect(filter.frequency);
+
+            // Create analyser
+            const analyser = state.Tone.context.createAnalyser();
+            analyser.fftSize = 2048;
+
+            // Connect filter output to analyser, then analyser to destination
+            filter.connect(analyser);
+            analyser.connect(state.Tone.Destination); // Connect analyser to final output
+
+            // Apply initial mute state
+            state.Tone.Destination.mute = state.isMuted;
+
+            // Return the created nodes so they can be managed/stopped/disposed
+            return { oscillator1, oscillator2, filter, lfo, mixer, analyser };
+        } catch (err) {
+            console.error(`Error creating synth for shape ${shapeName}:`, err);
+            return null;
+        }
+    }
+
+
+    // --- 4. Start/Stop Logic ---
+    async function startAudioAndDraw() {
+        if (state.isPlaying) return;
+        if (!state.Tone) {
+            loaderDiv.textContent = 'Error: Tone.js not loaded.';
+            return;
+        }
+        try {
+            // Resume Audio Context
+            if (state.Tone.context.state !== 'running') {
+                await state.Tone.start();
+                await state.Tone.context.resume();
+            }
+
+            // Create synth nodes for the *current* shape
+            const synthNodes = createSynthForShape(state.currentShape);
+            if (!synthNodes) {
+                throw new Error(`Failed to create synth for shape: ${state.currentShape}`);
+            }
+
+            // Store the active nodes
+            state.activeSynthNodes = synthNodes;
+
+            // Assign analyser to state for animation loop
+            state.analyser = synthNodes.analyser;
+
+            state.isPlaying = true;
+            startBtn.textContent = 'Stop Audio + Draw';
+            // Ensure mute state is correct
+            muteBtn.textContent = state.isMuted ? 'Unmute' : 'Mute';
+            animate();
+        } catch (err) {
+            console.error('Error starting audio:', err);
+            loaderDiv.textContent = 'Failed to start audio.';
+        }
+    }
+
+    function stopAudioAndDraw() {
+        if (!state.isPlaying) return;
+
+        // Stop and dispose of the active synth nodes
+        stopAndDisposeActiveSynth();
+
+        // Clear analyser reference
+        state.analyser = null;
+
+        state.isPlaying = false;
+        if (state.animationId) {
+            cancelAnimationFrame(state.animationId);
+            state.animationId = null;
+        }
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        startBtn.textContent = 'Start Audio + Draw';
+    }
+
+    // --- 5. Event Listeners ---
+    startBtn.addEventListener('click', () => {
+        if (state.isPlaying) {
+            stopAudioAndDraw();
+        } else {
+            startAudioAndDraw();
+        }
+    });
+
+    muteBtn.addEventListener('click', toggleMute); // Add listener for mute button
+
+    shapeSelect.addEventListener('change', () => {
+        const newShape = shapeSelect.value;
+        const wasPlaying = state.isPlaying;
+
+        // If audio is playing, we need to stop the old synth and start the new one
+        if (wasPlaying) {
+            stopAudioAndDraw(); // This also clears state.analyser
+        }
+
+        // Update the current shape
+        state.currentShape = newShape;
+
+        // If it was playing, restart with the new shape's synth
+        if (wasPlaying) {
+            startAudioAndDraw();
+        }
+    });
+
+    // --- 6. Initialize Loader ---
+    loadToneJSAndBoot({
+        setLoaderStatus: (message, isError = false) => {
+            loaderDiv.textContent = message;
+            loaderDiv.style.color = isError ? 'red' : '#aaa';
+        },
+        runtimeState: state, // Pass our state object to be populated
+        boot: () => {
+            // This is called after Tone.js is successfully loaded
+            console.log('Tone.js is ready, demo can now be started.');
+            loaderDiv.textContent = 'Audio engine ready. Click Start.';
+        }
+    });
+  </script>
+</body>
+</html>

@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Web3 Oscilloscope Music</title>
+  <meta name="viewport" content="width=600,initial-scale=1">
+  <style>
+    html, body {margin:0; padding:0; height:100%; background:#121212; color:#fff; font-family:sans-serif;}
+    body {display:grid; place-items:center; gap:2rem;}
+    #scope {border-radius:8px; border:1px solid #333; background:#000;}
+    #controls {display:flex; gap:1rem; align-items:center;}
+    #controls button, #controls select {padding:0.5rem 1rem; border-radius:4px; border:1px solid #555; background:#222; color:#fff;}
+    #controls button:hover {background:#333;}
+    #loader {font-size:0.9rem; color:#aaa; min-height:1.2rem; text-align:center;}
+  </style>
+</head>
+<body>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Start Audio + Draw</button>
+    <button id="muteBtn">Mute</button>
+    <select id="shapeSelect">
+      <option value="circle">Circle</option>
+      <option value="square">Square</option>
+      <option value="butterfly">Butterfly</option>
+    </select>
+  </section>
+  <div id="loader">Initializing...</div>
+  <script type="module">
+    // ---- Dynamic Tone.js loader ----
+    function loadToneJSAndBoot({ toneUrl, setLoaderStatus, state, boot }) {
+      setLoaderStatus('Loading Audio Engine...');
+      import(toneUrl).then(mod => {
+        state.Tone = window.Tone ?? mod?.default ?? mod;
+        if (state.Tone) {
+          setLoaderStatus(`Tone.js v${state.Tone.version ?? "?"} ready.`);
+          boot();
+        } else throw new Error('Tone.js not found.');
+      }).catch(e => {
+        setLoaderStatus('Failed to load Tone.js. App cannot start.', 1);
+        console.error(e);
+      });
+    }
+
+    // ---- STATE & DOM ----
+    const state = { isPlaying: false, Tone: null, nodes: {} };
+    const canvas = scope, ctx = canvas.getContext('2d');
+    const startBtn = startBtn, muteBtn = muteBtn, shapeSel = shapeSelect, loader = loader;
+
+    // ---- SOUND + SHAPE PRESETS ----
+    // All keys Cmaj (C3, E3, G3, G4) harmonize.
+    const presets = {
+      circle:    { osc1: ['sine','C3'],        osc2: null,     filter:1500, lfo:[4,500,3000] },
+      square:    { osc1: ['square','E3'],      osc2: null,     filter:1200, lfo:[8,300,2500] },
+      butterfly: { osc1: ['sawtooth','G3'],    osc2:['sine','G4'], filter:2000, lfo:[1.33,200,4000] }
+    };
+
+    // ---- DRAWING ----
+    const drawFuncs = {
+      circle(data, t) {
+        const S = 0.8*canvas.width/2, cx = 300, cy = 300;
+        ctx.beginPath();
+        for (let i=0; i<data.length; ++i) {
+          const a = i/data.length * 2*Math.PI, amp = (data[i]+1)/2, r = S*amp;
+          const x = cx + Math.cos(a+t)*r, y = cy + Math.sin(a+t)*r;
+          i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+        }
+        ctx.closePath(); ctx.stroke();
+      },
+      square(data, t) {
+        const S = 0.8*canvas.width/Math.SQRT2, c = 300, o = (600-S)/2;
+        ctx.beginPath();
+        for (let i=0; i<data.length; ++i) {
+          const p = i/data.length, amp = (data[i]+1)/2;
+          let x,y;
+          if      (p<.25) [x,y]=[o+S*(p/.25),o];
+          else if (p<.5)  [x,y]=[o+S,o+S*((p-.25)/.25)];
+          else if (p<.75) [x,y]=[o+S-S*((p-.5)/.25),o+S];
+          else            [x,y]=[o,o+S-S*((p-.75)/.25)];
+          const dx=x-c, dy=y-c, fx=c+dx*(.8+.2*amp), fy=c+dy*(.8+.2*amp);
+          i?ctx.lineTo(fx,fy):ctx.moveTo(fx,fy);
+        }
+        ctx.closePath(); ctx.stroke();
+      },
+      butterfly(data, t) {
+        const S = 0.4*canvas.width, cx = 300, cy = 300;
+        ctx.beginPath();
+        for (let i=0; i<data.length; ++i) {
+          const th = i/data.length*Math.PI*24, amp = (data[i]+1)/2;
+          const scale = Math.exp(Math.cos(th)) - 2*Math.cos(4*th) + Math.pow(Math.sin(th/12),5);
+          let x = Math.sin(th)*scale, y = Math.cos(th)*scale;
+          x*=S*(.5+.5*amp); y*=S*(.5+.5*amp); x+=cx; y+=cy;
+          i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+        }
+        ctx.closePath(); ctx.stroke();
+      }
+    };
+
+    // ---- AUDIO GRAPH ----
+    function disposeNodes() {
+      for (let k in state.nodes) {
+        let n = state.nodes[k];
+        if (n?.stop) try{n.stop();}catch{}
+        if (n?.dispose) try{n.dispose();}catch{}
+        state.nodes[k]=null;
+      }
+      state.nodes = {};
+    }
+
+    async function startAudioAndDraw() {
+      if (state.isPlaying) return;
+      if (!state.Tone) return loader.textContent='Tone.js not loaded.';
+      await state.Tone.start();
+
+      disposeNodes();
+      const pr = presets[shapeSel.value];
+      const T = state.Tone;
+      // Oscillators
+      const osc1 = state.nodes.osc1 = new T.Oscillator(pr.osc1[1], pr.osc1[0]).start();
+      let osc2=null; if(pr.osc2) osc2 = state.nodes.osc2 = new T.Oscillator(pr.osc2[1], pr.osc2[0]).start();
+      // Volume, Filter, LFO
+      const volume = state.nodes.volume = new T.Volume(5);
+      const filter = state.nodes.filter = new T.Filter(pr.filter, "lowpass");
+      const lfo = state.nodes.lfo = new T.LFO(pr.lfo[0]+"n", pr.lfo[1], pr.lfo[2]).start();
+      lfo.connect(filter.frequency);
+
+      osc1.connect(volume); if(osc2) osc2.connect(volume);
+      volume.connect(filter); filter.toDestination();
+
+      // Analyzer after filter
+      const ana = state.nodes.analyser = T.context.createAnalyser();
+      ana.fftSize = 2048; filter.connect(ana);
+
+      state.isPlaying = true;
+      startBtn.textContent = "Stop Audio + Draw";
+      muteBtn.disabled = false;
+      animate();
+    }
+
+    function stopAudioAndDraw() {
+      if (!state.isPlaying) return;
+      cancelAnimationFrame(state.nodes.animId); ctx.clearRect(0,0,600,600);
+      disposeNodes();
+      state.isPlaying = false;
+      startBtn.textContent = "Start Audio + Draw";
+      muteBtn.disabled = true; muteBtn.textContent = "Mute";
+      if (state.Tone) state.Tone.Destination.mute = false;
+    }
+
+    // ---- ANIMATION ----
+    function animate() {
+      const ana = state.nodes.analyser;
+      if (!ana || !state.isPlaying) return;
+      const buf = new Float32Array(ana.fftSize); ana.getFloatTimeDomainData(buf);
+      ctx.clearRect(0,0,600,600);
+      ctx.strokeStyle = `hsl(${(performance.now()/50)%360},100%,70%)`;
+      ctx.lineWidth=2; ctx.lineJoin=ctx.lineCap='round';
+      (drawFuncs[shapeSel.value]||drawFuncs.circle)(buf, performance.now()/1000);
+      state.nodes.animId = requestAnimationFrame(animate);
+    }
+
+    // ---- UI EVENTS ----
+    startBtn.onclick = () => state.isPlaying ? stopAudioAndDraw() : startAudioAndDraw();
+    muteBtn.onclick = () => {
+      if (!state.Tone) return;
+      const m = state.Tone.Destination.mute = !state.Tone.Destination.mute;
+      muteBtn.textContent = m ? "Unmute" : "Mute";
+    };
+    shapeSel.onchange = () => {
+      if (state.isPlaying) { stopAudioAndDraw(); startAudioAndDraw(); }
+    };
+
+    // ---- INITIALIZE ----
+    loadToneJSAndBoot({
+      toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+      setLoaderStatus: (msg, err) => {
+        loader.textContent = msg;
+        loader.style.color = err ? "red" : "#aaa";
+        startBtn.disabled = !!err;
+        muteBtn.disabled = true;
+      },
+      state,
+      boot: () => {
+        loader.textContent = "Audio engine ready. Click Start.";
+        startBtn.disabled = false;
+        muteBtn.disabled = true;
+      }
+    });
+
+    // Startup: buttons disabled
+    startBtn.disabled = true; muteBtn.disabled = true;
+  </script>
+</body>
+</html>

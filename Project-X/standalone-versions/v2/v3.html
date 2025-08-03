@@ -1,0 +1,510 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Enhanced Web3 Oscilloscope Music</title>
+  <meta name="viewport" content="width=600,initial-scale=1">
+  <style>
+    html,body {margin:0;padding:0;height:100%;background:#121212;color:#fff;font-family:sans-serif;}
+    body {display:grid;place-items:center;gap:2rem;}
+    #scope {border-radius:8px;border:1px solid #333;background:#000;}
+    #controls {display:flex;gap:1rem;align-items:center;flex-wrap: wrap; justify-content: center;}
+    #controls button, #controls select {padding:0.5rem 1rem;border-radius:4px;border:1px solid #555;background:#222;color:#fff; cursor: pointer;}
+    #controls button:hover, #controls select:hover {background:#333;}
+    #controls button:disabled, #controls select:disabled {opacity: 0.5; cursor: not-allowed;}
+    #loader {font-size:0.9rem;color:#aaa;min-height:1.2rem;text-align:center;}
+  </style>
+</head>
+<body>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Start Audio + Draw</button>
+    <button id="muteBtn">Mute</button>
+    <select id="shapeSelect">
+      <option value="circle">Circle</option>
+      <option value="square">Square</option>
+      <option value="butterfly">Butterfly</option>
+      <option value="lissajous">Lissajous</option>
+      <option value="supershape">Supershape</option>
+    </select>
+  </section>
+  <div id="loader">Initializing...</div>
+  <script type="module">
+    // --- Dynamic Tone.js Loader ---
+    function loadToneJSAndBoot({toneUrl, setLoaderStatus, state, boot}) {
+      setLoaderStatus('Loading Audio Engine...');
+      import(toneUrl).then(mod=>{
+        state.Tone = window.Tone ?? mod?.default ?? mod;
+        if (state.Tone) { setLoaderStatus(`Tone.js v${state.Tone.version??"?"} ready.`); boot(); }
+        else throw new Error('Tone.js not loaded.');
+      }).catch(e=>{
+        setLoaderStatus('Failed to load Tone.js. App cannot start.',1);
+        console.error(e);
+      });
+    }
+
+    // --- State & DOM ---
+    const state = {
+        isPlaying: false,
+        Tone: null,
+        nodes: {},
+        currentParams: {
+            baseHue: 0,
+            rotationSpeed: 0,
+            scaleModAmp: 0,
+            scaleModFreq: 0,
+            distortionAmp: 0,
+            shapeSpecific: {} // For parameters like lissajous ratios
+        }
+    };
+    const canvas = document.getElementById('scope');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const shapeSel = document.getElementById('shapeSelect');
+    const loader = document.getElementById('loader');
+
+    // --- Sound Preset Generator ---
+    function generateRandomPreset(Tone) {
+        const types = ['sine', 'square', 'sawtooth', 'triangle'];
+        const rootNotes = ['C3', 'D3', 'E3', 'G3', 'A3']; // Harmonious base notes
+        const intervals = [0.5, 1, 1.5, 2, 2.5]; // Octave, fifth, etc.
+
+        const rootNote = rootNotes[Math.floor(Math.random() * rootNotes.length)];
+        const osc1Type = types[Math.floor(Math.random() * types.length)];
+        // Increase chance of 2nd oscillator for richer interference
+        const osc2Type = Math.random() > 0.3 ? types[Math.floor(Math.random() * types.length)] : null;
+
+        const interval = intervals[Math.floor(Math.random() * intervals.length)];
+        let osc2Note = null;
+        if (osc2Type) {
+            // Calculate second oscillator frequency based on interval
+            const rootFreq = Tone.Frequency(rootNote).toFrequency();
+            const osc2Freq = rootFreq * interval;
+            osc2Note = Tone.Frequency(osc2Freq).toNote();
+        }
+
+        const baseFreqHz = Tone.Frequency(rootNote).toFrequency();
+        // Filter range adjusted for richer harmonics
+        const filterCutoff = baseFreqHz * (0.8 + Math.random() * 4.2);
+
+        // LFO: Use musical note values for rate for more harmony, plus some randomness
+        const lfoRates = ['8n', '4n', '2n', '1n', '2n.', '1n.', 0.1, 0.2, 0.5, 1, 2, 5];
+        const lfoRate = lfoRates[Math.floor(Math.random() * lfoRates.length)];
+        // Wider modulation range for more dynamic visuals
+        const lfoMin = filterCutoff * (0.1 + Math.random() * 0.5);
+        const lfoMax = filterCutoff * (1.5 + Math.random() * 3);
+
+        // Add Detune LFO for subtle pitch shimmer
+        const detuneLFOAmount = 5 + Math.random() * 20; // Cents
+
+        return {
+            osc1: [osc1Type, rootNote],
+            osc2: osc2Type ? [osc2Type, osc2Note] : null,
+            filter: filterCutoff,
+            lfo: [lfoRate, lfoMin, lfoMax],
+            detuneLFOAmount: detuneLFOAmount
+        };
+    }
+
+    // --- Audio Data Validation ---
+    /**
+     * Checks if the audio data buffer is valid and likely to produce a visible output.
+     * @param {Float32Array} data - The audio time-domain data.
+     * @returns {boolean} True if data is valid and likely drawable, false otherwise.
+     */
+    function isAudioDataValid(data) {
+        if (!data || data.length === 0) {
+            console.warn("Audio data is empty or null.");
+            return false;
+        }
+
+        let isValid = false;
+        let sum = 0;
+        for (let i = 0; i < data.length; i++) {
+            const val = data[i];
+            // Check for invalid values
+            if (!isFinite(val)) { // Catches NaN and Infinity
+                console.warn("Audio data contains invalid value (NaN/Infinity) at index", i, val);
+                return false;
+            }
+            sum += Math.abs(val); // Accumulate absolute values
+            // If we find any non-zero value, it's potentially valid
+            if (val !== 0) {
+                 isValid = true; // Flag that we have *some* signal
+            }
+        }
+
+        // Optional: Check if the overall signal energy is above a tiny threshold
+        // This helps catch cases where the signal is technically non-zero but practically silent/flat.
+        const avgEnergy = sum / data.length;
+        if (isValid && avgEnergy < 1e-10) { // Adjust threshold as needed
+             console.warn("Audio data appears to be practically silent (very low energy).");
+             // You can choose to return false here if you want to reject near-silent signals
+             // return false;
+        }
+
+        // Return true only if we found at least one non-zero value and no invalid ones.
+        return isValid;
+    }
+
+
+    // --- Drawing with Randomization and Slow Motion ---
+    const drawFuncs = {
+        circle(data, t) {
+            const params = state.currentParams;
+            const S = 0.8 * canvas.width / 2;
+            const cx = 300;
+            const cy = 300;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; ++i) {
+                const a = i / data.length * 2 * Math.PI;
+                const amp = (data[i] + 1) / 2;
+                let r = S * amp;
+
+                const scaleMod = 1 + params.scaleModAmp * Math.sin(t * params.scaleModFreq);
+                r *= scaleMod;
+
+                const distortionX = params.distortionAmp * (Math.sin(i * 0.01 + t * 0.05) - 0.5);
+                const distortionY = params.distortionAmp * (Math.cos(i * 0.015 + t * 0.04) - 0.5);
+
+                const x = cx + Math.cos(a + t * params.rotationSpeed) * r + distortionX;
+                const y = cy + Math.sin(a + t * params.rotationSpeed) * r + distortionY;
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        },
+        square(data, t) {
+            const params = state.currentParams;
+            const S = 0.8 * canvas.width / Math.SQRT2;
+            const c = 300;
+            const o = (600 - S) / 2;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; ++i) {
+                const p = i / data.length;
+                const amp = (data[i] + 1) / 2;
+                let x, y;
+                if (p < .25) [x, y] = [o + S * (p / .25), o];
+                else if (p < .5) [x, y] = [o + S, o + S * ((p - .25) / .25)];
+                else if (p < .75) [x, y] = [o + S - S * ((p - .5) / .25), o + S];
+                else [x, y] = [o, o + S - S * ((p - .75) / .25)];
+
+                const dx = x - c;
+                const dy = y - c;
+
+                const scaleMod = 1 + params.scaleModAmp * Math.sin(t * params.scaleModFreq);
+                let fx = c + dx * (0.8 + 0.2 * amp) * scaleMod;
+                let fy = c + dy * (0.8 + 0.2 * amp) * scaleMod;
+
+                const distortionX = params.distortionAmp * (Math.sin(i * 0.01 + t * 0.05) - 0.5);
+                const distortionY = params.distortionAmp * (Math.cos(i * 0.015 + t * 0.04) - 0.5);
+                fx += distortionX;
+                fy += distortionY;
+
+                i ? ctx.lineTo(fx, fy) : ctx.moveTo(fx, fy);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        },
+        butterfly(data, t) {
+            const params = state.currentParams;
+            const S = 0.4 * canvas.width;
+            const cx = 300;
+            const cy = 300;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; ++i) {
+                const th = i / data.length * Math.PI * 24;
+                const amp = (data[i] + 1) / 2;
+                const scale = Math.exp(Math.cos(th)) - 2 * Math.cos(4 * th) + Math.pow(Math.sin(th / 12), 5);
+                let x = Math.sin(th) * scale;
+                let y = Math.cos(th) * scale;
+
+                const scaleMod = 1 + params.scaleModAmp * Math.sin(t * params.scaleModFreq);
+                x *= S * (0.5 + 0.5 * amp) * scaleMod;
+                y *= S * (0.5 + 0.5 * amp) * scaleMod;
+
+                const distortionX = params.distortionAmp * (Math.sin(th * 0.1 + t * 0.025) - 0.5);
+                const distortionY = params.distortionAmp * (Math.cos(th * 0.12 + t * 0.02) - 0.5);
+                x += distortionX;
+                y += distortionY;
+
+                x += cx;
+                y += cy;
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        },
+        lissajous(data, t) {
+            const params = state.currentParams;
+            const S = 0.8 * canvas.width / 2;
+            const cx = 300;
+            const cy = 300;
+
+            // Use a portion of the buffer for smoother, slower patterns
+            const step = Math.max(1, Math.floor(data.length / 1024));
+            ctx.beginPath();
+            for (let i = 0; i < data.length; i += step) {
+                // Use two oscillators: one for X, one for Y
+                // We simulate this by using different parts of the buffer or applying phase shifts
+                // Here, we use a simple approach with phase shift based on ratio
+                const idx1 = i % data.length;
+                const idx2 = (i * params.shapeSpecific.ratioA / params.shapeSpecific.ratioB) % data.length;
+
+                const ampX = (data[idx1] + 1) / 2;
+                const ampY = (data[idx2] + 1) / 2;
+
+                // Apply slow rotation to the entire pattern
+                const baseAngle = t * params.rotationSpeed;
+                const rawX = (ampX * 2 - 1) * S; // Map amp to -S to S
+                const rawY = (ampY * 2 - 1) * S;
+
+                // Rotate point
+                const x = cx + rawX * Math.cos(baseAngle) - rawY * Math.sin(baseAngle);
+                const y = cy + rawX * Math.sin(baseAngle) + rawY * Math.cos(baseAngle);
+
+                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+        },
+        supershape(data, t) {
+            const params = state.currentParams;
+            const specific = params.shapeSpecific;
+            const n1 = specific.n1;
+            const n2 = specific.n2;
+            const n3 = specific.n3;
+            const m = specific.m;
+            const a = specific.a;
+            const b = specific.b;
+
+            const S = 0.8 * canvas.width / 2;
+            const cx = 300;
+            const cy = 300;
+            const numPoints = 1024; // Fixed number for smoother shape
+            ctx.beginPath();
+            for (let i = 0; i < numPoints; i++) {
+                const angle = (i / numPoints) * Math.PI * 2;
+                const ampIndex = Math.floor((i / numPoints) * data.length) % data.length;
+                const amp = (data[ampIndex] + 1) / 2; // Use audio for radius modulation
+
+                // Supershape formula
+                const term1 = Math.abs(Math.cos(m * angle / 4) / a);
+                const term2 = Math.abs(Math.sin(m * angle / 4) / b);
+                let r = Math.pow(Math.pow(term1, n2) + Math.pow(term2, n3), -1 / n1);
+                if (!isFinite(r)) r = 0; // Handle potential math errors gracefully
+
+                // Apply audio amplitude and scale modulation
+                const scaleMod = 1 + params.scaleModAmp * Math.sin(t * params.scaleModFreq);
+                r = r * S * (0.5 + 0.5 * amp) * scaleMod;
+
+                const x = cx + r * Math.cos(angle + t * params.rotationSpeed);
+                const y = cy + r * Math.sin(angle + t * params.rotationSpeed);
+
+                i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+    };
+
+    // --- Audio Node Management ---
+    function disposeNodes() {
+      Object.values(state.nodes).forEach(n=>{
+        try{n?.stop?.()}catch{}
+        try{n?.dispose?.()}catch{}
+      });
+      state.nodes={};
+    }
+
+    async function startAudioAndDraw() {
+      if(state.isPlaying) return;
+      if(!state.Tone) return loader.textContent='Tone.js not loaded.';
+      await state.Tone.start();
+      disposeNodes();
+
+      // --- Generate Random Parameters on Start ---
+      const pr = generateRandomPreset(state.Tone);
+      state.currentParams.baseHue = Math.random() * 360;
+      state.currentParams.rotationSpeed = (Math.random() * 0.04) - 0.02; // Can be negative for reverse
+      state.currentParams.scaleModAmp = 0.01 + Math.random() * 0.05;
+      state.currentParams.scaleModFreq = 0.02 + Math.random() * 0.08;
+      state.currentParams.distortionAmp = 0.2 + Math.random() * 1.5;
+
+      // --- Shape-Specific Random Params ---
+      const selectedShape = shapeSel.value;
+      if (selectedShape === 'lissajous') {
+          // Use simple integer ratios for classic Lissajous curves
+          const ratios = [[1,1], [1,2], [2,1], [1,3], [3,1], [2,3], [3,2], [1,4], [4,1], [3,4], [4,3]];
+          const ratio = ratios[Math.floor(Math.random() * ratios.length)];
+          state.currentParams.shapeSpecific = { ratioA: ratio[0], ratioB: ratio[1] };
+      } else if (selectedShape === 'supershape') {
+          state.currentParams.shapeSpecific = {
+              m: 2 + Math.random() * 8,
+              n1: 0.1 + Math.random() * 5,
+              n2: 0.1 + Math.random() * 5,
+              n3: 0.1 + Math.random() * 5,
+              a: 1, // Often kept constant
+              b: 1  // Often kept constant
+          };
+      } else {
+          state.currentParams.shapeSpecific = {}; // Reset for other shapes
+      }
+
+      const T = state.Tone;
+      const osc1 = state.nodes.osc1 = new T.Oscillator(pr.osc1[1], pr.osc1[0]).start();
+      let osc2 = null;
+      if (pr.osc2) osc2 = state.nodes.osc2 = new T.Oscillator(pr.osc2[1], pr.osc2[0]).start();
+
+      const volume = state.nodes.volume = new T.Volume(-6); // Adjust volume
+      const filter = state.nodes.filter = new T.Filter(pr.filter, "lowpass");
+      filter.Q.value = 2 + Math.random() * 8; // Add some filter resonance
+
+      // --- Modulation ---
+      const lfo = state.nodes.lfo = new T.LFO(pr.lfo[0], pr.lfo[1], pr.lfo[2]).start();
+      lfo.connect(filter.frequency);
+
+      // Detune LFO for subtle shimmer
+      const detuneLFO = state.nodes.detuneLFO = new T.LFO('8n', -pr.detuneLFOAmount, pr.detuneLFOAmount).start();
+      detuneLFO.connect(osc1.detune);
+      if (osc2) {
+          // Apply detune to second oscillator as well, maybe with a slight offset
+          const detuneLFO2 = state.nodes.detuneLFO2 = new T.LFO('8n.', -pr.detuneLFOAmount * 1.1, pr.detuneLFOAmount * 1.1).start();
+          detuneLFO2.connect(osc2.detune);
+      }
+
+      osc1.connect(volume);
+      if (osc2) osc2.connect(volume);
+      volume.connect(filter);
+
+      // --- Use Tone.js Analyser ---
+      // Create a Tone.Analyser node. fftSize is a property we can set.
+      const analyser = state.nodes.analyser = new T.Analyser('fft'); // 'fft' for waveform data
+      analyser.size = 2048; // Set the buffer size
+
+      // Connect the filter output to the analyser input
+      filter.connect(analyser);
+
+      // Connect the analyser output to the main audio output (Destination)
+      // This ensures you hear the sound.
+      analyser.toDestination();
+
+      state.isPlaying = true;
+      startBtn.textContent = "Stop Audio + Draw";
+      muteBtn.disabled = false;
+      animate();
+    }
+
+
+    function stopAudioAndDraw() {
+      if(!state.isPlaying) return;
+      cancelAnimationFrame(state.nodes.animId);
+      ctx.clearRect(0,0,600,600);
+      disposeNodes();
+      state.isPlaying=false;
+      startBtn.textContent="Start Audio + Draw";
+      muteBtn.disabled=true;
+      muteBtn.textContent="Mute";
+      if(state.Tone) state.Tone.Destination.mute=false;
+    }
+
+    // --- Animation with Blank Canvas Prevention ---
+    let consecutiveBadDataCount = 0; // Counter for retries
+    const maxConsecutiveBadDataRetries = 5; // Max retries before forcing a restart
+
+    function animate() {
+        const analyser = state.nodes.analyser;
+        if (!analyser || !state.isPlaying) return;
+
+        // --- Get waveform data using Tone.js method ---
+        const buf = analyser.getValue(); // This returns the Float32Array directly
+
+        // --- Validate Audio Data ---
+        if (!isAudioDataValid(buf)) {
+            consecutiveBadDataCount++;
+            console.warn(`Invalid audio data detected. Retry attempt ${consecutiveBadDataCount}/${maxConsecutiveBadDataRetries}`);
+            ctx.clearRect(0, 0, 600, 600); // Clear canvas on bad data
+
+            if (consecutiveBadDataCount <= maxConsecutiveBadDataRetries) {
+                // Retry next frame
+                state.nodes.animId = requestAnimationFrame(animate);
+                return;
+            } else {
+                // If retries exhausted, force a regeneration
+                console.error("Max retries for valid audio data exceeded. Forcing regeneration.");
+                // Stop and restart audio to get a fresh graph
+                stopAudioAndDraw();
+                // Use a short delay to ensure cleanup is complete before restarting
+                setTimeout(() => {
+                     startAudioAndDraw();
+                     consecutiveBadDataCount = 0; // Reset counter after restart
+                }, 100);
+                return; // Exit current animation loop
+            }
+        }
+
+        // If data is valid, reset the retry counter
+        consecutiveBadDataCount = 0;
+
+        // --- Clear and Draw ---
+        ctx.clearRect(0, 0, 600, 600);
+
+        // --- Dynamic Color ---
+        const time = performance.now() / 1000;
+        const hue = (state.currentParams.baseHue + time * 5) % 360; // Slower hue shift
+        const saturation = 70 + 20 * Math.sin(time * 0.3);
+        let avgAmp = 0;
+        for (let val of buf) avgAmp += Math.abs(val);
+        avgAmp /= buf.length;
+        const brightness = 50 + 30 * avgAmp;
+
+        ctx.strokeStyle = `hsl(${hue},${saturation}%,${brightness}%)`;
+        ctx.lineWidth = 1.5 + 1.5 * avgAmp; // Line width reacts to amplitude
+        ctx.lineJoin = ctx.lineCap = 'round';
+
+        // --- Call Draw Function ---
+        const drawFunc = drawFuncs[shapeSel.value] || drawFuncs.circle;
+        try {
+            drawFunc(buf, time); // Wrap drawing in try/catch for robustness
+        } catch (drawError) {
+            console.error("Error during drawing:", drawError);
+            // Optionally clear canvas or show an error message
+            ctx.clearRect(0, 0, 600, 600);
+            ctx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+            ctx.fillText('Drawing Error!', 10, 30);
+        }
+
+        state.nodes.animId = requestAnimationFrame(animate);
+    }
+
+    // --- UI Events ---
+    startBtn.onclick = () => state.isPlaying ? stopAudioAndDraw() : startAudioAndDraw();
+    muteBtn.onclick = () => {
+      if (!state.Tone) return;
+      const m = state.Tone.Destination.mute = !state.Tone.Destination.mute;
+      muteBtn.textContent = m ? "Unmute" : "Mute";
+    };
+    // Regenerate on shape change or start for maximum variety
+    shapeSel.onchange = () => { if(state.isPlaying){stopAudioAndDraw();} startAudioAndDraw(); };
+
+    // --- Initialize ---
+    loadToneJSAndBoot({
+      toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+      setLoaderStatus: (msg, err) => {
+        loader.textContent = msg;
+        loader.style.color = err ? "red" : "#aaa";
+        startBtn.disabled=!!err;
+        muteBtn.disabled=true;
+      },
+      state,
+      boot: () => {
+        loader.textContent = "Audio engine ready. Click Start.";
+        startBtn.disabled=false;
+        muteBtn.disabled=true;
+      }
+    });
+    startBtn.disabled = true;
+    muteBtn.disabled = true;
+  </script>
+</body>
+</html>

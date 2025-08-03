@@ -1,0 +1,355 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Web3 Oscilloscope Music</title>
+  <meta name="viewport" content="width=600,initial-scale=1">
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      background: #000;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+    }
+    body {
+      display: grid;
+      place-items: center;
+      gap: 1rem;
+    }
+    #scope {
+      border-radius: 12px;
+      border: 1px solid #333;
+      background: #000;
+      box-shadow: 0 0 30px rgba(0, 0, 0, 0.5);
+    }
+    #controls {
+      display: flex;
+      gap: 1rem;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+      padding: 0.5rem;
+      background: rgba(255, 255, 255, 0.05);
+      border-radius: 8px;
+    }
+    #controls button, #controls select {
+      padding: 0.5rem 1rem;
+      border-radius: 6px;
+      border: 1px solid #555;
+      background: #222;
+      color: #fff;
+      font-size: 0.9rem;
+      cursor: pointer;
+    }
+    #controls button:hover {
+      background: #444;
+    }
+    #loader {
+      font-size: 0.9rem;
+      color: #aaa;
+      min-height: 1.4rem;
+      text-align: center;
+      font-style: italic;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Start Audio + Draw</button>
+    <button id="muteBtn">Mute</button>
+    <select id="shapeSelect">
+      <option value="circle">Circle</option>
+      <option value="square">Square</option>
+      <option value="butterfly">Butterfly</option>
+      <option value="lissajous">Lissajous</option>
+      <option value="spiro">Spirograph</option>
+      <option value="harmonograph">Harmonograph</option>
+    </select>
+  </section>
+  <div id="loader">Initializing...</div>
+
+  <script type="module">
+    // --- Dynamic Tone.js Loader ---
+    function loadToneJSAndBoot({ toneUrl, setLoaderStatus, state, boot }) {
+      setLoaderStatus('Loading Audio Engine...');
+      import(toneUrl).then(mod => {
+        state.Tone = window.Tone ?? mod?.default ?? mod;
+        if (state.Tone) {
+          setLoaderStatus(`Tone.js v${state.Tone.version ?? "?"} ready.`);
+          boot();
+        } else throw new Error('Tone.js not found.');
+      }).catch(e => {
+        setLoaderStatus('Failed to load Tone.js. App cannot start.', 1);
+        console.error(e);
+      });
+    }
+
+    // --- State & DOM ---
+    const state = { isPlaying: false, Tone: null, nodes: {} };
+    const canvas = document.getElementById('scope');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const shapeSel = document.getElementById('shapeSelect');
+    const loader = document.getElementById('loader');
+
+    // --- Random Preset Generator ---
+    function randomPreset() {
+      const types = ['sine', 'triangle', 'square', 'sawtooth'];
+      const notes = ['C2', 'D2', 'E2', 'G2', 'A2', 'C3', 'E3', 'G3', 'B3', 'D4', 'F#4', 'A4'];
+      return {
+        osc1: [types[Math.floor(Math.random() * 4)], notes[Math.floor(Math.random() * notes.length)]],
+        osc2: Math.random() > 0.5 ? [types[Math.floor(Math.random() * 4)], notes[Math.floor(Math.random() * notes.length)]] : null,
+        filter: 500 + Math.random() * 3000,
+        lfo: [
+          0.1 + Math.random() * 3, // very slow LFO
+          300 + Math.random() * 1000,
+          800 + Math.random() * 2000
+        ],
+        colorSpeed: 0.05 + Math.random() * 0.3,
+        shapeDrift: 0.0003 + Math.random() * 0.002
+      };
+    }
+
+    // --- Generate Random Presets on Load ---
+    let presets = {};
+    ['circle', 'square', 'butterfly', 'lissajous', 'spiro', 'harmonograph'].forEach(key => {
+      presets[key] = randomPreset();
+    });
+
+    // --- Drawing Functions (Enhanced & New) ---
+    const drawFuncs = {
+      circle(data, t) {
+        const S = 0.8 * canvas.width / 2, cx = 300, cy = 300;
+        ctx.beginPath();
+        for (let i = 0; i < data.length; ++i) {
+          const a = i / data.length * 2 * Math.PI + t * 0.001;
+          const amp = (data[i] + 1) / 2;
+          const r = S * amp;
+          const x = cx + Math.cos(a) * r;
+          const y = cy + Math.sin(a) * r;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      },
+
+      square(data, t) {
+        const S = 0.8 * canvas.width / Math.SQRT2, c = 300, o = (600 - S) / 2;
+        ctx.beginPath();
+        for (let i = 0; i < data.length; ++i) {
+          const p = i / data.length, amp = (data[i] + 1) / 2;
+          let x, y;
+          if (p < .25) [x, y] = [o + S * (p / .25), o];
+          else if (p < .5) [x, y] = [o + S, o + S * ((p - .25) / .25)];
+          else if (p < .75) [x, y] = [o + S - S * ((p - .5) / .25), o + S];
+          else [x, y] = [o, o + S - S * ((p - .75) / .25)];
+          const dx = x - c, dy = y - c;
+          const fx = c + dx * (0.8 + 0.2 * amp) + Math.sin(t * 0.0005) * 10;
+          const fy = c + dy * (0.8 + 0.2 * amp) + Math.cos(t * 0.0006) * 10;
+          i ? ctx.lineTo(fx, fy) : ctx.moveTo(fx, fy);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      },
+
+      butterfly(data, t) {
+        const S = 0.4 * canvas.width, cx = 300, cy = 300;
+        ctx.beginPath();
+        for (let i = 0; i < data.length; ++i) {
+          const th = i / data.length * Math.PI * 24 + t * 0.0003;
+          const amp = (data[i] + 1) / 2;
+          const scale = Math.exp(Math.cos(th)) - 2 * Math.cos(4 * th) + Math.pow(Math.sin(th / 12), 5);
+          let x = Math.sin(th) * scale;
+          let y = Math.cos(th) * scale;
+          x *= S * (0.5 + 0.5 * amp);
+          y *= S * (0.5 + 0.5 * amp);
+          x += cx;
+          y += cy;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.closePath();
+        ctx.stroke();
+      },
+
+      lissajous(data, t) {
+        const S = 0.8 * canvas.width / 3, cx = 300, cy = 300;
+        const avg = (data.reduce((a, b) => a + Math.abs(b), 0) / data.length);
+        const freqX = 3 + Math.sin(t * 0.0003) * 1.5;
+        const freqY = 2 + Math.cos(t * 0.0004) * 1.5;
+        const phase = t * 0.0005;
+
+        ctx.beginPath();
+        for (let i = 0; i < data.length; i++) {
+          const theta = (i / data.length) * Math.PI * 2;
+          const r = avg * (0.5 + 0.5 * data[i]);
+          const x = cx + Math.sin(freqX * theta + phase) * S * r;
+          const y = cy + Math.sin(freqY * theta) * S * r;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      },
+
+      spiro(data, t) {
+        const S = 0.6 * canvas.width / 3, cx = 300, cy = 300;
+        const inner = 0.3 + Math.sin(t * 0.0002) * 0.2;
+        const outer = 0.7;
+        const ratio = 0.21 + 0.02 * Math.sin(t * 0.0001);
+
+        ctx.beginPath();
+        for (let i = 0; i < data.length; i++) {
+          const theta = (i / data.length) * Math.PI * 2;
+          const waveAmp = (data[i] + 1) / 2;
+          const x = cx + (S * (outer - inner) * Math.cos(theta) +
+            S * inner * Math.cos((outer - inner) / inner * theta + t * ratio)) * (0.8 + 0.2 * waveAmp);
+          const y = cy + (S * (outer - inner) * Math.sin(theta) -
+            S * inner * Math.sin((outer - inner) / inner * theta + t * ratio)) * (0.8 + 0.2 * waveAmp);
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      },
+
+      harmonograph(data, t) {
+        const S = 0.7 * canvas.width / 4, cx = 300, cy = 300;
+        const decay = Math.exp(-t * 0.0002);
+        const avg = (data.reduce((a, b) => a + b, 0) / data.length + 1) * 0.5;
+
+        ctx.beginPath();
+        for (let i = 0; i < data.length; i++) {
+          const theta = (i / data.length) * Math.PI * 2;
+          const x = cx + decay * S * (
+            Math.sin(3 * theta + t * 0.0003) * 0.7 +
+            Math.sin(5 * theta + t * 0.0004) * 0.3
+          ) * (0.5 + 0.5 * data[i]);
+          const y = cy + decay * S * (
+            Math.sin(4 * theta + t * 0.00035) * 0.6 +
+            Math.sin(6 * theta + t * 0.00025) * 0.4
+          ) * (0.5 + 0.5 * data[i]);
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      }
+    };
+
+    // --- Audio Node Management ---
+    function disposeNodes() {
+      Object.values(state.nodes).forEach(n => {
+        try { n?.stop?.() } catch { }
+        try { n?.dispose?.() } catch { }
+      });
+      state.nodes = {};
+    }
+
+    async function startAudioAndDraw() {
+      if (state.isPlaying) return;
+      if (!state.Tone) return loader.textContent = 'Tone.js not loaded.';
+      await state.Tone.start();
+      disposeNodes();
+      const pr = presets[shapeSel.value];
+      const T = state.Tone;
+
+      const osc1 = state.nodes.osc1 = new T.Oscillator(pr.osc1[1], pr.osc1[0]).start();
+      let osc2 = null;
+      if (pr.osc2) osc2 = state.nodes.osc2 = new T.Oscillator(pr.osc2[1], pr.osc2[0]).start();
+
+      const volume = state.nodes.volume = new T.Volume(5);
+      const filter = state.nodes.filter = new T.Filter(pr.filter, "lowpass");
+      const lfo = state.nodes.lfo = new T.LFO(pr.lfo[0] + "n", pr.lfo[1], pr.lfo[2]).start();
+
+      lfo.connect(filter.frequency);
+      if (osc2) lfo.connect(osc2.detune); // Phase interference
+
+      osc1.connect(volume);
+      if (osc2) osc2.connect(volume);
+      volume.connect(filter);
+
+      // Add subtle reverb for depth
+      const reverb = state.nodes.reverb = new T.Freeverb().set({ wet: 0.3, roomSize: 0.8 });
+      filter.connect(reverb);
+      reverb.toDestination();
+
+      const analyser = state.nodes.analyser = T.context.createAnalyser();
+      analyser.fftSize = 2048;
+      filter.connect(analyser);
+
+      state.isPlaying = true;
+      startBtn.textContent = "Stop Audio + Draw";
+      muteBtn.disabled = false;
+      animate();
+    }
+
+    function stopAudioAndDraw() {
+      if (!state.isPlaying) return;
+      cancelAnimationFrame(state.nodes.animId);
+      ctx.clearRect(0, 0, 600, 600);
+      disposeNodes();
+      state.isPlaying = false;
+      startBtn.textContent = "Start Audio + Draw";
+      muteBtn.disabled = true;
+      muteBtn.textContent = "Mute";
+      if (state.Tone) state.Tone.Destination.mute = false;
+    }
+
+    // --- Animation Loop ---
+    function animate() {
+      const analyser = state.nodes.analyser;
+      if (!analyser || !state.isPlaying) return;
+
+      const buf = new Float32Array(analyser.fftSize);
+      analyser.getFloatTimeDomainData(buf);
+
+      ctx.clearRect(0, 0, 600, 600);
+
+      const pr = presets[shapeSel.value];
+      const avg = (buf.reduce((a, b) => a + Math.abs(b), 0) / buf.length);
+      const hue = (performance.now() * pr.colorSpeed) % 360;
+      const saturation = 70 + avg * 30;
+      const lightness = 50 + avg * 20;
+
+      ctx.strokeStyle = `hsl(${hue}, ${saturation}%, ${lightness}%)`;
+      ctx.lineWidth = 1 + avg * 4;
+      ctx.lineJoin = ctx.lineCap = 'round';
+
+      (drawFuncs[shapeSel.value] || drawFuncs.circle)(buf, performance.now());
+      state.nodes.animId = requestAnimationFrame(animate);
+    }
+
+    // --- UI Events ---
+    startBtn.onclick = () => state.isPlaying ? stopAudioAndDraw() : startAudioAndDraw();
+    muteBtn.onclick = () => {
+      if (!state.Tone) return;
+      const m = state.Tone.Destination.mute = !state.Tone.Destination.mute;
+      muteBtn.textContent = m ? "Unmute" : "Mute";
+    };
+    shapeSel.onchange = () => {
+      if (state.isPlaying) { stopAudioAndDraw(); startAudioAndDraw(); }
+    };
+
+    // --- Initialize: Pick Random Shape on Load ---
+    loadToneJSAndBoot({
+      toneUrl: 'https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.min.js',
+      setLoaderStatus: (msg, err) => {
+        loader.textContent = msg;
+        loader.style.color = err ? "red" : "#aaa";
+        startBtn.disabled = !!err;
+        muteBtn.disabled = true;
+      },
+      state,
+      boot: () => {
+        const shapes = Object.keys(drawFuncs);
+        const randomShape = shapes[Math.floor(Math.random() * shapes.length)];
+        shapeSel.value = randomShape;
+        loader.textContent = `Ready. Shape: ${randomShape}`;
+        startBtn.disabled = false;
+      }
+    });
+
+    startBtn.disabled = true;
+    muteBtn.disabled = true;
+  </script>
+</body>
+</html>

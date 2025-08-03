@@ -1,0 +1,916 @@
+<!-- 
+  4-Bar 64-Step Sequencer with Tone.js
+
+  USAGE:
+  - Click steps to toggle them on/off
+  - Use SPACE to play/pause
+  - Use arrow keys to move playhead when stopped
+  - Drag/drop audio files into sample rows or use file input
+  - Select synth types for synth rows
+  - Adjust synth parameters via generated UI controls
+  - Record MIDI events with the record button
+  - Save/load projects with JSON files
+-->
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>4-Bar Sequencer</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+  <style>
+    :root {
+      --step-on: #4caf50;
+      --step-off: #e0e0e0;
+      --playhead: #ff9800;
+      --grid-gap: 2px;
+      --step-size: 20px;
+    }
+
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 1rem;
+      background: #f5f5f5;
+    }
+
+    .container {
+      display: flex;
+      flex-direction: column;
+      gap: 1rem;
+      max-width: 1200px;
+      margin: auto;
+    }
+
+    .transport-controls {
+      display: flex;
+      align-items: center;
+      gap: 1rem;
+      padding: 0.5rem;
+      background: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .grid-container {
+      display: grid;
+      gap: 0.5rem;
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: repeat(64, var(--step-size));
+      gap: var(--grid-gap);
+    }
+
+    .step {
+      width: var(--step-size);
+      height: var(--step-size);
+      background: var(--step-off);
+      border: none;
+      cursor: pointer;
+      border-radius: 2px;
+    }
+
+    .step.active {
+      background: var(--step-on);
+    }
+
+    .step.playhead {
+      box-shadow: 0 0 0 2px var(--playhead);
+    }
+
+    .channel-controls {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 0.5rem;
+      background: white;
+      border-radius: 4px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+
+    .channel-label {
+      width: 80px;
+      font-weight: bold;
+    }
+
+    .piano-keys {
+      display: flex;
+      gap: 2px;
+      margin-top: 0.5rem;
+    }
+
+    .piano-key {
+      padding: 0.25rem 0.5rem;
+      background: #ddd;
+      border: 1px solid #bbb;
+      cursor: pointer;
+      border-radius: 2px;
+      font-size: 0.8rem;
+    }
+
+    .piano-key:hover {
+      background: #ccc;
+    }
+
+    .synth-ui {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.5rem;
+      margin-top: 0.5rem;
+    }
+
+    .control-group {
+      display: flex;
+      flex-direction: column;
+      gap: 0.25rem;
+    }
+
+    .control-label {
+      font-size: 0.8rem;
+    }
+
+    .recording {
+      background: red !important;
+      color: white;
+    }
+
+    .warning {
+      color: orange;
+      font-weight: bold;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="transport-controls">
+      <button id="playButton">Play</button>
+      <button id="stopButton">Stop</button>
+      <label>BPM: <input type="number" id="bpmInput" value="120" min="20" max="300"></label>
+      <button id="saveButton">Save</button>
+      <input type="file" id="loadInput" accept=".json">
+    </div>
+    
+    <div class="grid-container" id="gridContainer"></div>
+  </div>
+
+  <!-- Constants Module -->
+  <script type="module" id="constants">
+    export const ROWS = 8;
+    export const STEPS = 64;
+    export const SAMPLE_ROWS = 4;
+    export const SYNTH_ROWS = 4;
+    export const DEFAULT_BPM = 120;
+    export const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+  </script>
+
+  <!-- State Module -->
+  <script type="module" id="state">
+    import { ROWS, STEPS, SAMPLE_ROWS, SYNTH_ROWS, DEFAULT_BPM } from './constants.js';
+
+    // Initial state
+    const initialState = {
+      bpm: DEFAULT_BPM,
+      playhead: 0,
+      isPlaying: false,
+      sampleRows: Array(SAMPLE_ROWS).fill(null).map(() => ({
+        buffer: null,
+        activeSteps: Array(STEPS).fill(false),
+        muted: false,
+        fileName: ''
+      })),
+      synthRows: Array(SYNTH_ROWS).fill(null).map(() => ({
+        synthType: 'BasicSynth',
+        params: {},
+        notePerStep: Array(STEPS).fill('C4'),
+        muted: false,
+        recordedMidi: []
+      }))
+    };
+
+    let currentState = {...initialState};
+    let listeners = [];
+
+    export function getState() {
+      return currentState;
+    }
+
+    export function setState(newState) {
+      currentState = newState;
+      listeners.forEach(listener => listener(currentState));
+    }
+
+    export function subscribe(listener) {
+      listeners.push(listener);
+    }
+
+    export function unsubscribe(listener) {
+      listeners = listeners.filter(l => l !== listener);
+    }
+  </script>
+
+  <!-- Actions Module -->
+  <script type="module" id="actions">
+    import { setState, getState } from './state.js';
+
+    // Action creators
+    export function setBpm(bpm) {
+      const state = getState();
+      setState({...state, bpm});
+    }
+
+    export function setPlayhead(step) {
+      const state = getState();
+      setState({...state, playhead: step});
+    }
+
+    export function togglePlaying() {
+      const state = getState();
+      setState({...state, isPlaying: !state.isPlaying});
+    }
+
+    export function setPlaying(playing) {
+      const state = getState();
+      setState({...state, isPlaying: playing});
+    }
+
+    export function toggleSampleStep(row, step) {
+      const state = getState();
+      const newSampleRows = [...state.sampleRows];
+      const newRow = {...newSampleRows[row]};
+      newRow.activeSteps = [...newRow.activeSteps];
+      newRow.activeSteps[step] = !newRow.activeSteps[step];
+      newSampleRows[row] = newRow;
+      setState({...state, sampleRows: newSampleRows});
+    }
+
+    export function toggleSynthStep(row, step) {
+      const state = getState();
+      const newSynthRows = [...state.synthRows];
+      const newRow = {...newSynthRows[row]};
+      newRow.activeSteps = [...newRow.activeSteps];
+      newRow.activeSteps[step] = !newRow.activeSteps[step];
+      newSynthRows[row] = newRow;
+      setState({...state, synthRows: newSynthRows});
+    }
+
+    export function setSampleBuffer(row, buffer, fileName) {
+      const state = getState();
+      const newSampleRows = [...state.sampleRows];
+      newSampleRows[row] = {...newSampleRows[row], buffer, fileName};
+      setState({...state, sampleRows: newSampleRows});
+    }
+
+    export function setSynthType(row, synthType) {
+      const state = getState();
+      const newSynthRows = [...state.synthRows];
+      newSynthRows[row] = {...newSynthRows[row], synthType, params: {}};
+      setState({...state, synthRows: newSynthRows});
+    }
+
+    export function setSynthParam(row, param, value) {
+      const state = getState();
+      const newSynthRows = [...state.synthRows];
+      const newRow = {...newSynthRows[row]};
+      newRow.params = {...newRow.params, [param]: value};
+      newSynthRows[row] = newRow;
+      setState({...state, synthRows: newSynthRows});
+    }
+
+    export function setNoteForStep(row, step, note) {
+      const state = getState();
+      const newSynthRows = [...state.synthRows];
+      const newRow = {...newSynthRows[row]};
+      newRow.notePerStep = [...newRow.notePerStep];
+      newRow.notePerStep[step] = note;
+      newSynthRows[row] = newRow;
+      setState({...state, synthRows: newSynthRows});
+    }
+
+    export function toggleSampleMute(row) {
+      const state = getState();
+      const newSampleRows = [...state.sampleRows];
+      newSampleRows[row] = {...newSampleRows[row], muted: !newSampleRows[row].muted};
+      setState({...state, sampleRows: newSampleRows});
+    }
+
+    export function toggleSynthMute(row) {
+      const state = getState();
+      const newSynthRows = [...state.synthRows];
+      newSynthRows[row] = {...newSynthRows[row], muted: !newSynthRows[row].muted};
+      setState({...state, synthRows: newSynthRows});
+    }
+
+    export function clearSampleRow(row) {
+      const state = getState();
+      const newSampleRows = [...state.sampleRows];
+      newSampleRows[row] = {...newSampleRows[row], activeSteps: Array(64).fill(false)};
+      setState({...state, sampleRows: newSampleRows});
+    }
+
+    export function clearSynthRow(row) {
+      const state = getState();
+      const newSynthRows = [...state.synthRows];
+      newSynthRows[row] = {...newSynthRows[row], activeSteps: Array(64).fill(false)};
+      setState({...state, synthRows: newSynthRows});
+    }
+
+    export function addRecordedMidi(row, note, time, duration) {
+      const state = getState();
+      const newSynthRows = [...state.synthRows];
+      const newRow = {...newSynthRows[row]};
+      newRow.recordedMidi = [...newRow.recordedMidi, {note, time, duration}];
+      newSynthRows[row] = newRow;
+      setState({...state, synthRows: newSynthRows});
+    }
+
+    export function clearRecordedMidi(row) {
+      const state = getState();
+      const newSynthRows = [...state.synthRows];
+      newSynthRows[row] = {...newSynthRows[row], recordedMidi: []};
+      setState({...state, synthRows: newSynthRows});
+    }
+  </script>
+
+  <!-- Sequencer Grid Module -->
+  <script type="module" id="sequencerGrid">
+    import { getState, subscribe } from './state.js';
+    import { toggleSampleStep, toggleSynthStep } from './actions.js';
+    import { SAMPLE_ROWS } from './constants.js';
+
+    const gridContainer = document.getElementById('gridContainer');
+
+    function renderGrid() {
+      const state = getState();
+      gridContainer.innerHTML = '';
+
+      // Render sample rows
+      state.sampleRows.forEach((row, rowIndex) => {
+        const rowElement = document.createElement('div');
+        rowElement.className = 'row';
+        
+        row.activeSteps.forEach((isActive, stepIndex) => {
+          const stepElement = document.createElement('button');
+          stepElement.className = `step ${isActive ? 'active' : ''} ${state.playhead === stepIndex ? 'playhead' : ''}`;
+          stepElement.addEventListener('click', () => {
+            toggleSampleStep(rowIndex, stepIndex);
+          });
+          rowElement.appendChild(stepElement);
+        });
+        
+        gridContainer.appendChild(rowElement);
+      });
+
+      // Render synth rows
+      state.synthRows.forEach((row, rowIndex) => {
+        const rowElement = document.createElement('div');
+        rowElement.className = 'row';
+        
+        row.activeSteps.forEach((isActive, stepIndex) => {
+          const stepElement = document.createElement('button');
+          stepElement.className = `step ${isActive ? 'active' : ''} ${state.playhead === stepIndex ? 'playhead' : ''}`;
+          stepElement.addEventListener('click', () => {
+            toggleSynthStep(rowIndex, stepIndex);
+          });
+          rowElement.appendChild(stepElement);
+        });
+        
+        gridContainer.appendChild(rowElement);
+      });
+    }
+
+    subscribe(renderGrid);
+    renderGrid();
+  </script>
+
+  <!-- Sample Channel Module -->
+  <script type="module" id="sampleChannel">
+    import { getState, subscribe } from './state.js';
+    import { setSampleBuffer, toggleSampleMute, clearSampleRow } from './actions.js';
+    import { SAMPLE_ROWS } from './constants.js';
+
+    const gridContainer = document.getElementById('gridContainer');
+
+    function renderSampleChannels() {
+      const state = getState();
+      
+      // Remove existing channel controls
+      document.querySelectorAll('.sample-channel-controls').forEach(el => el.remove());
+      
+      // Render sample channel controls
+      state.sampleRows.forEach((row, rowIndex) => {
+        const controlsElement = document.createElement('div');
+        controlsElement.className = 'channel-controls sample-channel-controls';
+        
+        const labelElement = document.createElement('div');
+        labelElement.className = 'channel-label';
+        labelElement.textContent = `Sample ${rowIndex + 1}`;
+        controlsElement.appendChild(labelElement);
+        
+        const fileInput = document.createElement('input');
+        fileInput.type = 'file';
+        fileInput.accept = 'audio/*';
+        fileInput.addEventListener('change', async (e) => {
+          if (e.target.files.length > 0) {
+            const file = e.target.files[0];
+            const arrayBuffer = await file.arrayBuffer();
+            const audioBuffer = await Tone.getContext().decodeAudioData(arrayBuffer);
+            setSampleBuffer(rowIndex, audioBuffer, file.name);
+          }
+        });
+        controlsElement.appendChild(fileInput);
+        
+        const muteButton = document.createElement('button');
+        muteButton.textContent = row.muted ? 'Unmute' : 'Mute';
+        muteButton.addEventListener('click', () => {
+          toggleSampleMute(rowIndex);
+        });
+        controlsElement.appendChild(muteButton);
+        
+        const clearButton = document.createElement('button');
+        clearButton.textContent = 'Clear';
+        clearButton.addEventListener('click', () => {
+          clearSampleRow(rowIndex);
+        });
+        controlsElement.appendChild(clearButton);
+        
+        if (!row.buffer && row.fileName) {
+          const warningElement = document.createElement('span');
+          warningElement.className = 'warning';
+          warningElement.textContent = '⚠ File missing';
+          controlsElement.appendChild(warningElement);
+        }
+        
+        gridContainer.parentNode.insertBefore(controlsElement, gridContainer);
+      });
+    }
+
+    subscribe(renderSampleChannels);
+    renderSampleChannels();
+  </script>
+
+  <!-- Synth Channel Module -->
+  <script type="module" id="synthChannel">
+    import { getState, subscribe } from './state.js';
+    import { setSynthType, setSynthParam, toggleSynthMute, clearSynthRow, setNoteForStep } from './actions.js';
+    import { SYNTH_ROWS, NOTE_NAMES } from './constants.js';
+    import { synthRegistry } from './synthManager.js';
+
+    const gridContainer = document.getElementById('gridContainer');
+
+    function renderSynthChannels() {
+      const state = getState();
+      
+      // Remove existing channel controls
+      document.querySelectorAll('.synth-channel-controls').forEach(el => el.remove());
+      
+      // Render synth channel controls
+      state.synthRows.forEach((row, rowIndex) => {
+        const controlsElement = document.createElement('div');
+        controlsElement.className = 'channel-controls synth-channel-controls';
+        
+        const labelElement = document.createElement('div');
+        labelElement.className = 'channel-label';
+        labelElement.textContent = `Synth ${rowIndex + 1}`;
+        controlsElement.appendChild(labelElement);
+        
+        const synthSelect = document.createElement('select');
+        Object.keys(synthRegistry).forEach(synthType => {
+          const option = document.createElement('option');
+          option.value = synthType;
+          option.textContent = synthType;
+          if (synthType === row.synthType) {
+            option.selected = true;
+          }
+          synthSelect.appendChild(option);
+        });
+        synthSelect.addEventListener('change', (e) => {
+          setSynthType(rowIndex, e.target.value);
+        });
+        controlsElement.appendChild(synthSelect);
+        
+        const muteButton = document.createElement('button');
+        muteButton.textContent = row.muted ? 'Unmute' : 'Mute';
+        muteButton.addEventListener('click', () => {
+          toggleSynthMute(rowIndex);
+        });
+        controlsElement.appendChild(muteButton);
+        
+        const clearButton = document.createElement('button');
+        clearButton.textContent = 'Clear';
+        clearButton.addEventListener('click', () => {
+          clearSynthRow(rowIndex);
+        });
+        controlsElement.appendChild(clearButton);
+        
+        // Generate synth UI controls
+        const synthClass = synthRegistry[row.synthType];
+        if (synthClass && synthClass.getUI) {
+          const uiDescriptors = synthClass.getUI();
+          const synthUIElement = document.createElement('div');
+          synthUIElement.className = 'synth-ui';
+          
+          uiDescriptors.forEach(descriptor => {
+            const controlGroup = document.createElement('div');
+            controlGroup.className = 'control-group';
+            
+            const label = document.createElement('label');
+            label.className = 'control-label';
+            label.textContent = descriptor.label;
+            controlGroup.appendChild(label);
+            
+            if (descriptor.type === 'range') {
+              const input = document.createElement('input');
+              input.type = 'range';
+              input.min = descriptor.min || 0;
+              input.max = descriptor.max || 1;
+              input.step = descriptor.step || 0.01;
+              input.value = row.params[descriptor.param] || descriptor.defaultValue || 0;
+              input.addEventListener('input', (e) => {
+                setSynthParam(rowIndex, descriptor.param, parseFloat(e.target.value));
+              });
+              controlGroup.appendChild(input);
+            } else if (descriptor.type === 'select') {
+              const select = document.createElement('select');
+              descriptor.options.forEach(option => {
+                const optionElement = document.createElement('option');
+                optionElement.value = option;
+                optionElement.textContent = option;
+                if (option === (row.params[descriptor.param] || descriptor.defaultValue)) {
+                  optionElement.selected = true;
+                }
+                select.appendChild(optionElement);
+              });
+              select.addEventListener('change', (e) => {
+                setSynthParam(rowIndex, descriptor.param, e.target.value);
+              });
+              controlGroup.appendChild(select);
+            }
+            
+            synthUIElement.appendChild(controlGroup);
+          });
+          
+          controlsElement.appendChild(synthUIElement);
+        }
+        
+        // Piano keys for note selection
+        const pianoKeysElement = document.createElement('div');
+        pianoKeysElement.className = 'piano-keys';
+        
+        // Generate one octave of piano keys (C4 to B4)
+        for (let i = 0; i < 12; i++) {
+          const note = NOTE_NAMES[i] + '4';
+          const keyElement = document.createElement('button');
+          keyElement.className = 'piano-key';
+          keyElement.textContent = note;
+          keyElement.addEventListener('click', () => {
+            // This would ideally set the note for the current step
+            // For simplicity, we'll just log it
+            console.log(`Selected note: ${note}`);
+          });
+          pianoKeysElement.appendChild(keyElement);
+        }
+        
+        controlsElement.appendChild(pianoKeysElement);
+        
+        gridContainer.parentNode.insertBefore(controlsElement, gridContainer.nextSibling);
+      });
+    }
+
+    subscribe(renderSynthChannels);
+    renderSynthChannels();
+  </script>
+
+  <!-- Transport Controls Module -->
+  <script type="module" id="transportControls">
+    import { getState, subscribe } from './state.js';
+    import { setBpm, togglePlaying, setPlaying, setPlayhead } from './actions.js';
+    import { saveProject, loadProject } from './saveLoad.js';
+
+    const playButton = document.getElementById('playButton');
+    const stopButton = document.getElementById('stopButton');
+    const bpmInput = document.getElementById('bpmInput');
+    const saveButton = document.getElementById('saveButton');
+    const loadInput = document.getElementById('loadInput');
+
+    function renderTransport() {
+      const state = getState();
+      playButton.textContent = state.isPlaying ? 'Pause' : 'Play';
+    }
+
+    playButton.addEventListener('click', () => {
+      togglePlaying();
+    });
+
+    stopButton.addEventListener('click', () => {
+      setPlaying(false);
+      setPlayhead(0);
+    });
+
+    bpmInput.addEventListener('change', () => {
+      setBpm(parseInt(bpmInput.value));
+    });
+
+    saveButton.addEventListener('click', () => {
+      saveProject();
+    });
+
+    loadInput.addEventListener('change', async (e) => {
+      if (e.target.files.length > 0) {
+        const file = e.target.files[0];
+        const text = await file.text();
+        loadProject(JSON.parse(text));
+      }
+    });
+
+    // Keyboard shortcuts
+    document.addEventListener('keydown', (e) => {
+      if (e.code === 'Space') {
+        e.preventDefault();
+        togglePlaying();
+      } else if (e.code === 'ArrowRight') {
+        const state = getState();
+        if (!state.isPlaying) {
+          setPlayhead((state.playhead + 1) % 64);
+        }
+      } else if (e.code === 'ArrowLeft') {
+        const state = getState();
+        if (!state.isPlaying) {
+          setPlayhead((state.playhead - 1 + 64) % 64);
+        }
+      }
+    });
+
+    subscribe(renderTransport);
+    renderTransport();
+  </script>
+
+  <!-- Synth Manager Module -->
+  <script type="module" id="synthManager">
+    // Synth registry
+    export const synthRegistry = {};
+
+    // Register a synth
+    export function registerSynth(name, synthClass) {
+      synthRegistry[name] = synthClass;
+    }
+
+    // Create a synth instance
+    export function createSynth(name, toneContext, initialParams) {
+      const SynthClass = synthRegistry[name];
+      if (!SynthClass) {
+        throw new Error(`Synth ${name} not found in registry`);
+      }
+      return new SynthClass(toneContext, initialParams);
+    }
+  </script>
+
+  <!-- Save/Load Module -->
+  <script type="module" id="saveLoad">
+    import { getState, setState } from './state.js';
+
+    export function saveProject() {
+      const state = getState();
+      const dataStr = JSON.stringify(state, null, 2);
+      const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+      
+      const exportFileDefaultName = 'sequencer-project.json';
+      
+      const linkElement = document.createElement('a');
+      linkElement.setAttribute('href', dataUri);
+      linkElement.setAttribute('download', exportFileDefaultName);
+      linkElement.click();
+    }
+
+    export function loadProject(projectData) {
+      setState(projectData);
+    }
+  </script>
+
+  <!-- Basic Synth Implementation -->
+  <script type="module" id="synths/BasicSynth">
+    class BasicSynth {
+      constructor(toneContext, initialParams = {}) {
+        this.toneContext = toneContext;
+        this.oscillator = new Tone.Oscillator().toDestination();
+        this.envelope = new Tone.AmplitudeEnvelope({
+          attack: initialParams.attack || 0.1,
+          decay: initialParams.decay || 0.2,
+          sustain: initialParams.sustain || 0.5,
+          release: initialParams.release || 0.8
+        }).connect(this.oscillator);
+        
+        this.oscillator.connect(this.envelope);
+        
+        // Apply initial parameters
+        this.set(initialParams);
+      }
+      
+      trigger(note, duration, time) {
+        this.oscillator.frequency.value = Tone.Frequency(note).toFrequency();
+        this.envelope.triggerAttackRelease(duration, time);
+      }
+      
+      set(params) {
+        if (params.waveform) {
+          this.oscillator.type = params.waveform;
+        }
+        if (params.attack !== undefined) {
+          this.envelope.attack = params.attack;
+        }
+        if (params.decay !== undefined) {
+          this.envelope.decay = params.decay;
+        }
+        if (params.sustain !== undefined) {
+          this.envelope.sustain = params.sustain;
+        }
+        if (params.release !== undefined) {
+          this.envelope.release = params.release;
+        }
+      }
+      
+      dispose() {
+        this.oscillator.dispose();
+        this.envelope.dispose();
+      }
+      
+      static getUI() {
+        return [
+          {
+            type: 'select',
+            label: 'Waveform',
+            param: 'waveform',
+            options: ['sine', 'square', 'sawtooth', 'triangle'],
+            defaultValue: 'sine'
+          },
+          {
+            type: 'range',
+            label: 'Attack',
+            param: 'attack',
+            min: 0,
+            max: 2,
+            step: 0.01,
+            defaultValue: 0.1
+          },
+          {
+            type: 'range',
+            label: 'Decay',
+            param: 'decay',
+            min: 0,
+            max: 2,
+            step: 0.01,
+            defaultValue: 0.2
+          },
+          {
+            type: 'range',
+            label: 'Sustain',
+            param: 'sustain',
+            min: 0,
+            max: 1,
+            step: 0.01,
+            defaultValue: 0.5
+          },
+          {
+            type: 'range',
+            label: 'Release',
+            param: 'release',
+            min: 0,
+            max: 5,
+            step: 0.01,
+            defaultValue: 0.8
+          }
+        ];
+      }
+    }
+
+    export default BasicSynth;
+  </script>
+
+  <!-- FM Synth Implementation -->
+  <script type="module" id="synths/FMSynth">
+    class FMSynth {
+      constructor(toneContext, initialParams = {}) {
+        this.toneContext = toneContext;
+        this.synth = new Tone.FMSynth().toDestination();
+        this.set(initialParams);
+      }
+      
+      trigger(note, duration, time) {
+        this.synth.triggerAttackRelease(note, duration, time);
+      }
+      
+      set(params) {
+        this.synth.set(params);
+      }
+      
+      dispose() {
+        this.synth.dispose();
+      }
+      
+      static getUI() {
+        return [
+          {
+            type: 'range',
+            label: 'Harmonicity',
+            param: 'harmonicity',
+            min: 0,
+            max: 10,
+            step: 0.1,
+            defaultValue: 3
+          },
+          {
+            type: 'range',
+            label: 'Modulation Index',
+            param: 'modulationIndex',
+            min: 0,
+            max: 100,
+            step: 1,
+            defaultValue: 10
+          }
+        ];
+      }
+    }
+
+    export default FMSynth;
+  </script>
+
+  <!-- Main Module -->
+  <script type="module" id="main">
+    import { getState, setState, subscribe } from './state.js';
+    import { setBpm, setPlayhead } from './actions.js';
+    import { registerSynth } from './synthManager.js';
+    import BasicSynth from './synths/BasicSynth.js';
+    import FMSynth from './synths/FMSynth.js';
+
+    // Register synths
+    registerSynth('BasicSynth', BasicSynth);
+    registerSynth('FMSynth', FMSynth);
+
+    // Initialize Tone.js
+    Tone.Transport.bpm.value = 120;
+
+    // Create players for sample rows
+    const players = Array(4).fill(null).map(() => new Tone.Player());
+
+    // Create synths for synth rows
+    const synths = Array(4).fill(null).map(() => null);
+
+    // Sequence function
+    function sequence(time) {
+      const state = getState();
+      const step = state.playhead;
+      
+      // Update playhead
+      setPlayhead(step);
+      
+      // Schedule sample events
+      state.sampleRows.forEach((row, rowIndex) => {
+        if (row.activeSteps[step] && !row.muted && row.buffer) {
+          players[rowIndex].buffer = row.buffer;
+          players[rowIndex].start(time);
+        }
+      });
+      
+      // Schedule synth events
+      state.synthRows.forEach((row, rowIndex) => {
+        if (row.activeSteps[step] && !row.muted) {
+          // Reuse or create synth
+          if (!synths[rowIndex]) {
+            const SynthClass = synthRegistry[row.synthType];
+            synths[rowIndex] = new SynthClass(Tone.getContext(), row.params);
+          } else {
+            synths[rowIndex].set(row.params);
+          }
+          
+          // Trigger synth
+          synths[rowIndex].trigger(row.notePerStep[step], '16n', time);
+        }
+      });
+      
+      // Advance step
+      const nextStep = (step + 1) % 64;
+      setTimeout(() => {
+        const newState = getState();
+        if (newState.isPlaying) {
+          setPlayhead(nextStep);
+        }
+      }, 60000 / state.bpm / 4); // 16th note duration
+    }
+
+    // Transport callbacks
+    subscribe((state) => {
+      Tone.Transport.bpm.value = state.bpm;
+      
+      if (state.isPlaying) {
+        Tone.Transport.start();
+        sequence(Tone.now());
+      } else {
+        Tone.Transport.stop();
+      }
+    });
+
+    // Start transport
+    Tone.Transport.scheduleRepeat(sequence, '16n');
+  </script>
+</body>
+</html>

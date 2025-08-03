@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Web3 Oscilloscope Music - Enhanced v2</title>
+  <meta name="viewport" content="width=600,initial-scale=1">
+  <style>
+    html,body {margin:0;padding:0;height:100%;background:#121212;color:#fff;font-family:sans-serif;}
+    body {display:grid;place-items:center;gap:1.5rem;padding:1rem;}
+    #scope {border-radius:8px;border:1px solid #333;background:#000;box-shadow: 0 0 20px rgba(0, 100, 255, 0.2);}
+    #controls {display:flex;gap:1rem;align-items:center;flex-wrap: wrap; justify-content: center;}
+    #controls button, #controls select {padding:0.6rem 1.2rem;border-radius:6px;border:1px solid #555;background:#222;color:#eee; cursor: pointer; transition: background 0.2s, color 0.2s;}
+    #controls button:hover, #controls select:hover {background:#333; color:#fff; border-color:#777;}
+    #controls button:disabled {opacity: 0.5; cursor: not-allowed;}
+    #loader {font-size:1rem;color:#aaa;min-height:1.4rem;text-align:center; font-style: italic;}
+    #info { font-size: 0.85rem; color: #777; text-align: center; max-width: 90%; }
+  </style>
+</head>
+<body>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Start Audio + Draw</button>
+    <button id="muteBtn">Mute</button>
+    <button id="regenBtn">Regenerate</button>
+  </section>
+  <div id="loader">Initializing...</div>
+  <div id="info">Experience unique, slowly evolving audio-visual patterns. Each reload or click on 'Regenerate' creates a new one.</div>
+  <script type="module">
+    // --- Dynamic Tone.js Loader ---
+    function loadToneJSAndBoot({toneUrl, setLoaderStatus, state, boot}) {
+      setLoaderStatus('Loading Audio Engine...');
+      import(toneUrl).then(mod=>{
+        state.Tone = window.Tone ?? mod?.default ?? mod;
+        if (state.Tone) { setLoaderStatus(`Tone.js v${state.Tone.version??"?"} ready.`); boot(); }
+        else throw new Error('Tone.js not found.');
+      }).catch(e=>{
+        setLoaderStatus('Failed to load Tone.js. App cannot start.',1);
+        console.error(e);
+      });
+    }
+
+    // --- State & DOM ---
+    const state = { isPlaying:false, Tone:null, nodes:{}, currentPreset: null, currentVisual: null };
+    const canvas = document.getElementById('scope');
+    const ctx = canvas.getContext('2d');
+    const startBtn = document.getElementById('startBtn');
+    const muteBtn = document.getElementById('muteBtn');
+    const regenBtn = document.getElementById('regenBtn');
+    const loader = document.getElementById('loader');
+
+    // --- Randomized Sound Preset Generator ---
+    function generateRandomPreset(Tone) {
+        const types = ['sine', 'square', 'sawtooth', 'triangle'];
+        const baseNotes = ['C3', 'D3', 'E3', 'G3', 'A3', 'C4', 'D4', 'E4', 'G4', 'A4'];
+
+        // Helper to get a random item
+        const randItem = (arr) => arr[Math.floor(Math.random() * arr.length)];
+        // Helper for small random values
+        const randSmall = () => (Math.random() * 2 - 1) * 0.05;
+
+        const preset = {
+            filter: new Tone.Filter({
+                type: randItem(['lowpass', 'highpass', 'bandpass']),
+                frequency: Math.random() * 3000 + 300,
+                rolloff: randItem([-12, -24]),
+                Q: Math.random() * 4 + 0.5
+            }),
+            // Slow LFO for filter modulation
+            lfo: new Tone.LFO({
+                type: randItem(types),
+                frequency: Math.random() * 0.5 + 0.05, // Very slow 0.05Hz to 0.55Hz
+                min: Math.random() * 800 + 200,
+                max: Math.random() * 4000 + 1000,
+                phase: Math.random() * 360
+            }),
+            effects: []
+        };
+
+        // Oscillator 1
+        preset.osc1 = new Tone.Oscillator({
+            type: randItem(types),
+            frequency: Tone.Frequency(randItem(baseNotes)).toFrequency() * (1 + randSmall()), // Slight detune
+            volume: -6
+        }).start();
+
+        // Maybe add Oscillator 2 (detuned for beating/chorusing effect)
+        if (Math.random() > 0.4) {
+            const detuneAmount = (Math.random() * 20 - 10) + (Math.random() > 0.5 ? 0 : 1200); // Either small detune or an octave
+            preset.osc2 = new Tone.Oscillator({
+                type: randItem(types),
+                frequency: preset.osc1.frequency.value * (1 + randSmall()),
+                detune: detuneAmount,
+                volume: -12
+            }).start();
+        }
+
+        // Add a simple, reliable effect
+        if (Math.random() > 0.5) {
+            preset.effects.push(new Tone.Chorus({
+                frequency: Math.random() * 1.5 + 0.5,
+                delayTime: Math.random() * 3 + 2,
+                depth: Math.random() * 0.5 + 0.2,
+                wet: Math.random() * 0.3 + 0.1
+            }));
+        }
+        
+        // Connect LFO to filter
+        preset.lfo.connect(preset.filter.frequency);
+
+        state.currentPreset = preset;
+        return preset;
+    }
+
+    // --- Enhanced Visuals ---
+    const visualFuncs = {
+        lissajous(data, t, params) {
+            const S = 0.4 * canvas.width;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            // Use simple, fixed ratios for stable, slow patterns
+            const ratios = [[1, 1], [1, 2], [2, 3], [3, 4], [1, 3], [2, 5]];
+            const [freqX, freqY] = params.ratio || ratios[Math.floor(Math.random() * ratios.length)];
+            const phase = params.phase || 0;
+
+            ctx.beginPath();
+            const len = data.length;
+            for (let i = 0; i < len; i++) {
+                const amp = (data[i] + 1) / 2;
+                const theta = (i / len) * Math.PI * 2;
+                const x = cx + S * amp * Math.sin(freqX * theta + phase + t * 0.05); // Slow phase drift
+                const y = cy + S * amp * Math.sin(freqY * theta + t * 0.1); // Slow Y phase drift
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            }
+            ctx.stroke();
+        },
+        harmonograph(data, t, params) {
+            const S = 0.4 * canvas.width;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            // Slowly evolving frequencies and phases for smooth motion
+            // Use irrational-seeming ratios for complex, non-repeating patterns
+            const f1 = params.f1 || (1 + Math.sin(t * 0.01) * 0.05);
+            const f2 = params.f2 || (2 + Math.cos(t * 0.013) * 0.05);
+            const f3 = params.f3 || (1.01 + Math.sin(t * 0.008) * 0.05);
+            const f4 = params.f4 || (2.02 + Math.cos(t * 0.011) * 0.05);
+            const d = 0.005; // Fixed damping for consistency
+
+            ctx.beginPath();
+            const len = data.length;
+            for (let i = 0; i < len; i++) {
+                const amp = (data[i] + 1) / 2;
+                const T = t * 0.3; // Slow time
+                const idx = i / len;
+                const x = cx + S * amp * (Math.sin(T * f1 + idx * Math.PI * 2) * Math.exp(-d * T) + Math.sin(T * f2) * Math.exp(-d * T * 1.2));
+                const y = cy + S * amp * (Math.sin(T * f3 + idx * Math.PI) * Math.exp(-d * T * 0.9) + Math.sin(T * f4) * Math.exp(-d * T * 1.1));
+                i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+            }
+            ctx.stroke();
+        },
+        particles(data, t, params) {
+            const numParticles = Math.min(300, data.length);
+            const S = 0.45 * canvas.width;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            
+            // Ensure particle state exists
+            if (!params.particleState || params.particleState.length !== numParticles) {
+                params.particleState = Array.from({ length: numParticles }, (_, i) => ({
+                    x: cx + (Math.random() - 0.5) * S,
+                    y: cy + (Math.random() - 0.5) * S,
+                    vx: (Math.random() - 0.5) * 1,
+                    vy: (Math.random() - 0.5) * 1,
+                    size: Math.random() * 3 + 1,
+                    life: 1.0,
+                    hue: (i * 137.5) % 360 // Golden angle for spread
+                }));
+            }
+
+            const particles = params.particleState;
+
+            for (let i = 0; i < numParticles; i++) {
+                const p = particles[i];
+                const dataIndex = Math.floor((i / numParticles) * data.length);
+                const amp = (data[dataIndex] + 1) / 2;
+
+                // Apply force based on waveform
+                p.vx += (Math.random() - 0.5) * amp * 0.3;
+                p.vy += (Math.random() - 0.5) * amp * 0.3;
+
+                // Damping
+                p.vx *= 0.96;
+                p.vy *= 0.96;
+
+                // Update position
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // Boundary check with damping
+                if (p.x < 0 || p.x > canvas.width) p.vx *= -0.7;
+                if (p.y < 0 || p.y > canvas.height) p.vy *= -0.7;
+                p.x = Math.max(0, Math.min(canvas.width, p.x));
+                p.y = Math.max(0, Math.min(canvas.height, p.y));
+
+                // Fade out and respawn
+                p.life -= 0.005;
+                if (p.life <= 0 || (p.x <= 1 && p.y <= 1)) { // Respawn if stuck
+                    p.x = cx + (Math.random() - 0.5) * 10;
+                    p.y = cy + (Math.random() - 0.5) * 10;
+                    p.vx = (Math.random() - 0.5) * 1;
+                    p.vy = (Math.random() - 0.5) * 1;
+                    p.life = 1.0;
+                }
+
+                // Draw
+                const alpha = p.life * 0.7;
+                ctx.fillStyle = `hsla(${(p.hue + t * 10) % 360}, 90%, 60%, ${alpha})`;
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.size * amp, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        },
+        // Modified original shapes with enhancements
+        circle(data, t, params) {
+            const S = 0.8*canvas.width/2;
+            const cx = canvas.width / 2;
+            const cy = canvas.height / 2;
+            const rotationSpeed = params.rotationSpeed || 0.3;
+            
+            ctx.beginPath();
+            const len = data.length;
+            for (let i=0; i<len; ++i) {
+                const a = i/len * 2 * Math.PI;
+                const amp = (data[i] + 1) / 2;
+                // Modulate radius slowly
+                const mod = 0.9 + 0.1 * Math.sin(t * 0.2 + a * 4);
+                const r = S * amp * mod;
+                const x = cx + Math.cos(a + t * rotationSpeed) * r;
+                const y = cy + Math.sin(a + t * rotationSpeed) * r;
+                i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        },
+        square(data, t, params) {
+            const S = 0.8 * canvas.width / Math.SQRT2;
+            const c = canvas.width / 2;
+            const o = (canvas.width - S) / 2;
+            const pulse = params.pulse || 1;
+            // Slow pulsing and slight rotation
+            const scaleMod = 0.8 + 0.2 * Math.sin(t * 0.23);
+            const rotation = t * 0.1;
+            
+            ctx.beginPath();
+            const len = data.length;
+            for (let i = 0; i < len; ++i) {
+                const p = i / len;
+                const amp = (data[i] + 1) / 2;
+                let x, y;
+                if (p < 0.25)      [x, y] = [o + S * (p / 0.25), o];
+                else if (p < 0.5)  [x, y] = [o + S, o + S * ((p - 0.25) / 0.25)];
+                else if (p < 0.75) [x, y] = [o + S - S * ((p - 0.5) / 0.25), o + S];
+                else               [x, y] = [o, o + S - S * ((p - 0.75) / 0.25)];
+                
+                // Apply scale and rotation
+                const dx = x - c, dy = y - c;
+                const scaledX = dx * (scaleMod + 0.2 * amp * pulse);
+                const scaledY = dy * (scaleMod + 0.2 * amp * pulse);
+                
+                const rotatedX = scaledX * Math.cos(rotation) - scaledY * Math.sin(rotation);
+                const rotatedY = scaledX * Math.sin(rotation) + scaledY * Math.cos(rotation);
+                
+                const fx = c + rotatedX;
+                const fy = c + rotatedY;
+                
+                i ? ctx.lineTo(fx, fy) : ctx.moveTo(fx, fy);
+            }
+            ctx.closePath();
+            ctx.stroke();
+        }
+    };
+
+    // --- Audio Node Management ---
+    function disposeNodes() {
+      Object.values(state.nodes).forEach(n=>{
+        try{n?.stop?.()}catch{}
+        try{n?.dispose?.()}catch{}
+      });
+      state.nodes={};
+    }
+
+    async function startAudioAndDraw() {
+      if(state.isPlaying) return;
+      if(!state.Tone) return loader.textContent='Tone.js not loaded.';
+      await state.Tone.start();
+      disposeNodes();
+      
+      const T = state.Tone;
+      
+      // Generate new preset and visual on start
+      const pr = generateRandomPreset(T);
+      const visualNames = Object.keys(visualFuncs);
+      const selectedVisual = visualNames[Math.floor(Math.random() * visualNames.length)];
+      state.currentVisual = { name: selectedVisual, params: {} }; // Initialize params
+
+      // --- Simplified and Robust Connection Chain ---
+      // Create a single master volume for output control
+      const masterVol = state.nodes.masterVol = new T.Volume(-12);
+      masterVol.toDestination();
+
+      // Connect Oscillators -> Effects (chain) -> Filter -> Master Volume
+      let lastNode = pr.osc1;
+      if (pr.osc2) {
+          pr.osc2.connect(lastNode); // Mix into osc1
+      }
+
+      // Chain effects
+      pr.effects.forEach(effect => {
+          lastNode.connect(effect);
+          lastNode = effect;
+      });
+
+      // Connect filter and then to master volume
+      lastNode.connect(pr.filter);
+      pr.filter.connect(masterVol);
+      
+      // Mute/Unmute the master volume
+      masterVol.mute = T.Destination.mute;
+
+      // Create analyser from the final output before master volume
+      const ana = state.nodes.analyser = T.context.createAnalyser();
+      ana.fftSize = 2048;
+      pr.filter.connect(ana); // Analyse post-filter signal
+      
+      state.isPlaying = true;
+      startBtn.textContent = "Stop Audio + Draw";
+      muteBtn.disabled = false;
+      regenBtn.disabled = false;
+      animate();
+    }
+
+    function stopAudioAndDraw() {
+      if(!state.isPlaying) return;
+      cancelAnimationFrame(state.nodes.animId);
+      // Do not clear canvas here to maintain trails
+      disposeNodes();
+      state.isPlaying = false;
+      startBtn.textContent = "Start Audio + Draw";
+      muteBtn.disabled = true;
+      muteBtn.textContent = "Mute";
+      regenBtn.disabled = true;
+      if(state.Tone) state.Tone.Destination.mute = false;
+    }
+
+    // --- Animation ---
+    let hueOffset = 0;
+    let lastTime = 0;
+    function animate(time) {
+        // Use performance.now for consistency if time isn't passed
+        if (time === undefined) time = performance.now();
+        const deltaTime = time - (lastTime || time);
+        lastTime = time;
+
+        const ana = state.nodes.analyser;
+        if (!ana || !state.isPlaying) return;
+
+        const buf = new Float32Array(ana.fftSize);
+        ana.getFloatTimeDomainData(buf);
+
+        // Trails: Draw a semi-transparent overlay instead of full clear
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)'; // Slightly faster fade for clarity
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+        // Time in seconds for animations
+        const t = time / 1000;
+
+        // Slowly evolve hue for color palette
+        hueOffset = (hueOffset + deltaTime * 0.0001) % 360;
+        const baseHue = (t * 3) % 360; // Slightly faster base hue shift
+
+        // Set dynamic styles
+        const visual = state.currentVisual;
+        if (visual) {
+            // Vary line width slightly
+            ctx.lineWidth = 1.5 + 0.5 * Math.sin(t * 0.3);
+            ctx.lineJoin = ctx.lineCap = 'round';
+            
+            // Color based on time and shape
+            if (visual.name !== 'particles') { // Particles handle their own color
+                ctx.strokeStyle = `hsl(${(baseHue + hueOffset) % 360}, 95%, 60%)`;
+            }
+
+            // Call the drawing function
+            const drawFunc = visualFuncs[visual.name];
+            if (drawFunc) {
+                drawFunc(buf, t, visual.params);
+            }
+        }
+
+        state.nodes.animId = requestAnimationFrame(animate);
+    }
+
+
+    // --- UI Events ---
+    startBtn.onclick = () => state.isPlaying ? stopAudioAndDraw() : startAudioAndDraw();
+    muteBtn.onclick = () => {
+      if (!state.Tone || !state.nodes.masterVol) return;
+      const m = state.nodes.masterVol.mute = !state.nodes.masterVol.mute;
+      muteBtn.textContent = m ? "Unmute" : "Mute";
+    };
+    regenBtn.onclick = () => {
+        if (state.isPlaying) {
+            stopAudioAndDraw();
+            // Brief pause before restart to ensure cleanup
+            setTimeout(() => {
+                startAudioAndDraw();
+                loader.textContent = "Regenerated!";
+                setTimeout(() => { if(state.isPlaying) loader.textContent = ""; }, 1000);
+            }, 100);
+        }
+    };
+
+    // --- Initialize ---
+    loadToneJSAndBoot({
+      toneUrl: 'https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js', // Reliable CDN
+      setLoaderStatus: (msg, err) => {
+        loader.textContent = msg;
+        loader.style.color = err ? "red" : "#aaa";
+        startBtn.disabled=!!err;
+        muteBtn.disabled=true;
+        regenBtn.disabled=true;
+      },
+      state,
+      boot: () => {
+        loader.textContent = "Audio engine ready. Click Start.";
+        startBtn.disabled=false;
+        muteBtn.disabled=true;
+        regenBtn.disabled=true;
+      }
+    });
+    startBtn.disabled = true;
+    muteBtn.disabled = true;
+    regenBtn.disabled = true;
+  </script>
+</body>
+</html>
