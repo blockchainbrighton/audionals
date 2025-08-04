@@ -1,0 +1,287 @@
+```html
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Web3 Oscilloscope Music</title>
+  <meta name="viewport" content="width=600,initial-scale=1">
+  <style>
+    html,body {margin:0;padding:0;height:100%;background:#000;color:#fff;font-family:'Courier New',monospace;overflow:hidden;}
+    body {display:grid;place-items:center;gap:1rem;}
+    #scope {border-radius:12px;border:1px solid #333;background:#000;box-shadow:0 0 30px #0008;}
+    #controls{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;padding:.5rem;background:#fff1;border-radius:8px;}
+    #controls button,#controls select{padding:.5rem 1rem;border-radius:6px;border:1px solid #555;background:#222;color:#fff;font-size:.9rem;cursor:pointer;}
+    #controls button:hover{background:#444;}
+    #loader{font-size:.9rem;color:#aaa;min-height:1.4rem;text-align:center;font-style:italic;}
+  </style>
+</head>
+<body>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Start Audio + Draw</button>
+    <button id="muteBtn">Mute</button>
+    <select id="shapeSelect">
+      <option value="circle">Circle</option>
+      <option value="square">Square</option>
+      <option value="butterfly">Butterfly</option>
+      <option value="lissajous">Lissajous</option>
+      <option value="spiro">Spirograph</option>
+      <option value="harmonograph">Harmonograph</option>
+    </select>
+  </section>
+  <div id="loader">Initializing...</div>
+  <script type="module">
+    // --- State ---
+    const state = { isPlaying:false, Tone:null, nodes:{}, seed:'676u567' };
+    const canvas = scope, ctx = canvas.getContext('2d');
+    const [startBtn, muteBtn, shapeSel, loader] = ['startBtn','muteBtn','shapeSelect','loader'].map(id=>document.getElementById(id));
+    // --- Deterministic PRNG ---
+    function mulberry32(seed) {
+      let a = 0x6d2b79f5 ^ seed.length;
+      for (let i = 0; i < seed.length; ++i) a = Math.imul(a ^ seed.charCodeAt(i), 2654435761);
+      return () => ((a = Math.imul(a ^ a >>> 15, 1 | a)), (a >>> 16) / 0x10000);
+    }
+    // --- Deterministic preset generator ---
+    // Now supports ultra-slow evolving, layered, FX-rich, and percussive/randomized soundscapes.
+    function deterministicPreset(seed, shape) {
+    const rng = mulberry32(seed + "_" + shape);
+    const types = ['sine','triangle','square','sawtooth'];
+    const notes = ['C1','C2','E2','G2','A2','C3','E3','G3','B3','D4','F#4','A4','C5'];
+    // Choose mode: 0=short/plucky, 1=medium/FX, 2=long evolving, 3=very long drone
+    const modeRoll = rng();
+    let mode = 1;
+    if (modeRoll < 0.18) mode = 0;         // 18% chance: short/plucky
+    else if (modeRoll < 0.56) mode = 1;    // 38% chance: medium/varied
+    else if (modeRoll < 0.85) mode = 2;    // 29% chance: long evolving
+    else mode = 3;                         // 15% chance: very long evolving
+    // LFO Rate (seconds)
+    let lfoRate;
+    if (mode === 0)      lfoRate = 0.07 + rng()*0.3;   // percussive, <0.4s
+    else if (mode === 1) lfoRate = 0.25 + rng()*8;     // 0.25–8s
+    else if (mode === 2) lfoRate = 6 + rng()*20;       // 6–26s
+    else                 lfoRate = 24 + rng()*36;      // 24–60s
+    // LFO Min/Max (filter sweeps, pitch, etc.)
+    let lfoMin, lfoMax;
+    if (mode === 0) {
+        lfoMin = 400 + rng()*400;
+        lfoMax = 900 + rng()*600;
+    } else if (mode === 1) {
+        lfoMin = 120 + rng()*700;
+        lfoMax = 1200 + rng()*1400;
+    } else {
+        lfoMin = 80 + rng()*250;
+        lfoMax = 1500 + rng()*3500;
+    }
+    // Number of oscillators
+    const oscCount = mode === 3 ? 2 + (rng() > 0.7 ? 1 : 0) : 1 + (rng() > 0.6 ? 1 : 0);
+    // Build oscillators
+    const oscs = [];
+    for (let i = 0; i < oscCount; ++i) {
+        oscs.push([types[(rng()*types.length)|0], notes[(rng()*notes.length)|0]]);
+    }
+    // Filter: freq + resonance
+    const filterBase = mode === 0 ? 700 + rng()*500 : 300 + rng()*2400;
+    const resonance = 0.6 + rng()*0.7;
+    // Envelope (attack, decay, sustain, release)
+    let env = {};
+    if (mode === 0) { // percussive
+        env = { attack: 0.005 + rng()*0.03, decay: 0.04 + rng()*0.08, sustain: 0.1 + rng()*0.2, release: 0.03 + rng()*0.1 };
+    } else if (mode === 3) { // drone
+        env = { attack: 2 + rng()*8, decay: 4 + rng()*20, sustain: 0.7 + rng()*0.2, release: 8 + rng()*24 };
+    } else {
+        env = { attack: 0.03 + rng()*0.4, decay: 0.1 + rng()*0.7, sustain: 0.2 + rng()*0.5, release: 0.2 + rng()*3 };
+    }
+    // Effects (reverb/delay)
+    const reverbWet = (mode === 3 ? 0.4 + rng()*0.5 : 0.1 + rng()*0.5);
+    const reverbRoom = (mode === 3 ? 0.85 + rng()*0.12 : 0.6 + rng()*0.38);
+    // Visuals
+    const colorSpeed = 0.06 + rng()*0.22;
+    const shapeDrift = 0.0006 + rng()*0.0032;
+    return {
+        osc1: oscs[0],
+        osc2: oscs[1] || null,
+        filter: filterBase,
+        filterQ: resonance,
+        lfo: [lfoRate, lfoMin, lfoMax],
+        envelope: env,
+        reverb: { wet: reverbWet, roomSize: reverbRoom },
+        colorSpeed,
+        shapeDrift
+    };
+    }
+    // Generate deterministic presets for all shapes at load time
+    const SHAPES = ['circle','square','butterfly','lissajous','spiro','harmonograph'];
+    let presets = {};
+    for(const k of SHAPES) presets[k] = deterministicPreset(state.seed, k);
+    // --- Drawing Functions ---
+    const drawFuncs = {
+      circle(data,t,pr){const S=.8*canvas.width/2,c=300;ctx.beginPath();
+        for(let i=0;i<data.length;++i){let a=i/data.length*2*Math.PI+t*.001,amp=(data[i]+1)/2,
+        r=S*amp,x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+        ctx.closePath();ctx.stroke();
+      },
+      square(data,t,pr){const S=.8*canvas.width/Math.SQRT2,c=300,o=(600-S)/2;ctx.beginPath();
+        for(let i=0;i<data.length;++i){let p=i/data.length,amp=(data[i]+1)/2,x,y;
+        if(p<.25)[x,y]=[o+S*(p/.25),o];
+        else if(p<.5)[x,y]=[o+S,o+S*((p-.25)/.25)];
+        else if(p<.75)[x,y]=[o+S-S*((p-.5)/.25),o+S];
+        else [x,y]=[o,o+S-S*((p-.75)/.25)];
+        let dx=x-c,dy=y-c,fx=c+dx*(.8+.2*amp)+Math.sin(t*.0005)*10,fy=c+dy*(.8+.2*amp)+Math.cos(t*.0006)*10;
+        i?ctx.lineTo(fx,fy):ctx.moveTo(fx,fy);}
+        ctx.closePath();ctx.stroke();
+      },
+      butterfly(data,t,pr){const S=.4*canvas.width,c=300;ctx.beginPath();
+        for(let i=0;i<data.length;++i){let th=i/data.length*Math.PI*24+t*.0003,amp=(data[i]+1)/2,
+        scale=Math.exp(Math.cos(th))-2*Math.cos(4*th)+Math.pow(Math.sin(th/12),5),
+        x=Math.sin(th)*scale*S*(.5+.5*amp)+c,y=Math.cos(th)*scale*S*(.5+.5*amp)+c;
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+        ctx.closePath();ctx.stroke();
+      },
+      lissajous(data,t,pr){const S=.8*canvas.width/3,c=300,avg=data.reduce((a,b)=>a+Math.abs(b),0)/data.length,
+        freqX=3+Math.sin(t*.0003)*1.5,freqY=2+Math.cos(t*.0004)*1.5,phase=t*.0005;ctx.beginPath();
+        for(let i=0;i<data.length;i++){let theta=i/data.length*2*Math.PI,r=avg*(.5+.5*data[i]),
+        x=c+Math.sin(freqX*theta+phase)*S*r,y=c+Math.sin(freqY*theta)*S*r;
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+        ctx.stroke();
+      },
+      spiro(data,t,pr){const S=.6*canvas.width/3,c=300,inner=.3+Math.sin(t*.0002)*.2,outer=.7,ratio=.21+.02*Math.sin(t*.0001);ctx.beginPath();
+        for(let i=0;i<data.length;i++){let theta=i/data.length*2*Math.PI,waveAmp=(data[i]+1)/2,
+        x=c+(S*(outer-inner)*Math.cos(theta)+S*inner*Math.cos((outer-inner)/inner*theta+t*ratio))*(.8+.2*waveAmp),
+        y=c+(S*(outer-inner)*Math.sin(theta)-S*inner*Math.sin((outer-inner)/inner*theta+t*ratio))*(.8+.2*waveAmp);
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+        ctx.stroke();
+      },
+      harmonograph(data,t,pr){const S=.7*canvas.width/4,c=300,decay=Math.exp(-t*.0002),avg=(data.reduce((a,b)=>a+b,0)/data.length+1)*.5;ctx.beginPath();
+        for(let i=0;i<data.length;i++){let theta=i/data.length*2*Math.PI,
+        x=c+decay*S*(Math.sin(3*theta+t*.0003)*.7+Math.sin(5*theta+t*.0004)*.3)*(.5+.5*data[i]),
+        y=c+decay*S*(Math.sin(4*theta+t*.00035)*.6+Math.sin(6*theta+t*.00025)*.4)*(.5+.5*data[i]);
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
+        ctx.stroke();
+      }
+    };
+    // --- Dummy deterministic buffer for silent visual seed mode ---
+    function makeSeedBuffer(shape, seed, len=2048) {
+      // Simulate a unique, seed-determined waveform for each shape
+      const rng = mulberry32(seed+"_"+shape), arr = new Float32Array(len);
+      for(let i=0;i<len;++i) {
+        // Mix several harmonics in a deterministic way
+        const t = i/len, base = Math.sin(2*Math.PI*t + rng()*6.28);
+        const harm2 = 0.5*Math.sin(4*Math.PI*t + rng()*6.28);
+        const harm3 = 0.25*Math.sin(6*Math.PI*t + rng()*6.28);
+        arr[i] = 0.6*base + 0.3*harm2 + 0.15*harm3;
+      }
+      return arr;
+    }
+    // --- Visual Animation (switches between seed and live mode) ---
+    let animId = null, mode = "seed"; // "seed" or "live"
+    function visualAnimate() {
+      ctx.clearRect(0,0,600,600);
+      const pr = presets[shapeSel.value], t = performance.now();
+      // Deterministic color/hue
+      const avg = mode==="seed"?0.5:0.5, hue = (t*pr.colorSpeed)%360, sat = 70+avg*30, light = 50+avg*20;
+      ctx.strokeStyle = `hsl(${hue},${sat}%,${light}%)`;
+      ctx.lineWidth = 2; ctx.lineJoin = ctx.lineCap = 'round';
+      // Use seed-determined data or analyser
+      let buf;
+      if(mode==="seed") {
+        buf = makeSeedBuffer(shapeSel.value, state.seed);
+      } else {
+        const analyser = state.nodes.analyser;
+        buf = new Float32Array(analyser.fftSize);
+        analyser.getFloatTimeDomainData(buf);
+      }
+      (drawFuncs[shapeSel.value]||drawFuncs.circle)(buf, t, pr);
+      animId = requestAnimationFrame(visualAnimate);
+    }
+    // --- Audio Node Management ---
+    function disposeNodes() {
+      Object.values(state.nodes).forEach(n=>{try{n?.stop?.()}catch{}try{n?.dispose?.()}catch{}});
+      state.nodes={};
+    }
+    async function startAudioAndDraw() {
+      if(state.isPlaying||!state.Tone)return;
+      await state.Tone.start();
+      disposeNodes();
+      const pr=presets[shapeSel.value],T=state.Tone;
+      const osc1=state.nodes.osc1=new T.Oscillator(pr.osc1[1],pr.osc1[0]).start();
+      let osc2=null; if(pr.osc2)osc2=state.nodes.osc2=new T.Oscillator(pr.osc2[1],pr.osc2[0]).start();
+      const volume=state.nodes.volume=new T.Volume(5),
+            filter=state.nodes.filter=new T.Filter(pr.filter,"lowpass"),
+            lfo=state.nodes.lfo=new T.LFO(pr.lfo[0]+"n",pr.lfo[1],pr.lfo[2]).start();
+      lfo.connect(filter.frequency);
+      if(osc2)lfo.connect(osc2.detune);
+      osc1.connect(volume); if(osc2)osc2.connect(volume);
+      volume.connect(filter);
+      const reverb=state.nodes.reverb=new T.Freeverb().set({wet:.3,roomSize:.8});
+      filter.connect(reverb); reverb.toDestination();
+      const analyser=state.nodes.analyser=T.context.createAnalyser();
+      analyser.fftSize=2048; filter.connect(analyser);
+      state.isPlaying=true;
+      startBtn.textContent="Stop Audio + Draw"; muteBtn.disabled=false;
+      mode = "live";
+    }
+    function stopAudioAndDraw() {
+      if(!state.isPlaying)return;
+      disposeNodes();
+      state.isPlaying=false;
+      startBtn.textContent="Start Audio + Draw";
+      muteBtn.disabled=true; muteBtn.textContent="Mute";
+      if(state.Tone) state.Tone.Destination.mute=false;
+      mode = "seed";
+    }
+    // --- UI Events ---
+    startBtn.onclick = ()=>state.isPlaying?stopAudioAndDraw():startAudioAndDraw();
+    muteBtn.onclick = ()=>{
+      if(!state.Tone)return;
+      const m=state.Tone.Destination.mute=!state.Tone.Destination.mute;
+      muteBtn.textContent=m?"Unmute":"Mute";
+    };
+    shapeSel.onchange=()=>{
+      // If audio is playing, reset it. Otherwise just change seed visual.
+      if(state.isPlaying){ stopAudioAndDraw(); startAudioAndDraw(); }
+      else mode="seed";
+    };
+
+    // --- Keyboard Controls: 1-6 for shapes ---
+    document.addEventListener('keydown', (e) => {
+      if (e.key >= '1' && e.key <= '6') {
+        const index = parseInt(e.key) - 1;
+        const shape = SHAPES[index];
+        if (shape) {
+          shapeSel.value = shape;
+          // Trigger change behavior
+          if(state.isPlaying){ stopAudioAndDraw(); startAudioAndDraw(); }
+          else mode = "seed";
+        }
+      }
+    });
+
+    // --- Tone Loader ---
+    function loadToneJS({url,onReady,onFail}) {
+      loader.textContent = 'Loading Audio Engine...';
+      import(url).then(mod=>{
+        state.Tone = window.Tone ?? mod?.default ?? mod;
+        if(state.Tone){onReady();loader.textContent=`Tone.js v${state.Tone.version??"?"} ready.`;}
+        else throw 'Tone.js not found';
+      }).catch(e=>{
+        loader.textContent='Failed to load Tone.js.';onFail?.();console.error(e);
+      });
+    }
+    // --- Init: show seed-visual by default ---
+    let firstShape = SHAPES[(mulberry32(state.seed)()*SHAPES.length)|0];
+    shapeSel.value = firstShape;
+    mode = "seed";
+    startBtn.disabled = true; muteBtn.disabled = true;
+    visualAnimate(); // Start seed-visual immediately
+    loadToneJS({
+      url:'https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.min.js',
+      onReady:()=>{
+        loader.textContent=`Ready. Shape: ${shapeSel.value}`;
+        startBtn.disabled=false;
+      },
+      onFail:()=>{startBtn.disabled=true;muteBtn.disabled=true;}
+    });
+  </script>
+</body>
+</html>
+```

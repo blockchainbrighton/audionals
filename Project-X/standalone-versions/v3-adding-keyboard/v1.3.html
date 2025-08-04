@@ -1,0 +1,391 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Web3 Oscilloscope Music - Optimized</title>
+  <meta name="viewport" content="width=600,initial-scale=1">
+  <style>
+    html,body {margin:0;padding:0;height:100%;background:#000;color:#fff;font-family:sans-serif;}
+    body {display:grid;place-items:center;gap:1.2rem;padding:1rem;}
+    #scope {border-radius:8px;border:1px solid #444;background:#000;box-shadow:0 0 15px rgba(100,100,255,0.2);cursor:pointer;}
+    #controls {display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;justify-content:center;}
+    #controls button,#controls select{padding:0.5rem 1rem;border-radius:5px;border:1px solid #666;background:#2a2a2a;color:#eee;transition:background 0.2s,transform 0.1s;font-size:0.9rem;}
+    #controls button:hover{background:#3a3a3a;transform:translateY(-1px);}
+    #controls button:active{transform:translateY(1px);}
+    #loader{font-size:0.95rem;color:#aaa;min-height:1.3rem;text-align:center;font-style:italic;}
+    #info{font-size:0.8rem;color:#888;text-align:center;max-width:600px;}
+    .visual-indicator{position:absolute;top:10px;right:10px;padding:4px 8px;border-radius:3px;font-size:0.75rem;font-weight:bold;z-index:10;}
+    .indicator-silent{background:#555;color:#ccc;}
+    .indicator-audio{background:#4a86e8;color:#fff;box-shadow:0 0 8px rgba(74,134,232,0.7);}
+    #modeToggle.seed-mode{background:#2c5a2c;border-color:#5cb85c;color:#dff0d8;}
+    #modeToggle.random-mode{background:#5a3c2c;border-color:#b85c5c;color:#f0d8d8;}
+    .keyboard-note {position:absolute;bottom:10px;right:10px;padding:4px 8px;border-radius:3px;font-size:0.75rem;z-index:10;opacity:0.9;}
+    .keyboard-note {background:#8b4513;color:#fff;box-shadow:0 0 8px rgba(139,69,19,0.7);}
+  </style>
+</head>
+<body>
+  <div id="visualIndicator" class="visual-indicator indicator-silent">Silent Mode</div>
+  <div id="keyboardIndicator" class="keyboard-note" style="display:none;">Keyboard Ready</div>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Start Audio</button>
+    <button id="muteBtn">Mute</button>
+    <select id="shapeSelect"></select>
+    <button id="randomizeBtn">Randomize</button>
+    <button id="modeToggle" class="random-mode">Mode: Random</button>
+  </section>
+  <div id="loader">Initializing...</div>
+  <div id="info">Visuals start automatically. Click 'Start Audio' OR the image to hear sound. Use 'Mode' to switch generation method.</div>
+  <script type="module">
+    // --- Utilities ---
+    function mulberry32(seed) {
+      let a = 0x6d2b79f5 ^ seed.length;
+      for (let i = 0; i < seed.length; ++i) a = Math.imul(a ^ seed.charCodeAt(i), 2654435761);
+      return () => ((a = Math.imul(a ^ a >>> 15, 1 | a)), (a >>> 16) / 0x10000);
+    }
+
+    function noteToFrequency(note) {
+        const A4 = 440;
+        const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const regex = /([A-G]#?)(\d+)/;
+        const match = note.match(regex);
+        if (!match) return A4; // Default if note format is wrong
+        const name = match[1];
+        const octave = parseInt(match[2], 10);
+        const index = noteNames.indexOf(name);
+        const steps = index + (octave - 4) * 12; // Steps from A4
+        return A4 * Math.pow(2, steps / 12);
+    }
+
+    // --- DOM refs & State ---
+    const $ = id => document.getElementById(id);
+    const canvas = $("scope"), ctx = canvas.getContext("2d"),
+      startBtn = $("startBtn"), muteBtn = $("muteBtn"), shapeSel = $("shapeSelect"),
+      randomizeBtn = $("randomizeBtn"), loader = $("loader"),
+      visualIndicator = $("visualIndicator"), modeToggleBtn = $("modeToggle"),
+      keyboardIndicator = $("keyboardIndicator");
+    const state = {
+      isPlaying: false, isAudioStarted: false, Tone: null, nodes: {}, currentParams: {}, 
+      isSeedMode: false, seedGenerator: null, predefinedSets: {}, keyboardOsc: {}, dummyData: null
+    };
+    // --- Base Shapes ---
+    const baseShapes = {
+      circle:    {name: "Circle",    draw: drawCircle},
+      square:    {name: "Square",    draw: drawSquare},
+      butterfly: {name: "Butterfly", draw: drawButterfly},
+      lissajous: {name: "Lissajous", draw: drawLissajous},
+      spiral:    {name: "Spiral",    draw: drawSpiral},
+      rose:      {name: "Rose",      draw: drawRose}
+    };
+    Object.entries(baseShapes).forEach(([k, {name}]) => {
+      const o = document.createElement("option"); o.value = k; o.textContent = name; shapeSel.appendChild(o);
+    });
+    // --- Drawing (unchanged) ---
+    function drawCircle(data, t, p) {const S=p.size*canvas.width/2,c=300;ctx.beginPath();
+      for(let i=0;i<data.length;++i){const a=i/data.length*2*Math.PI,amp=(data[i]+1)/2,r=S*amp,modA=a+t*(p.rotationSpeed??.05);
+        const x=c+Math.cos(modA)*r,y=c+Math.sin(modA)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();}
+    function drawSquare(data,t,p){const S=p.size*canvas.width/Math.SQRT2,c=300,o=(600-S)/2;ctx.beginPath();
+      for(let i=0;i<data.length;++i){const q=i/data.length,amp=(data[i]+1)/2;
+        let x,y;if(q<.25)[x,y]=[o+S*(q/.25),o];else if(q<.5)[x,y]=[o+S,o+S*((q-.25)/.25)];
+        else if(q<.75)[x,y]=[o+S-S*((q-.5)/.25),o+S];else[x,y]=[o,o+S-S*((q-.75)/.25)];
+        const dx=x-c,dy=y-c,scale=.8+.2*amp+.1*Math.sin(t*(p.pulseSpeed??.2)),fx=c+dx*scale,fy=c+dy*scale;
+        i?ctx.lineTo(fx,fy):ctx.moveTo(fx,fy);}ctx.closePath();ctx.stroke();}
+    function drawButterfly(data,t,p){const S=p.size*.4*canvas.width,c=300;ctx.beginPath();
+      for(let i=0;i<data.length;++i){const th=i/data.length*Math.PI*24,amp=(data[i]+1)/2,scale=Math.exp(Math.cos(th))-2*Math.cos(4*th)+Math.pow(Math.sin(th/12),5);
+        let x=Math.sin(th)*scale*S*(.5+.5*amp),y=Math.cos(th)*scale*S*(.5+.5*amp);
+        const a=t*(p.rotationSpeed??.05),nx=x*Math.cos(a)-y*Math.sin(a),ny=x*Math.cos(a)+y*Math.sin(a);
+        i?ctx.lineTo(nx+c,ny+c):ctx.moveTo(nx+c,ny+c);}ctx.closePath();ctx.stroke();}
+    function drawLissajous(data,t,p){const S=p.size*.45*canvas.width,c=300,a=p.lissaA||3,b=p.lissaB||2,d=p.lissaDelta||0;ctx.beginPath();
+      for(let i=0;i<data.length;++i){const prog=i/data.length,amp=(data[i]+1)/2,modT=t*(p.rotationSpeed??.05);
+        const x=S*Math.sin(a*modT+prog*2*Math.PI+d)*amp,y=S*Math.sin(b*modT+prog*2*Math.PI)*amp;
+        i?ctx.lineTo(x+c,y+c):ctx.moveTo(x+c,y+c);}ctx.stroke();}
+    function drawSpiral(data,t,p){const S=p.size*.45*canvas.width,c=300,turns=p.spiralTurns||5;ctx.beginPath();
+      for(let i=0;i<data.length;++i){const prog=i/data.length,amp=(data[i]+1)/2,a=prog*2*Math.PI*turns+t*(p.rotationSpeed??.05),r=S*prog*amp;
+        const x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();}
+    function drawRose(data,t,p){const S=p.size*.45*canvas.width,c=300,k=p.roseK||3;ctx.beginPath();
+      for(let i=0;i<data.length;++i){const prog=i/data.length,amp=(data[i]+1)/2,a=prog*2*Math.PI+t*(p.rotationSpeed??.05),r=S*Math.cos(k*a)*amp;
+        const x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();}
+    // --- Dummy Data ---
+    function generateDummyData(){
+      const d = new Float32Array(2048);
+      for(let i=0;i<2048;i++){
+        const t=i/2048;d[i]=.4*Math.sin(t*6*Math.PI)+.3*Math.sin(t*14*Math.PI+Math.PI/3)+.2*Math.sin(t*22*Math.PI+Math.PI/6)+.1*Math.sin(t*34*Math.PI);}
+      return d;
+    }
+    // --- Audio Param Generators ---
+    const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'], octaves=[2,3,4,5], waveforms=['sine','square','sawtooth','triangle'], filterTypes=['lowpass','highpass','bandpass'];
+    const rand = (arr, rng=Math.random) => arr[Math.floor(rng()*arr.length)];
+    function getRandomNote(rng=Math.random){return rand(noteNames,rng)+rand(octaves,rng);}
+    function generateRandomParams(shapeKey=null,rng=Math.random){
+      const sKey=shapeKey||rand(Object.keys(baseShapes),rng),osc1Type=rand(waveforms,rng),osc1Note=getRandomNote(rng),useOsc2=rng()>.3,osc2Type=useOsc2?rand(waveforms,rng):null,osc2Note=useOsc2?getRandomNote(rng):null;
+      let interaction='mix';if(useOsc2){const r=rng();if(r<.4)interaction='am';else if(r<.7)interaction='fm';}
+      const filterFreq=500+rng()*4000,filterType=rand(filterTypes,rng),lfoFreq=.1+rng()*5,lfoMin=200+rng()*1e3,lfoMax=lfoMin+500+rng()*4e3,
+        hueBase=Math.floor(rng()*360),hueRange=50+Math.floor(rng()*100),lineWidth=1.5+rng()*3,rotationSpeed=(rng()-.5)*.3,pulseSpeed=.05+rng()*.3,size=.65+rng()*.4,useGlow=rng()>.5;
+      let lissaA,lissaB,lissaDelta,spiralTurns,roseK;
+      switch(sKey){
+        case 'lissajous':lissaA=1+Math.floor(rng()*5);lissaB=1+Math.floor(rng()*5);lissaDelta=rng()*Math.PI;break;
+        case 'spiral':spiralTurns=2+Math.floor(rng()*6);break;
+        case 'rose':roseK=.5+rng()*5;break;
+        default:lissaA=1+Math.floor(rng()*5);lissaB=1+Math.floor(rng()*5);lissaDelta=rng()*Math.PI;spiralTurns=2+Math.floor(rng()*6);roseK=.5+rng()*5;
+      }
+      return {shapeKey:sKey,osc1:{type:osc1Type,note:osc1Note},osc2:useOsc2?{type:osc2Type,note:osc2Note}:null,interaction,
+        filter:{frequency:filterFreq,type:filterType},lfo:{frequency:lfoFreq,min:lfoMin,max:lfoMax},
+        visual:{hueBase,hueRange,lineWidth,rotationSpeed,pulseSpeed,size,useGlow,lissaA,lissaB,lissaDelta,spiralTurns,roseK}};
+    }
+    function generatePredefinedSets(seedString="defaultSeed123"){
+      const rng=mulberry32(seedString),sets={};Object.keys(baseShapes).forEach(k=>sets[k]=generateRandomParams(k,rng));
+      state.predefinedSets=sets;
+    }
+    // --- Keyboard: 88-key Piano mapping ---
+    const keyMap = {
+      'a':21,'w':22,'s':23,'e':24,'d':25,'f':26,'t':27,'g':28,'y':29,'h':30,'u':31,'j':32,'k':33,'o':34,'l':35,'p':36,';':37,"'":38,
+      'z':39,'x':40,'c':41,'v':42,'b':43,'n':44,',':45,'m':46,'.':47,'/':48,'q':49,'1':50,'2':51,'3':52,'4':53,'5':54,'6':55,'7':56,
+      '8':57,'9':58,'0':59,'-':60,'=':61,'r':62,'i':63,'[':64,']':65,'\\':66
+    };
+    function midiToNoteName(midi){const names=['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];return names[midi%12]+(Math.floor(midi/12)-1);}
+    function midiToFreq(midi){return 440*Math.pow(2,(midi-69)/12);}
+    function setupKeyboard() {
+      window.addEventListener('keydown', e => {
+        if(!state.Tone||!state.isAudioStarted||e.repeat) return;
+        const key = e.key.toLowerCase(), midi = keyMap[key];
+        if(!midi || state.keyboardOsc[key]) return;
+        const {osc1={},filter={}}=state.currentParams, freq=midiToFreq(midi), osc = new state.Tone.Oscillator(freq,osc1.type||'sine').start();
+        let out = osc;
+        if(filter.frequency) { const f = new state.Tone.Filter(filter.frequency,filter.type); osc.connect(f); out=f;}
+        out.connect(state.Tone.Destination);
+        state.keyboardOsc[key]=osc;
+        keyboardIndicator.style.display = 'block';
+        keyboardIndicator.textContent = `Playing: ${midiToNoteName(midi)}`;
+        loader.textContent = `Playing note: ${midiToNoteName(midi)}`;
+      });
+      window.addEventListener('keyup', e => {
+        const k = e.key.toLowerCase(), osc = state.keyboardOsc[k];
+        if(osc) { osc.stop('+0.05'); delete state.keyboardOsc[k]; }
+      });
+      window.addEventListener('blur', ()=>{ Object.values(state.keyboardOsc).forEach(o=>o.stop('+0.01')); state.keyboardOsc={}; });
+      window.addEventListener('beforeunload', ()=>{ Object.values(state.keyboardOsc).forEach(o=>o.stop()); });
+      keyboardIndicator.style.display='block';
+      keyboardIndicator.textContent='Keyboard Ready - Play any mapped key';
+    }
+    // --- Audio Graph Setup (Enhanced for Smooth Transitions) ---
+    function disposeNodes(){
+        Object.values(state.nodes).forEach(n=>{
+            try{
+                if(n && typeof n.stop === 'function') n.stop();
+            }catch{}
+            try{
+                if(n && typeof n.dispose === 'function') n.dispose();
+            }catch{}
+        });
+        state.nodes={};
+    }
+
+    // Helper to determine if audio graph structure needs to change
+    function needsRebuild(newParams, oldParams) {
+        if (!oldParams) return true; // Initial setup
+        // Check if fundamental structure changes
+        const osc2PresenceChanged = Boolean(newParams.osc2) !== Boolean(oldParams.osc2);
+        const interactionChanged = newParams.interaction !== oldParams.interaction;
+        return osc2PresenceChanged || interactionChanged;
+    }
+
+    // Helper to update parameters of existing nodes
+    function updateAudioNodes(params, nodes, Tone) {
+        if (nodes.osc1) {
+            nodes.osc1.type = params.osc1.type;
+            nodes.osc1.frequency.rampTo(noteToFrequency(params.osc1.note), 0.05); // Smooth transition
+        }
+        if (params.osc2 && nodes.osc2) {
+            nodes.osc2.type = params.osc2.type;
+            nodes.osc2.frequency.rampTo(noteToFrequency(params.osc2.note), 0.05);
+        }
+        if (nodes.filter) {
+            nodes.filter.type = params.filter.type;
+            nodes.filter.frequency.rampTo(params.filter.frequency, 0.05);
+        }
+        if (nodes.lfo) {
+            nodes.lfo.frequency.value = params.lfo.frequency;
+            nodes.lfo.min = params.lfo.min;
+            nodes.lfo.max = params.lfo.max;
+        }
+        // For AM/FM, if structure didn't change, we just updated the underlying oscillators
+    }
+
+    async function setupAudioGraph(params, forceRebuild = false){
+        if(!state.Tone) return loader.textContent='Tone.js not loaded.';
+        if(!state.isAudioStarted){
+            try{
+                await state.Tone.start();
+                state.isAudioStarted=true;
+            }catch(e){
+                loader.textContent="Failed to start audio.";
+                return false;
+            }
+        }
+
+        const needsRebuildFlag = forceRebuild || needsRebuild(params, state.currentParams);
+
+        if (needsRebuildFlag) {
+            // console.log("Rebuilding audio graph");
+            disposeNodes();
+            const T=state.Tone;
+
+            // Create new nodes
+            const osc1 = state.nodes.osc1 = new T.Oscillator(noteToFrequency(params.osc1.note), params.osc1.type).start();
+            let osc2 = null;
+            if(params.osc2) osc2 = state.nodes.osc2 = new T.Oscillator(noteToFrequency(params.osc2.note), params.osc2.type).start();
+
+            const filter = state.nodes.filter = new T.Filter(params.filter.frequency, params.filter.type);
+            const lfo = state.nodes.lfo = new T.LFO(params.lfo.frequency, params.lfo.min, params.lfo.max).start();
+            const modulatedGain = state.nodes.modulatedGain = new T.Gain(1);
+            const volume = state.nodes.volume = new T.Volume(-10); // Consider making this a parameter
+
+            lfo.connect(filter.frequency);
+
+            // Connect based on interaction type
+            if(params.interaction === 'am' && osc2){
+                osc1.connect(modulatedGain);
+                osc2.connect(modulatedGain.gain);
+                modulatedGain.connect(volume);
+            } else if(params.interaction === 'fm' && osc2){
+                osc2.connect(osc1.frequency); // Modulate osc1 frequency with osc2
+                osc1.connect(volume);
+            } else {
+                osc1.connect(volume);
+                if(osc2) osc2.connect(volume);
+            }
+
+            volume.connect(filter);
+            filter.toDestination(); // Connect to master output
+
+            // Setup analyser
+            const ana = state.nodes.analyser = T.context.createAnalyser();
+            ana.fftSize = 2048;
+            filter.connect(ana);
+
+            // Initial mute state
+            state.Tone.Destination.mute = !state.isPlaying; // Mute if not playing
+            muteBtn.textContent = state.Tone.Destination.mute ? "Unmute" : "Mute";
+
+        } else {
+            // console.log("Updating audio node parameters");
+            // Update parameters of existing nodes
+            updateAudioNodes(params, state.nodes, state.Tone);
+        }
+
+        return true;
+    }
+
+
+    // --- Animation Loop ---
+    const defaultVis = {hueBase:200,hueRange:100,lineWidth:2,rotationSpeed:.05,pulseSpeed:.2,size:.8,useGlow:true};
+    (function animate(){
+      const time=performance.now()/1e3,ana=state.nodes.analyser;
+      let data=(state.isAudioStarted&&state.isPlaying&&ana)?(ana.getFloatTimeDomainData(state.liveDataBuffer=state.liveDataBuffer||new Float32Array(ana.fftSize)),state.liveDataBuffer):(state.dummyData=state.dummyData||generateDummyData());
+      visualIndicator.textContent=(state.isAudioStarted&&state.isPlaying&&ana)?"Audio Live":(state.isAudioStarted?"Muted":"Silent Mode");
+      visualIndicator.className="visual-indicator "+((state.isAudioStarted&&state.isPlaying&&ana)?"indicator-audio":"indicator-silent");
+      const p=state.currentParams.visual||defaultVis,shapeKey=state.currentParams.shapeKey||"circle",shapeFunc=baseShapes[shapeKey]?.draw||drawCircle;
+      ctx.clearRect(0,0,600,600);
+      const hue=(p.hueBase+time*15)%360,sat=80+15*Math.sin(time*.4),light=50+25*Math.sin(time*.25);
+      ctx.strokeStyle=`hsl(${hue},${sat}%,${light}%)`;ctx.lineWidth=p.lineWidth;ctx.lineJoin=ctx.lineCap='round';ctx.shadowBlur=p.useGlow?12:0;ctx.shadowColor=ctx.strokeStyle;
+      shapeFunc(data,time,p); state.nodes.animId=requestAnimationFrame(animate);
+    })();
+    // --- Audio Toggle ---
+    async function toggleAudio(){
+      if(!state.isAudioStarted){
+          if(await setupAudioGraph(state.currentParams, true)){ // Force rebuild on initial start
+              state.isPlaying=true;
+              state.Tone.Destination.mute=false;
+              startBtn.textContent="Stop Audio";
+              muteBtn.disabled=false;
+              muteBtn.textContent = "Mute";
+              loader.textContent="Audio is now playing.";
+          }
+      }else if(state.isPlaying){
+          state.Tone.Destination.mute=true;
+          state.isPlaying=false;
+          startBtn.textContent="Start Audio";
+          muteBtn.textContent = "Unmute";
+          loader.textContent="Audio muted.";
+      } else{
+          state.Tone.Destination.mute=false;
+          state.isPlaying=true;
+          startBtn.textContent="Stop Audio";
+          muteBtn.textContent = "Mute";
+          loader.textContent="Audio unmuted.";
+      }
+    }
+    // --- UI Events ---
+    startBtn.onclick = canvas.onclick = toggleAudio;
+    muteBtn.onclick = ()=>{
+        if(!state.Tone||!state.isAudioStarted)return;
+        const m=state.Tone.Destination.mute=!state.Tone.Destination.mute;
+        muteBtn.textContent=m?"Unmute":"Mute";
+        loader.textContent=m?"Audio muted.":"Audio unmuted.";
+        // Update visual indicator immediately
+        visualIndicator.textContent = m ? "Muted" : "Audio Live";
+        visualIndicator.className = "visual-indicator " + (m ? "indicator-silent" : "indicator-audio");
+    };
+    shapeSel.onchange=()=>{
+      if(state.currentParams){
+        let np=state.isSeedMode&&state.predefinedSets[shapeSel.value]?state.predefinedSets[shapeSel.value]:{...state.currentParams,shapeKey:shapeSel.value};
+        if(np.visual){delete np.visual.lissaA;delete np.visual.lissaB;delete np.visual.lissaDelta;delete np.visual.spiralTurns;delete np.visual.roseK;}
+        state.currentParams=np;
+      }
+    };
+    randomizeBtn.onclick=async()=>{
+      let np=state.isSeedMode?generateRandomParams(null,state.seedGenerator):generateRandomParams();
+      state.currentParams=np;shapeSel.value=np.shapeKey;state.dummyData=null;
+      if(state.isAudioStarted){
+          // Pass the new params, let setupAudioGraph decide if rebuild is needed
+          await setupAudioGraph(np);
+          // Do not toggle state.isPlaying or mute, just update the graph
+          loader.textContent= state.isPlaying ? "Audio pattern randomized." : "Visual pattern randomized. Click 'Start Audio' to hear.";
+      } else {
+          loader.textContent="New visual pattern generated. Click 'Start Audio' to hear.";
+      }
+    };
+    modeToggleBtn.onclick=()=>{
+      state.isSeedMode=!state.isSeedMode;
+      if(state.isSeedMode){
+        modeToggleBtn.textContent="Mode: Seed";modeToggleBtn.className="seed-mode";
+        const seed="MyUniqueSeed_v1";state.seedGenerator=mulberry32(seed);generatePredefinedSets(seed);
+        const k=Object.keys(state.predefinedSets)[0];state.currentParams=state.predefinedSets[k];shapeSel.value=k;
+        loader.textContent=`Seed Mode (${seed}) loaded. Showing '${baseShapes[k].name}'.`;
+      }else{
+        modeToggleBtn.textContent="Mode: Random";modeToggleBtn.className="random-mode";state.seedGenerator=null;
+        loader.textContent="Random Mode. New randomizations will use Math.random.";
+      }
+    };
+    // --- Tone.js Loader ---
+    function loadToneJSAndBoot({toneUrl,setLoaderStatus,state,boot}){
+      setLoaderStatus('Loading Audio Engine...');
+      import(toneUrl).then(mod=>{
+        state.Tone=window.Tone??mod?.default??mod;
+        if(state.Tone){setLoaderStatus(`Tone.js v${state.Tone.version??"?"} ready.`);boot();}
+        else throw new Error('Tone.js not found.');
+      }).catch(e=>{
+        setLoaderStatus('Failed to load Tone.js. App cannot start.',1);console.error(e);
+      });
+    }
+    // --- Boot ---
+    loadToneJSAndBoot({
+      toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+      setLoaderStatus:(msg,err)=>{loader.textContent=msg;loader.style.color=err?"red":"#aaa";startBtn.disabled=!!err;muteBtn.disabled=true;randomizeBtn.disabled=!!err;modeToggleBtn.disabled=!!err;},
+      state,
+      boot:()=>{
+        loader.textContent="Audio engine ready. Generating initial pattern...";
+        startBtn.disabled=false;muteBtn.disabled=true;randomizeBtn.disabled=false;modeToggleBtn.disabled=false;
+        generatePredefinedSets("InitialSeed_v1");
+        const initial="circle";
+        state.currentParams=state.predefinedSets[initial]||generateRandomParams(initial);
+        state.dummyData=generateDummyData();
+        shapeSel.value=state.currentParams.shapeKey;
+        loader.textContent="Pattern generated (Seed Mode ready). Click 'Start Audio' OR the image to hear sound.";
+        setupKeyboard();
+      }
+    });
+    startBtn.disabled=true;muteBtn.disabled=true;randomizeBtn.disabled=true;modeToggleBtn.disabled=true;
+  </script>
+</body>
+</html>

@@ -1,0 +1,292 @@
+<!-- This version has lovely visuals particularly and sounds are also good but the sounds and therefore
+     the visuals are updating to new settings when changing between shapes. Sounds must be deterministically selected
+    based on the seed so if the seed does not change the sound settings should be that same goup of settings paired with the same shapes -->
+
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+      <meta charset="UTF-8">
+      <title>Enhanced Web3 Oscilloscope Music</title>
+      <meta name="viewport" content="width=600,initial-scale=1">
+      <style>
+        html,body {margin:0;padding:0;height:100%;background:#111;color:#fff;font-family:'Segoe UI',sans-serif;}
+        body {display:grid;place-items:center;gap:1.5rem;padding:1rem;}
+        #scope {border-radius:12px;border:1px solid #444;background:#000;box-shadow:0 0 20px rgba(100,100,255,0.1);}
+        #controls {display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;}
+        #controls button,#controls select {padding:0.6rem 1.2rem;border-radius:6px;border:1px solid #666;background:linear-gradient(to bottom,#333,#222);color:#eee;font-weight:500;cursor:pointer;transition:all 0.2s;}
+        #controls button:hover,#controls select:hover {background:linear-gradient(to bottom,#444,#333);border-color:#888;box-shadow:0 0 8px rgba(100,150,255,0.3);}
+        #controls button:active {transform:translateY(1px);}
+        #loader {font-size:1rem;color:#aaa;min-height:1.4rem;text-align:center;font-style:italic;}
+        #info {font-size:0.85rem;color:#888;text-align:center;max-width:90%;}
+      </style>
+    </head>
+    <body>
+      <canvas id="scope" width="600" height="600"></canvas>
+      <section id="controls">
+        <button id="startBtn">Generate New Experience</button>
+        <button id="muteBtn">Mute</button>
+        <select id="visualModeSelect">
+          <option value="radial">Radial Waves</option>
+          <option value="polygon">Dynamic Polygons</option>
+          <option value="layers">Layered Interference</option>
+          <option value="particles">Particle Flow</option>
+        </select>
+      </section>
+      <div id="loader">Initializing audio engine...</div>
+      <div id="info">Each generation creates unique, slowly evolving audiovisual patterns.</div>
+      <script type="module">
+        // --- Utilities ---
+        const $ = id => document.getElementById(id);
+        const randRange = (min, max) => Math.random() * (max - min) + min;
+        const randInt = (min, max) => Math.floor(randRange(min, max + 1));
+        const randChoice = arr => arr[Math.floor(Math.random() * arr.length)];
+        const lerp = (a, b, t) => a + (b - a) * t;
+        const parseHue = c => +((c.match(/hsla?\(([\d.]+)/)||[])[1]||0);
+    
+        // --- DOM refs ---
+        const canvas = $('scope'), ctx = canvas.getContext('2d');
+        const startBtn = $('startBtn'), muteBtn = $('muteBtn');
+        const modeSel = $('visualModeSelect'), loader = $('loader');
+    
+        // --- State ---
+        const state = {
+          isPlaying:false, Tone:null,
+          nodes:{}, visuals:{}, currentVisualParams:null
+        };
+    
+        // --- Tone.js Loader ---
+        function loadToneJS({url,onReady}) {
+          loader.textContent = 'Loading Tone.js audio engine...';
+          import(url).then(mod=>{
+            state.Tone = window.Tone ?? mod?.default ?? mod;
+            loader.textContent = state.Tone
+              ? `Tone.js v${state.Tone.version||"?"} ready.`
+              : 'Tone.js not found.';
+            onReady(!!state.Tone);
+          }).catch(e=>{
+            loader.textContent = 'Failed to load Tone.js. App cannot start.';
+            loader.style.color = "#f66";
+            startBtn.disabled = muteBtn.disabled = true;
+          });
+        }
+    
+        // --- Audio Parameter Generation ---
+        function generateAudioParams(T) {
+          const scales = {
+            pentatonic: ['C3','D3','E3','G3','A3','C4','D4','E4','G4','A4','C5'],
+            minor: ['A2','B2','C3','D3','E3','F3','G3','A3','B3','C4','D4','E4','F4','G4','A4'],
+            dorian: ['C3','D3','Eb3','F3','G3','A3','Bb3','C4','D4','Eb4','F4','G4','A4','Bb4','C5']
+          };
+          const scale = randChoice(Object.values(scales)), note = randChoice(scale);
+          const oscTypes = ['sine','square','sawtooth','triangle'];
+          const filterTypes = ['lowpass','highpass','bandpass'];
+          const masterVolume = new T.Volume(-12), filter = new T.Filter({
+            type: randChoice(filterTypes), frequency: randRange(300,4000), rolloff:-24, Q: randRange(1,10)
+          });
+          // Oscillators
+          const oscillators = [
+            new T.Oscillator({type:randChoice(oscTypes),frequency:note,volume:-6}).start()
+          ];
+          // Optional harmony
+          if(Math.random()>.4)
+            oscillators.push(new T.Oscillator({
+              type: randChoice(oscTypes), frequency:randChoice(scale),
+              volume:-10, detune: randRange(-20,20)
+            }).start());
+          // LFOs
+          const lfos=[];
+          for(let i=0;i<randInt(1,2);++i){
+            const lfoType = randChoice(oscTypes), lfoFreq=randRange(0.01,1.5);
+            const targets=[
+              {target:filter.frequency,min:randRange(200,1000),max:randRange(1000,8000)},
+              oscillators[1]&&{target:oscillators[1].detune,min:randRange(-50,-5),max:randRange(5,50)},
+              {target:masterVolume.volume,min:randRange(-15,-1),max:randRange(1,3)}
+            ].filter(Boolean);
+            const trg = randChoice(targets);
+            const lfo=new T.LFO({
+              type:lfoType,frequency:lfoFreq,min:trg.min,max:trg.max,amplitude:1
+            }).start();
+            lfo.connect(trg.target); lfos.push(lfo);
+          }
+          // Optional phaser
+          const phaser = Math.random()>.6
+            ? new T.Phaser({frequency:randRange(0.1,2),octaves:randRange(2,6),baseFrequency:randRange(200,1000)})
+            : null;
+          return { masterVolume, oscillators, filter, lfos, phaser };
+        }
+    
+        // --- Visual Parameter Generation ---
+        function generateVisualParams() {
+          const baseHue = randRange(0,360), mode=modeSel.value;
+          const strategies = {
+            analogous: [0,30,60], triadic:[0,120,240], complementary:[0,180,0]
+          };
+          const strat = randChoice(Object.keys(strategies)), offsets=strategies[strat];
+          const palette=offsets.map(o=>`hsla(${(baseHue+o)%360},90%,60%,0.85)`);
+          const bgColor = `hsl(${baseHue},20%,${randRange(5,12)}%)`;
+          return {
+            palette, bgColor, baseShape:mode, symmetry:randInt(1,8),
+            visualLFOs:[
+              {type:'rotation',rate:randRange(0.001,0.01),depth:Math.PI*2,phase:randRange(0,2*Math.PI)},
+              {type:'hueShift',rate:randRange(0.0005,0.005),depth:360,phase:randRange(0,2*Math.PI)}
+            ],
+            polygonSides: mode==='polygon'?randInt(3,9):4,
+            particleCount: mode==='particles'?randInt(50,200):0,
+            particleSize: randRange(1,4)
+          };
+        }
+    
+        // --- Audio/Visual Node Management ---
+        function disposeAll() {
+          Object.values(state.nodes).forEach(n=>{
+            try{n?.stop?.()}catch{}
+            try{n?.dispose?.()}catch{}
+          });
+          state.nodes={}; state.visuals={}; state.currentVisualParams=null;
+        }
+    
+        // --- Draw Modes ---
+        const drawFuncs = {
+          radial(data, t, params) {
+            const {symmetry=1,visualLFOs}=params, S=0.4*canvas.width, cx=canvas.width/2,cy=canvas.height/2;
+            const angStep=2*Math.PI/symmetry, rot=(visualLFOs?.[0]?.rate||0.005)*t;
+            for(let s=0;s<symmetry;s++){
+              ctx.save(); ctx.rotate(s*angStep+rot);
+              ctx.beginPath();
+              for(let i=0;i<data.length;i++){
+                const a=i/data.length*2*Math.PI, amp=(data[i]+1)/2,
+                  r=S*(0.5+0.5*amp), x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r;
+                i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+              }
+              ctx.closePath(); ctx.stroke(); ctx.restore();
+            }
+          },
+          polygon(data, t, params) {
+            const {symmetry=1,visualLFOs,polygonSides=4}=params, S=0.4*canvas.width, cx=canvas.width/2,cy=canvas.height/2;
+            const angStep=2*Math.PI/symmetry, rot=(visualLFOs?.[0]?.rate||0.005)*t;
+            for(let s=0;s<symmetry;s++){
+              ctx.save(); ctx.rotate(s*angStep+rot); ctx.beginPath();
+              for(let i=0;i<data.length;i++){
+                const p=i/data.length, amp=(data[i]+1)/2, sideIdx=Math.floor(p*polygonSides),
+                  sideProg=(p*polygonSides)%1,
+                  a1=sideIdx/polygonSides*2*Math.PI, a2=(sideIdx+1)/polygonSides*2*Math.PI,
+                  x1=Math.cos(a1)*S,y1=Math.sin(a1)*S,x2=Math.cos(a2)*S,y2=Math.sin(a2)*S,
+                  x=x1+(x2-x1)*sideProg, y=y1+(y2-y1)*sideProg, len=Math.hypot(x,y),
+                  modLen=len*(0.7+0.3*amp), fx=cx+(x/len)*modLen, fy=cy+(y/len)*modLen;
+                i?ctx.lineTo(fx,fy):ctx.moveTo(fx,fy);
+              }
+              ctx.closePath(); ctx.stroke(); ctx.restore();
+            }
+          },
+          layers(data, t, params) {
+            const {visualLFOs}=params, layers=3, cx=canvas.width/2, cy=canvas.height/2, baseSize=0.4*canvas.width;
+            for(let l=0;l<layers;l++){
+              ctx.save(); ctx.globalAlpha=0.7-l*0.2;
+              ctx.rotate((visualLFOs?.[0]?.rate||0.005)*t*(1+l*0.3)+l*0.05);
+              ctx.beginPath();
+              for(let i=0;i<data.length;i++){
+                const a=i/data.length*2*Math.PI, amp=(data[(i+100*l)%data.length]+1)/2,
+                  r=baseSize*(1-l*0.15)*(0.8+0.2*amp), x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r;
+                i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+              }
+              ctx.closePath(); ctx.stroke(); ctx.restore();
+            }
+          },
+          particles(data, t, params) {
+            const {particleCount=100,particleSize=2,visualLFOs}=params, cx=canvas.width/2, cy=canvas.height/2, baseRadius=0.4*canvas.width;
+            if(!state.visuals.particles||state.visuals.particles.length!==particleCount)
+              state.visuals.particles=Array.from({length:particleCount},(_,i)=>({
+                angle:i/particleCount*2*Math.PI,radius:baseRadius,speed:randRange(0.001,0.01),life:randRange(0,1000),size:particleSize*randRange(0.5,1.5)
+              }));
+            const particles=state.visuals.particles, rot=(visualLFOs?.[0]?.rate||0.002)*t;
+            particles.forEach(p=>{
+              p.life+=0.01;
+              const audioIdx=Math.floor(p.angle/(2*Math.PI)*data.length)%data.length,
+                amp=(data[audioIdx]+1)/2;
+              p.radius=baseRadius*(0.8+0.4*amp); p.angle+=p.speed;
+              const ang=p.angle+rot, x=cx+Math.cos(ang)*p.radius, y=cy+Math.sin(ang)*p.radius;
+              ctx.beginPath(); ctx.arc(x,y,p.size,0,2*Math.PI); ctx.fill();
+            });
+          }
+        };
+    
+        // --- Main Audio/Visual Start ---
+        async function startAudioAndDraw() {
+          if(state.isPlaying) stopAudioAndDraw();
+          if(!state.Tone) return loader.textContent='Tone.js not loaded.';
+          loader.textContent = "Generating unique experience...";
+          await state.Tone.start();
+          disposeAll();
+          const T = state.Tone, audio = generateAudioParams(T), visual = generateVisualParams();
+          state.currentVisualParams = visual;
+          // Connect Audio
+          audio.oscillators.forEach(o=>o.connect(audio.filter));
+          let lastNode=audio.filter;
+          if(audio.phaser){lastNode.connect(audio.phaser);lastNode=audio.phaser;}
+          lastNode.connect(audio.masterVolume); audio.masterVolume.toDestination();
+          // Analyser
+          const ana = T.context.createAnalyser();
+          ana.fftSize = 2048; audio.masterVolume.connect(ana);
+          Object.assign(state.nodes, { ...audio, analyser:ana });
+          // UI
+          state.isPlaying=true; startBtn.textContent="Regenerate Experience";
+          muteBtn.disabled=false; loader.textContent = "Experience active. Generating visuals...";
+          animate();
+        }
+        function stopAudioAndDraw() {
+          if(!state.isPlaying) return;
+          cancelAnimationFrame(state.nodes.animId); ctx.clearRect(0,0,canvas.width,canvas.height);
+          disposeAll(); state.isPlaying=false;
+          startBtn.textContent="Generate New Experience"; muteBtn.disabled=true; muteBtn.textContent="Mute";
+          if(state.Tone) state.Tone.Destination.mute=false;
+          loader.textContent="Audio engine ready. Click Start.";
+        }
+    
+        // --- Animation Loop ---
+        function animate() {
+          const ana=state.nodes.analyser, visual=state.currentVisualParams;
+          if(!ana||!state.isPlaying) return;
+          const now=performance.now(), buf=new Float32Array(ana.fftSize); ana.getFloatTimeDomainData(buf);
+          // Bg
+          ctx.fillStyle = visual.bgColor||'#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
+          // Visual LFOs
+          let rotation=0, hueShift=0;
+          visual.visualLFOs.forEach(lfo=>{
+            const val = Math.sin(now*lfo.rate+lfo.phase);
+            if(lfo.type==='rotation')rotation=val*lfo.depth;
+            if(lfo.type==='hueShift')hueShift=val*lfo.depth;
+          });
+          // Transform + Colors
+          ctx.save(); ctx.translate(canvas.width/2,canvas.height/2); ctx.rotate(rotation); ctx.translate(-canvas.width/2,-canvas.height/2);
+          const baseColor=visual.palette[0], baseHue=parseHue(baseColor), shiftedHue=(baseHue+hueShift+360)%360;
+          ctx.strokeStyle = `hsla(${shiftedHue},90%,65%,0.9)`; ctx.fillStyle = `hsla(${shiftedHue},90%,65%,0.7)`;
+          ctx.lineWidth=2.5; ctx.lineJoin='round'; ctx.lineCap='round';
+          (drawFuncs[visual.baseShape]||drawFuncs.radial)(buf,now/1000,visual);
+          ctx.restore();
+          state.nodes.animId = requestAnimationFrame(animate);
+        }
+    
+        // --- UI Events ---
+        startBtn.onclick = startAudioAndDraw;
+        muteBtn.onclick = () => {
+          if(!state.Tone) return;
+          const m = state.Tone.Destination.mute = !state.Tone.Destination.mute;
+          muteBtn.textContent = m ? "Unmute" : "Mute";
+        };
+        modeSel.onchange = ()=>{ if(state.isPlaying){stopAudioAndDraw();startAudioAndDraw();} };
+    
+        // --- Init Tone.js ---
+        startBtn.disabled = muteBtn.disabled = true;
+        loadToneJS({
+          url:'https://cdn.jsdelivr.net/npm/tone@14.7.77/build/Tone.js',
+          onReady:ok=>{
+            if(ok) {
+              loader.textContent = "Audio engine ready. Click 'Generate New Experience'.";
+              startBtn.disabled=false; muteBtn.disabled=true;
+            }
+          }
+        });
+      </script>
+    </body>
+    </html>
+    

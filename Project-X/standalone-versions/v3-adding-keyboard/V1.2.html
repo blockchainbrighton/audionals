@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Web3 Oscilloscope Music - Optimized</title>
+  <meta name="viewport" content="width=600,initial-scale=1">
+  <style>
+    html,body {margin:0;padding:0;height:100%;background:#000;color:#fff;font-family:sans-serif;}
+    body {display:grid;place-items:center;gap:1.2rem;padding:1rem;}
+    #scope {border-radius:8px;border:1px solid #444;background:#000;box-shadow:0 0 15px rgba(100,100,255,0.2);cursor:pointer;}
+    #controls {display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;justify-content:center;}
+    #controls button,#controls select{padding:0.5rem 1rem;border-radius:5px;border:1px solid #666;background:#2a2a2a;color:#eee;transition:background 0.2s,transform 0.1s;font-size:0.9rem;}
+    #controls button:hover{background:#3a3a3a;transform:translateY(-1px);}
+    #controls button:active{transform:translateY(1px);}
+    #loader{font-size:0.95rem;color:#aaa;min-height:1.3rem;text-align:center;font-style:italic;}
+    #info{font-size:0.8rem;color:#888;text-align:center;max-width:600px;}
+    .visual-indicator{position:absolute;top:10px;right:10px;padding:4px 8px;border-radius:3px;font-size:0.75rem;font-weight:bold;z-index:10;}
+    .indicator-silent{background:#555;color:#ccc;}
+    .indicator-audio{background:#4a86e8;color:#fff;box-shadow:0 0 8px rgba(74,134,232,0.7);}
+    #modeToggle{background:#444;border-color:#777;}
+    #modeToggle.seed-mode{background:#2c5a2c;border-color:#5cb85c;color:#dff0d8;}
+    #modeToggle.random-mode{background:#5a3c2c;border-color:#b85c5c;color:#f0d8d8;}
+    .keyboard-note {position:absolute;bottom:10px;right:10px;padding:4px 8px;border-radius:3px;font-size:0.75rem;z-index:10;opacity:0.9;}
+    .keyboard-note {background:#8b4513;color:#fff;box-shadow:0 0 8px rgba(139,69,19,0.7);}
+    .midi-status {position:absolute;top:10px;left:10px;padding:4px 8px;border-radius:3px;font-size:0.75rem;z-index:10;}
+    .midi-connected {background:#4CAF50;color:#fff;box-shadow:0 0 8px rgba(76,175,80,0.7);}
+    .midi-disconnected {background:#f44336;color:#fff;box-shadow:0 0 8px rgba(244,67,54,0.7);}
+  </style>
+</head>
+<body>
+  <div id="visualIndicator" class="visual-indicator indicator-silent">Silent Mode</div>
+  <div id="midiStatus" class="midi-status midi-disconnected">MIDI: Disconnected</div>
+  <div id="keyboardIndicator" class="keyboard-note" style="display:none;">Keyboard Ready</div>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Start Audio</button>
+    <button id="muteBtn">Mute</button>
+    <select id="shapeSelect"></select>
+    <button id="randomizeBtn">Randomize</button>
+    <button id="modeToggle" class="random-mode">Mode: Random</button>
+    <button id="latchBtn" class="latch-off">Latch: Off</button>
+  </section>
+  <div id="loader">Initializing...</div>
+  <div id="info">Visuals start automatically. Click 'Start Audio' OR the image to hear sound. Use 'Mode' to switch generation method.</div>
+  <script type="module">
+    // --- Utilities: Seeded RNG (mulberry32) ---
+    function mulberry32(seed) {
+      let a = 0x6d2b79f5 ^ seed.length;
+      for (let i = 0; i < seed.length; ++i) a = Math.imul(a ^ seed.charCodeAt(i), 2654435761);
+      return () => ((a = Math.imul(a ^ a >>> 15, 1 | a)), (a >>> 16) / 0x10000);
+    }
+    // --- State and DOM refs ---
+    const state = {
+      isPlaying: false, isAudioStarted: false, Tone: null, nodes: {}, currentParams: {}, dummyData: null,
+      isSeedMode: false, seedGenerator: null, predefinedSets: {}, keyboardOscillators: {}, keyboardNotes: {},
+      keyboardActive: false, midiAccess: null, midiOscillators: {}, midiConnected: false,
+      activeNotes: [], noteInfluence: 0, lastNoteTime: 0, latchMode: false,
+      noteGates: {}, gateReleaseTimeouts: {}
+    };
+    const $ = id => document.getElementById(id);
+    const canvas = $("scope"), ctx = canvas.getContext("2d"),
+      startBtn = $("startBtn"), muteBtn = $("muteBtn"), shapeSel = $("shapeSelect"),
+      randomizeBtn = $("randomizeBtn"), loader = $("loader"),
+      visualIndicator = $("visualIndicator"), modeToggleBtn = $("modeToggle"),
+      keyboardIndicator = $("keyboardIndicator"), midiStatus = $("midiStatus"),
+      latchBtn = $("latchBtn");
+    // --- Shapes ---
+    const baseShapes = {
+      circle:    {name: "Circle",    draw: drawCircle},
+      square:    {name: "Square",    draw: drawSquare},
+      butterfly: {name: "Butterfly", draw: drawButterfly},
+      lissajous: {name: "Lissajous", draw: drawLissajous},
+      spiral:    {name: "Spiral",    draw: drawSpiral},
+      rose:      {name: "Rose",      draw: drawRose}
+    };
+    Object.entries(baseShapes).forEach(([key, {name}])=>{
+      const o = document.createElement("option"); o.value = key; o.textContent = name; shapeSel.appendChild(o);
+    });
+    // --- Drawing Functions (enhanced) ---
+    function drawCircle(data, t, p) {
+      const S=p.size*canvas.width/2, c=300;
+      ctx.beginPath();
+      
+      // Base frequency from active notes
+      let baseFreq = 1;
+      if (state.activeNotes.length > 0) {
+        // Use the average frequency of active notes
+        const avgNote = state.activeNotes.reduce((sum, note) => sum + note, 0) / state.activeNotes.length;
+        baseFreq = Math.pow(2, (avgNote - 69) / 12) * 440 / 440;
+      }
+      
+      // Modulate the drawing based on active notes
+      const noteMod = 1 + state.noteInfluence * 0.5 * Math.sin(t * baseFreq * 2);
+      
+      for(let i=0;i<data.length;++i){
+        const a=i/data.length*2*Math.PI,amp=(data[i]+1)/2,r=S*amp*noteMod,modA=a+t*(p.rotationSpeed??.05);
+        const x=c+Math.cos(modA)*r,y=c+Math.sin(modA)*r;
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+      } ctx.closePath(); ctx.stroke();
+    }
+    function drawSquare(data,t,p){const S=p.size*canvas.width/Math.SQRT2,c=300,o=(600-S)/2;ctx.beginPath();
+      
+      // Modulate based on active notes
+      let modulation = 1;
+      if (state.activeNotes.length > 0) {
+        const avgNote = state.activeNotes.reduce((sum, note) => sum + note, 0) / state.activeNotes.length;
+        const noteFreq = Math.pow(2, (avgNote - 69) / 12);
+        modulation = 1 + state.noteInfluence * 0.3 * Math.sin(performance.now() / 1000 * noteFreq);
+      }
+      
+      for(let i=0;i<data.length;++i){const q=i/data.length,amp=(data[i]+1)/2;
+        let x,y;if(q<.25)[x,y]=[o+S*(q/.25),o];else if(q<.5)[x,y]=[o+S,o+S*((q-.25)/.25)];
+        else if(q<.75)[x,y]=[o+S-S*((q-.5)/.25),o+S];else[x,y]=[o,o+S-S*((q-.75)/.25)];
+        const dx=x-c,dy=y-c,scale=(.8+.2*amp+.1*Math.sin(t*(p.pulseSpeed??.2))) * modulation,fx=c+dx*scale,fy=c+dy*scale;
+        i?ctx.lineTo(fx,fy):ctx.moveTo(fx,fy);}ctx.closePath();ctx.stroke();}
+    function drawButterfly(data,t,p){const S=p.size*.4*canvas.width,c=300;ctx.beginPath();
+      
+      // Modulate the butterfly pattern with active notes
+      let scaleMod = 1;
+      if (state.activeNotes.length > 0) {
+        const avgNote = state.activeNotes.reduce((sum, note) => sum + note, 0) / state.activeNotes.length;
+        const noteFreq = Math.pow(2, (avgNote - 69) / 12);
+        scaleMod = 1 + state.noteInfluence * 0.4 * Math.sin(performance.now() / 1000 * noteFreq * 0.5);
+      }
+      
+      for(let i=0;i<data.length;++i){const th=i/data.length*Math.PI*24,amp=(data[i]+1)/2,scale=Math.exp(Math.cos(th))-2*Math.cos(4*th)+Math.pow(Math.sin(th/12),5);
+        let x=Math.sin(th)*scale*S*(.5+.5*amp)*scaleMod,y=Math.cos(th)*scale*S*(.5+.5*amp)*scaleMod;
+        const a=t*(p.rotationSpeed??.05),nx=x*Math.cos(a)-y*Math.sin(a),ny=x*Math.sin(a)+y*Math.cos(a);
+        i?ctx.lineTo(nx+c,ny+c):ctx.moveTo(nx+c,ny+c);}ctx.closePath();ctx.stroke();}
+    function drawLissajous(data,t,p){const S=p.size*.45*canvas.width,c=300,
+      // Use active notes to modulate the Lissajous parameters
+      a=state.activeNotes.length > 0 ? 
+         Math.max(1, Math.min(10, Math.floor(state.activeNotes.reduce((sum, n) => sum + n, 0) / state.activeNotes.length / 12))) : 
+         (p.lissaA||3),
+      b=state.activeNotes.length > 0 ? 
+         Math.max(1, Math.min(10, Math.floor((state.activeNotes.reduce((sum, n) => sum + n, 0) / state.activeNotes.length + 7) / 12))) : 
+         (p.lissaB||2),
+      d=state.activeNotes.length > 0 ? 
+         (state.activeNotes.reduce((sum, n) => sum + n, 0) / state.activeNotes.length % 12) * Math.PI / 6 : 
+         (p.lissaDelta||0);ctx.beginPath();
+      for(let i=0;i<data.length;++i){const prog=i/data.length,amp=(data[i]+1)/2,modT=t*(p.rotationSpeed??.05);
+        const x=S*Math.sin(a*modT+prog*2*Math.PI+d)*amp,y=S*Math.sin(b*modT+prog*2*Math.PI)*amp;
+        i?ctx.lineTo(x+c,y+c):ctx.moveTo(x+c,y+c);}ctx.stroke();}
+    function drawSpiral(data,t,p){const S=p.size*.45*canvas.width,c=300,
+      // Modulate spiral turns by active notes
+      turns=state.activeNotes.length > 0 ? 
+             2 + Math.floor(state.activeNotes.reduce((sum, n) => sum + n, 0) / state.activeNotes.length / 10) : 
+             (p.spiralTurns||5);ctx.beginPath();
+      for(let i=0;i<data.length;++i){const prog=i/data.length,amp=(data[i]+1)/2,a=prog*2*Math.PI*turns+t*(p.rotationSpeed??.05),r=S*prog*amp;
+        const x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();}
+    function drawRose(data,t,p){const S=p.size*.45*canvas.width,c=300,
+      // Modulate rose pattern by active notes
+      k=state.activeNotes.length > 0 ? 
+         1 + (state.activeNotes.reduce((sum, n) => sum + n, 0) / state.activeNotes.length % 8) / 2 : 
+         (p.roseK||3);ctx.beginPath();
+      for(let i=0;i<data.length;++i){const prog=i/data.length,amp=(data[i]+1)/2,a=prog*2*Math.PI+t*(p.rotationSpeed??.05),r=S*Math.cos(k*a)*amp;
+        const x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();}
+    // --- Dummy Data ---
+    function generateDummyData(){
+      const d = new Float32Array(2048);
+      for(let i=0;i<2048;i++){
+        const t=i/2048;d[i]=.4*Math.sin(t*6*Math.PI)+.3*Math.sin(t*14*Math.PI+Math.PI/3)+.2*Math.sin(t*22*Math.PI+Math.PI/6)+.1*Math.sin(t*34*Math.PI);}
+      return d;
+    }
+    // --- Audio: param/gen helpers ---
+    const noteNames = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'], octaves=[2,3,4,5], waveforms=['sine','square','sawtooth','triangle'], filterTypes=['lowpass','highpass','bandpass'];
+    const rand = (arr, rng=Math.random) => arr[Math.floor(rng()*arr.length)];
+    function getRandomNote(rng=Math.random){return rand(noteNames,rng)+rand(octaves,rng);}
+    function generateRandomParams(shapeKey=null,rng=Math.random){
+      const sKey=shapeKey||rand(Object.keys(baseShapes),rng),osc1Type=rand(waveforms,rng),osc1Note=getRandomNote(rng),useOsc2=rng()>.3,osc2Type=useOsc2?rand(waveforms,rng):null,osc2Note=useOsc2?getRandomNote(rng):null;
+      let interaction='mix';if(useOsc2){const r=rng();if(r<.4)interaction='am';else if(r<.7)interaction='fm';}
+      const filterFreq=500+rng()*4000,filterType=rand(filterTypes,rng),lfoFreq=.1+rng()*5,lfoMin=200+rng()*1e3,lfoMax=lfoMin+500+rng()*4e3,
+        hueBase=Math.floor(rng()*360),hueRange=50+Math.floor(rng()*100),lineWidth=1.5+rng()*3,rotationSpeed=(rng()-.5)*.3,pulseSpeed=.05+rng()*.3,size=.65+rng()*.4,useGlow=rng()>.5;
+      let lissaA,lissaB,lissaDelta,spiralTurns,roseK;
+      switch(sKey){
+        case 'lissajous':lissaA=1+Math.floor(rng()*5);lissaB=1+Math.floor(rng()*5);lissaDelta=rng()*Math.PI;break;
+        case 'spiral':spiralTurns=2+Math.floor(rng()*6);break;
+        case 'rose':roseK=.5+rng()*5;break;
+        default:lissaA=1+Math.floor(rng()*5);lissaB=1+Math.floor(rng()*5);lissaDelta=rng()*Math.PI;spiralTurns=2+Math.floor(rng()*6);roseK=.5+rng()*5;
+      }
+      return {shapeKey:sKey,osc1:{type:osc1Type,note:osc1Note},osc2:useOsc2?{type:osc2Type,note:osc2Note}:null,interaction,
+        filter:{frequency:filterFreq,type:filterType},lfo:{frequency:lfoFreq,min:lfoMin,max:lfoMax},
+        visual:{hueBase,hueRange,lineWidth,rotationSpeed,pulseSpeed,size,useGlow,lissaA,lissaB,lissaDelta,spiralTurns,roseK}};
+    }
+    function generatePredefinedSets(seedString="defaultSeed123"){
+      const rng=mulberry32(seedString),sets={};Object.keys(baseShapes).forEach(k=>sets[k]=generateRandomParams(k,rng));
+      state.predefinedSets=sets;
+    }
+    
+    // --- Keyboard and MIDI Piano Implementation with Visual Feedback ---
+    function setupKeyboardInterface() {
+      // Piano key mapping: 88 keys from A0 (21) to C8 (108)
+      // Map keyboard keys to piano notes
+      const keyMap = {
+        'a': 21, 'w': 22, 's': 23, 'e': 24, 'd': 25, 'f': 26, 't': 27, 'g': 28, 
+        'y': 29, 'h': 30, 'u': 31, 'j': 32, 'k': 33, 'o': 34, 'l': 35, 'p': 36, 
+        ';': 37, "'": 38, 'z': 39, 'x': 40, 'c': 41, 'v': 42, 'b': 43, 'n': 44, 
+        ',': 45, 'm': 46, '.': 47, '/': 48,
+        // Second octave set
+        'q': 49, '1': 50, '2': 51, '3': 52, '4': 53, '5': 54, '6': 55, '7': 56, 
+        '8': 57, '9': 58, '0': 59, '-': 60, '=': 61, 'r': 62, 'i': 63, '[': 64, 
+        ']': 65, '\\': 66
+      };
+      
+      // Function to convert MIDI note number to note name
+      function midiToNoteName(midi) {
+        const noteNames = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const octave = Math.floor(midi / 12) - 1;
+        const note = noteNames[midi % 12];
+        return note + octave;
+      }
+      
+      // Function to convert MIDI note to frequency
+      function midiToFreq(midi) {
+        return 440 * Math.pow(2, (midi - 69) / 12);
+      }
+      
+      // Track active keyboard oscillators
+      state.keyboardOscillators = {};
+      
+      // Keyboard event handlers
+      window.addEventListener('keydown', (e) => {
+        // Only respond if audio is initialized
+        if (!state.Tone || !state.isAudioStarted) return;
+        
+        // Prevent multiple triggers from holding key
+        if (e.repeat) return;
+        
+        const key = e.key.toLowerCase();
+        if (keyMap[key]) {
+          // Mark keyboard as active
+          if (!state.keyboardActive) {
+            state.keyboardActive = true;
+            keyboardIndicator.style.display = 'block';
+            keyboardIndicator.textContent = 'Keyboard Ready';
+            setTimeout(() => {
+              keyboardIndicator.textContent = 'Play any key!';
+            }, 1500);
+          }
+          
+          const midiNote = keyMap[key];
+          const noteName = midiToNoteName(midiNote);
+          const freq = midiToFreq(midiNote);
+          
+          // Add note to active notes
+          if (!state.activeNotes.includes(midiNote)) {
+            state.activeNotes.push(midiNote);
+          }
+          
+          // Increase influence based on number of notes
+          state.noteInfluence = Math.min(1, state.activeNotes.length * 0.3);
+          state.lastNoteTime = performance.now();
+          
+          // Use current audio parameters for the oscillator
+          const params = state.currentParams;
+          const oscType = params.osc1?.type || 'sine';
+          
+          // Create oscillator with current visual parameters for feedback
+          const osc = new state.Tone.Oscillator(freq, oscType).start();
+          
+          // Apply current filter settings if available
+          if (params.filter) {
+            const filter = new state.Tone.Filter(params.filter.frequency, params.filter.type);
+            osc.connect(filter);
+            filter.connect(state.Tone.Destination);
+          } else {
+            osc.connect(state.Tone.Destination);
+          }
+          
+          // Store oscillator to allow stopping it
+          state.keyboardOscillators[key] = osc;
+          
+          // Visual feedback on canvas
+          keyboardIndicator.textContent = `Playing: ${noteName}`;
+          
+          // Update the loader text
+          loader.textContent = `Playing note: ${noteName} (${state.activeNotes.length} notes active)`;
+          
+          console.log(`Keyboard note on: ${noteName} (MIDI ${midiNote}), active notes: ${state.activeNotes.length}`);
+        }
+      });
+      
+      window.addEventListener('keyup', (e) => {
+        const key = e.key.toLowerCase();
+        if (state.keyboardOscillators[key]) {
+          // Stop the oscillator with a short release for natural sound
+          state.keyboardOscillators[key].stop('+0.05');
+          delete state.keyboardOscillators[key];
+          
+          // Remove note from active notes
+          const midiNote = Object.entries(keyMap).find(([k, v]) => k === key)?.[1];
+          if (midiNote) {
+            state.activeNotes = state.activeNotes.filter(n => n !== midiNote);
+            
+            // Adjust influence based on remaining notes
+            state.noteInfluence = Math.min(1, state.activeNotes.length * 0.3);
+            
+            // Update display
+            const noteName = midiToNoteName(midiNote);
+            keyboardIndicator.textContent = `Note released: ${noteName}`;
+            setTimeout(() => {
+              if (state.activeNotes.length > 0) {
+                keyboardIndicator.textContent = `${state.activeNotes.length} notes active`;
+              } else {
+                keyboardIndicator.textContent = 'Keyboard Ready';
+              }
+            }, 1000);
+            
+            console.log(`Keyboard note off: ${noteName} (MIDI ${midiNote}), active notes: ${state.activeNotes.length}`);
+          }
+        }
+      });
+      
+      // MIDI Support
+      function setupMIDI() {
+        if (!navigator.requestMIDIAccess) {
+          console.log('Web MIDI API not supported in this browser');
+          midiStatus.textContent = 'MIDI: Not Supported';
+          return;
+        }
+        
+        navigator.requestMIDIAccess().then(
+          (access) => {
+            state.midiAccess = access;
+            state.midiConnected = true;
+            midiStatus.textContent = 'MIDI: Connected';
+            midiStatus.className = 'midi-status midi-connected';
+            
+            // Listen for MIDI input
+            access.inputs.forEach(input => {
+              input.onmidimessage = onMIDIMessage;
+            });
+            
+            // Listen for new MIDI devices
+            access.onstatechange = (event) => {
+              const device = event.port;
+              if (device.type === 'input') {
+                if (device.state === 'connected') {
+                  device.onmidimessage = onMIDIMessage;
+                  midiStatus.textContent = `MIDI: Connected to ${device.name}`;
+                  console.log(`MIDI device connected: ${device.name}`);
+                }
+              }
+            };
+            
+            console.log('MIDI access granted');
+          },
+          (err) => {
+            console.error('MIDI access denied or failed:', err);
+            midiStatus.textContent = 'MIDI: Access Denied';
+          }
+        );
+      }
+      
+      function onMIDIMessage(message) {
+        const data = message.data;
+        const cmd = data[0] >> 4;
+        const channel = data[0] & 0xf;
+        const noteNumber = data[1];
+        const velocity = data.length > 2 ? data[2] : 0;
+        
+        // Note on (cmd 9) with velocity > 0 or Note off (cmd 8)
+        if ((cmd === 9 && velocity > 0) || cmd === 8) {
+          if (cmd === 9 && velocity > 0) {
+            // Note on
+            playMIDINote(noteNumber, velocity / 127);
+          } else {
+            // Note off
+            stopMIDINote(noteNumber);
+          }
+        }
+      }
+      
+      function playMIDINote(midiNote, velocity) {
+        if (!state.Tone || !state.isAudioStarted) return;
+        
+        const noteName = midiToNoteName(midiNote);
+        const freq = midiToFreq(midiNote);
+        
+        // Add note to active notes
+        if (!state.activeNotes.includes(midiNote)) {
+          state.activeNotes.push(midiNote);
+        }
+        
+        // Increase influence based on number of notes
+        state.noteInfluence = Math.min(1, state.activeNotes.length * 0.3);
+        state.lastNoteTime = performance.now();
+        
+        // Use current audio parameters for the oscillator
+        const params = state.currentParams;
+        const oscType = params.osc1?.type || 'sine';
+        
+        // Create oscillator with current visual parameters for feedback
+        const osc = new state.Tone.Oscillator(freq, oscType).start();
+        
+        // Apply velocity to gain
+        const gainNode = new state.Tone.Gain(velocity).toDestination();
+        osc.connect(gainNode);
+        
+        // Apply current filter settings if available
+        if (params.filter) {
+          const filter = new state.Tone.Filter(params.filter.frequency, params.filter.type);
+          osc.connect(filter);
+          filter.connect(gainNode);
+        }
+        
+        // Store oscillator to allow stopping it
+        state.midiOscillators[midiNote] = osc;
+        
+        // Mark this note as currently gated (on)
+        state.noteGates[midiNote] = true;
+        
+        // If in latch mode, just store it
+        if (state.latchMode) {
+          // No automatic release in latch mode
+        } else {
+          // In non-latch mode, set up automatic release
+          // Clear any existing timeout for this note
+          if (state.gateReleaseTimeouts[midiNote]) {
+            clearTimeout(state.gateReleaseTimeouts[midiNote]);
+            state.gateReleaseTimeouts[midiNote] = null;
+          }
+          
+          // Set a timeout to release the note after a short duration
+          // This creates a "gated" or "staccato" effect
+          state.gateReleaseTimeouts[midiNote] = setTimeout(() => {
+            // Only release if the gate is still active and we're not in latch mode
+            if (state.noteGates[midiNote] && !state.latchMode) {
+              // Stop the oscillator
+              if (state.midiOscillators[midiNote]) {
+                state.midiOscillators[midiNote].stop('+0.01');
+                delete state.midiOscillators[midiNote];
+              }
+              
+              // Remove from active notes
+              state.activeNotes = state.activeNotes.filter(n => n !== midiNote);
+              state.noteGates[midiNote] = false;
+              delete state.gateReleaseTimeouts[midiNote];
+              
+              // Adjust influence based on remaining notes
+              state.noteInfluence = Math.min(1, state.activeNotes.length * 0.3);
+              
+              // Update display
+              keyboardIndicator.textContent = `Note gated: ${noteName}`;
+              setTimeout(() => {
+                if (state.activeNotes.length > 0) {
+                  keyboardIndicator.textContent = `${state.activeNotes.length} notes active`;
+                } else {
+                  keyboardIndicator.textContent = 'Keyboard Ready';
+                }
+              }, 500);
+              
+              console.log(`MIDI Note auto-released: ${noteName} (MIDI ${midiNote}), active notes: ${state.activeNotes.length}`);
+            }
+          }, 150); // 150ms gate time - adjust for desired staccato effect
+        }
+        
+        // Visual feedback on canvas
+        keyboardIndicator.textContent = state.latchMode ? 
+          `Latched: ${noteName}` : 
+          `MIDI: ${noteName}`;
+        loader.textContent = state.latchMode ?
+          `Latched note: ${noteName} (${state.activeNotes.length} notes active)` :
+          `MIDI playing: ${noteName} (${state.activeNotes.length} notes active)`;
+        
+        console.log(`${state.latchMode ? 'Latched' : 'MIDI'} Note On: ${noteName} (MIDI ${midiNote}, velocity: ${Math.round(velocity * 127)}), active notes: ${state.activeNotes.length}`);
+      }
+      
+      function stopMIDINote(midiNote) {
+        // Only process note-off if we're in latch mode
+        // In non-latch mode, the note is already released by the gate timeout
+        if (state.latchMode && state.midiOscillators[midiNote]) {
+          // Stop the oscillator with a short release for natural sound
+          state.midiOscillators[midiNote].stop('+0.05');
+          delete state.midiOscillators[midiNote];
+          
+          // Remove note from active notes
+          state.activeNotes = state.activeNotes.filter(n => n !== midiNote);
+          state.noteGates[midiNote] = false;
+          
+          // Clear any pending timeout
+          if (state.gateReleaseTimeouts[midiNote]) {
+            clearTimeout(state.gateReleaseTimeouts[midiNote]);
+            delete state.gateReleaseTimeouts[midiNote];
+          }
+          
+          // Adjust influence based on remaining notes
+          state.noteInfluence = Math.min(1, state.activeNotes.length * 0.3);
+          
+          // Update display
+          const noteName = midiToNoteName(midiNote);
+          keyboardIndicator.textContent = `Latched note off: ${noteName}`;
+          setTimeout(() => {
+            if (state.activeNotes.length > 0) {
+              keyboardIndicator.textContent = `${state.activeNotes.length} notes active`;
+            } else {
+              keyboardIndicator.textContent = 'Keyboard Ready';
+            }
+          }, 1000);
+          
+          console.log(`Latched MIDI Note Off: ${noteName} (MIDI ${midiNote}), active notes: ${state.activeNotes.length}`);
+        }
+        // In non-latch mode, we ignore note-off messages since we handle release via the gate
+      }
+      
+      // Toggle latch mode
+      latchBtn.onclick = () => {
+        state.latchMode = !state.latchMode;
+        
+        if (state.latchMode) {
+          latchBtn.textContent = 'Latch: On';
+          latchBtn.style.background = '#4CAF50';
+          loader.textContent = 'Latch mode enabled. Notes will sustain until manually released.';
+        } else {
+          // When turning off latch mode, release any notes that were latched
+          // But only if they haven't already been released
+          Object.keys(state.midiOscillators).forEach(midiNoteStr => {
+            const midiNote = parseInt(midiNoteStr);
+            // If this note is still active but we're in gate mode, release it
+            if (state.noteGates[midiNote] && !state.latchMode) {
+              // Don't release immediately - let the gate timeout handle it
+              // This prevents abrupt cutoffs
+            }
+          });
+          
+          latchBtn.textContent = 'Latch: Off';
+          latchBtn.style.background = '#2a2a2a';
+          loader.textContent = 'Latch mode disabled. Notes will play as gated/staccato notes.';
+        }
+      };
+      
+      // Initialize MIDI
+      setupMIDI();
+      
+      // Mark that keyboard is ready
+      keyboardIndicator.style.display = 'block';
+      setTimeout(() => {
+        keyboardIndicator.textContent = 'Keyboard Ready - Play any mapped key';
+      }, 500);
+      
+      console.log('Keyboard and MIDI interface initialized for 88-key piano with visual modulation and proper gating');
+    }
+    
+    // --- Audio Graph ---
+    function disposeNodes(){Object.values(state.nodes).forEach(n=>{try{n?.stop?.()}catch{}try{n?.dispose?.()}catch{}});state.nodes={};}
+    async function setupAudioGraph(params){
+      if(!state.Tone)return loader.textContent='Tone.js not loaded.';
+      if(!state.isAudioStarted){try{await state.Tone.start();state.isAudioStarted=true;}catch(e){loader.textContent="Failed to start audio.";return false;}}
+      disposeNodes();
+      const T=state.Tone,osc1=state.nodes.osc1=new T.Oscillator(params.osc1.note,params.osc1.type).start();
+      let osc2=null;if(params.osc2)osc2=state.nodes.osc2=new T.Oscillator(params.osc2.note,params.osc2.type).start();
+      const filter=state.nodes.filter=new T.Filter(params.filter.frequency,params.filter.type),
+        lfo=state.nodes.lfo=new T.LFO(params.lfo.frequency,params.lfo.min,params.lfo.max).start(),
+        modulatedGain=state.nodes.modulatedGain=new T.Gain(1),volume=state.nodes.volume=new T.Volume(-10);
+      lfo.connect(filter.frequency);
+      if(params.interaction==='am'&&osc2){osc1.connect(modulatedGain);osc2.connect(modulatedGain.gain);modulatedGain.connect(volume);}
+      else if(params.interaction==='fm'&&osc2){osc2.connect(osc1.frequency);osc1.connect(volume);}
+      else{osc1.connect(volume);if(osc2)osc2.connect(volume);}
+      volume.connect(filter);filter.toDestination();
+      state.Tone.Destination.mute=true;muteBtn.textContent="Unmute";
+      const ana=state.nodes.analyser=T.context.createAnalyser();ana.fftSize=2048;filter.connect(ana);
+      return true;
+    }
+    // --- Animation ---
+    const defaultVis = {hueBase:200,hueRange:100,lineWidth:2,rotationSpeed:.05,pulseSpeed:.2,size:.8,useGlow:true};
+    (function animate(){
+      const time=performance.now()/1e3,ana=state.nodes.analyser;
+      let data=(state.isAudioStarted&&state.isPlaying&&ana)?(ana.getFloatTimeDomainData(state.liveDataBuffer=state.liveDataBuffer||new Float32Array(ana.fftSize)),state.liveDataBuffer):(state.dummyData=state.dummyData||generateDummyData());
+      visualIndicator.textContent=(state.isAudioStarted&&state.isPlaying&&ana)?"Audio Live":(state.isAudioStarted?"Muted":"Silent Mode");
+      visualIndicator.className="visual-indicator "+((state.isAudioStarted&&state.isPlaying&&ana)?"indicator-audio":"indicator-silent");
+      const p=state.currentParams.visual||defaultVis,shapeKey=state.currentParams.shapeKey||"circle",shapeFunc=baseShapes[shapeKey]?.draw||drawCircle;
+      ctx.clearRect(0,0,600,600);
+      const hue=(p.hueBase+time*15)%360,sat=80+15*Math.sin(time*.4),light=50+25*Math.sin(time*.25);
+      ctx.strokeStyle=`hsl(${hue},${sat}%,${light}%)`;ctx.lineWidth=p.lineWidth;ctx.lineJoin=ctx.lineCap='round';ctx.shadowBlur=p.useGlow?12:0;ctx.shadowColor=ctx.strokeStyle;
+      shapeFunc(data,time,p); state.nodes.animId=requestAnimationFrame(animate);
+    })();
+    // --- Core Audio Toggle ---
+async function toggleAudio() {
+  // Always require audio context to be started first
+  if (!state.isAudioStarted) {
+    // First-time initialization: start audio context
+    try {
+      await state.Tone.start();
+      state.isAudioStarted = true;
+      // Now initialize the audio graph (but don't start playing yet)
+      await setupAudioGraph(state.currentParams);
+      state.isPlaying = false; // Start muted until user enables
+      state.Tone.Destination.mute = true;
+      startBtn.textContent = "Start Audio";
+      muteBtn.disabled = false;
+      loader.textContent = "Audio context ready. Click 'Start Audio' to begin main oscillator.";
+      // ✅ Now allow keyboard/MIDI to play notes
+    } catch (e) {
+      loader.textContent = "Failed to start audio.";
+      console.error(e);
+    }
+    return;
+  }
+
+  // After context is started: control only the main oscillator
+  if (state.isPlaying) {
+    // Stop main oscillator, but leave context alive
+    disposeNodes(); // Stop the main synth
+    state.isPlaying = false;
+    startBtn.textContent = "Start Audio";
+    loader.textContent = "Main oscillator stopped. Keyboard/MIDI notes still playable.";
+  } else {
+    // Restart main oscillator
+    await setupAudioGraph(state.currentParams);
+    state.isPlaying = true;
+    state.Tone.Destination.mute = false;
+    startBtn.textContent = "Stop Audio";
+    loader.textContent = "Main oscillator restarted.";
+  }
+}
+    // --- UI Events ---
+    startBtn.onclick = canvas.onclick = toggleAudio;
+    muteBtn.onclick = ()=>{if(!state.Tone||!state.isAudioStarted)return;const m=state.Tone.Destination.mute=!state.Tone.Destination.mute;muteBtn.textContent=m?"Unmute":"Mute";loader.textContent=m?"Audio muted.":"Audio unmuted.";}
+    shapeSel.onchange=()=>{
+      if(state.currentParams){
+        let np=state.isSeedMode&&state.predefinedSets[shapeSel.value]?state.predefinedSets[shapeSel.value]:{...state.currentParams,shapeKey:shapeSel.value};
+        if(np.visual){delete np.visual.lissaA;delete np.visual.lissaB;delete np.visual.lissaDelta;delete np.visual.spiralTurns;delete np.visual.roseK;}
+        state.currentParams=np;
+      }
+    };
+    randomizeBtn.onclick=async()=>{
+      let np=state.isSeedMode?generateRandomParams(null,state.seedGenerator):generateRandomParams();
+      state.currentParams=np;shapeSel.value=np.shapeKey;state.dummyData=null;
+      if(state.isAudioStarted)await setupAudioGraph(np);
+      loader.textContent=state.isAudioStarted?"Audio randomized and playing.":"New visual pattern generated. Click 'Start Audio' to hear.";
+    };
+    modeToggleBtn.onclick=()=>{
+      state.isSeedMode=!state.isSeedMode;
+      if(state.isSeedMode){
+        modeToggleBtn.textContent="Mode: Seed";modeToggleBtn.className="seed-mode";
+        const seed="MyUniqueSeed_v1";state.seedGenerator=mulberry32(seed);generatePredefinedSets(seed);
+        const k=Object.keys(state.predefinedSets)[0];state.currentParams=state.predefinedSets[k];shapeSel.value=k;
+        loader.textContent=`Seed Mode (${seed}) loaded. Showing '${baseShapes[k].name}'.`;
+      }else{
+        modeToggleBtn.textContent="Mode: Random";modeToggleBtn.className="random-mode";state.seedGenerator=null;
+        loader.textContent="Random Mode. New randomizations will use Math.random.";
+      }
+    };
+    // --- Tone.js Loader ---
+    function loadToneJSAndBoot({toneUrl,setLoaderStatus,state,boot}){
+      setLoaderStatus('Loading Audio Engine...');
+      import(toneUrl).then(mod=>{
+        state.Tone=window.Tone??mod?.default??mod;
+        if(state.Tone){setLoaderStatus(`Tone.js v${state.Tone.version??"?"} ready.`);boot();}
+        else throw new Error('Tone.js not found.');
+      }).catch(e=>{
+        setLoaderStatus('Failed to load Tone.js. App cannot start.',1);console.error(e);
+      });
+    }
+    // --- Boot ---
+    loadToneJSAndBoot({
+      toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+      setLoaderStatus:(msg,err)=>{loader.textContent=msg;loader.style.color=err?"red":"#aaa";startBtn.disabled=!!err;muteBtn.disabled=true;randomizeBtn.disabled=!!err;modeToggleBtn.disabled=!!err;},
+      state,
+      boot:()=>{
+        loader.textContent="Audio engine ready. Generating initial pattern...";
+        startBtn.disabled=false;muteBtn.disabled=true;randomizeBtn.disabled=false;modeToggleBtn.disabled=false;
+        generatePredefinedSets("InitialSeed_v1");
+        const initial="circle";
+        state.currentParams=state.predefinedSets[initial]||generateRandomParams(initial);
+        state.dummyData=generateDummyData();
+        shapeSel.value=state.currentParams.shapeKey;
+        loader.textContent="Pattern generated (Seed Mode ready). Click 'Start Audio' OR the image to hear sound.";
+        
+        // Initialize keyboard and MIDI interface after boot
+        setupKeyboardInterface();
+      }
+    });
+    startBtn.disabled=true;muteBtn.disabled=true;randomizeBtn.disabled=true;modeToggleBtn.disabled=true;
+  </script>
+</body>
+</html>
