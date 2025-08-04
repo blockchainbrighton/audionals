@@ -1,6 +1,3 @@
-<!-- This is great - loading of the initial sound and vision setill seems a bit glitchy, 
-    can we improve the UX so the sound and vision start smoothly every time?  -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -12,9 +9,18 @@
     body {display:grid;place-items:center;gap:1rem;}
     #scope {border-radius:12px;border:1px solid #333;background:#000;box-shadow:0 0 30px #0008;}
     #controls{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;padding:.5rem;background:#fff1;border-radius:8px;}
-    #controls button,#controls select{padding:.5rem 1rem;border-radius:6px;border:1px solid #555;background:#222;color:#fff;font-size:.9rem;cursor:pointer;}
+    #controls button, #controls select, #controls input, #controls label {padding:.5rem 1rem;border-radius:6px;border:1px solid #555;background:#222;color:#fff;font-size:.9rem;cursor:pointer;}
     #controls button:hover{background:#444;}
+    #controls input[type="range"] { cursor: pointer; }
     #loader{font-size:.9rem;color:#aaa;min-height:1.4rem;text-align:center;font-style:italic;}
+    #sequencer { display: none; width: 100%; max-width: 600px; text-align: center; }
+    #seqControls { display: flex; justify-content: center; align-items: center; gap: 1rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+    #stepContainer { display: flex; justify-content: center; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.2rem; } /* Reduced gap */
+    .step { width: 30px; height: 30px; border: 1px solid #555; border-radius: 5px; background: #222; display: flex; align-items: center; justify-content: center; cursor: pointer; font-weight: bold; font-size: 0.8rem; user-select: none; } /* Smaller steps */
+    .step.active { background: #444; box-shadow: 0 0 6px #fff8; }
+    .step.record { background: #630; box-shadow: 0 0 6px #f808; }
+    #playButton { margin-top: 0.5rem; padding: 0.5rem 1rem; }
+    #tempoDisplay { min-width: 60px; text-align: center; } /* Style for tempo display */
   </style>
 </head>
 <body>
@@ -30,8 +36,26 @@
       <option value="spiro">Spirograph</option>
       <option value="harmonograph">Harmonograph</option>
     </select>
+    <button id="seqBtn">Create Sequence</button>
   </section>
   <div id="loader">Initializing...</div>
+  <div id="sequencer">
+    <div id="seqControls">
+        <label for="tempoSlider">Tempo:</label>
+        <input type="range" id="tempoSlider" min="50" max="300" value="150">
+        <span id="tempoDisplay">150 BPM</span>
+
+        <label for="lengthSelect">Steps:</label>
+        <select id="lengthSelect">
+            <option value="4">4</option>
+            <option value="8" selected>8</option>
+            <option value="16">16</option>
+            <option value="32">32</option>
+        </select>
+    </div>
+    <div id="stepContainer"></div>
+    <button id="playButton" style="display:none;">Play</button>
+  </div>
   <script type="module">
     // --- State ---
     const state = {
@@ -41,10 +65,23 @@
       current: null, // Currently connected shape
       seed: '567',
       ready: false,
-      contextUnlocked: false
+      contextUnlocked: false,
+      // --- Sequencer State ---
+      sequencer: {
+        isActive: false,
+        steps: Array(8).fill(null), // Will be resized based on lengthSelect
+        currentStep: -1,
+        isRecording: false,
+        isPlaying: false,
+        playIntervalId: null,
+        stepDuration: 400, // ms (calculated from BPM)
+        bpm: 150,
+        length: 8 // Default length
+      }
     };
     const canvas = scope, ctx = canvas.getContext('2d');
-    const [startBtn, muteBtn, shapeSel, loader] = ['startBtn','muteBtn','shapeSelect','loader'].map(id=>document.getElementById(id));
+    const [startBtn, muteBtn, shapeSel, loader, seqBtn, stepContainer, playButton, tempoSlider, tempoDisplay, lengthSelect] =
+          ['startBtn','muteBtn','shapeSelect','loader','seqBtn','stepContainer', 'playButton', 'tempoSlider', 'tempoDisplay', 'lengthSelect'].map(id=>document.getElementById(id));
 
     // --- Deterministic PRNG ---
     function mulberry32(seed) {
@@ -99,7 +136,6 @@
       const reverbRoom = (mode === 3 ? 0.85 + rng()*0.12 : 0.6 + rng()*0.38);
       const colorSpeed = 0.06 + rng()*0.22;
       const shapeDrift = 0.0006 + rng()*0.0032;
-
       return {
           osc1: oscs[0],
           osc2: oscs[1] || null,
@@ -119,7 +155,7 @@
     for(const k of SHAPES) presets[k] = deterministicPreset(state.seed, k);
 
     // --- Drawing Functions (unchanged for brevity) ---
-    const drawFuncs = { // ... (same as before, unchanged) ...
+    const drawFuncs = {
       circle(data,t,pr){const S=.8*canvas.width/2,c=300;ctx.beginPath();
         for(let i=0;i<data.length;++i){let a=i/data.length*2*Math.PI+t*.001,amp=(data[i]+1)/2,
         r=S*amp,x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
@@ -206,6 +242,7 @@
       state.chains = {};
       state.current = null;
     }
+
     function setActiveChain(shape) {
       // Disconnect all chains from destination
       for(const s in state.chains) {
@@ -241,7 +278,13 @@
     async function unlockAudioAndBufferInitial() {
       if (state.contextUnlocked) return;
       loader.textContent = "Unlocking AudioContext...";
-      await state.Tone.start();
+      try {
+          await state.Tone.start();
+      } catch (e) {
+          console.error("Error starting Tone.js:", e);
+          loader.textContent = "Failed to unlock audio. Please interact again.";
+          return;
+      }
       state.contextUnlocked = true;
       loader.textContent = "Buffering first synth chain...";
       await bufferShapeChain(shapeSel.value);
@@ -257,6 +300,7 @@
         for(const shape of SHAPES) {
           if(shape !== shapeSel.value) await bufferShapeChain(shape);
         }
+        loader.textContent = "All synth chains buffered. Ready!";
       },30);
     }
 
@@ -270,6 +314,143 @@
       mode = "seed";
     }
 
+    // --- Sequencer Logic ---
+    function createSteps() {
+        const numSteps = state.sequencer.length;
+        stepContainer.innerHTML = '';
+        // Ensure steps array matches the selected length
+        state.sequencer.steps = state.sequencer.steps.slice(0, numSteps);
+        while (state.sequencer.steps.length < numSteps) {
+            state.sequencer.steps.push(null);
+        }
+
+        for (let i = 0; i < numSteps; i++) {
+            const step = document.createElement('div');
+            step.className = 'step';
+            step.dataset.index = i;
+            step.textContent = state.sequencer.steps[i] || '';
+            step.addEventListener('click', () => startRecording(i));
+            // Right-click or long-press to clear
+            step.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                clearStep(i);
+            });
+            let pressTimer;
+            step.addEventListener('touchstart', (e) => {
+                pressTimer = setTimeout(() => {
+                    clearStep(i);
+                    e.preventDefault();
+                }, 500); // 500ms long press
+            });
+            step.addEventListener('touchend', () => clearTimeout(pressTimer));
+            step.addEventListener('touchmove', () => clearTimeout(pressTimer));
+
+            stepContainer.appendChild(step);
+        }
+        updateStepUI();
+    }
+
+    function updateStepUI() {
+        const steps = stepContainer.querySelectorAll('.step');
+        steps.forEach((step, i) => {
+            step.textContent = state.sequencer.steps[i] !== null ? state.sequencer.steps[i] : '';
+            step.classList.toggle('active', i === state.sequencer.currentStep);
+            step.classList.toggle('record', state.sequencer.isRecording && i === state.sequencer.currentStep);
+        });
+        // Check if all current steps are filled
+        const currentSteps = state.sequencer.steps.slice(0, state.sequencer.length);
+        const allFilled = currentSteps.every(s => s !== null);
+        playButton.style.display = allFilled ? 'inline-block' : 'none';
+    }
+
+    function startRecording(stepIndex) {
+        if (!state.contextUnlocked) {
+            loader.textContent = "Please start audio first.";
+            return;
+        }
+        state.sequencer.isRecording = true;
+        state.sequencer.currentStep = stepIndex;
+        updateStepUI();
+    }
+
+    function recordStep(keyNumber) {
+        if (state.sequencer.isRecording && state.sequencer.currentStep >= 0) {
+            state.sequencer.steps[state.sequencer.currentStep] = keyNumber;
+            state.sequencer.currentStep = (state.sequencer.currentStep + 1) % state.sequencer.length; // Use dynamic length
+            if (state.sequencer.currentStep === 0) {
+                state.sequencer.isRecording = false; // Auto-stop after full cycle?
+                // Or, let it continue recording until manually stopped or all steps are full?
+                // Let's stop recording when all steps are full instead.
+                 const currentSteps = state.sequencer.steps.slice(0, state.sequencer.length);
+                 if (currentSteps.every(s => s !== null)) {
+                     state.sequencer.isRecording = false;
+                 }
+            }
+            updateStepUI();
+        }
+    }
+
+    function clearStep(stepIndex) {
+        // Ensure index is within current length
+        if (stepIndex < state.sequencer.length) {
+             state.sequencer.steps[stepIndex] = null;
+             if (state.sequencer.currentStep === stepIndex) {
+                 state.sequencer.isRecording = false;
+             }
+             updateStepUI();
+         }
+    }
+
+    function playSequence() {
+        if (state.sequencer.isPlaying) {
+            clearInterval(state.sequencer.playIntervalId);
+            state.sequencer.isPlaying = false;
+            playButton.textContent = "Play";
+            state.sequencer.currentStep = -1;
+            updateStepUI();
+            return;
+        }
+
+        state.sequencer.isPlaying = true;
+        playButton.textContent = "Stop";
+        state.sequencer.currentStep = 0;
+        updateStepUI();
+
+        const playStep = () => {
+            const stepValue = state.sequencer.steps[state.sequencer.currentStep];
+            if (stepValue !== null && stepValue >= 1 && stepValue <= 6) {
+                const shapeIndex = stepValue - 1;
+                const shapeName = SHAPES[shapeIndex];
+
+                // Update UI
+                if(shapeSel.selectedIndex !== shapeIndex) {
+                    shapeSel.selectedIndex = shapeIndex;
+                    shapeSel.onchange();
+                }
+
+                // Trigger sound if audio is running
+                if (state.isPlaying && state.chains[shapeName]) {
+                    const chain = state.chains[shapeName];
+                    // Simple trigger, could be refined with envelopes
+                    chain.osc1?.restart();
+                    if(chain.osc2) chain.osc2?.restart();
+                }
+            }
+            state.sequencer.currentStep = (state.sequencer.currentStep + 1) % state.sequencer.length; // Use dynamic length
+            updateStepUI();
+        };
+
+        // Calculate step duration based on BPM
+        // 60,000 ms per minute / BPM = ms per beat (quarter note)
+        // Assuming 4 steps per beat (16th notes), step duration = beat duration / 4
+        // Or, simpler: step_duration = 60000 / (BPM * 4)
+        // Let's assume 4 steps per beat for 16th note feel.
+        state.sequencer.stepDuration = 60000 / (state.sequencer.bpm * 4);
+
+        playStep(); // Play first step immediately
+        state.sequencer.playIntervalId = setInterval(playStep, state.sequencer.stepDuration);
+    }
+
     // --- UI Events ---
     startBtn.onclick = async ()=>{
       if (!state.contextUnlocked) await unlockAudioAndBufferInitial();
@@ -278,27 +459,124 @@
         await unlockAudioAndBufferInitial();
       }
     };
+
     muteBtn.onclick = ()=>{
       if(!state.Tone)return;
       const m=state.Tone.Destination.mute=!state.Tone.Destination.mute;
       muteBtn.textContent=m?"Unmute":"Mute";
     };
+
     shapeSel.onchange=()=>{
       if(state.isPlaying) setActiveChain(shapeSel.value), mode="live";
       else mode="seed";
     };
 
-    // --- Number Key Shape/Sound Selection ---
+    seqBtn.onclick = () => {
+        state.sequencer.isActive = !state.sequencer.isActive;
+        sequencer.style.display = state.sequencer.isActive ? 'block' : 'none';
+        seqBtn.textContent = state.sequencer.isActive ? 'Close Sequencer' : 'Create Sequence';
+        if (state.sequencer.isActive) {
+            createSteps(); // Create steps based on current length setting
+        } else {
+            // Stop playback if sequencer is closed
+            if (state.sequencer.isPlaying) {
+                playSequence(); // This will stop it
+            }
+        }
+    };
+
+    playButton.onclick = playSequence;
+
+    // --- Sequencer Control Events ---
+    tempoSlider.oninput = () => {
+        state.sequencer.bpm = parseInt(tempoSlider.value, 10);
+        tempoDisplay.textContent = `${state.sequencer.bpm} BPM`;
+        // If playing, restart the interval with the new tempo
+        if (state.sequencer.isPlaying) {
+            clearInterval(state.sequencer.playIntervalId);
+            state.sequencer.stepDuration = 60000 / (state.sequencer.bpm * 4);
+            state.sequencer.playIntervalId = setInterval(() => {
+                 const playStep = () => {
+                     const stepValue = state.sequencer.steps[state.sequencer.currentStep];
+                     if (stepValue !== null && stepValue >= 1 && stepValue <= 6) {
+                         const shapeIndex = stepValue - 1;
+                         const shapeName = SHAPES[shapeIndex];
+                         if(shapeSel.selectedIndex !== shapeIndex) {
+                             shapeSel.selectedIndex = shapeIndex;
+                             shapeSel.onchange();
+                         }
+                         if (state.isPlaying && state.chains[shapeName]) {
+                             const chain = state.chains[shapeName];
+                             chain.osc1?.restart();
+                             if(chain.osc2) chain.osc2?.restart();
+                         }
+                     }
+                     state.sequencer.currentStep = (state.sequencer.currentStep + 1) % state.sequencer.length;
+                     updateStepUI();
+                 };
+                 playStep();
+            }, state.sequencer.stepDuration);
+        }
+    };
+
+    lengthSelect.onchange = () => {
+        const newLength = parseInt(lengthSelect.value, 10);
+        state.sequencer.length = newLength;
+
+        // Stop recording if length changes
+        state.sequencer.isRecording = false;
+        state.sequencer.currentStep = -1;
+
+        // Stop playback if length changes
+        if (state.sequencer.isPlaying) {
+            playSequence(); // This will stop it
+        }
+
+        // Resize steps array if necessary
+        if (state.sequencer.steps.length > newLength) {
+            // Truncate
+            state.sequencer.steps = state.sequencer.steps.slice(0, newLength);
+        } else if (state.sequencer.steps.length < newLength) {
+            // Extend with nulls
+            while (state.sequencer.steps.length < newLength) {
+                state.sequencer.steps.push(null);
+            }
+        }
+
+        // Recreate UI elements if sequencer is active
+        if (state.sequencer.isActive) {
+            createSteps();
+        }
+    };
+
+
+    // --- Number Key Shape/Sound Selection + Sequencer Input ---
     document.addEventListener('keydown', e => {
       if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      const idx = e.key.charCodeAt(0) - 49;
+      const key = e.key;
+      const idx = key.charCodeAt(0) - 49; // '1' -> 0, '2' -> 1, etc.
+
       if(idx >= 0 && idx < SHAPES.length) {
+        // Handle sequencer recording
+        if (state.sequencer.isActive && state.sequencer.isRecording) {
+            recordStep(idx + 1); // Store 1-6
+            e.preventDefault();
+            return;
+        }
+
+        // Normal playback
         if(shapeSel.selectedIndex !== idx) {
             shapeSel.selectedIndex = idx;
             shapeSel.onchange();
-            }
-            e.preventDefault();
         }
+        // Trigger sound if audio is running
+        if (state.isPlaying && state.chains[SHAPES[idx]]) {
+            const chain = state.chains[SHAPES[idx]];
+            chain.osc1?.restart();
+            if(chain.osc2) chain.osc2?.restart();
+        }
+        e.preventDefault();
+      }
     });
 
     // --- Tone Loader ---
@@ -306,10 +584,15 @@
       loader.textContent = 'Loading Audio Engine...';
       import(url).then(mod=>{
         state.Tone = window.Tone ?? mod?.default ?? mod;
-        if(state.Tone){onReady();loader.textContent=`Tone.js v${state.Tone.version??"?"} loaded.`;}
+        if(state.Tone){
+            onReady();
+            loader.textContent=`Tone.js v${state.Tone.version??"?"} loaded. Click 'Start Audio + Draw' to begin.`;
+        }
         else throw 'Tone.js not found';
       }).catch(e=>{
-        loader.textContent='Failed to load Tone.js.';onFail?.();console.error(e);
+        loader.textContent='Failed to load Tone.js.';
+        onFail?.();
+        console.error(e);
       });
     }
 
@@ -320,15 +603,13 @@
     mode = "seed";
     startBtn.disabled = false; // user must click!
     muteBtn.disabled = true;
-
     visualAnimate();
 
     // Load Tone, but synth chains only after user starts
     loadToneJS({
       url:'https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.min.js',
       onReady:()=>{
-        loader.textContent=`Ready for Audio. Click to start! (Shape: ${shapeSel.value})`;
-        startBtn.disabled = false;
+        // loader message updated inside loadToneJS now
       },
       onFail:()=>{startBtn.disabled=true;muteBtn.disabled=true;}
     });

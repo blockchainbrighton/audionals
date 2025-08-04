@@ -1,0 +1,363 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Web3 Oscilloscope Music – Simple Sequencer + BPM</title>
+  <meta name="viewport" content="width=600,initial-scale=1">
+  <style>
+    html,body {margin:0;padding:0;height:100%;background:#000;color:#fff;font-family:sans-serif;}
+    body {display:grid;place-items:center;gap:1.3rem;padding:1rem;}
+    #scope {border-radius:8px;border:1px solid #444;background:#000;box-shadow:0 0 15px #66f3;}
+    #controls {display:flex;gap:0.8rem;align-items:center;flex-wrap:wrap;justify-content:center;}
+    #controls button,#controls select{padding:0.5rem 1rem;border-radius:5px;border:1px solid #666;background:#222;color:#eee;transition:background .2s,transform .1s;}
+    #controls button:hover{background:#333;transform:translateY(-1px);}
+    #controls button:active{transform:translateY(1px);}
+    #seqArea {display:flex;gap:8px;align-items:center;justify-content:center;margin-top:.5rem;}
+    .seq-step {width:36px;height:36px;border-radius:5px;border:2px solid #666;background:#191919;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:1.2rem;cursor:pointer;user-select:none;transition:.15s;}
+    .seq-step.selected{border-color:#49f;}
+    .seq-step.filled{background:#282845;border-color:#49f;color:#aef;}
+    .seq-step.playing{box-shadow:0 0 12px 2px #6cf;}
+    #seqActions{display:flex;gap:8px;align-items:center;margin-top:4px;}
+    #bpmCtrl {display:flex;align-items:center;gap:8px;margin-top:.3rem;justify-content:center;}
+    #bpmSlider {width:200px;}
+    #bpmValue {width:64px;padding:.35rem;font-size:1.05rem;border-radius:4px;border:1px solid #444;background:#161616;color:#f4f4f4;text-align:right;}
+    #loader{font-size:.98rem;color:#aaa;text-align:center;font-style:italic;}
+    @media (max-width:500px) { #scope{width:98vw;height:98vw;max-width:99vw;max-height:99vw;} }
+  </style>
+</head>
+<body>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Start Audio</button>
+    <button id="muteBtn">Mute</button>
+    <select id="shapeSelect"></select>
+    <button id="randomizeBtn">Randomize</button>
+    <button id="seqBtn">Create Sequence</button>
+  </section>
+  <div id="seqArea" style="display:none;"></div>
+  <div id="seqActions" style="display:none;">
+    <button id="seqPlayBtn">Play</button>
+    <button id="seqClearBtn" title="Clear sequence">Clear</button>
+  </div>
+  <div id="bpmCtrl" style="display:none;">
+    <label for="bpmSlider" style="font-size:1.02rem;color:#9ad;">BPM</label>
+    <input type="range" id="bpmSlider" min="1" max="240" step="0.01" value="120.00">
+    <input type="number" id="bpmValue" min="1" max="240" step="0.01" value="120.00">
+  </div>
+  <div id="loader">Initializing…</div>
+  <script type="module">
+    const $ = id => document.getElementById(id);
+
+    function mulberry32(seed) {
+      let a = 0x6d2b79f5 ^ seed.length;
+      for (let i = 0; i < seed.length; ++i) a = Math.imul(a ^ seed.charCodeAt(i), 2654435761);
+      return () => ((a = Math.imul(a ^ a >>> 15, 1 | a)), (a >>> 16) / 0x10000);
+    }
+
+    const baseShapes = {
+      1: { name: "Circle"   },
+      2: { name: "Square"   },
+      3: { name: "Butterfly"},
+      4: { name: "Lissajous"},
+      5: { name: "Spiral"   },
+      6: { name: "Rose"     }
+    };
+
+    const shapeSel = $("shapeSelect");
+    Object.entries(baseShapes).forEach(([k, {name}]) => {
+      const o = document.createElement("option");
+      o.value = k; o.textContent = `${k}: ${name}`; shapeSel.appendChild(o);
+    });
+
+    const state = {
+      current: 1,
+      isPlaying: false,
+      isAudioStarted: false,
+      Tone: null,
+      nodes: {},
+      params: {},
+      dummyData: null,
+      seqActive: false,
+      seq: Array(8).fill(null),
+      seqPos: 0,
+      seqPlaying: false,
+      seqRecording: false,
+      seqRecordPos: 0,
+      seqAnimId: null,
+      bpm: 120.00,
+      transportStepEvent: null
+    };
+
+    // VISUALS
+    const canvas = $("scope"), ctx = canvas.getContext("2d");
+    function drawVisual(mode, t, data, playingStepIdx=null) {
+      ctx.clearRect(0,0,600,600);
+      ctx.save();
+      ctx.lineJoin = ctx.lineCap = 'round';
+      ctx.shadowBlur = 12; ctx.shadowColor = "#49f";
+      ctx.strokeStyle = `hsl(${mode*60 + t*10}, 80%, 60%)`;
+      ctx.lineWidth = 2 + Math.sin(t*.5+mode)*1.2;
+      switch(+mode) {
+        case 1:
+          ctx.beginPath();
+          for(let i=0;i<1024;i++){
+            const a = i/1024*2*Math.PI, r = 200+80*Math.sin(i/40+t);
+            const x = 300+Math.cos(a)*r, y=300+Math.sin(a)*r;
+            i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+          }
+          ctx.closePath();ctx.stroke(); break;
+        case 2:
+          ctx.beginPath();
+          for(let i=0;i<4;i++){
+            const x = 150+300*(i%2), y = 150+300*(i>1?1:0);
+            i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+          }
+          ctx.closePath();ctx.stroke(); break;
+        case 3:
+          ctx.beginPath();
+          for(let i=0;i<1024;i++){
+            const th = i/1024*Math.PI*16, r = 140+120*Math.sin(th*2+t);
+            const x = 300+Math.cos(th)*r, y=300+Math.sin(th)*r;
+            i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+          }
+          ctx.closePath();ctx.stroke(); break;
+        case 4:
+          ctx.beginPath();
+          for(let i=0;i<1024;i++){
+            const a = i/1024*2*Math.PI, r = 210;
+            const x = 300+Math.sin(3*a+t)*r, y=300+Math.sin(4*a)*r;
+            i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+          }
+          ctx.stroke(); break;
+        case 5:
+          ctx.beginPath();
+          for(let i=0;i<1024;i++){
+            const a = i/1024*8*Math.PI+t, r = 40+i/1024*240;
+            const x = 300+Math.cos(a)*r, y=300+Math.sin(a)*r;
+            i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+          }
+          ctx.stroke(); break;
+        case 6:
+          ctx.beginPath();
+          for(let i=0;i<1024;i++){
+            const a = i/1024*2*Math.PI, r = 200*Math.cos(4*a+t);
+            const x = 300+Math.cos(a)*r, y=300+Math.sin(a)*r;
+            i ? ctx.lineTo(x,y) : ctx.moveTo(x,y);
+          }
+          ctx.closePath();ctx.stroke(); break;
+      }
+      ctx.restore();
+      if (typeof playingStepIdx === 'number') {
+        ctx.save();
+        ctx.globalAlpha = .18;
+        ctx.beginPath();
+        ctx.arc(300,300,260,0,2*Math.PI);
+        ctx.fillStyle = "#6cf"; ctx.fill();
+        ctx.restore();
+      }
+    }
+
+    // SOUND
+    function noteToFrequency(mode) {
+      return 200 + 60*mode + 80*Math.sin(performance.now()/1100+mode);
+    }
+    function randomWave(mode) {
+      return ["sine","triangle","square","sawtooth","triangle","sine"][mode-1];
+    }
+    async function setupAudio(mode) {
+      if (!state.isAudioStarted) return false;
+      if (!state.Tone) return false;
+      Object.values(state.nodes).forEach(x=>{try{x.stop();}catch{} try{x.dispose();}catch{}});
+      state.nodes = {};
+      const freq = noteToFrequency(mode), typ = randomWave(mode);
+      const osc = state.nodes.osc = new state.Tone.Oscillator(freq, typ).start();
+      const filter = state.nodes.filter = new state.Tone.Filter(400 + 100*mode, "lowpass").toDestination();
+      osc.connect(filter);
+      const lfo = state.nodes.lfo = new state.Tone.LFO(.15+.12*mode, freq-40, freq+60).start();
+      lfo.connect(osc.frequency);
+      return true;
+    }
+    function playSound(mode) {
+      if (!state.isAudioStarted) return;
+      setupAudio(mode);
+    }
+
+    // UI EVENTS
+    $("startBtn").onclick = $("scope").onclick = async () => {
+      if (!state.Tone) return;
+      if (!state.isAudioStarted) {
+        await state.Tone.start(); state.isAudioStarted = true;
+        $("startBtn").textContent = "Stop Audio";
+        playSound(state.current);
+        state.isPlaying = true;
+        $("muteBtn").disabled = false;
+      } else if (state.isPlaying) {
+        state.Tone.Destination.mute = true;
+        state.isPlaying = false;
+        $("startBtn").textContent = "Start Audio";
+      } else {
+        state.Tone.Destination.mute = false;
+        state.isPlaying = true;
+        $("startBtn").textContent = "Stop Audio";
+        playSound(state.current);
+      }
+    };
+    $("muteBtn").onclick = ()=>{
+      if (!state.Tone || !state.isAudioStarted) return;
+      const m = state.Tone.Destination.mute = !state.Tone.Destination.mute;
+      $("muteBtn").textContent = m ? "Unmute" : "Mute";
+    };
+    $("shapeSelect").onchange = ()=>{
+      state.current = +$("shapeSelect").value;
+      playSound(state.current);
+    };
+    $("randomizeBtn").onclick = ()=>{
+      state.current = 1 + Math.floor(Math.random()*6);
+      $("shapeSelect").value = state.current;
+      playSound(state.current);
+    };
+
+    // KEYBOARD 1-6
+    window.addEventListener('keydown', e => {
+      if (!state.isAudioStarted || e.repeat) return;
+      if (state.seqActive && state.seqRecording && /^[1-6]$/.test(e.key)) {
+        state.seq[state.seqRecordPos] = +e.key;
+        updateSeqUI();
+        playSound(+e.key);
+        state.current = +e.key; $("shapeSelect").value = state.current;
+        state.seqRecordPos++;
+        if (state.seqRecordPos >= 8) {
+          state.seqRecording = false;
+          $("seqPlayBtn").disabled = false;
+        }
+      } else if (!state.seqActive && /^[1-6]$/.test(e.key)) {
+        state.current = +e.key;
+        $("shapeSelect").value = state.current;
+        playSound(state.current);
+      }
+    });
+
+    // SEQUENCER UI
+    const seqArea = $("seqArea"), seqActions = $("seqActions"), bpmCtrl = $("bpmCtrl"), bpmSlider = $("bpmSlider"), bpmValue = $("bpmValue");
+    function updateSeqUI(playingIdx=null) {
+      seqArea.innerHTML = "";
+      state.seq.forEach((v,i)=>{
+        const step = document.createElement("div");
+        step.className = "seq-step" + (v?" filled":"") + (i===state.seqRecordPos && state.seqRecording?" selected":"") + (i===playingIdx?" playing":"");
+        step.textContent = v ? v : "";
+        step.title = state.seqRecording ? (i===state.seqRecordPos?"(Next)":(v?"":"Empty")) : (v?"Click/Right-click to clear":"Click to record");
+        step.onclick = ()=>{
+          if (state.seqRecording) return;
+          if (state.seq[i]) { state.seq[i]=null; updateSeqUI(); $("seqPlayBtn").disabled=true; }
+          else { state.seqRecording=true; state.seqRecordPos=i; updateSeqUI(); }
+        };
+        step.oncontextmenu = e => { e.preventDefault(); state.seq[i]=null; updateSeqUI(); $("seqPlayBtn").disabled=true; };
+        seqArea.appendChild(step);
+      });
+    }
+    $("seqBtn").onclick = ()=>{
+      state.seqActive = true;
+      seqArea.style.display = "";
+      seqActions.style.display = "";
+      bpmCtrl.style.display = "";
+      if (state.seq.every(x=>!x)) {
+        state.seqRecording = true; state.seqRecordPos = 0;
+        $("seqPlayBtn").disabled = true;
+      } else {
+        state.seqRecording = false;
+        $("seqPlayBtn").disabled = state.seq.some(x=>!x);
+      }
+      bpmSlider.value = state.bpm;
+      bpmValue.value = state.bpm.toFixed(2);
+      updateSeqUI();
+    };
+    $("seqClearBtn").onclick = ()=>{
+      state.seq.fill(null); state.seqRecording=true; state.seqRecordPos=0;
+      updateSeqUI(); $("seqPlayBtn").disabled=true;
+    };
+    $("seqPlayBtn").onclick = ()=>{
+      if (state.seq.some(x=>!x)) return;
+      state.seqPlaying = !state.seqPlaying;
+      $("seqPlayBtn").textContent = state.seqPlaying ? "Stop" : "Play";
+      if (state.seqPlaying) runSequencer();
+      else stopSequencer();
+    };
+
+    // BPM CONTROLS (sync slider/input and transport)
+    function updateBpm(val) {
+      val = Math.max(1, Math.min(240, +val));
+      state.bpm = +val;
+      bpmSlider.value = val;
+      bpmValue.value = (+val).toFixed(2);
+      if (state.Tone && state.Tone.Transport) state.Tone.Transport.bpm.value = +val;
+    }
+    bpmSlider.oninput = e => updateBpm(e.target.value);
+    bpmValue.onchange = e => updateBpm(e.target.value);
+
+    // --- Sequencer (now with Tone.Transport for rock-solid timing) ---
+    function runSequencer() {
+      if (!state.Tone || state.seq.some(x=>!x)) return;
+      if (state.transportStepEvent) state.Tone.Transport.clear(state.transportStepEvent);
+      state.seqPos = 0;
+      state.Tone.Transport.stop();
+      state.Tone.Transport.position = 0;
+      state.Tone.Transport.bpm.value = state.bpm;
+      state.transportStepEvent = state.Tone.Transport.scheduleRepeat((time)=>{
+        if (!state.seqPlaying) return;
+        const idx = state.seqPos%8, mode = state.seq[idx];
+        state.current = mode;
+        $("shapeSelect").value = mode;
+        playSound(mode);
+        updateSeqUI(idx);
+        state.seqPos = (state.seqPos+1)%8;
+      }, "4n");
+      state.seqPlaying = true;
+      $("seqPlayBtn").textContent = "Stop";
+      state.Tone.Transport.start("+0.01");
+    }
+    function stopSequencer() {
+      state.seqPlaying = false;
+      $("seqPlayBtn").textContent = "Play";
+      if (state.Tone && state.Tone.Transport) state.Tone.Transport.stop();
+      if (state.transportStepEvent) state.Tone.Transport.clear(state.transportStepEvent);
+      updateSeqUI();
+    }
+
+    // --- ANIMATION LOOP ---
+    function animate() {
+      const t = performance.now()/950;
+      drawVisual(state.current, t, state.dummyData, state.seqPlaying ? state.seqPos-1 : null);
+      requestAnimationFrame(animate);
+    }
+    animate();
+
+    // --- TONE.JS LOADER ---
+    function loadToneJSAndBoot({toneUrl, setLoaderStatus, state, boot}) {
+      setLoaderStatus('Loading Audio Engine…');
+      import(toneUrl).then(mod=>{
+        state.Tone = window.Tone ?? mod?.default ?? mod;
+        if (state.Tone) { setLoaderStatus(`Tone.js ready.`); boot(); }
+        else throw new Error('Tone.js not found.');
+      }).catch(e=>{
+        setLoaderStatus('Failed to load Tone.js.',1); console.error(e);
+      });
+    }
+    loadToneJSAndBoot({
+      toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+      setLoaderStatus: (msg,err)=>{
+        $("loader").textContent=msg;
+        $("loader").style.color=err?"red":"#aaa";
+        $("startBtn").disabled=!!err; $("muteBtn").disabled=true;
+        $("randomizeBtn").disabled=!!err; $("seqBtn").disabled=!!err;
+      },
+      state,
+      boot: ()=>{
+        $("loader").textContent="Ready! Pick a mode, randomise, or build a sequence.";
+        $("startBtn").disabled=false; $("muteBtn").disabled=true;
+        $("randomizeBtn").disabled=false; $("seqBtn").disabled=false;
+      }
+    });
+    $("startBtn").disabled=true; $("muteBtn").disabled=true; $("randomizeBtn").disabled=true; $("seqBtn").disabled=true;
+  </script>
+</body>
+</html>

@@ -1,6 +1,3 @@
-<!-- This is great - loading of the initial sound and vision setill seems a bit glitchy, 
-    can we improve the UX so the sound and vision start smoothly every time?  -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -11,10 +8,23 @@
     html,body {margin:0;padding:0;height:100%;background:#000;color:#fff;font-family:'Courier New',monospace;overflow:hidden;}
     body {display:grid;place-items:center;gap:1rem;}
     #scope {border-radius:12px;border:1px solid #333;background:#000;box-shadow:0 0 30px #0008;}
-    #controls{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;padding:.5rem;background:#fff1;border-radius:8px;}
+    #controls{display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;padding:.5rem;background:#fff1;border-radius:8px;flex-wrap:wrap;}
     #controls button,#controls select{padding:.5rem 1rem;border-radius:6px;border:1px solid #555;background:#222;color:#fff;font-size:.9rem;cursor:pointer;}
     #controls button:hover{background:#444;}
     #loader{font-size:.9rem;color:#aaa;min-height:1.4rem;text-align:center;font-style:italic;}
+    #sequencer {width:100%;max-width:600px;padding:1rem;box-sizing:border-box;}
+    .step-container {display:flex;gap:.5rem;margin:.5rem 0;justify-content:center;flex-wrap:wrap;}
+    .step-slot {width:60px;height:60px;border-radius:8px;background:#111;border:2px solid #333;display:flex;align-items:center;justify-content:center;cursor:pointer;font-weight:bold;font-size:1.2rem;color:#666;transition:all .2s;}
+    .step-slot.active {background:#0f0;border-color:#0f0;color:#000;}
+    .step-slot.playing {background:#f0f;border-color:#f0f;color:#000;}
+    .step-controls {display:flex;gap:1rem;justify-content:center;margin-top:1rem;flex-wrap:wrap;}
+    .step-controls button {padding:0.5rem 1.5rem;font-size:1rem;}
+    .step-settings {display:flex;gap:1rem;justify-content:center;margin:.5rem 0;align-items:center;flex-wrap:wrap;}
+    .tempo-control {display:flex;align-items:center;gap:.5rem;}
+    .tempo-control label {min-width:60px;}
+    input[type="range"] {width:120px;height:8px;background:#333;border-radius:4px;outline:none;cursor:pointer;}
+    input[type="range"]::-webkit-slider-thumb {width:16px;height:16px;border-radius:50%;background:#0f0;border:2px solid #000;cursor:pointer;}
+    input[type="range"]::-moz-range-thumb {width:16px;height:16px;border-radius:50%;background:#0f0;border:2px solid #000;cursor:pointer;}
   </style>
 </head>
 <body>
@@ -30,8 +40,34 @@
       <option value="spiro">Spirograph</option>
       <option value="harmonograph">Harmonograph</option>
     </select>
+    <button id="seqBtn">Create Sequence</button>
   </section>
   <div id="loader">Initializing...</div>
+  
+  <div id="sequencer" style="display:none">
+    <div class="step-settings">
+      <div class="tempo-control">
+        <label for="tempoSlider">Tempo:</label>
+        <input type="range" id="tempoSlider" min="50" max="240" value="150" step="5">
+        <span id="tempoValue">150 BPM</span>
+      </div>
+      <div class="step-count-control">
+        <label for="stepCount">Steps:</label>
+        <select id="stepCount">
+          <option value="4">4</option>
+          <option value="8" selected>8</option>
+          <option value="16">16</option>
+          <option value="32">32</option>
+        </select>
+      </div>
+    </div>
+    <div class="step-container" id="stepSlots"></div>
+    <div class="step-controls">
+      <button id="playSeqBtn" style="display:none">Play Sequence</button>
+      <button id="stopSeqBtn" style="display:none">Stop</button>
+    </div>
+  </div>
+  
   <script type="module">
     // --- State ---
     const state = {
@@ -41,18 +77,36 @@
       current: null, // Currently connected shape
       seed: '567',
       ready: false,
-      contextUnlocked: false
+      contextUnlocked: false,
+      sequencer: {
+        active: false,
+        recording: false,
+        slots: Array(8).fill(null),
+        currentStep: 0,
+        interval: null,
+        baseStepTime: 400, // ms per step at 150 BPM
+        currentBPM: 150
+      }
     };
+    
     const canvas = scope, ctx = canvas.getContext('2d');
-    const [startBtn, muteBtn, shapeSel, loader] = ['startBtn','muteBtn','shapeSelect','loader'].map(id=>document.getElementById(id));
-
+    const [startBtn, muteBtn, shapeSel, loader, seqBtn] = 
+      ['startBtn','muteBtn','shapeSelect','loader','seqBtn'].map(id=>document.getElementById(id));
+    const stepSlots = document.getElementById('stepSlots');
+    const playSeqBtn = document.getElementById('playSeqBtn');
+    const stopSeqBtn = document.getElementById('stopSeqBtn');
+    const sequencerEl = document.getElementById('sequencer');
+    const tempoSlider = document.getElementById('tempoSlider');
+    const tempoValue = document.getElementById('tempoValue');
+    const stepCountSelect = document.getElementById('stepCount');
+    
     // --- Deterministic PRNG ---
     function mulberry32(seed) {
       let a = 0x6d2b79f5 ^ seed.length;
       for (let i = 0; i < seed.length; ++i) a = Math.imul(a ^ seed.charCodeAt(i), 2654435761);
       return () => ((a = Math.imul(a ^ a >>> 15, 1 | a)), (a >>> 16) / 0x10000);
     }
-
+    
     // --- Deterministic preset generator ---
     function deterministicPreset(seed, shape) {
       const rng = mulberry32(seed + "_" + shape);
@@ -99,7 +153,6 @@
       const reverbRoom = (mode === 3 ? 0.85 + rng()*0.12 : 0.6 + rng()*0.38);
       const colorSpeed = 0.06 + rng()*0.22;
       const shapeDrift = 0.0006 + rng()*0.0032;
-
       return {
           osc1: oscs[0],
           osc2: oscs[1] || null,
@@ -112,14 +165,14 @@
           shapeDrift
       };
     }
-
+    
     // Generate deterministic presets for all shapes at load time
     const SHAPES = ['circle','square','butterfly','lissajous','spiro','harmonograph'];
     let presets = {};
     for(const k of SHAPES) presets[k] = deterministicPreset(state.seed, k);
-
-    // --- Drawing Functions (unchanged for brevity) ---
-    const drawFuncs = { // ... (same as before, unchanged) ...
+    
+    // --- Drawing Functions ---
+    const drawFuncs = {
       circle(data,t,pr){const S=.8*canvas.width/2,c=300;ctx.beginPath();
         for(let i=0;i<data.length;++i){let a=i/data.length*2*Math.PI+t*.001,amp=(data[i]+1)/2,
         r=S*amp,x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
@@ -164,7 +217,7 @@
         ctx.stroke();
       }
     };
-
+    
     // --- Dummy deterministic buffer for silent visual seed mode ---
     function makeSeedBuffer(shape, seed, len=2048) {
       const rng = mulberry32(seed+"_"+shape), arr = new Float32Array(len);
@@ -176,7 +229,7 @@
       }
       return arr;
     }
-
+    
     // --- Visual Animation ---
     let animId = null, mode = "seed";
     function visualAnimate() {
@@ -197,7 +250,7 @@
       (drawFuncs[shapeSel.value]||drawFuncs.circle)(buf, t, pr);
       animId = requestAnimationFrame(visualAnimate);
     }
-
+    
     // --- Audio Chain Buffering ---
     function disposeAllChains() {
       Object.values(state.chains).forEach(chain=>{
@@ -206,6 +259,7 @@
       state.chains = {};
       state.current = null;
     }
+    
     function setActiveChain(shape) {
       // Disconnect all chains from destination
       for(const s in state.chains) {
@@ -216,7 +270,7 @@
       chain?.reverb?.toDestination();
       state.current = shape;
     }
-
+    
     // --- Immediate First Shape Buffering, Other Chains Lazy ---
     async function bufferShapeChain(shape) {
       if (!state.contextUnlocked) return; // Robust: only run if context is running
@@ -237,7 +291,7 @@
       analyser.fftSize=2048; filter.connect(analyser);
       state.chains[shape] = {osc1, osc2, volume, filter, lfo, reverb, analyser};
     }
-
+    
     async function unlockAudioAndBufferInitial() {
       if (state.contextUnlocked) return;
       loader.textContent = "Unlocking AudioContext...";
@@ -251,7 +305,6 @@
       muteBtn.disabled = false;
       mode = "live";
       state.isPlaying = true;
-
       // Now background buffer others:
       setTimeout(async ()=>{
         for(const shape of SHAPES) {
@@ -259,7 +312,7 @@
         }
       },30);
     }
-
+    
     function stopAudioAndDraw() {
       if(!state.isPlaying)return;
       disposeAllChains();
@@ -269,7 +322,173 @@
       if(state.Tone) state.Tone.Destination.mute=false;
       mode = "seed";
     }
-
+    
+    // --- Sequencer Functions ---
+    function initSequencer() {
+      // Set initial step count
+      updateStepCount(parseInt(stepCountSelect.value));
+      
+      // Show the sequencer
+      sequencerEl.style.display = 'block';
+      loader.textContent = 'Sequencer ready. Click a slot to start recording.';
+    }
+    
+    function updateStepCount(count) {
+      // Update state
+      state.sequencer.slots = Array(count).fill(null);
+      
+      // Create new slots
+      stepSlots.innerHTML = '';
+      for (let i = 0; i < count; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'step-slot';
+        slot.dataset.index = i;
+        slot.textContent = state.sequencer.slots[i] ? state.sequencer.slots[i] : '';
+        
+        // Click to enter record mode
+        slot.addEventListener('click', (e) => {
+          if (!state.sequencer.recording) {
+            // Start recording at this slot
+            state.sequencer.recording = true;
+            state.sequencer.currentStep = parseInt(e.target.dataset.index);
+            highlightActiveSlot();
+            loader.textContent = `Recording at step ${state.sequencer.currentStep + 1}. Press 1-6 to assign.`;
+          }
+        });
+        
+        // Right-click to clear
+        slot.addEventListener('contextmenu', (e) => {
+          e.preventDefault();
+          const index = parseInt(e.target.dataset.index);
+          state.sequencer.slots[index] = null;
+          e.target.textContent = '';
+          e.target.classList.remove('active');
+          
+          // Check if any slots are filled
+          const hasFilledSlots = state.sequencer.slots.some(slot => slot !== null);
+          playSeqBtn.style.display = hasFilledSlots ? 'inline-block' : 'none';
+        });
+        
+        // Long press to clear (alternative to right-click)
+        let pressTimer;
+        slot.addEventListener('mousedown', () => {
+          pressTimer = setTimeout(() => {
+            const index = parseInt(slot.dataset.index);
+            state.sequencer.slots[index] = null;
+            slot.textContent = '';
+            slot.classList.remove('active');
+            
+            const hasFilledSlots = state.sequencer.slots.some(slot => slot !== null);
+            playSeqBtn.style.display = hasFilledSlots ? 'inline-block' : 'none';
+          }, 500);
+        });
+        
+        slot.addEventListener('mouseup', () => clearTimeout(pressTimer));
+        slot.addEventListener('mouseleave', () => clearTimeout(pressTimer));
+        
+        stepSlots.appendChild(slot);
+      }
+      
+      // Reset recording if current step is beyond new count
+      if (state.sequencer.recording && state.sequencer.currentStep >= count) {
+        state.sequencer.currentStep = 0;
+        highlightActiveSlot();
+      }
+      
+      // Update play button visibility
+      const hasFilledSlots = state.sequencer.slots.some(slot => slot !== null);
+      playSeqBtn.style.display = hasFilledSlots ? 'inline-block' : 'none';
+    }
+    
+    function highlightActiveSlot() {
+      document.querySelectorAll('.step-slot').forEach((slot, i) => {
+        if (i === state.sequencer.currentStep) {
+          slot.classList.add('active');
+        } else {
+          slot.classList.remove('active');
+        }
+      });
+    }
+    
+    function highlightPlayingSlot(step) {
+      document.querySelectorAll('.step-slot').forEach((slot, i) => {
+        if (i === step) {
+          slot.classList.add('playing');
+        } else {
+          slot.classList.remove('playing');
+        }
+      });
+    }
+    
+    function updateSlotDisplay() {
+      document.querySelectorAll('.step-slot').forEach((slot, i) => {
+        slot.textContent = state.sequencer.slots[i] ? state.sequencer.slots[i] : '';
+        if (state.sequencer.slots[i]) {
+          slot.classList.add('active');
+        } else {
+          slot.classList.remove('active');
+        }
+      });
+      
+      // Show/hide play button based on whether we have any filled slots
+      const hasFilledSlots = state.sequencer.slots.some(slot => slot !== null);
+      playSeqBtn.style.display = hasFilledSlots ? 'inline-block' : 'none';
+    }
+    
+    function calculateStepTime() {
+      // Base step time is 400ms at 150 BPM (quarter note)
+      // Formula: (60000ms/min) / (BPM) / (4) * (150/150) = 150/BPM * 400
+      return (150 / state.sequencer.currentBPM) * 400;
+    }
+    
+    function startSequencer() {
+      if (state.sequencer.interval) return;
+      
+      let currentStep = 0;
+      const stepTime = calculateStepTime();
+      
+      state.sequencer.interval = setInterval(() => {
+        // Clear previous playing highlight
+        document.querySelectorAll('.step-slot').forEach(slot => {
+          slot.classList.remove('playing');
+        });
+        
+        // Trigger the sound for current step
+        const stepValue = state.sequencer.slots[currentStep];
+        if (stepValue !== null) {
+          const shapeIndex = parseInt(stepValue) - 1;
+          if (shapeIndex >= 0 && shapeIndex < SHAPES.length) {
+            const shape = SHAPES[shapeIndex];
+            shapeSel.value = shape;
+            shapeSel.onchange();
+            highlightPlayingSlot(currentStep);
+          }
+        }
+        
+        currentStep = (currentStep + 1) % state.sequencer.slots.length;
+      }, stepTime);
+      
+      playSeqBtn.style.display = 'none';
+      stopSeqBtn.style.display = 'inline-block';
+      loader.textContent = `Sequence playing at ${state.sequencer.currentBPM} BPM...`;
+    }
+    
+    function stopSequencer() {
+      if (state.sequencer.interval) {
+        clearInterval(state.sequencer.interval);
+        state.sequencer.interval = null;
+      }
+      
+      // Clear playing highlights
+      document.querySelectorAll('.step-slot').forEach(slot => {
+        slot.classList.remove('playing');
+      });
+      
+      stopSeqBtn.style.display = 'none';
+      playSeqBtn.style.display = 'inline-block';
+      loader.textContent = 'Sequence stopped.';
+    }
+    
     // --- UI Events ---
     startBtn.onclick = async ()=>{
       if (!state.contextUnlocked) await unlockAudioAndBufferInitial();
@@ -278,29 +497,96 @@
         await unlockAudioAndBufferInitial();
       }
     };
+    
     muteBtn.onclick = ()=>{
       if(!state.Tone)return;
-      const m=state.Tone.Destination.mute=!state.Tone.Destination.mute;
-      muteBtn.textContent=m?"Unmute":"Mute";
+      const m = state.Tone.Destination.mute = !state.Tone.Destination.mute;
+      muteBtn.textContent = m ? "Unmute" : "Mute";
     };
-    shapeSel.onchange=()=>{
+    
+    shapeSel.onchange = ()=>{
       if(state.isPlaying) setActiveChain(shapeSel.value), mode="live";
       else mode="seed";
     };
-
+    
+    seqBtn.onclick = () => {
+      if (sequencerEl.style.display === 'none') {
+        initSequencer();
+        seqBtn.textContent = 'Hide Sequencer';
+      } else {
+        sequencerEl.style.display = 'none';
+        seqBtn.textContent = 'Create Sequence';
+        // Exit any recording mode
+        state.sequencer.recording = false;
+        document.querySelectorAll('.step-slot').forEach(slot => {
+          slot.classList.remove('active');
+        });
+        loader.textContent = 'Sequencer hidden.';
+      }
+    };
+    
+    playSeqBtn.onclick = () => {
+      startSequencer();
+    };
+    
+    stopSeqBtn.onclick = () => {
+      stopSequencer();
+    };
+    
+    // Tempo slider events
+    tempoSlider.addEventListener('input', () => {
+      state.sequencer.currentBPM = parseInt(tempoSlider.value);
+      tempoValue.textContent = `${state.sequencer.currentBPM} BPM`;
+      
+      // Update display if playing
+      if (state.sequencer.interval) {
+        loader.textContent = `Sequence playing at ${state.sequencer.currentBPM} BPM...`;
+      }
+    });
+    
+    // Step count change
+    stepCountSelect.addEventListener('change', () => {
+      const newCount = parseInt(stepCountSelect.value);
+      updateStepCount(newCount);
+      loader.textContent = `Step count changed to ${newCount}. Click a slot to start recording.`;
+    });
+    
     // --- Number Key Shape/Sound Selection ---
     document.addEventListener('keydown', e => {
       if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      const idx = e.key.charCodeAt(0) - 49;
-      if(idx >= 0 && idx < SHAPES.length) {
-        if(shapeSel.selectedIndex !== idx) {
-            shapeSel.selectedIndex = idx;
-            shapeSel.onchange();
-            }
-            e.preventDefault();
+      
+      // Handle 1-6 keys for shape selection
+      const keyNum = parseInt(e.key);
+      if(keyNum >= 1 && keyNum <= 6) {
+        const shapeIndex = keyNum - 1;
+        if(shapeSel.selectedIndex !== shapeIndex) {
+          shapeSel.selectedIndex = shapeIndex;
+          shapeSel.onchange();
         }
+        
+        // If in sequencer record mode, fill the current slot
+        if (state.sequencer.recording) {
+          state.sequencer.slots[state.sequencer.currentStep] = keyNum;
+          updateSlotDisplay();
+          
+          // Auto-advance to next slot
+          state.sequencer.currentStep = (state.sequencer.currentStep + 1) % state.sequencer.slots.length;
+          highlightActiveSlot();
+          
+          // Check if all slots are filled
+          const allFilled = state.sequencer.slots.every(slot => slot !== null);
+          if (allFilled) {
+            state.sequencer.recording = false;
+            loader.textContent = `All ${state.sequencer.slots.length} slots filled! Press Play to start sequence.`;
+          } else {
+            loader.textContent = `Slot ${state.sequencer.currentStep + 1} ready. Press 1-6 to assign.`;
+          }
+        }
+        
+        e.preventDefault();
+      }
     });
-
+    
     // --- Tone Loader ---
     function loadToneJS({url,onReady,onFail}) {
       loader.textContent = 'Loading Audio Engine...';
@@ -312,7 +598,7 @@
         loader.textContent='Failed to load Tone.js.';onFail?.();console.error(e);
       });
     }
-
+    
     // --- Init: show seed-visual by default, UI disables, wait for interaction to unlock audio ---
     let rand = mulberry32(state.seed);
     let firstShape = SHAPES[(rand()*SHAPES.length)|0];
@@ -320,9 +606,8 @@
     mode = "seed";
     startBtn.disabled = false; // user must click!
     muteBtn.disabled = true;
-
     visualAnimate();
-
+    
     // Load Tone, but synth chains only after user starts
     loadToneJS({
       url:'https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.min.js',

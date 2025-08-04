@@ -1,6 +1,3 @@
-<!-- This is great - loading of the initial sound and vision setill seems a bit glitchy, 
-    can we improve the UX so the sound and vision start smoothly every time?  -->
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -15,6 +12,13 @@
     #controls button,#controls select{padding:.5rem 1rem;border-radius:6px;border:1px solid #555;background:#222;color:#fff;font-size:.9rem;cursor:pointer;}
     #controls button:hover{background:#444;}
     #loader{font-size:.9rem;color:#aaa;min-height:1.4rem;text-align:center;font-style:italic;}
+    #sequencer { display: none; text-align: center; width: 100%; }
+    #stepSlots { display: flex; justify-content: center; gap: 0.5rem; margin-top: 0.5rem; margin-bottom: 0.5rem; }
+    .step-slot { width: 40px; height: 40px; border: 1px solid #555; border-radius: 6px; background: #222; display: grid; place-items: center; cursor: pointer; font-weight: bold; user-select: none; }
+    .step-slot.record-mode { background: #444; box-shadow: 0 0 8px #fff8; }
+    .step-slot.record-mode.active { background: #666; }
+    #sequenceControls { margin-top: 0.5rem; }
+    #playBtn { display: none; }
   </style>
 </head>
 <body>
@@ -30,21 +34,39 @@
       <option value="spiro">Spirograph</option>
       <option value="harmonograph">Harmonograph</option>
     </select>
+    <button id="seqBtn">Create Sequence</button>
   </section>
+  <div id="sequencer">
+    <div id="stepSlots"></div>
+    <div id="sequenceControls">
+      <button id="playBtn">Play Sequence</button>
+      <label for="stepTimeInput">Step Time (ms):</label>
+      <input type="number" id="stepTimeInput" min="50" max="2000" value="400" style="width: 60px;">
+    </div>
+  </div>
   <div id="loader">Initializing...</div>
   <script type="module">
     // --- State ---
     const state = {
       isPlaying: false,
+      isSequencerMode: false,
+      isRecording: false,
+      currentRecordSlot: -1,
+      sequence: Array(8).fill(null),
+      sequencePlaying: false,
+      sequenceIntervalId: null,
+      sequenceStepIndex: 0,
+      stepTime: 400, // ms
       Tone: null,
       chains: {}, // All audio chains, shape => { ...nodes }
       current: null, // Currently connected shape
-      seed: '567',
+      seed: '5s567g67',
       ready: false,
       contextUnlocked: false
     };
     const canvas = scope, ctx = canvas.getContext('2d');
-    const [startBtn, muteBtn, shapeSel, loader] = ['startBtn','muteBtn','shapeSelect','loader'].map(id=>document.getElementById(id));
+    const [startBtn, muteBtn, shapeSel, loader, seqBtn, sequencerDiv, stepSlotsDiv, playBtn, stepTimeInput] =
+      ['startBtn','muteBtn','shapeSelect','loader','seqBtn','sequencer','stepSlots','playBtn', 'stepTimeInput'].map(id=>document.getElementById(id));
 
     // --- Deterministic PRNG ---
     function mulberry32(seed) {
@@ -52,7 +74,6 @@
       for (let i = 0; i < seed.length; ++i) a = Math.imul(a ^ seed.charCodeAt(i), 2654435761);
       return () => ((a = Math.imul(a ^ a >>> 15, 1 | a)), (a >>> 16) / 0x10000);
     }
-
     // --- Deterministic preset generator ---
     function deterministicPreset(seed, shape) {
       const rng = mulberry32(seed + "_" + shape);
@@ -99,7 +120,6 @@
       const reverbRoom = (mode === 3 ? 0.85 + rng()*0.12 : 0.6 + rng()*0.38);
       const colorSpeed = 0.06 + rng()*0.22;
       const shapeDrift = 0.0006 + rng()*0.0032;
-
       return {
           osc1: oscs[0],
           osc2: oscs[1] || null,
@@ -112,14 +132,13 @@
           shapeDrift
       };
     }
-
     // Generate deterministic presets for all shapes at load time
     const SHAPES = ['circle','square','butterfly','lissajous','spiro','harmonograph'];
     let presets = {};
     for(const k of SHAPES) presets[k] = deterministicPreset(state.seed, k);
 
-    // --- Drawing Functions (unchanged for brevity) ---
-    const drawFuncs = { // ... (same as before, unchanged) ...
+    // --- Drawing Functions ---
+    const drawFuncs = {
       circle(data,t,pr){const S=.8*canvas.width/2,c=300;ctx.beginPath();
         for(let i=0;i<data.length;++i){let a=i/data.length*2*Math.PI+t*.001,amp=(data[i]+1)/2,
         r=S*amp,x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}
@@ -238,26 +257,40 @@
       state.chains[shape] = {osc1, osc2, volume, filter, lfo, reverb, analyser};
     }
 
+    // --- Improved Unlock & Start ---
     async function unlockAudioAndBufferInitial() {
-      if (state.contextUnlocked) return;
-      loader.textContent = "Unlocking AudioContext...";
-      await state.Tone.start();
-      state.contextUnlocked = true;
-      loader.textContent = "Buffering first synth chain...";
-      await bufferShapeChain(shapeSel.value);
-      setActiveChain(shapeSel.value);
-      loader.textContent = "Ready. Shape: " + shapeSel.value;
-      startBtn.textContent = "Stop Audio + Draw";
-      muteBtn.disabled = false;
-      mode = "live";
-      state.isPlaying = true;
+        if (state.contextUnlocked) return;
+        loader.textContent = "Unlocking AudioContext...";
+        try {
+            // Ensure context is running by awaiting a user-initiated action
+            await state.Tone.context.resume();
+            state.contextUnlocked = true;
+            loader.textContent = "Buffering first synth chain...";
+            await bufferShapeChain(shapeSel.value);
+            setActiveChain(shapeSel.value);
+            loader.textContent = "Ready. Shape: " + shapeSel.value;
+            startBtn.textContent = "Stop Audio + Draw";
+            muteBtn.disabled = false;
+            mode = "live";
+            state.isPlaying = true;
 
-      // Now background buffer others:
-      setTimeout(async ()=>{
-        for(const shape of SHAPES) {
-          if(shape !== shapeSel.value) await bufferShapeChain(shape);
+            // Background buffer others after a short delay to let the first one settle
+            setTimeout(async ()=>{
+                for(const shape of SHAPES) {
+                    if(shape !== shapeSel.value) {
+                        try {
+                            await bufferShapeChain(shape);
+                        } catch(e) {
+                            console.warn(`Failed to buffer chain for ${shape}:`, e);
+                        }
+                    }
+                }
+            }, 100); // Slightly longer delay
+
+        } catch (e) {
+            console.error("Error unlocking audio:", e);
+            loader.textContent = "Failed to unlock AudioContext.";
         }
-      },30);
     }
 
     function stopAudioAndDraw() {
@@ -268,15 +301,135 @@
       muteBtn.disabled=true; muteBtn.textContent="Mute";
       if(state.Tone) state.Tone.Destination.mute=false;
       mode = "seed";
+      // Stop sequencer if running
+      if (state.sequencePlaying) {
+          stopSequence();
+      }
+    }
+
+    // --- Sequencer Logic ---
+    function createSequenceUI() {
+        stepSlotsDiv.innerHTML = '';
+        for (let i = 0; i < 8; i++) {
+            const slot = document.createElement('div');
+            slot.className = 'step-slot';
+            slot.dataset.index = i;
+            slot.textContent = state.sequence[i] || '';
+            slot.addEventListener('click', () => startRecording(i));
+            // Right-click or long-press to clear
+            slot.addEventListener('contextmenu', (e) => {
+                e.preventDefault();
+                clearSlot(i);
+            });
+            let pressTimer;
+            slot.addEventListener('touchstart', (e) => {
+                pressTimer = setTimeout(() => {
+                    clearSlot(i);
+                    e.preventDefault();
+                }, 500); // 500ms for long press
+            });
+            slot.addEventListener('touchend', () => clearTimeout(pressTimer));
+            slot.addEventListener('touchmove', () => clearTimeout(pressTimer)); // Cancel if moved
+
+            stepSlotsDiv.appendChild(slot);
+        }
+        updateSequenceUI();
+    }
+
+    function updateSequenceUI() {
+        const slots = stepSlotsDiv.querySelectorAll('.step-slot');
+        slots.forEach((slot, i) => {
+            slot.textContent = state.sequence[i] || '';
+            slot.classList.remove('record-mode', 'active');
+            if (state.isRecording && i === state.currentRecordSlot) {
+                slot.classList.add('record-mode', 'active');
+            } else if (state.isRecording && i > state.currentRecordSlot) {
+                 slot.classList.add('record-mode');
+            }
+        });
+        playBtn.style.display = state.sequence.every(s => s !== null) ? 'inline-block' : 'none';
+    }
+
+    function startRecording(slotIndex) {
+        if (state.sequencePlaying) return; // Don't record while playing
+        state.isRecording = true;
+        state.currentRecordSlot = slotIndex;
+        updateSequenceUI();
+    }
+
+    function recordStep(keyNumber) { // 1-6
+        if (!state.isRecording || state.currentRecordSlot < 0 || state.currentRecordSlot >= 8) return;
+        state.sequence[state.currentRecordSlot] = keyNumber;
+        state.currentRecordSlot++;
+        if (state.currentRecordSlot >= 8) {
+            state.isRecording = false;
+            state.currentRecordSlot = -1;
+        }
+        updateSequenceUI();
+    }
+
+    function clearSlot(slotIndex) {
+         if (state.sequencePlaying) return;
+         state.sequence[slotIndex] = null;
+         // If we cleared a slot before or at the current recording position, stop recording
+         if (state.isRecording && slotIndex <= state.currentRecordSlot) {
+             state.isRecording = false;
+             state.currentRecordSlot = -1;
+         }
+         updateSequenceUI();
+    }
+
+    function playSequence() {
+        if (state.sequencePlaying || !state.sequence.every(s => s !== null)) return;
+        state.sequencePlaying = true;
+        state.sequenceStepIndex = 0;
+        playBtn.textContent = "Stop Sequence";
+        playBtn.disabled = false; // Ensure it's enabled when starting
+        const playStep = () => {
+            if (!state.sequencePlaying) return;
+            const stepValue = state.sequence[state.sequenceStepIndex];
+            if (stepValue !== null && stepValue >= 1 && stepValue <= 6) {
+                triggerStep(stepValue - 1); // Convert to 0-5 index
+            }
+            state.sequenceStepIndex = (state.sequenceStepIndex + 1) % 8;
+            state.sequenceIntervalId = setTimeout(playStep, state.stepTime);
+        };
+        playStep(); // Start immediately
+    }
+
+    function stopSequence() {
+        state.sequencePlaying = false;
+        clearTimeout(state.sequenceIntervalId);
+        state.sequenceIntervalId = null;
+        playBtn.textContent = "Play Sequence";
+        playBtn.disabled = false;
+    }
+
+    function triggerStep(shapeIndex) { // 0-5
+        if (shapeIndex < 0 || shapeIndex >= SHAPES.length) return;
+        const shape = SHAPES[shapeIndex];
+        shapeSel.value = shape;
+        if (state.isPlaying) {
+            setActiveChain(shape);
+            mode = "live";
+        } else {
+            // If audio is not running, just update the visual seed
+            mode = "seed";
+        }
+        // Update UI to reflect the change
+        shapeSel.onchange();
     }
 
     // --- UI Events ---
     startBtn.onclick = async ()=>{
-      if (!state.contextUnlocked) await unlockAudioAndBufferInitial();
-      else if (state.isPlaying) stopAudioAndDraw();
-      else { // restart
-        await unlockAudioAndBufferInitial();
-      }
+       if (!state.contextUnlocked) {
+            await unlockAudioAndBufferInitial();
+        } else if (state.isPlaying) {
+            stopAudioAndDraw();
+        } else {
+            // Restart audio
+            await unlockAudioAndBufferInitial();
+        }
     };
     muteBtn.onclick = ()=>{
       if(!state.Tone)return;
@@ -288,17 +441,58 @@
       else mode="seed";
     };
 
+    seqBtn.onclick = () => {
+        state.isSequencerMode = !state.isSequencerMode;
+        sequencerDiv.style.display = state.isSequencerMode ? 'block' : 'none';
+        seqBtn.textContent = state.isSequencerMode ? 'Hide Sequencer' : 'Create Sequence';
+        if (state.isSequencerMode) {
+            createSequenceUI();
+        } else {
+            // Optionally stop recording/playing when hiding
+            state.isRecording = false;
+            state.currentRecordSlot = -1;
+            if (state.sequencePlaying) {
+                stopSequence();
+            }
+            updateSequenceUI();
+        }
+    };
+
+    playBtn.onclick = () => {
+        if (state.sequencePlaying) {
+            stopSequence();
+        } else {
+            state.stepTime = parseInt(stepTimeInput.value, 10) || 400;
+            playSequence();
+        }
+    };
+
+    stepTimeInput.onchange = () => {
+        const val = parseInt(stepTimeInput.value, 10);
+        if (!isNaN(val) && val >= 50 && val <= 2000) {
+            state.stepTime = val;
+        } else {
+            stepTimeInput.value = state.stepTime;
+        }
+    };
+
     // --- Number Key Shape/Sound Selection ---
     document.addEventListener('keydown', e => {
       if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
-      const idx = e.key.charCodeAt(0) - 49;
+      const idx = e.key.charCodeAt(0) - 49; // '1' -> 0, '2' -> 1, ..., '6' -> 5
       if(idx >= 0 && idx < SHAPES.length) {
+        if (state.isSequencerMode && state.isRecording) {
+            recordStep(idx + 1); // Record 1-6
+            e.preventDefault();
+            return;
+        }
+        // Normal mode or sequencer not recording
         if(shapeSel.selectedIndex !== idx) {
             shapeSel.selectedIndex = idx;
             shapeSel.onchange();
-            }
-            e.preventDefault();
         }
+        e.preventDefault();
+      }
     });
 
     // --- Tone Loader ---
@@ -306,10 +500,22 @@
       loader.textContent = 'Loading Audio Engine...';
       import(url).then(mod=>{
         state.Tone = window.Tone ?? mod?.default ?? mod;
-        if(state.Tone){onReady();loader.textContent=`Tone.js v${state.Tone.version??"?"} loaded.`;}
+        if(state.Tone){
+            // Ensure Tone context is created but not started yet
+            if (state.Tone.context && state.Tone.context.state === 'suspended') {
+                 // It's created, we just need user interaction to resume/start it
+            } else {
+                // Create context if it doesn't exist implicitly (unlikely with Tone.js)
+                // state.Tone.context = new (state.Tone.Context || AudioContext)();
+            }
+            onReady();
+            loader.textContent=`Tone.js v${state.Tone.version??"?"} loaded. Click 'Start Audio + Draw' to begin.`;
+        }
         else throw 'Tone.js not found';
       }).catch(e=>{
-        loader.textContent='Failed to load Tone.js.';onFail?.();console.error(e);
+        loader.textContent='Failed to load Tone.js.';
+        onFail?.();
+        console.error(e);
       });
     }
 
@@ -320,16 +526,11 @@
     mode = "seed";
     startBtn.disabled = false; // user must click!
     muteBtn.disabled = true;
-
     visualAnimate();
-
     // Load Tone, but synth chains only after user starts
     loadToneJS({
       url:'https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.min.js',
-      onReady:()=>{
-        loader.textContent=`Ready for Audio. Click to start! (Shape: ${shapeSel.value})`;
-        startBtn.disabled = false;
-      },
+      onReady:()=>{ },
       onFail:()=>{startBtn.disabled=true;muteBtn.disabled=true;}
     });
   </script>
