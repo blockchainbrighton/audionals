@@ -392,7 +392,7 @@ class OscApp2 extends HTMLElement {
     this._controls.updateState({
       isAudioStarted: true,
       isPlaying: false,
-      isMuted: true,
+      isMuted: false,
       shapeKey: firstShape,
       sequencerVisible: false
     });
@@ -673,7 +673,7 @@ class OscApp2 extends HTMLElement {
     this._canvas.mode = 'seed';
     // Populate control state
     this._controls.disableAll(false);
-    this._controls.updateState({ isAudioStarted: true, isPlaying: false, isMuted: true, shapeKey: initialShape, sequencerVisible: false });
+    this._controls.updateState({ isAudioStarted: true, isPlaying: false, isMuted: false, shapeKey: initialShape, sequencerVisible: false });
     this._loader.textContent = 'Tone.js loaded. Click \u2018Start Audio + Draw\u2019 or the image to begin.';
   }
 

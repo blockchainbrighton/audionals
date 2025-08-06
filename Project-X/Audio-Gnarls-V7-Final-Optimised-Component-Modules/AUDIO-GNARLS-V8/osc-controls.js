@@ -2,31 +2,40 @@
 // controls and a button to reveal or hide the step sequencer.  It
 // dispatches `start-request`, `mute-toggle`, `shape-change` and
 // `toggle-sequencer` events.
+// File: osc-controls.js
+
 class OscControls2 extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
+
     // Build the UI elements
     const container = document.createElement('div');
     container.id = 'controls';
+
     this._startBtn = document.createElement('button');
     this._startBtn.id = 'startBtn';
     this._startBtn.textContent = 'POWER ON';
+
     this._muteBtn = document.createElement('button');
     this._muteBtn.id = 'muteBtn';
     this._muteBtn.textContent = 'Mute';
+
     this._shapeSelect = document.createElement('select');
     this._shapeSelect.id = 'shapeSelect';
+
     this._seqBtn = document.createElement('button');
     this._seqBtn.id = 'seqBtn';
     this._seqBtn.textContent = 'Create Sequence';
+
     container.append(
       this._startBtn,
       this._muteBtn,
       this._shapeSelect,
       this._seqBtn
     );
-    // Styles resembling the original application
+
+    // Add modern/futuristic CSS with button state logic
     const style = document.createElement('style');
     style.textContent = `
       :host {
@@ -43,6 +52,8 @@ class OscControls2 extends HTMLElement {
         border-radius: 9px;
         width: 95%;
         max-width: 880px;
+        margin: 1.1rem auto 0 auto;
+        box-sizing: border-box;
       }
       button, select {
         padding: 0.53em 1.17em;
@@ -54,10 +65,38 @@ class OscControls2 extends HTMLElement {
         cursor: pointer;
         font-family: inherit;
         font-weight: 500;
-        transition: background 0.19s;
+        transition: background 0.19s, color 0.19s, box-shadow 0.19s;
+        box-shadow: 0 0 0px #0000;
+      }
+      button:focus {
+        outline: 2px solid #7af6ff;
+        outline-offset: 1px;
       }
       button:hover {
         background: #454;
+      }
+      /* POWER ON/OFF states */
+      #startBtn.power-on {
+        background: #167c26;
+        color: #fff;
+        border-color: #24d840;
+        box-shadow: 0 0 14px #24d84088;
+        text-shadow: 0 1px 2px #0a320e;
+      }
+      #startBtn.power-off {
+        background: #b41419;
+        color: #fff;
+        border-color: #e8474e;
+        box-shadow: 0 0 14px #e8474e77;
+        text-shadow: 0 1px 2px #320a0b;
+      }
+      /* MUTED state */
+      #muteBtn.muted {
+        background: #a51427;
+        color: #fff;
+        border-color: #ff506e;
+        box-shadow: 0 0 12px #ff506e66;
+        text-shadow: 0 1px 2px #320a0b;
       }
       button:disabled, select:disabled {
         opacity: 0.5;
@@ -65,6 +104,7 @@ class OscControls2 extends HTMLElement {
       }
     `;
     this.shadowRoot.append(style, container);
+
     // Event forwarding
     this._startBtn.addEventListener('click', () => {
       this.dispatchEvent(new CustomEvent('start-request', { bubbles: true, composed: true }));
@@ -80,6 +120,7 @@ class OscControls2 extends HTMLElement {
       this.dispatchEvent(new CustomEvent('toggle-sequencer', { bubbles: true, composed: true }));
     });
   }
+
   setShapes(shapes) {
     this._shapeSelect.innerHTML = '';
     shapes.forEach(({ value, label }) => {
@@ -89,18 +130,32 @@ class OscControls2 extends HTMLElement {
       this._shapeSelect.appendChild(opt);
     });
   }
+
   disableAll(disabled) {
     [this._startBtn, this._muteBtn, this._shapeSelect, this._seqBtn].forEach(el => {
       el.disabled = disabled;
     });
   }
+
   updateState({ isAudioStarted, isPlaying, isMuted, shapeKey, sequencerVisible }) {
+    // Enable/disable
     this._startBtn.disabled = !isAudioStarted;
     this._muteBtn.disabled = !isAudioStarted;
-    this._startBtn.textContent = isPlaying ? 'Stop Audio + Draw' : 'POWER ON';
+
+    // Button text
+    this._startBtn.textContent = isPlaying ? 'POWER OFF' : 'POWER ON';
     this._muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+
+    // Visual state for power button
+    this._startBtn.classList.toggle('power-on', !!isPlaying);
+    this._startBtn.classList.toggle('power-off', !isPlaying);
+
+    // Visual state for mute
+    this._muteBtn.classList.toggle('muted', !!isMuted);
+
     if (shapeKey) this._shapeSelect.value = shapeKey;
     this._seqBtn.textContent = sequencerVisible ? 'Hide Sequencer' : 'Create Sequence';
   }
 }
+
 customElements.define('osc-controls', OscControls2);
