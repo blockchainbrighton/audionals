@@ -131,13 +131,6 @@ class OscApp2 extends HTMLElement {
     main.append(canvasContainer, this._controls, this._sequencerDiv, this._loader);
     // Compose wrapper
     wrapper.append(aside, main);
-    // Intro overlay
-    this._introOverlay = document.createElement('div');
-    this._introOverlay.id = 'introOverlay';
-    const introText = document.createElement('span');
-    introText.id = 'introText';
-    introText.textContent = 'Powering Up the Web3 Music Engine';
-    this._introOverlay.appendChild(introText);
     // Attach style
     const style = document.createElement('style');
     style.textContent = `
@@ -297,36 +290,9 @@ class OscApp2 extends HTMLElement {
       #playBtn {
         display: inline-block;
       }
-      /* Intro overlay styling */
-      #introOverlay {
-        position: fixed;
-        inset: 0;
-        z-index: 9999;
-        background: linear-gradient(120deg, #181818 80%, #171720 100%);
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        transition: opacity .6s cubic-bezier(.7,.3,.2,1);
-      }
-      #introOverlay[hidden] {
-        opacity: 0;
-        pointer-events: none;
-      }
-      #introText {
-        color: #ffe17a;
-        font-size: 2.7rem;
-        letter-spacing: .04em;
-        text-shadow: 0 0 40px #fa0a,0 2px 10px #fff5;
-        font-weight: 700;
-        padding: 1.2em 2em;
-        background: rgba(30,24,8,0.18);
-        border-radius: 16px;
-        border: 2px solid #f7c46966;
-        box-shadow: 0 4px 32px #000c;
-      }
     `;
     // Append all top‑level elements
-    this.shadowRoot.append(style, document.createElement('tone-loader'), this._introOverlay, wrapper);
+    this.shadowRoot.append(style, document.createElement('tone-loader'), wrapper);
     // Seed default value into input
     seedForm.querySelector('#seedInput').value = this.state.seed;
     // Hook up event listeners
@@ -353,13 +319,6 @@ class OscApp2 extends HTMLElement {
     // Initialize the control panel with shape options
     const shapeOptions = this.shapes.map(key => ({ value: key, label: this.shapeLabels[key] }));
     this._controls.setShapes(shapeOptions);
-    // Intro overlay fade out after 2 seconds
-    setTimeout(() => {
-      this._introOverlay.style.opacity = '0';
-      setTimeout(() => {
-        this._introOverlay.setAttribute('hidden', '');
-      }, 600);
-    }, 2000);
   }
 
   // Seed PRNG used by deterministic preset generator
