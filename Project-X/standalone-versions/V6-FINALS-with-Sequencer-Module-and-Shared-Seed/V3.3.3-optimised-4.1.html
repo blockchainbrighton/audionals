@@ -1,0 +1,457 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Web3 Oscilloscope Music</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <style>
+    html,body {
+      margin:0; padding:0; height:100%; width:100%;
+      background:#000; color:#fff; font-family:'Courier New',monospace; overflow:hidden;
+    }
+    body {
+      min-width: 480px; min-height: 400px;
+      display: grid; grid-template-columns: minmax(220px,340px) 1fr;
+      height: 100vh; box-sizing: border-box;
+    }
+    #instructions {
+      background: linear-gradient(90deg, #181818 97%, #0000);
+      color: #e1d9ce; font-size: 1.07rem; width: 100%; max-width: 340px; height: 100vh;
+      border-right: 2px solid #2229;
+      display: flex; flex-direction: column; gap: 1.4rem; padding: 2.2rem 1.2rem 2.4rem 2.2rem; overflow-y: auto;
+    }
+    #instructions h2 { color: #f7c469; font-size: 1.22rem; margin: 0 0 .95em 0; font-weight: bold; letter-spacing: .04em; }
+    #instructions ol { margin: 0; padding-left: 1.22em; }
+    #seedForm {
+      margin-top: auto; background: #1c1c1c; padding: 1.1em 1em .9em .9em;
+      border-radius: 8px; border: 1px solid #292929; color: #fff;
+      font-size: 1rem; box-shadow: 0 0 9px #0006; display: flex; flex-direction: column; gap: .5em;
+    }
+    #seedForm label { font-size: .97em; color: #ffecb3; margin-bottom: 0.1em; font-weight: 600; }
+    #seedInput {
+      font-family: inherit; padding: .35em .5em; border-radius: 4px; border: 1px solid #444;
+      background: #232325; color: #ffecb3; font-size: 1em; width: 100%; margin-bottom: 0.2em; letter-spacing: .05em;
+    }
+    #seedSetBtn {
+      padding: .3em 1em; border-radius: 4px; border: 1px solid #666; background: #212; color: #ffe0a3;
+      cursor: pointer; font-family: inherit; font-size: .97em; transition: background .18s;
+    }
+    #seedSetBtn:hover { background: #383023; color: #ffeab8; }
+    #main {
+      width: 100%; height: 100vh; display: flex; flex-direction: column; align-items: center;
+      overflow: hidden; box-sizing: border-box; background: #000;
+    }
+    #canvas-container {
+      flex: 1; width: 100%; display: flex; flex-direction: column; align-items: center;
+      min-width: 0; min-height: 0; margin: 0;
+    }
+    #scope {
+      display: block; border-radius: 14px; border: 1.5px solid #333; background: #000;
+      box-shadow: 0 0 34px #000a; cursor: pointer; width: 90vw;
+      max-width: min(900px, 85vw, calc(95vh - 150px)); aspect-ratio: 1/1;
+      min-width: 260px; min-height: 260px; margin: 2rem 0 1.2rem 0;
+      transition: box-shadow .18s;
+    }
+    #scope:active { box-shadow: 0 0 50px #fc0c,0 0 34px #3cf4; }
+    #controls {
+      display: flex; gap: 1.1rem; align-items: center; flex-wrap: wrap; justify-content: center;
+      padding: .7rem 1.2rem; background: #fff1; border-radius: 9px;
+      width: 95%; max-width: 880px; margin: 0 0 .4em 0;
+    }
+    #controls button, #controls select {
+      padding: .53em 1.17em; border-radius: 6px; border: 1px solid #555; background: #242; color: #fff;
+      font-size: 1rem; cursor: pointer; font-family: inherit; font-weight: 500; transition: background .19s;
+    }
+    #controls button:hover { background: #454; }
+    #loader { font-size: .98rem; color: #aaa; min-height: 1.3em; text-align: center; font-style: italic; margin-top: .1em; }
+    #sequencer { display: none; text-align: center; width: 95%; margin: .8em auto 0 auto; }
+    #stepSlots { display: flex; justify-content: center; gap: 0.55em; margin: 0.6em 0 0.7em 0; }
+    .step-slot {
+      width: 37px; height: 37px; border: 1px solid #555; border-radius: 6px; background: #232325;
+      display: grid; place-items: center; cursor: pointer; font-weight: bold; font-size: 1.12rem;
+      user-select: none; transition: background .15s, box-shadow .16s;
+    }
+    .step-slot.record-mode { background: #343; box-shadow: 0 0 7px #f7c46988; }
+    .step-slot.record-mode.active { background: #575; box-shadow: 0 0 12px #f7c469d6; }
+    #sequenceControls { margin-top: 0.5em; }
+    #playBtn { display: none; }
+    @media (max-width: 900px) {
+      body { grid-template-columns: 1fr; }
+      #instructions { border: none; max-width: 100vw; padding: 1.1rem .6rem 1.3rem 1.1rem; height: auto; }
+      #scope { min-width: 160px; }
+    }
+    @media (max-width: 600px) {
+      #controls, #sequencer { width: 99vw; max-width: 99vw; }
+      #scope { width: 96vw; max-width: 96vw; min-width: 110px; }
+    }
+  </style>
+</head>
+<body>
+  <aside id="instructions">
+    <div>
+      <h2>How to Use</h2>
+      <ol>
+        <li><b>Numbers 1-6:</b> Instantly switch between unique sound+visual shapes.</li>
+        <li><b>Step Sequencer:</b>
+          <ul style="margin:0 0 0 1em; padding:0; font-size:.98em;">
+            <li>Click <b>Create Sequence</b> to open.</li>
+            <li>Click a box to record steps (use 1-6 keys).</li>
+            <li>Right-click/long-press a box to clear.</li>
+            <li>Set <b>Step Time</b> for sequence speed.</li>
+            <li>Press <b>Play Sequence</b> to loop.</li>
+          </ul>
+        </li>
+        <li><b>Mix Sounds:</b> Change shapes while audio is on to layer and blend rich effects.</li>
+        <li><b>Toggle Audio:</b> Click the image or use <b>Start Audio</b> button to start/stop.</li>
+      </ol>
+    </div>
+    <form id="seedForm" autocomplete="off" title="Set a deterministic seed for sounds and visuals">
+      <label for="seedInput">Seed (deterministic):</label>
+      <input id="seedInput" maxlength="32" spellcheck="false" value="5s567g67" />
+      <button id="seedSetBtn" type="submit">Set Seed</button>
+    </form>
+  </aside>
+  <div id="main">
+    <div id="canvas-container">
+      <canvas id="scope" width="900" height="900" title="Click to Start/Stop Audio"></canvas>
+      <section id="controls">
+        <button id="startBtn">Start Audio + Draw</button>
+        <button id="muteBtn">Mute</button>
+        <select id="shapeSelect">
+          <option value="circle">Circle</option>
+          <option value="square">Square</option>
+          <option value="butterfly">Butterfly</option>
+          <option value="lissajous">Lissajous</option>
+          <option value="spiro">Spirograph</option>
+          <option value="harmonograph">Harmonograph</option>
+        </select>
+        <button id="seqBtn">Create Sequence</button>
+      </section>
+      <div id="sequencer">
+        <div id="stepSlots"></div>
+        <div id="sequenceControls">
+          <button id="playBtn">Play Sequence</button>
+          <label for="stepTimeInput" style="margin-left:1.2em;">Step Time (ms):</label>
+          <input type="number" id="stepTimeInput" min="50" max="2000" value="400" style="width:60px;">
+        </div>
+      </div>
+      <div id="loader">Initializing...</div>
+    </div>
+  </div>
+  <script type="module">
+    // --- DOM refs
+    const $ = id => document.getElementById(id), canvas = $("scope"), ctx = canvas.getContext('2d');
+    const [startBtn, muteBtn, shapeSel, loader, seqBtn, sequencerDiv, stepSlotsDiv, playBtn, stepTimeInput, seedInput, seedSetBtn, seedForm] =
+      ['startBtn','muteBtn','shapeSelect','loader','seqBtn','sequencer','stepSlots','playBtn','stepTimeInput','seedInput','seedSetBtn','seedForm'].map($);
+
+    // --- State ---
+    let state = {
+      isPlaying: false, isSequencerMode: false, isRecording: false, currentRecordSlot: -1,
+      sequence: Array(8).fill(null), sequencePlaying: false, sequenceIntervalId: null,
+      sequenceStepIndex: 0, stepTime: 400, Tone: null, chains: {}, current: null,
+      seed: '5s567g67', ready: false, contextUnlocked: false
+    };
+
+    // --- PRNG ---
+    function mulberry32(seed) {
+      let a = 0x6d2b79f5 ^ seed.length;
+      for (let i = 0; i < seed.length; ++i) a = Math.imul(a ^ seed.charCodeAt(i), 2654435761);
+      return () => ((a = Math.imul(a ^ a >>> 15, 1 | a)), (a >>> 16) / 0x10000);
+    }
+
+    // --- Deterministic preset gen ---
+    const SHAPES = ['circle','square','butterfly','lissajous','spiro','harmonograph'];
+    let presets = {};
+    function loadPresets(seed) {
+      presets = {};
+      for(const k of SHAPES) presets[k] = deterministicPreset(seed, k);
+    }
+    function deterministicPreset(seed, shape) {
+      const rng = mulberry32(seed+"_"+shape);
+      const types = ['sine','triangle','square','sawtooth'];
+      const notes = ['C1','C2','E2','G2','A2','C3','E3','G3','B3','D4','F#4','A4','C5'];
+      const modeRoll = rng(), mode = modeRoll<0.18?0:modeRoll<0.56?1:modeRoll<0.85?2:3;
+      let lfoRate = mode===0?0.07+rng()*0.3:mode===1?0.25+rng()*8:mode===2?6+rng()*20:24+rng()*36;
+      let lfoMin = mode===0?400+rng()*400:mode===1?120+rng()*700:80+rng()*250;
+      let lfoMax = mode===0?900+rng()*600:mode===1?1200+rng()*1400:1500+rng()*3500;
+      const oscCount = mode===3?2+(rng()>0.7?1:0):1+(rng()>0.6?1:0), oscs = [];
+      for (let i = 0; i < oscCount; ++i) oscs.push([types[(rng()*types.length)|0], notes[(rng()*notes.length)|0]]);
+      const filterBase = mode===0?700+rng()*500:300+rng()*2400, resonance=0.6+rng()*0.7;
+      let env = mode===0?{attack:0.005+rng()*0.03,decay:0.04+rng()*0.08,sustain:0.1+rng()*0.2,release:0.03+rng()*0.1}
+        :mode===3?{attack:2+rng()*8,decay:4+rng()*20,sustain:0.7+rng()*0.2,release:8+rng()*24}
+        :{attack:0.03+rng()*0.4,decay:0.1+rng()*0.7,sustain:0.2+rng()*0.5,release:0.2+rng()*3};
+      const reverbWet = mode===3?0.4+rng()*0.5:0.1+rng()*0.5, reverbRoom = mode===3?0.85+rng()*0.12:0.6+rng()*0.38;
+      const colorSpeed = 0.06+rng()*0.22, shapeDrift = 0.0006+rng()*0.0032;
+      return {osc1:oscs[0],osc2:oscs[1]||null,filter:filterBase,filterQ:resonance,lfo:[lfoRate,lfoMin,lfoMax],
+        envelope:env,reverb:{wet:reverbWet,roomSize:reverbRoom},colorSpeed,shapeDrift};
+    }
+
+    // --- Drawing ---
+    const drawFuncs = {
+      circle(data,t,pr){const S=.8*canvas.width/2,c=canvas.width/2;ctx.beginPath();
+        for(let i=0;i<data.length;++i){let a=i/data.length*2*Math.PI+t*.001,amp=(data[i]+1)/2,
+        r=S*amp,x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();},
+      square(data,t,pr){const S=.8*canvas.width/Math.SQRT2,c=canvas.width/2,o=(canvas.width-S)/2;ctx.beginPath();
+        for(let i=0;i<data.length;++i){let p=i/data.length,amp=(data[i]+1)/2,x,y;
+        if(p<.25)[x,y]=[o+S*(p/.25),o];
+        else if(p<.5)[x,y]=[o+S,o+S*((p-.25)/.25)];
+        else if(p<.75)[x,y]=[o+S-S*((p-.5)/.25),o+S];
+        else [x,y]=[o,o+S-S*((p-.75)/.25)];
+        let dx=x-c,dy=y-c,fx=c+dx*(.8+.2*amp)+Math.sin(t*.0005)*10,fy=c+dy*(.8+.2*amp)+Math.cos(t*.0006)*10;
+        i?ctx.lineTo(fx,fy):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();},
+      butterfly(data,t,pr){const S=.4*canvas.width,c=canvas.width/2;ctx.beginPath();
+        for(let i=0;i<data.length;++i){let th=i/data.length*Math.PI*24+t*.0003,amp=(data[i]+1)/2,
+        scale=Math.exp(Math.cos(th))-2*Math.cos(4*th)+Math.pow(Math.sin(th/12),5),
+        x=Math.sin(th)*scale*S*(.5+.5*amp)+c,y=Math.cos(th)*scale*S*(.5+.5*amp)+c;
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();},
+      lissajous(data,t,pr){const S=.8*canvas.width/3,c=canvas.width/2,avg=data.reduce((a,b)=>a+Math.abs(b),0)/data.length,
+        freqX=3+Math.sin(t*.0003)*1.5,freqY=2+Math.cos(t*.0004)*1.5,phase=t*.0005;ctx.beginPath();
+        for(let i=0;i<data.length;i++){let theta=i/data.length*2*Math.PI,r=avg*(.5+.5*data[i]),
+        x=c+Math.sin(freqX*theta+phase)*S*r,y=c+Math.sin(freqY*theta)*S*r;
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();},
+      spiro(data,t,pr){const S=.6*canvas.width/3,c=canvas.width/2,inner=.3+Math.sin(t*.0002)*.2,outer=.7,ratio=.21+.02*Math.sin(t*.0001);ctx.beginPath();
+        for(let i=0;i<data.length;i++){let theta=i/data.length*2*Math.PI,waveAmp=(data[i]+1)/2,
+        x=c+(S*(outer-inner)*Math.cos(theta)+S*inner*Math.cos((outer-inner)/inner*theta+t*ratio))*(.8+.2*waveAmp),
+        y=c+(S*(outer-inner)*Math.sin(theta)-S*inner*Math.sin((outer-inner)/inner*theta+t*ratio))*(.8+.2*waveAmp);
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();},
+      harmonograph(data,t,pr){const S=.7*canvas.width/4,c=canvas.width/2,decay=Math.exp(-t*.0002),avg=(data.reduce((a,b)=>a+b,0)/data.length+1)*.5;ctx.beginPath();
+        for(let i=0;i<data.length;i++){let theta=i/data.length*2*Math.PI,
+        x=c+decay*S*(Math.sin(3*theta+t*.0003)*.7+Math.sin(5*theta+t*.0004)*.3)*(.5+.5*data[i]),
+        y=c+decay*S*(Math.sin(4*theta+t*.00035)*.6+Math.sin(6*theta+t*.00025)*.4)*(.5+.5*data[i]);
+        i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();}
+    };
+
+    // --- Deterministic buffer for silent visual seed mode ---
+    function makeSeedBuffer(shape, seed, len=2048) {
+      const rng = mulberry32(seed+"_"+shape), arr = new Float32Array(len);
+      for(let i=0;i<len;++i) {
+        const t = i/len, base = Math.sin(2*Math.PI*t + rng()*6.28),
+        harm2 = 0.5*Math.sin(4*Math.PI*t + rng()*6.28), harm3 = 0.25*Math.sin(6*Math.PI*t + rng()*6.28);
+        arr[i] = 0.6*base + 0.3*harm2 + 0.15*harm3;
+      }
+      return arr;
+    }
+
+    // --- Canvas & visual animation ---
+    function resizeSquareCanvas() {
+      const rect = $("canvas-container").getBoundingClientRect();
+      const controlsH = $("controls").offsetHeight || 70, loaderH = $("loader").offsetHeight || 30;
+      const maxH = Math.max(150, rect.height - controlsH - loaderH - 40);
+      const maxW = Math.max(160, rect.width * 0.97);
+      const dim = Math.max(120, Math.min(maxH, maxW, 900));
+      canvas.width = canvas.height = dim;
+      canvas.style.width = canvas.style.height = dim + 'px';
+    }
+    window.addEventListener('resize', resizeSquareCanvas);
+    window.addEventListener('DOMContentLoaded', resizeSquareCanvas);
+
+    let animId = null, mode = "seed";
+    function visualAnimate() {
+      resizeSquareCanvas();
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      const pr = presets[shapeSel.value], t = performance.now();
+      ctx.strokeStyle = `hsl(${(t*pr.colorSpeed)%360},${70+15}%,${60}%)`;
+      ctx.lineWidth = 2; ctx.lineJoin = ctx.lineCap = 'round';
+      let buf = mode==="seed"?makeSeedBuffer(shapeSel.value,state.seed)
+        :(state.chains[state.current]?.analyser ? (()=>{let b=new Float32Array(2048);state.chains[state.current].analyser.getFloatTimeDomainData(b);return b;})() : new Float32Array(2048));
+      (drawFuncs[shapeSel.value]||drawFuncs.circle)(buf,t,pr);
+      animId = requestAnimationFrame(visualAnimate);
+    }
+
+    // --- Audio Chain Buffering ---
+    function disposeAllChains() {
+      Object.values(state.chains).forEach(chain=>
+        Object.values(chain).forEach(n=>{try{n?.stop?.()}catch{}try{n?.dispose?.()}catch{} }));
+      state.chains = {}; state.current = null;
+    }
+    function setActiveChain(shape) {
+      for(const s in state.chains) state.chains[s]?.reverb?.disconnect();
+      const chain = state.chains[shape]; chain?.reverb?.toDestination(); state.current = shape;
+    }
+    async function bufferShapeChain(shape) {
+      if (!state.contextUnlocked) return; if (state.chains[shape]) return;
+      const pr = presets[shape], T = state.Tone;
+      const osc1 = new T.Oscillator(pr.osc1[1],pr.osc1[0]).start();
+      let osc2 = pr.osc2?new T.Oscillator(pr.osc2[1],pr.osc2[0]).start():null;
+      const volume = new T.Volume(5), filter = new T.Filter(pr.filter,"lowpass"),
+        lfo = new T.LFO(pr.lfo[0]+"n",pr.lfo[1],pr.lfo[2]).start();
+      lfo.connect(filter.frequency); if(osc2)lfo.connect(osc2.detune);
+      osc1.connect(volume); if(osc2)osc2.connect(volume); volume.connect(filter);
+      const reverb = new T.Freeverb().set({wet:.3,roomSize:.8});
+      filter.connect(reverb);
+      const analyser = T.context.createAnalyser(); analyser.fftSize=2048; filter.connect(analyser);
+      state.chains[shape]={osc1,osc2,volume,filter,lfo,reverb,analyser};
+    }
+    async function unlockAudioAndBufferInitial() {
+      if (state.contextUnlocked) return;
+      loader.textContent = "Unlocking AudioContext...";
+      try {
+        await state.Tone.context.resume(); state.contextUnlocked = true;
+        loader.textContent = "Buffering first synth chain...";
+        await bufferShapeChain(shapeSel.value); setActiveChain(shapeSel.value);
+        loader.textContent = "Ready. Shape: "+shapeSel.value;
+        startBtn.textContent = "Stop Audio + Draw"; muteBtn.disabled = false; mode = "live"; state.isPlaying = true;
+        setTimeout(()=>{SHAPES.filter(s=>s!==shapeSel.value).forEach(s=>bufferShapeChain(s));},100);
+      } catch { loader.textContent = "Failed to unlock AudioContext."; }
+    }
+    function stopAudioAndDraw() {
+      if(!state.isPlaying)return; disposeAllChains(); state.isPlaying=false;
+      startBtn.textContent="Start Audio + Draw"; muteBtn.disabled=true; muteBtn.textContent="Mute";
+      if(state.Tone) state.Tone.Destination.mute=false;
+      mode = "seed"; if (state.sequencePlaying) stopSequence();
+    }
+
+    // --- Sequencer Logic ---
+    function createSequenceUI() {
+      stepSlotsDiv.innerHTML = '';
+      for (let i = 0; i < 8; i++) {
+        const slot = document.createElement('div');
+        slot.className = 'step-slot'; slot.dataset.index = i; slot.textContent = state.sequence[i] || '';
+        slot.addEventListener('click', () => startRecording(i));
+        slot.addEventListener('contextmenu', (e) => { e.preventDefault(); clearSlot(i); });
+        let pressTimer;
+        slot.addEventListener('touchstart', (e) => {
+          pressTimer = setTimeout(() => { clearSlot(i); e.preventDefault(); }, 500);
+        });
+        slot.addEventListener('touchend', () => clearTimeout(pressTimer));
+        slot.addEventListener('touchmove', () => clearTimeout(pressTimer));
+        stepSlotsDiv.appendChild(slot);
+      }
+      updateSequenceUI();
+    }
+    function updateSequenceUI() {
+      stepSlotsDiv.querySelectorAll('.step-slot').forEach((slot,i)=>{
+        slot.textContent = state.sequence[i] || '';
+        slot.classList.remove('record-mode','active');
+        if(state.isRecording&&i===state.currentRecordSlot)slot.classList.add('record-mode','active');
+        else if(state.isRecording&&i>state.currentRecordSlot)slot.classList.add('record-mode');
+      });
+      playBtn.style.display = state.sequence.every(s => s !== null) ? 'inline-block' : 'none';
+    }
+    function startRecording(slotIndex) {
+      if(state.sequencePlaying) return; state.isRecording=true; state.currentRecordSlot=slotIndex; updateSequenceUI();
+    }
+    function recordStep(keyNumber) {
+      if (!state.isRecording||state.currentRecordSlot<0||state.currentRecordSlot>=8) return;
+      state.sequence[state.currentRecordSlot]=keyNumber; state.currentRecordSlot++;
+      if(state.currentRecordSlot>=8){state.isRecording=false;state.currentRecordSlot=-1;}
+      updateSequenceUI();
+    }
+    function clearSlot(slotIndex) {
+      if(state.sequencePlaying)return; state.sequence[slotIndex]=null;
+      if(state.isRecording&&slotIndex<=state.currentRecordSlot){state.isRecording=false;state.currentRecordSlot=-1;}
+      updateSequenceUI();
+    }
+    function playSequence() {
+      if(state.sequencePlaying||!state.sequence.every(s=>s!==null))return;
+      state.sequencePlaying=true; state.sequenceStepIndex=0; playBtn.textContent="Stop Sequence"; playBtn.disabled=false;
+      const playStep=()=>{if(!state.sequencePlaying)return;
+        const stepValue=state.sequence[state.sequenceStepIndex];
+        if(stepValue!==null&&stepValue>=1&&stepValue<=6)triggerStep(stepValue-1);
+        state.sequenceStepIndex=(state.sequenceStepIndex+1)%8;
+        state.sequenceIntervalId=setTimeout(playStep,state.stepTime);
+      }; playStep();
+    }
+    function stopSequence() {
+      state.sequencePlaying=false; clearTimeout(state.sequenceIntervalId); state.sequenceIntervalId=null;
+      playBtn.textContent="Play Sequence"; playBtn.disabled=false;
+    }
+    function triggerStep(shapeIndex) {
+      if(shapeIndex<0||shapeIndex>=SHAPES.length)return;
+      const shape=SHAPES[shapeIndex];
+      shapeSel.value=shape; if(state.isPlaying){setActiveChain(shape);mode="live";}else{mode="seed";}
+      shapeSel.onchange();
+    }
+
+    // --- UI Events ---
+    startBtn.onclick = async ()=>{
+      if (!state.contextUnlocked) await unlockAudioAndBufferInitial();
+      else if (state.isPlaying) stopAudioAndDraw();
+      else await unlockAudioAndBufferInitial();
+    };
+    muteBtn.onclick = ()=>{
+      if(!state.Tone)return;
+      const m=state.Tone.Destination.mute=!state.Tone.Destination.mute;
+      muteBtn.textContent=m?"Unmute":"Mute";
+    };
+    shapeSel.onchange=()=>{
+      if(state.isPlaying) setActiveChain(shapeSel.value), mode="live";
+      else mode="seed";
+    };
+    seqBtn.onclick = () => {
+      state.isSequencerMode = !state.isSequencerMode;
+      sequencerDiv.style.display = state.isSequencerMode ? 'block' : 'none';
+      seqBtn.textContent = state.isSequencerMode ? 'Hide Sequencer' : 'Create Sequence';
+      if (state.isSequencerMode) createSequenceUI();
+      else { state.isRecording = false; state.currentRecordSlot = -1; if (state.sequencePlaying) stopSequence(); updateSequenceUI(); }
+    };
+    playBtn.onclick = () => {
+      if (state.sequencePlaying) stopSequence();
+      else { state.stepTime = parseInt(stepTimeInput.value, 10) || 400; playSequence(); }
+    };
+    stepTimeInput.onchange = () => {
+      const val = parseInt(stepTimeInput.value, 10);
+      if (!isNaN(val) && val >= 50 && val <= 2000) state.stepTime = val;
+      else stepTimeInput.value = state.stepTime;
+    };
+    document.addEventListener('keydown', e => {
+      if(e.target.tagName === "INPUT" || e.target.tagName === "TEXTAREA") return;
+      const idx = e.key.charCodeAt(0) - 49;
+      if(idx >= 0 && idx < SHAPES.length) {
+        if (shapeSel.selectedIndex !== idx) { shapeSel.selectedIndex = idx; shapeSel.onchange(); }
+        if (state.isSequencerMode && state.isRecording) { recordStep(idx + 1); e.preventDefault(); return; }
+        e.preventDefault();
+      }
+    });
+
+    // --- Tone Loader ---
+    function loadToneJS({url,onReady,onFail}) {
+      loader.textContent = 'Loading Audio Engine...';
+      import(url).then(mod=>{
+        state.Tone = window.Tone ?? mod?.default ?? mod;
+        if(state.Tone){
+          onReady();
+          loader.textContent=`Tone.js v${state.Tone.version??"?"} loaded. Click 'Start Audio + Draw' or the image to begin.`;
+        } else throw 'Tone.js not found';
+      }).catch(()=>{ loader.textContent='Failed to load Tone.js.'; onFail?.(); });
+    }
+
+    // --- Main image click listener for start/stop audio ---
+    canvas.addEventListener('click', async ()=>{
+      if (!state.contextUnlocked || !state.isPlaying) await unlockAudioAndBufferInitial();
+      else stopAudioAndDraw();
+    });
+
+    // --- Seed change UI ---
+    function resetToSeed(newSeed) {
+      stopAudioAndDraw(); disposeAllChains(); state.contextUnlocked=false;
+      state.seed=newSeed; loadPresets(newSeed);
+      let rand = mulberry32(newSeed), firstShape = SHAPES[(rand()*SHAPES.length)|0];
+      shapeSel.value=firstShape; mode="seed"; visualAnimate();
+      loader.textContent = "Seed updated. Click Start Audio + Draw.";
+    }
+    seedForm.addEventListener('submit', e => {
+      e.preventDefault();
+      let val = seedInput.value.trim();
+      if(!val) val = "default";
+      if(val === state.seed) return;
+      resetToSeed(val);
+    });
+    seedInput.addEventListener('keydown', e=>{
+      if(e.key === 'Enter') seedSetBtn.click();
+    });
+
+    // --- Init: show seed-visual by default ---
+    loadPresets(state.seed);
+    let rand = mulberry32(state.seed), firstShape = SHAPES[(rand()*SHAPES.length)|0];
+    shapeSel.value = firstShape; mode = "seed";
+    startBtn.disabled = false; muteBtn.disabled = true;
+    visualAnimate();
+    loadToneJS({
+      url:'https://cdn.jsdelivr.net/npm/tone@15.0.4/build/Tone.min.js',
+      onReady:()=>{},
+      onFail:()=>{startBtn.disabled=true;muteBtn.disabled=true;}
+    });
+  </script>
+</body>
+</html>

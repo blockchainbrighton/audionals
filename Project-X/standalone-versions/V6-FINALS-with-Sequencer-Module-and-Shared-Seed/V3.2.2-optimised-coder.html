@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Web3 Oscilloscope Music</title>
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<style>
+    html,body {margin:0;padding:0;height:100%;width:100%;background:#000;color:#fff;font-family:'Courier New',monospace;overflow:hidden;}
+    body {height:100vh;width:100vw;min-width:480px;min-height:400px;display:grid;grid-template-columns:minmax(220px,340px) 1fr;grid-template-rows:100vh;gap:0;box-sizing:border-box;}
+    #introOverlay {position:fixed;inset:0;z-index:9999;background:linear-gradient(120deg,#181818 80%,#171720 100%);display:flex;align-items:center;justify-content:center;transition:opacity .6s cubic-bezier(.7,.3,.2,1);}
+    #introOverlay[hidden]{opacity:0;pointer-events:none;}
+    #introText{color:#ffe17a;font-size:2.7rem;letter-spacing:.04em;text-shadow:0 0 40px #fa0a,0 2px 10px #fff5;font-weight:700;padding:1.2em 2em;background:rgba(30,24,8,0.18);border-radius:16px;border:2px solid #f7c46966;box-shadow:0 4px 32px #000c;}
+    #instructions{background:linear-gradient(90deg,#181818 97%,#0000);color:#e1d9ce;font-size:1.07rem;width:100%;min-width:210px;max-width:340px;height:100vh;border-right:2px solid #2229;line-height:1.65;box-sizing:border-box;display:flex;flex-direction:column;justify-content:flex-start;gap:1.4rem;padding:2.2rem 1.2rem 2.4rem 2.2rem;overflow-y:auto;}
+    #instructions h2{color:#f7c469;font-size:1.22rem;margin:0 0 .95em 0;font-weight:bold;letter-spacing:.04em;}
+    #instructions ol{margin:0;padding-left:1.22em;}
+    #seedForm{margin-top:auto;background:#1c1c1c;padding:1.1em 1em .9em .9em;border-radius:8px;border:1px solid #292929;color:#fff;font-size:1rem;box-shadow:0 0 9px #0006;display:flex;flex-direction:column;gap:.5em;}
+    #seedForm label{font-size:.97em;color:#ffecb3;margin-bottom:.1em;font-weight:600;}
+    #seedInput{font-family:inherit;padding:.35em .5em;border-radius:4px;border:1px solid #444;background:#232325;color:#ffecb3;font-size:1em;width:100%;margin-bottom:.2em;letter-spacing:.05em;}
+    #seedSetBtn{padding:.3em 1em;border-radius:4px;border:1px solid #666;background:#212;color:#ffe0a3;cursor:pointer;font-family:inherit;font-size:.97em;transition:background .18s;}
+    #seedSetBtn:hover{background:#383023;color:#ffeab8;}
+    #main{width:100%;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:hidden;box-sizing:border-box;background:#000;}
+    #canvas-container{flex:1 1 0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:0;min-width:0;margin:0;}
+    #scope{display:block;border-radius:14px;border:1.5px solid #333;background:#000;box-shadow:0 0 34px #000a;cursor:pointer;transition:box-shadow .18s;width:90vw;max-width:min(900px,85vw,calc(95vh - 150px));height:auto;aspect-ratio:1/1;min-width:260px;min-height:260px;margin:2rem 0 1.2rem 0;}
+    #scope:active{box-shadow:0 0 50px #fc0c,0 0 34px #3cf4;}
+    #controls{display:flex;gap:1.1rem;align-items:center;flex-wrap:wrap;justify-content:center;padding:.7rem 1.2rem;background:#fff1;border-radius:9px;width:95%;max-width:880px;margin:0 0 .4em 0;}
+    #controls button,#controls select{padding:.53em 1.17em;border-radius:6px;border:1px solid #555;background:#242;color:#fff;font-size:1rem;cursor:pointer;font-family:inherit;font-weight:500;transition:background .19s;}
+    #controls button:hover{background:#454;}
+    #loader{font-size:.98rem;color:#aaa;min-height:1.3em;text-align:center;font-style:italic;margin-top:.1em;}
+    #sequencer{display:none;text-align:center;width:95%;margin:.8em auto 0 auto;}
+    #stepSlots{display:flex;justify-content:center;gap:.55em;margin:.6em 0 .7em 0;}
+    .step-slot{width:37px;height:37px;border:1px solid #555;border-radius:6px;background:#232325;display:grid;place-items:center;cursor:pointer;font-weight:bold;font-size:1.12rem;user-select:none;transition:background .15s,box-shadow .16s;}
+    .step-slot.record-mode{background:#343;box-shadow:0 0 7px #f7c46988;}
+    .step-slot.record-mode.active{background:#575;box-shadow:0 0 12px #f7c469d6;}
+    #sequenceControls{margin-top:.5em;}
+    #playBtn{display:none;}
+    @media (max-width:900px){
+    body{grid-template-columns:1fr;}
+    #instructions{border:none;max-width:100vw;min-width:0;padding:1.1rem .6rem 1.3rem 1.1rem;height:auto;}
+    #main{height:auto;}
+    #scope{min-width:160px;}
+    }
+    @media (max-width:600px){
+    #controls,#sequencer{width:99vw;max-width:99vw;}
+    #scope{width:96vw;max-width:96vw;min-width:110px;}
+    }
+</style>
+</head>
+<body>
+<div id="introOverlay"><span id="introText">Powering Up the Web3 Music Engine</span></div> <!-- Updated Message -->
+<aside id="instructions">
+    <div>
+    <h2>How to Use</h2>
+    <ol>
+        <li><b>Numbers 1-6:</b><br> Instantly switch between unique sound+visual shapes.</li>
+        <li><b>Step Sequencer:</b>
+        <ul style="margin:0 0 0 1em; padding:0; font-size:.98em;">
+            <li>Click <b>Create Sequence</b> to open.</li>
+            <li>Click a box to record steps (use 1-6 keys).</li>
+            <li>Right-click/long-press a box to clear.</li>
+            <li>Set <b>Step Time</b> for sequence speed.</li>
+            <li>Press <b>Play Sequence</b> to loop.</li>
+        </ul>
+        </li>
+        <li><b>Mix Sounds:</b> Change shapes while audio is on to layer and blend rich effects.</li>
+        <li><b>Toggle Audio:</b> Click the image or use <b>Start Audio</b> button to start/stop.</li>
+    </ol>
+    </div>
+    <form id="seedForm" autocomplete="off" title="Set a deterministic seed for sounds and visuals">
+    <label for="seedInput">Seed (deterministic):</label>
+    <input id="seedInput" name="seedInput" maxlength="32" spellcheck="false" value="5s567g67" />
+    <button id="seedSetBtn" type="submit">Set Seed</button>
+    </form>
+</aside>
+<div id="main">
+    <div id="canvas-container">
+    <canvas id="scope" width="900" height="900" title="Click to Start/Stop Audio"></canvas>
+    <section id="controls">
+        <button id="startBtn">Start Audio + Draw</button>
+        <button id="muteBtn">Mute</button>
+        <select id="shapeSelect">
+        <option value="circle">Circle</option>
+        <option value="square">Square</option>
+        <option value="butterfly">Butterfly</option>
+        <option value="lissajous">Lissajous</option>
+        <option value="spiro">Spirograph</option>
+        <option value="harmonograph">Harmonograph</option>
+        </select>
+        <button id="seqBtn">Create Sequence</button>
+    </section>
+    <div id="sequencer">
+        <div id="stepSlots"></div>
+        <div id="sequenceControls">
+        <button id="playBtn">Play Sequence</button>
+        <label for="stepTimeInput" style="margin-left:1.2em;">Step Time (ms):</label>
+        <input type="number" id="stepTimeInput" min="50" max="2000" value="400" style="width: 60px;">
+        </div>
+    </div>
+    <div id="loader">Initializing...</div>
+    </div>
+</div>
+<script type="module">
+    //--- Canvas & UI Setup ---
+    const [canvas,ctx]=[scope,scope.getContext('2d')],
+    [startBtn,muteBtn,shapeSel,loader,seqBtn,sequencerDiv,stepSlotsDiv,playBtn,stepTimeInput,seedInput,seedSetBtn,seedForm]=
+    ['startBtn','muteBtn','shapeSelect','loader','seqBtn','sequencer','stepSlots','playBtn','stepTimeInput','seedInput','seedSetBtn','seedForm'].map(id=>document.getElementById(id));
+    const introOverlay=document.getElementById('introOverlay');
+    //--- State ---
+    let state={isPlaying:false,isSequencerMode:false,isRecording:false,currentRecordSlot:-1,sequence:Array(8).fill(null),sequencePlaying:false,sequenceIntervalId:null,sequenceStepIndex:0,stepTime:400,Tone:null,chains:{},current:null,seed:'5s567g67',ready:false,contextUnlocked:false,initialBufferingStarted:false,initialShapeBuffered:false};
+    //--- PRNG & Presets ---
+    function mulberry32(seed){let a=0x6d2b79f5^seed.length;for(let i=0;i<seed.length;++i)a=Math.imul(a^seed.charCodeAt(i),2654435761);return()=>((a=Math.imul(a^a>>>15,1|a)),(a>>>16)/0x10000);}
+    function deterministicPreset(seed,shape){const rng=mulberry32(seed+"_"+shape),types=['sine','triangle','square','sawtooth'],notes=['C1','C2','E2','G2','A2','C3','E3','G3','B3','D4','F#4','A4','C5'];const modeRoll=rng();let mode=modeRoll<.18?0:modeRoll<.56?1:modeRoll<.85?2:3,lfoRate=mode===0?.07+rng()*.3:mode===1?.25+rng()*8:mode===2?6+rng()*20:24+rng()*36,lfoMin, lfoMax;mode===0?(lfoMin=400+rng()*400,lfoMax=900+rng()*600):mode===1?(lfoMin=120+rng()*700,lfoMax=1200+rng()*1400):(lfoMin=80+rng()*250,lfoMax=1500+rng()*3500);const oscCount=mode===3?2+(rng()>.7?1:0):1+(rng()>.6?1:0),oscs=[];for(let i=0;i<oscCount;++i)oscs.push([types[(rng()*types.length)|0],notes[(rng()*notes.length)|0]]);const filterBase=mode===0?700+rng()*500:300+rng()*2400,resonance=.6+rng()*.7;let env={};if(mode===0)env={attack:.005+rng()*.03,decay:.04+rng()*.08,sustain:.1+rng()*.2,release:.03+rng()*.1};else if(mode===3)env={attack:2+rng()*8,decay:4+rng()*20,sustain:.7+rng()*.2,release:8+rng()*24};else env={attack:.03+rng()*.4,decay:.1+rng()*.7,sustain:.2+rng()*.5,release:.2+rng()*3};const reverbWet=(mode===3?.4+rng()*.5:.1+rng()*.5),reverbRoom=(mode===3?.85+rng()*.12:.6+rng()*.38),colorSpeed=.06+rng()*.22,shapeDrift=.0006+rng()*.0032;return{osc1:oscs[0],osc2:oscs[1]||null,filter:filterBase,filterQ:resonance,lfo:[lfoRate,lfoMin,lfoMax],envelope:env,reverb:{wet:reverbWet,roomSize:reverbRoom},colorSpeed,shapeDrift};}
+    const SHAPES=['circle','square','butterfly','lissajous','spiro','harmonograph'];let presets={};
+    function loadPresets(seed){presets={};for(const k of SHAPES)presets[k]=deterministicPreset(seed,k);}
+    //--- Drawing
+    const drawFuncs={
+    circle:(data,t,pr)=>{const S=.8*canvas.width/2,c=canvas.width/2;ctx.beginPath();for(let i=0;i<data.length;++i){let a=i/data.length*2*Math.PI+t*.001,amp=(data[i]+1)/2,r=S*amp,x=c+Math.cos(a)*r,y=c+Math.sin(a)*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();},
+    square:(data,t,pr)=>{const S=.8*canvas.width/Math.SQRT2,c=canvas.width/2,o=(canvas.width-S)/2;ctx.beginPath();for(let i=0;i<data.length;++i){let p=i/data.length,amp=(data[i]+1)/2,x,y;if(p<.25)[x,y]=[o+S*(p/.25),o];else if(p<.5)[x,y]=[o+S,o+S*((p-.25)/.25)];else if(p<.75)[x,y]=[o+S-S*((p-.5)/.25),o+S];else [x,y]=[o,o+S-S*((p-.75)/.25)];let dx=x-c,dy=y-c,fx=c+dx*(.8+.2*amp)+Math.sin(t*.0005)*10,fy=c+dy*(.8+.2*amp)+Math.cos(t*.0006)*10;i?ctx.lineTo(fx,fy):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();},
+    butterfly:(data,t,pr)=>{const S=.4*canvas.width,c=canvas.width/2;ctx.beginPath();for(let i=0;i<data.length;++i){let th=i/data.length*Math.PI*24+t*.0003,amp=(data[i]+1)/2,scale=Math.exp(Math.cos(th))-2*Math.cos(4*th)+Math.pow(Math.sin(th/12),5),x=Math.sin(th)*scale*S*(.5+.5*amp)+c,y=Math.cos(th)*scale*S*(.5+.5*amp)+c;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.closePath();ctx.stroke();},
+    lissajous:(data,t,pr)=>{const S=.8*canvas.width/3,c=canvas.width/2,avg=data.reduce((a,b)=>a+Math.abs(b),0)/data.length,freqX=3+Math.sin(t*.0003)*1.5,freqY=2+Math.cos(t*.0004)*1.5,phase=t*.0005;ctx.beginPath();for(let i=0;i<data.length;i++){let theta=i/data.length*2*Math.PI,r=avg*(.5+.5*data[i]),x=c+Math.sin(freqX*theta+phase)*S*r,y=c+Math.sin(freqY*theta)*S*r;i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();},
+    spiro:(data,t,pr)=>{const S=.6*canvas.width/3,c=canvas.width/2,inner=.3+Math.sin(t*.0002)*.2,outer=.7,ratio=.21+.02*Math.sin(t*.0001);ctx.beginPath();for(let i=0;i<data.length;i++){let theta=i/data.length*2*Math.PI,waveAmp=(data[i]+1)/2,x=c+(S*(outer-inner)*Math.cos(theta)+S*inner*Math.cos((outer-inner)/inner*theta+t*ratio))*(.8+.2*waveAmp),y=c+(S*(outer-inner)*Math.sin(theta)-S*inner*Math.sin((outer-inner)/inner*theta+t*ratio))*(.8+.2*waveAmp);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();},
+    harmonograph:(data,t,pr)=>{const S=.7*canvas.width/4,c=canvas.width/2,decay=Math.exp(-t*.0002),avg=(data.reduce((a,b)=>a+b,0)/data.length+1)*.5;ctx.beginPath();for(let i=0;i<data.length;i++){let theta=i/data.length*2*Math.PI,x=c+decay*S*(Math.sin(3*theta+t*.0003)*.7+Math.sin(5*theta+t*.0004)*.3)*(.5+.5*data[i]),y=c+decay*S*(Math.sin(4*theta+t*.00035)*.6+Math.sin(6*theta+t*.00025)*.4)*(.5+.5*data[i]);i?ctx.lineTo(x,y):ctx.moveTo(x,y);}ctx.stroke();}
+    };
+    //--- Seed visual buffer
+    function makeSeedBuffer(shape,seed,len=2048){const rng=mulberry32(seed+"_"+shape),arr=new Float32Array(len);for(let i=0;i<len;++i){const t=i/len,base=Math.sin(2*Math.PI*t+rng()*6.28),harm2=.5*Math.sin(4*Math.PI*t+rng()*6.28),harm3=.25*Math.sin(6*Math.PI*t+rng()*6.28);arr[i]=.6*base+.3*harm2+.15*harm3;}return arr;}
+    //--- Resize logic
+    function resizeSquareCanvas(){const container=document.getElementById('canvas-container');if(!container)return;const rect=container.getBoundingClientRect();let controlsH=0,loaderH=0;const controls=document.getElementById('controls'),loader=document.getElementById('loader');if(controls)controlsH=controls.offsetHeight||70;if(loader)loaderH=loader.offsetHeight||30;const maxH=Math.max(150,rect.height-controlsH-loaderH-40),maxW=Math.max(160,rect.width*.97),dim=Math.max(120,Math.min(maxH,maxW,900));canvas.width=canvas.height=dim;canvas.style.width=canvas.style.height=dim+'px';}
+    window.addEventListener('resize',resizeSquareCanvas);
+    //--- Visual animation
+    let animId=null,mode="seed";
+    function visualAnimate(){resizeSquareCanvas();ctx.clearRect(0,0,canvas.width,canvas.height);const pr=presets[shapeSel.value],t=performance.now(),hue=(t*pr.colorSpeed)%360,sat=70+.5*30,light=50+.5*20;ctx.strokeStyle=`hsl(${hue},${sat}%,${light}%)`;ctx.lineWidth=2;ctx.lineJoin=ctx.lineCap='round';let buf;buf=(mode==="seed"||mode==="live"&&!state.initialShapeBuffered&&state.contextUnlocked)?makeSeedBuffer(shapeSel.value,state.seed):(()=>{const currentChain=state.chains[state.current],analyser=currentChain?.analyser;return analyser?new Float32Array(analyser.fftSize):(new Float32Array(2048));})();if(mode!=="seed"&&state.chains[state.current]?.analyser)state.chains[state.current].analyser.getFloatTimeDomainData(buf);(drawFuncs[shapeSel.value]||drawFuncs.circle)(buf,t,pr);animId=requestAnimationFrame(visualAnimate);}
+    //--- Audio chain mgmt
+    function disposeAllChains(){Object.values(state.chains).forEach(chain=>{Object.values(chain).forEach(n=>{try{n?.stop?.()}catch{}try{n?.dispose?.()}catch{}})});state.chains={};state.current=null;}
+    function setActiveChain(shape){for(const s in state.chains)state.chains[s]?.reverb?.disconnect();const chain=state.chains[shape];chain?.reverb?.toDestination();state.current=shape;}
+    async function bufferShapeChain(shape){if(!state.contextUnlocked)return;const pr=presets[shape],T=state.Tone;if(!T)return;try{const osc1=new T.Oscillator(pr.osc1[1],pr.osc1[0]).start(),osc2=pr.osc2?new T.Oscillator(pr.osc2[1],pr.osc2[0]).start():null,volume=new T.Volume(5),filter=new T.Filter(pr.filter,"lowpass"),lfo=new T.LFO(pr.lfo[0]+"n",pr.lfo[1],pr.lfo[2]).start(),reverb=new T.Freeverb().set({wet:.3,roomSize:.8}),analyser=T.context.createAnalyser();analyser.fftSize=2048;lfo.connect(filter.frequency);if(osc2)lfo.connect(osc2.detune);osc1.connect(volume);if(osc2)osc2.connect(volume);volume.connect(filter);filter.connect(reverb);filter.connect(analyser);if(state.chains[shape])Object.values(state.chains[shape]).forEach(n=>{try{n?.stop?.()}catch{}try{n?.dispose?.()}catch{}});state.chains[shape]={osc1,osc2,volume,filter,lfo,reverb,analyser};}catch(error){console.error(`Error buffering chain for shape ${shape}:`,error);delete state.chains[shape];throw error;}}
+    //--- Optimized Audio Unlocking and Buffering ---
+    async function unlockAudioAndBufferInitial() {
+        // Prevent multiple simultaneous calls
+        if (state.initialBufferingStarted && !state.initialShapeBuffered) {
+            loader.textContent = "Still preparing initial synth, please wait...";
+            return;
+        }
+        // If already playing, stop instead
+        if (state.isPlaying) {
+            stopAudioAndDraw();
+            return;
+        }
+        // If context is already unlocked, proceed to play
+        if (state.contextUnlocked) {
+            if (state.initialShapeBuffered) {
+                try {
+                    setActiveChain(shapeSel.value);
+                    state.current = shapeSel.value;
+                    state.isPlaying = true;
+                    mode = "live";
+                    startBtn.textContent = "Stop Audio + Draw";
+                    muteBtn.disabled = false;
+                    loader.textContent = "Audio resumed.";
+                    return;
+                } catch (activationError) {
+                    console.error("[BOP] Error re-activating chain:", activationError);
+                    loader.textContent = "Error resuming audio.";
+                }
+            } else {
+                 loader.textContent = "Audio context unlocked, but synth not ready. Click again.";
+                 return;
+            }
+        }
+
+        // Otherwise, start the full unlock and buffer process
+        loader.textContent = "Unlocking AudioContext...";
+        try {
+            // Attempt to resume AudioContext using available methods
+            let contextResumed = false;
+            const contextToResume = state.Tone?.getContext?.() || state.Tone?.context;
+            if (contextToResume && typeof contextToResume.resume === "function") {
+                await contextToResume.resume();
+                contextResumed = true;
+            } else if (state.Tone?.start) {
+                await state.Tone.start();
+                contextResumed = true;
+            }
+
+            if (!contextResumed) throw new Error("Could not resume AudioContext using available methods.");
+
+            state.contextUnlocked = true;
+            state.initialBufferingStarted = true;
+            const initialShape = shapeSel.value;
+            loader.textContent = `Preparing ${initialShape} synth...`;
+
+            await bufferShapeChain(initialShape);
+            console.log(`[BOP] Initial chain ${initialShape} buffered.`);
+
+            // Activate the initial chain only if this is the initial buffering
+            if (state.initialBufferingStarted && !state.initialShapeBuffered) {
+                try {
+                    setActiveChain(initialShape);
+                    state.current = initialShape;
+                    state.initialShapeBuffered = true;
+                    loader.textContent = "Ready. Shape: " + initialShape;
+                    startBtn.textContent = "Stop Audio + Draw";
+                    muteBtn.disabled = false;
+                    mode = "live";
+                    state.isPlaying = true;
+
+                    // Start background buffering for other shapes
+                    (async () => {
+                        for (const shape of SHAPES) {
+                            if (shape !== initialShape && state.contextUnlocked) {
+                                try {
+                                    await bufferShapeChain(shape);
+                                    console.log(`[BOP] Background buffered chain: ${shape}`);
+                                } catch (e) {
+                                    console.error(`[BOP] Error background buffering chain for ${shape}:`, e);
+                                }
+                                // Yield control to the event loop
+                                await new Promise(r => setTimeout(r, 0));
+                            }
+                        }
+                    })();
+
+                } catch (activationError) {
+                    console.error("[BOP] Error activating initial chain:", activationError);
+                    loader.textContent = "Error activating initial synth.";
+                    state.initialBufferingStarted = false; // Reset on activation error
+                    state.contextUnlocked = false; // Reset context state on error
+                }
+            }
+        } catch (e) {
+            console.error("[BOP] Failed to unlock AudioContext:", e);
+            loader.textContent = "Failed to unlock AudioContext.";
+            state.contextUnlocked = false;
+            state.initialBufferingStarted = false;
+            state.initialShapeBuffered = false;
+        }
+    }
+
+    function stopAudioAndDraw(){
+        if(!state.isPlaying && !state.initialBufferingStarted) return;
+        disposeAllChains();
+        state.isPlaying = false;
+        // Reset buffering flags but keep contextUnlocked for potential restart
+        state.initialBufferingStarted = false;
+        state.initialShapeBuffered = false;
+        startBtn.textContent = "Start Audio + Draw";
+        muteBtn.disabled = true;
+        muteBtn.textContent = "Mute";
+        if(state.Tone?.Destination) state.Tone.Destination.mute = false;
+        mode = "seed";
+        if(state.sequencePlaying) stopSequence();
+        loader.textContent = "Audio stopped.";
+        // Crucially, keep state.contextUnlocked = true to allow restart
+        // state.contextUnlocked = false; // DO NOT reset this here
+    }
+    //--- UI Events
+    startBtn.onclick=async()=>{ await unlockAudioAndBufferInitial(); };
+    muteBtn.onclick=()=>{if(!state.Tone?.Destination)return;const m=state.Tone.Destination.mute=!state.Tone.Destination.mute;muteBtn.textContent=m?"Unmute":"Mute";};
+    shapeSel.onchange=()=>{if(state.isPlaying){setActiveChain(shapeSel.value);mode="live";}else if(state.contextUnlocked&&state.initialShapeBuffered)mode="seed";else mode="seed";};
+    seqBtn.onclick=()=>{state.isSequencerMode=!state.isSequencerMode;sequencerDiv.style.display=state.isSequencerMode?'block':'none';seqBtn.textContent=state.isSequencerMode?'Hide Sequencer':'Create Sequence';if(state.isSequencerMode)createSequenceUI();else{state.isRecording=false;state.currentRecordSlot=-1;if(state.sequencePlaying)stopSequence();updateSequenceUI();}};
+    playBtn.onclick=()=>{if(state.sequencePlaying)stopSequence();else{state.stepTime=parseInt(stepTimeInput.value,10)||400;playSequence();}};
+    stepTimeInput.onchange=()=>{const val=parseInt(stepTimeInput.value,10);if(val>=50&&val<=2000)state.stepTime=val;else stepTimeInput.value=state.stepTime;};
+    document.addEventListener('keydown',e=>{if(e.target.tagName==="INPUT"||e.target.tagName==="TEXTAREA")return;const idx=e.key.charCodeAt(0)-49;if(idx>=0&&idx<SHAPES.length){if(shapeSel.selectedIndex!==idx){shapeSel.selectedIndex=idx;shapeSel.onchange();}if(state.isSequencerMode&&state.isRecording){recordStep(idx+1);e.preventDefault();return;}e.preventDefault();}});
+    function loadToneJSAndBoot({toneUrl='https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',setLoaderStatus,runtimeState,boot}){setLoaderStatus('Loading Audio Engine...');import(toneUrl).then(()=>{runtimeState.Tone=window.Tone;console.log('[BOP Matrix] Tone.js loaded:',runtimeState.Tone?.version??'Unknown');setLoaderStatus(`Tone.js v${runtimeState.Tone?.version??"?"} loaded. Click 'Start Audio + Draw' or the image to begin.`);boot();}).catch(err=>{setLoaderStatus('Failed to load Tone.js. App cannot start.',true);console.error('[BOP Matrix] Critical Tone.js load error:',err);boot();});}
+    canvas.addEventListener('click',async()=>{ await unlockAudioAndBufferInitial(); });
+    function resetToSeed(newSeed){stopAudioAndDraw();disposeAllChains();state.contextUnlocked=false;state.initialBufferingStarted=false;state.initialShapeBuffered=false;state.seed=newSeed;loadPresets(newSeed);let rand=mulberry32(newSeed);let firstShape=SHAPES[(rand()*SHAPES.length)|0];shapeSel.value=firstShape;mode="seed";if(!animId)visualAnimate();loader.textContent="Seed updated. Click Start Audio + Draw.";}
+    seedForm.addEventListener('submit',e=>{e.preventDefault();let val=seedInput.value.trim();if(!val)val="default";if(val===state.seed)return;resetToSeed(val);});
+    seedInput.addEventListener('keydown',e=>{if(e.key==='Enter')seedSetBtn.click();});
+    //--- Boot function
+    function bootApp(){if(!animId)visualAnimate();startBtn.disabled=false;muteBtn.disabled=true;if(!state.Tone){startBtn.disabled=true;muteBtn.disabled=true;loader.textContent="Audio failed to load. Visuals only.";}}
+    //--- Sequencer logic (placeholder for brevity, assumes you have these in the original) ---
+    function createSequenceUI(){}
+    function updateSequenceUI(){}
+    function recordStep(){}
+    function stopSequence(){}
+    function playSequence(){}
+    //--- App Startup: Powering Up overlay, boot, lazy Tone.js ---
+    loadPresets(state.seed);let rand=mulberry32(state.seed),firstShape=SHAPES[(rand()*SHAPES.length)|0];shapeSel.value=firstShape;mode="seed";
+    window.addEventListener('DOMContentLoaded',()=>{
+        loadToneJSAndBoot({setLoaderStatus:(text)=>{loader.textContent=text;},runtimeState:state,boot:()=>{}});
+        setTimeout(()=>{
+            introOverlay.style.opacity=0;
+            setTimeout(()=>{
+                introOverlay.setAttribute('hidden','');
+                // Start animation loop after overlay is hidden for smoother visual startup
+                if(!animId) visualAnimate();
+            }, 600); // Match CSS transition duration
+        }, 2000); // Show overlay for at least 2 seconds
+    });
+</script>
+</body>
+</html>

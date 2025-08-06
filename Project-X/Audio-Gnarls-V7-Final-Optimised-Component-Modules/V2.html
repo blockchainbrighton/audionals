@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Enhanced Web3 Oscilloscope Music</title>
+  <meta name="viewport" content="width=600,initial-scale=1">
+  <style>
+    html,body {margin:0;padding:0;height:100%;background:#111;color:#fff;font-family:'Segoe UI',sans-serif;}
+    body {display:grid;place-items:center;gap:1.5rem;padding:1rem;}
+    #scope {border-radius:12px;border:1px solid #444;background:#000;box-shadow:0 0 20px rgba(100,100,255,0.1);}
+    #controls {display:flex;gap:1rem;align-items:center;flex-wrap:wrap;justify-content:center;}
+    #controls button,#controls select {
+      padding:0.6rem 1.2rem;border-radius:6px;border:1px solid #666;
+      background:linear-gradient(to bottom,#333,#222);color:#eee;font-weight:500;cursor:pointer;transition:.2s;
+    }
+    #controls button:hover,#controls select:hover {background:linear-gradient(to bottom,#444,#333);border-color:#888;box-shadow:0 0 8px rgba(100,150,255,0.3);}
+    #controls button:active {transform:translateY(1px);}
+    #loader {font-size:1rem;color:#aaa;min-height:1.4rem;text-align:center;font-style:italic;}
+    #info {font-size:0.85rem;color:#888;text-align:center;max-width:90%;}
+  </style>
+</head>
+<body>
+  <canvas id="scope" width="600" height="600"></canvas>
+  <section id="controls">
+    <button id="startBtn">Generate New Experience</button>
+    <button id="muteBtn">Mute</button>
+    <select id="visualModeSelect">
+      <option value="radial">Radial Waves</option>
+      <option value="polygon">Dynamic Polygons</option>
+      <option value="layers">Layered Interference</option>
+      <option value="particles">Particle Flow</option>
+    </select>
+  </section>
+  <div id="loader">Initializing audio engine...</div>
+  <div id="info">Each generation creates unique, slowly evolving audiovisual patterns.</div>
+  <script type="module">
+    // --- Utility ---
+    const $ = id => document.getElementById(id),
+      rand = (a, b) => Math.random() * (b - a) + a,
+      randi = (a, b) => Math.floor(rand(a, b + 1)),
+      pick = arr => arr[Math.floor(Math.random() * arr.length)],
+      lerp = (a, b, t) => a + (b - a) * t,
+      parseHue = c => +((c.match(/hsla?\(([\d.]+)/)||[])[1]||0);
+
+    // --- DOM refs & Runtime State ---
+    const canvas = $('scope'), ctx = canvas.getContext('2d'),
+      startBtn = $('startBtn'), muteBtn = $('muteBtn'),
+      modeSel = $('visualModeSelect'), loader = $('loader');
+    const runtimeState = { isPlaying:false, Tone:null, nodes:{}, visuals:{}, params:null };
+
+    // --- Tone.js Ordinals Loader ---
+    function loadToneJSAndBoot({ 
+      toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+      setLoaderStatus,
+      runtimeState,
+      boot
+    }) {
+      setLoaderStatus('Loading Audio Engine...');
+      import(toneUrl)
+        .then(() => {
+          runtimeState.Tone = window.Tone;
+          setLoaderStatus(runtimeState.Tone 
+            ? `Tone.js v${runtimeState.Tone?.version || '?'} ready.` 
+            : 'Tone.js not found.', !runtimeState.Tone);
+          if (runtimeState.Tone) boot();
+        })
+        .catch(err => {
+          setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+          startBtn.disabled = muteBtn.disabled = true;
+          console.error('[BOP Matrix] Critical Tone.js load error:', err);
+        });
+    }
+
+    // --- Loader status helper ---
+    function setLoaderStatus(msg, isError = false) {
+      loader.textContent = msg;
+      loader.style.color = isError ? '#f66' : '#aaa';
+    }
+
+    // --- Audio Param Generation ---
+    function generateAudioParams(T) {
+      const scales = {
+        pentatonic:['C3','D3','E3','G3','A3','C4','D4','E4','G4','A4','C5'],
+        minor:['A2','B2','C3','D3','E3','F3','G3','A3','B3','C4','D4','E4','F4','G4','A4'],
+        dorian:['C3','D3','Eb3','F3','G3','A3','Bb3','C4','D4','Eb4','F4','G4','A4','Bb4','C5']
+      }, scale = pick(Object.values(scales)), note = pick(scale),
+      oscTypes = ['sine','square','sawtooth','triangle'],
+      filterTypes = ['lowpass','highpass','bandpass'],
+      master = new T.Volume(-12), filter = new T.Filter({type:pick(filterTypes), frequency:rand(300,4000), rolloff:-24, Q:rand(1,10)});
+      const oscillators = [new T.Oscillator({type:pick(oscTypes),frequency:note,volume:-6}).start()];
+      if(Math.random()>.4) oscillators.push(new T.Oscillator({type:pick(oscTypes), frequency:pick(scale), volume:-10, detune:rand(-20,20)}).start());
+      const lfos = [];
+      for(let i=0;i<randi(1,2);++i){
+        const lfoType = pick(oscTypes), lfoFreq = rand(0.01,1.5), tgts = [
+          {target:filter.frequency,min:rand(200,1000),max:rand(1000,8000)},
+          oscillators[1]&&{target:oscillators[1].detune,min:rand(-50,-5),max:rand(5,50)},
+          {target:master.volume,min:rand(-15,-1),max:rand(1,3)}
+        ].filter(Boolean), trg = pick(tgts), lfo = new T.LFO({type:lfoType,frequency:lfoFreq,min:trg.min,max:trg.max,amplitude:1}).start();
+        lfo.connect(trg.target); lfos.push(lfo);
+      }
+      const phaser = Math.random()>.6 ? new T.Phaser({frequency:rand(0.1,2),octaves:rand(2,6),baseFrequency:rand(200,1000)}) : null;
+      return { master, oscillators, filter, lfos, phaser };
+    }
+
+    // --- Visual Param Generation ---
+    function generateVisualParams() {
+      const baseHue = rand(0,360), mode = modeSel.value,
+        strategies = {analogous:[0,30,60], triadic:[0,120,240], complementary:[0,180,0]},
+        offsets = pick(Object.values(strategies)),
+        palette = offsets.map(o=>`hsla(${(baseHue+o)%360},90%,60%,0.85)`),
+        bgColor = `hsl(${baseHue},20%,${rand(5,12)}%)`;
+      return {
+        palette, bgColor, baseShape:mode, symmetry:randi(1,8),
+        visualLFOs:[
+          {type:'rotation',rate:rand(0.001,0.01),depth:Math.PI*2,phase:rand(0,2*Math.PI)},
+          {type:'hueShift',rate:rand(0.0005,0.005),depth:360,phase:rand(0,2*Math.PI)}
+        ],
+        polygonSides: mode==='polygon'?randi(3,9):4,
+        particleCount: mode==='particles'?randi(50,200):0,
+        particleSize: rand(1,4)
+      };
+    }
+
+    // --- Node Management ---
+    function disposeAll() {
+      Object.values(runtimeState.nodes).forEach(n=>{try{n?.stop?.()}catch{}try{n?.dispose?.()}catch{}});
+      runtimeState.nodes={}; runtimeState.visuals={}; runtimeState.params=null;
+    }
+
+    // --- Draw Modes ---
+    const drawFuncs = {
+      radial(data, t, p) {
+        const S=0.4*canvas.width,cx=canvas.width/2,cy=canvas.height/2,angStep=2*Math.PI/p.symmetry,rot=(p.visualLFOs?.[0]?.rate||0.005)*t;
+        for(let s=0;s<p.symmetry;s++){
+          ctx.save(); ctx.rotate(s*angStep+rot); ctx.beginPath();
+          for(let i=0;i<data.length;i++){
+            const a=i/data.length*2*Math.PI, amp=(data[i]+1)/2, r=S*(0.5+0.5*amp), x=cx+Math.cos(a)*r, y=cy+Math.sin(a)*r;
+            i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+          } ctx.closePath(); ctx.stroke(); ctx.restore();
+        }
+      },
+      polygon(data, t, p) {
+        const S=0.4*canvas.width,cx=canvas.width/2,cy=canvas.height/2,angStep=2*Math.PI/p.symmetry,rot=(p.visualLFOs?.[0]?.rate||0.005)*t;
+        for(let s=0;s<p.symmetry;s++){
+          ctx.save(); ctx.rotate(s*angStep+rot); ctx.beginPath();
+          for(let i=0;i<data.length;i++){
+            const q=i/data.length, amp=(data[i]+1)/2,sideIdx=Math.floor(q*p.polygonSides),sideProg=(q*p.polygonSides)%1,
+              a1=sideIdx/p.polygonSides*2*Math.PI, a2=(sideIdx+1)/p.polygonSides*2*Math.PI,
+              x1=Math.cos(a1)*S, y1=Math.sin(a1)*S, x2=Math.cos(a2)*S, y2=Math.sin(a2)*S,
+              x=x1+(x2-x1)*sideProg, y=y1+(y2-y1)*sideProg, len=Math.hypot(x,y), modLen=len*(0.7+0.3*amp),
+              fx=cx+(x/len)*modLen, fy=cy+(y/len)*modLen;
+            i?ctx.lineTo(fx,fy):ctx.moveTo(fx,fy);
+          } ctx.closePath(); ctx.stroke(); ctx.restore();
+        }
+      },
+      layers(data, t, p) {
+        const layers=3,cx=canvas.width/2,cy=canvas.height/2,baseSize=0.4*canvas.width;
+        for(let l=0;l<layers;l++){
+          ctx.save(); ctx.globalAlpha=0.7-l*0.2;
+          ctx.rotate((p.visualLFOs?.[0]?.rate||0.005)*t*(1+l*0.3)+l*0.05); ctx.beginPath();
+          for(let i=0;i<data.length;i++){
+            const a=i/data.length*2*Math.PI,amp=(data[(i+100*l)%data.length]+1)/2,
+              r=baseSize*(1-l*0.15)*(0.8+0.2*amp),x=cx+Math.cos(a)*r,y=cy+Math.sin(a)*r;
+            i?ctx.lineTo(x,y):ctx.moveTo(x,y);
+          } ctx.closePath(); ctx.stroke(); ctx.restore();
+        }
+      },
+      particles(data, t, p) {
+        const cx=canvas.width/2,cy=canvas.height/2,baseRadius=0.4*canvas.width;
+        if(!runtimeState.visuals.particles||runtimeState.visuals.particles.length!==p.particleCount)
+          runtimeState.visuals.particles=Array.from({length:p.particleCount},(_,i)=>({
+            angle:i/p.particleCount*2*Math.PI, radius:baseRadius, speed:rand(0.001,0.01), life:rand(0,1000), size:p.particleSize*rand(0.5,1.5)
+          }));
+        const particles=runtimeState.visuals.particles,rot=(p.visualLFOs?.[0]?.rate||0.002)*t;
+        particles.forEach(pt=>{
+          pt.life+=0.01;
+          const idx=Math.floor(pt.angle/(2*Math.PI)*data.length)%data.length,
+            amp=(data[idx]+1)/2;
+          pt.radius=baseRadius*(0.8+0.4*amp); pt.angle+=pt.speed;
+          const ang=pt.angle+rot, x=cx+Math.cos(ang)*pt.radius, y=cy+Math.sin(ang)*pt.radius;
+          ctx.beginPath(); ctx.arc(x,y,pt.size,0,2*Math.PI); ctx.fill();
+        });
+      }
+    };
+
+    // --- Main Audio/Visual Start ---
+    async function startAudioAndDraw() {
+      if(runtimeState.isPlaying) stopAudioAndDraw();
+      if(!runtimeState.Tone) return setLoaderStatus('Tone.js not loaded.', true);
+      setLoaderStatus("Generating unique experience...");
+      await runtimeState.Tone.start(); disposeAll();
+      const T = runtimeState.Tone, audio = generateAudioParams(T), visual = generateVisualParams();
+      runtimeState.params = visual;
+      audio.oscillators.forEach(o=>o.connect(audio.filter));
+      let out=audio.filter;
+      if(audio.phaser){out.connect(audio.phaser); out=audio.phaser;}
+      out.connect(audio.master); audio.master.toDestination();
+      const ana = T.context.createAnalyser(); ana.fftSize = 2048; audio.master.connect(ana);
+      Object.assign(runtimeState.nodes, {...audio, analyser:ana});
+      runtimeState.isPlaying=true; startBtn.textContent="Regenerate Experience";
+      muteBtn.disabled=false; setLoaderStatus("Experience active. Generating visuals...");
+      animate();
+    }
+    function stopAudioAndDraw() {
+      if(!runtimeState.isPlaying) return;
+      cancelAnimationFrame(runtimeState.nodes.animId); ctx.clearRect(0,0,canvas.width,canvas.height);
+      disposeAll(); runtimeState.isPlaying=false;
+      startBtn.textContent="Generate New Experience"; muteBtn.disabled=true; muteBtn.textContent="Mute";
+      if(runtimeState.Tone) runtimeState.Tone.Destination.mute=false;
+      setLoaderStatus("Audio engine ready. Click Start.");
+    }
+
+    // --- Animation Loop ---
+    function animate() {
+      const ana=runtimeState.nodes.analyser, v=runtimeState.params;
+      if(!ana||!runtimeState.isPlaying) return;
+      const now=performance.now(), buf=new Float32Array(ana.fftSize); ana.getFloatTimeDomainData(buf);
+      ctx.fillStyle = v.bgColor||'#111'; ctx.fillRect(0,0,canvas.width,canvas.height);
+      let rotation=0, hueShift=0;
+      v.visualLFOs.forEach(lfo=>{
+        const val = Math.sin(now*lfo.rate+lfo.phase);
+        if(lfo.type==='rotation')rotation=val*lfo.depth;
+        if(lfo.type==='hueShift')hueShift=val*lfo.depth;
+      });
+      ctx.save(); ctx.translate(canvas.width/2,canvas.height/2); ctx.rotate(rotation); ctx.translate(-canvas.width/2,-canvas.height/2);
+      const baseColor=v.palette[0], baseHue=parseHue(baseColor), shiftedHue=(baseHue+hueShift+360)%360;
+      ctx.strokeStyle = `hsla(${shiftedHue},90%,65%,0.9)`; ctx.fillStyle = `hsla(${shiftedHue},90%,65%,0.7)`;
+      ctx.lineWidth=2.5; ctx.lineJoin='round'; ctx.lineCap='round';
+      (drawFuncs[v.baseShape]||drawFuncs.radial)(buf,now/1000,v);
+      ctx.restore();
+      runtimeState.nodes.animId = requestAnimationFrame(animate);
+    }
+
+    // --- UI Events ---
+    startBtn.onclick = startAudioAndDraw;
+    muteBtn.onclick = () => {
+      if(!runtimeState.Tone) return;
+      const m = runtimeState.Tone.Destination.mute = !runtimeState.Tone.Destination.mute;
+      muteBtn.textContent = m ? "Unmute" : "Mute";
+    };
+    modeSel.onchange = ()=>{ if(runtimeState.isPlaying){stopAudioAndDraw();startAudioAndDraw();} };
+
+    // --- Init Tone.js Ordinal Loader ---
+    startBtn.disabled = muteBtn.disabled = true;
+    loadToneJSAndBoot({
+      toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+      setLoaderStatus,
+      runtimeState,
+      boot: () => {
+        setLoaderStatus("Audio engine ready. Click 'Generate New Experience'.");
+        startBtn.disabled=false; muteBtn.disabled=true;
+      }
+    });
+  </script>
+</body>
+</html>

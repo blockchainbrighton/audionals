@@ -1,0 +1,839 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Web3 Oscilloscope Music</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    :root {
+      --bg-panel: #181818;
+      --border: #2229;
+      --btn-bg: #212;
+      --btn-hover: #383023;
+      --text: #e1d9ce;
+      --label: #ffecb3;
+      --input-bg: #232325;
+      --highlight: #f7c469;
+    }
+
+    html, body {
+      margin: 0; padding: 0; height: 100%; width: 100%;
+      background: #000; color: #fff; font-family: 'Courier New', monospace;
+      overflow: hidden;
+    }
+
+    body {
+      height: 100vh; width: 100vw;
+      min-height: 400px; min-width: 480px;
+      display: grid;
+      grid-template-columns: minmax(220px, 340px) 1fr;
+      gap: 0;
+    }
+
+    #instructions {
+      background: linear-gradient(90deg, var(--bg-panel) 97%, transparent);
+      color: var(--text);
+      font-size: 1.07rem;
+      border-right: 2px solid var(--border);
+      line-height: 1.65;
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      gap: 1.4rem;
+      padding: 2.2rem 1.2rem 2.4rem 2.2rem;
+      overflow-y: auto;
+    }
+
+    #instructions h2 {
+      color: var(--highlight);
+      font-size: 1.22rem;
+      margin: 0 0 0.95em 0;
+      font-weight: bold;
+      letter-spacing: 0.04em;
+    }
+
+    #instructions ol { margin: 0; padding-left: 1.22em; }
+    #instructions ul { margin: 0.4em 0; padding-left: 1em; font-size: 0.98em; }
+
+    #seedForm {
+      margin-top: auto;
+      background: #1c1c1c;
+      padding: 1.1em 1em 0.9em 0.9em;
+      border-radius: 8px;
+      border: 1px solid #292929;
+      color: #fff;
+      box-shadow: 0 0 9px #0006;
+      display: flex;
+      flex-direction: column;
+      gap: 0.5em;
+    }
+
+    #seedForm label {
+      font-size: 0.97em;
+      color: var(--label);
+      margin-bottom: 0.1em;
+      font-weight: 600;
+    }
+
+    #seedInput {
+      font-family: inherit;
+      padding: 0.35em 0.5em;
+      border-radius: 4px;
+      border: 1px solid #444;
+      background: var(--input-bg);
+      color: var(--label);
+      font-size: 1em;
+      letter-spacing: 0.05em;
+    }
+
+    #seedSetBtn {
+      padding: 0.3em 1em;
+      border-radius: 4px;
+      border: 1px solid #666;
+      background: var(--btn-bg);
+      color: #ffe0a3;
+      cursor: pointer;
+      font-family: inherit;
+      font-size: 0.97em;
+      transition: background 0.18s;
+    }
+
+    #seedSetBtn:hover { background: var(--btn-hover); color: #ffeab8; }
+
+    #main {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: flex-start;
+      overflow: hidden;
+      background: #000;
+    }
+
+    #canvas-container {
+      flex: 1;
+      width: 100%;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 0;
+      min-width: 0;
+      margin: 0;
+    }
+
+    #scope {
+      display: block;
+      border-radius: 14px;
+      border: 1.5px solid #333;
+      background: #000;
+      box-shadow: 0 0 34px #000a;
+      cursor: pointer;
+      transition: box-shadow 0.18s;
+      width: 90vw;
+      max-width: min(900px, 85vw, calc(95vh - 150px));
+      height: auto;
+      aspect-ratio: 1/1;
+      min-width: 260px;
+      min-height: 260px;
+      margin: 2rem 0 1.2rem 0;
+    }
+
+    #scope:active { box-shadow: 0 0 50px #fc0c, 0 0 34px #3cf4; }
+
+    #controls {
+      display: flex;
+      gap: 1.1rem;
+      align-items: center;
+      flex-wrap: wrap;
+      justify-content: center;
+      padding: 0.7rem 1.2rem;
+      background: #fff1;
+      border-radius: 9px;
+      width: 95%;
+      max-width: 880px;
+      margin: 0 0 0.4em 0;
+    }
+
+    #controls button, #controls select {
+      padding: 0.53em 1.17em;
+      border-radius: 6px;
+      border: 1px solid #555;
+      background: #242;
+      color: #fff;
+      font-size: 1rem;
+      cursor: pointer;
+      font-family: inherit;
+      font-weight: 500;
+      transition: background 0.19s;
+    }
+
+    #controls button:hover { background: #454; }
+
+    #loader {
+      font-size: 0.98rem;
+      color: #aaa;
+      min-height: 1.3em;
+      text-align: center;
+      font-style: italic;
+      margin-top: 0.1em;
+    }
+
+    #sequencer {
+      display: none;
+      text-align: center;
+      width: 95%;
+      margin: 0.8em auto 0;
+    }
+
+    #stepSlots {
+      display: flex;
+      justify-content: center;
+      gap: 0.55em;
+      margin: 0.6em 0 0.7em 0;
+    }
+
+    .step-slot {
+      width: 37px;
+      height: 37px;
+      border: 1px solid #555;
+      border-radius: 6px;
+      background: #232325;
+      display: grid;
+      place-items: center;
+      cursor: pointer;
+      font-weight: bold;
+      font-size: 1.12rem;
+      user-select: none;
+      transition: background 0.15s, box-shadow 0.16s;
+    }
+
+    .step-slot.record-mode { background: #343; box-shadow: 0 0 7px #f7c46988; }
+    .step-slot.record-mode.active { background: #575; box-shadow: 0 0 12px #f7c469d6; }
+
+    #sequenceControls { margin-top: 0.5em; }
+    #playBtn { display: none; }
+
+    @media (max-width: 900px) {
+      body { grid-template-columns: 1fr; }
+      #instructions {
+        border: none;
+        max-width: 100vw;
+        padding: 1.1rem 0.6rem 1.3rem 1.1rem;
+        height: auto;
+      }
+      #main { height: auto; }
+      #scope { min-width: 160px; }
+    }
+
+    @media (max-width: 600px) {
+      #controls, #sequencer { width: 99vw; max-width: 99vw; }
+      #scope { width: 96vw; max-width: 96vw; min-width: 110px; }
+    }
+  </style>
+</head>
+<body>
+  <aside id="instructions">
+    <div>
+      <h2>How to Use</h2>
+      <ol>
+        <li><b>Numbers 1–6:</b> Switch between sound+visual shapes instantly.</li>
+        <li><b>Step Sequencer:</b>
+          <ul>
+            <li>Click <b>Create Sequence</b> to open.</li>
+            <li>Click a box to record steps (use keys 1–6).</li>
+            <li>Right-click or long-press to clear.</li>
+            <li>Adjust <b>Step Time</b> for speed.</li>
+            <li>Press <b>Play Sequence</b> to loop.</li>
+          </ul>
+        </li>
+        <li><b>Mix Sounds:</b> Change shapes while audio is on to layer effects.</li>
+        <li><b>Toggle Audio:</b> Click the image or <b>Start Audio</b> button.</li>
+      </ol>
+    </div>
+    <form id="seedForm" autocomplete="off">
+      <label for="seedInput">Seed (deterministic):</label>
+      <input id="seedInput" name="seedInput" maxlength="32" spellcheck="false" value="5s567g67" />
+      <button id="seedSetBtn" type="submit">Set Seed</button>
+    </form>
+  </aside>
+
+  <div id="main">
+    <div id="canvas-container">
+      <canvas id="scope" width="900" height="900" title="Click to Start/Stop Audio"></canvas>
+      <section id="controls">
+        <!-- Optional: Two-button mode -->
+        <button id="warmupBtn" style="display:none">Warm Up Engine</button>
+        <button id="startBtn">Start Audio + Draw</button>
+        <button id="muteBtn" disabled>Mute</button>
+        <select id="shapeSelect">
+          <option value="circle">Circle</option>
+          <option value="square">Square</option>
+          <option value="butterfly">Butterfly</option>
+          <option value="lissajous">Lissajous</option>
+          <option value="spiro">Spirograph</option>
+          <option value="harmonograph">Harmonograph</option>
+        </select>
+        <button id="seqBtn">Create Sequence</button>
+      </section>
+      <div id="sequencer">
+        <div id="stepSlots"></div>
+        <div id="sequenceControls">
+          <button id="playBtn">Play Sequence</button>
+          <label for="stepTimeInput" style="margin-left:1.2em;">Step Time (ms):</label>
+          <input type="number" id="stepTimeInput" min="50" max="2000" value="400" style="width: 60px;">
+        </div>
+      </div>
+      <div id="loader">Initializing...</div>
+    </div>
+  </div>
+
+  <script type="module">
+    // === DOM Elements ===
+    const $ = id => document.getElementById(id);
+    const canvas = $('scope');
+    const ctx = canvas.getContext('2d');
+
+    const [startBtn, muteBtn, shapeSel, loader, seqBtn, sequencerDiv, stepSlotsDiv, playBtn, stepTimeInput, seedInput, seedSetBtn, seedForm, warmupBtn] =
+      ['startBtn','muteBtn','shapeSelect','loader','seqBtn','sequencer','stepSlots','playBtn','stepTimeInput','seedInput','seedSetBtn','seedForm','warmupBtn']
+        .map($);
+
+    // === CONFIG: Toggle Two-Button Mode ===
+    const USE_TWO_BUTTON_MODE = false; // <<<<<<< SET TO true TO ENABLE "WARM UP" + "START"
+    warmupBtn.style.display = USE_TWO_BUTTON_MODE ? 'inline-block' : 'none';
+    startBtn.textContent = USE_TWO_BUTTON_MODE ? 'Start Audio + Draw' : 'Start Audio + Draw';
+
+    // === Constants ===
+    const SHAPES = ['circle','square','butterfly','lissajous','spiro','harmonograph'];
+    const NOTES = ['C1','C2','E2','G2','A2','C3','E3','G3','B3','D4','F#4','A4','C5'];
+    const WAVEFORMS = ['sine','triangle','square','sawtooth'];
+
+    // === State ===
+    const state = {
+      isPlaying: false,
+      isSequencerMode: false,
+      isRecording: false,
+      currentRecordSlot: -1,
+      sequence: Array(8).fill(null),
+      sequencePlaying: false,
+      sequenceIntervalId: null,
+      sequenceStepIndex: 0,
+      stepTime: 400,
+      Tone: null,
+      chains: {},
+      current: null,
+      seed: '5s567g67',
+      contextUnlocked: false,
+      animId: null,
+      audioReady: false // Pre-buffered
+    };
+
+    // === Deterministic RNG ===
+    function mulberry32(seed) {
+      let a = 0x6d2b79f5 ^ [...seed].reduce((a, c) => a ^ c.charCodeAt(0), 0);
+      return () => (a ^= a << 13, a ^= a >> 17, (a ^= a << 5) >>> 0) / 0x100000000;
+    }
+
+    // === Preset Generator ===
+    function deterministicPreset(seed, shape) {
+      const rng = mulberry32(seed + "_" + shape);
+      const mode = rng() < 0.18 ? 0 : rng() < 0.56 ? 1 : rng() < 0.85 ? 2 : 3;
+
+      const lfoRate = [
+        0.07 + rng() * 0.3,
+        0.25 + rng() * 8,
+        6 + rng() * 20,
+        24 + rng() * 36
+      ][mode];
+
+      const [lfoMin, lfoMax] = [
+        [400 + rng() * 400, 900 + rng() * 600],
+        [120 + rng() * 700, 1200 + rng() * 1400],
+        [80 + rng() * 250, 1500 + rng() * 3500],
+        [80 + rng() * 250, 1500 + rng() * 3500]
+      ][mode];
+
+      const oscCount = mode === 3 ? (rng() > 0.7 ? 3 : 2) : (rng() > 0.6 ? 2 : 1);
+      const oscs = Array(oscCount).fill().map(() => [WAVEFORMS[(rng() * WAVEFORMS.length) | 0], NOTES[(rng() * NOTES.length) | 0]]);
+
+      const filterBase = mode === 0 ? 700 + rng() * 500 : 300 + rng() * 2400;
+      const resonance = 0.6 + rng() * 0.7;
+
+      const env = mode === 0
+        ? { attack: 0.005 + rng() * 0.03, decay: 0.04 + rng() * 0.08, sustain: 0.1 + rng() * 0.2, release: 0.03 + rng() * 0.1 }
+        : mode === 3
+          ? { attack: 2 + rng() * 8, decay: 4 + rng() * 20, sustain: 0.7 + rng() * 0.2, release: 8 + rng() * 24 }
+          : { attack: 0.03 + rng() * 0.4, decay: 0.1 + rng() * 0.7, sustain: 0.2 + rng() * 0.5, release: 0.2 + rng() * 3 };
+
+      return {
+        osc1: oscs[0],
+        osc2: oscs[1] || null,
+        filter: filterBase,
+        filterQ: resonance,
+        lfo: [lfoRate, lfoMin, lfoMax],
+        envelope: env,
+        reverb: { wet: (mode === 3 ? 0.4 + rng() * 0.5 : 0.1 + rng() * 0.5), roomSize: (mode === 3 ? 0.85 + rng() * 0.12 : 0.6 + rng() * 0.38) },
+        colorSpeed: 0.06 + rng() * 0.22,
+        shapeDrift: 0.0006 + rng() * 0.0032
+      };
+    }
+
+    let presets = {};
+    function loadPresets(seed) {
+      presets = Object.fromEntries(SHAPES.map(shape => [shape, deterministicPreset(seed, shape)]));
+    }
+
+    // === Drawing Functions ===
+    const drawFuncs = {
+      circle(data, t, pr) {
+        const S = 0.8 * canvas.width / 2, c = canvas.width / 2;
+        ctx.beginPath();
+        for (let i = 0; i < data.length; ++i) {
+          const a = i / data.length * 2 * Math.PI + t * 0.001;
+          const r = S * (data[i] + 1) / 2;
+          const x = c + Math.cos(a) * r, y = c + Math.sin(a) * r;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.closePath(); ctx.stroke();
+      },
+      square(data, t, pr) {
+        const S = 0.8 * canvas.width / Math.SQRT2, c = canvas.width / 2, o = (canvas.width - S) / 2;
+        ctx.beginPath();
+        for (let i = 0; i < data.length; ++i) {
+          const p = i / data.length, amp = (data[i] + 1) / 2;
+          let x, y;
+          if (p < 0.25) [x, y] = [o + S * (p / 0.25), o];
+          else if (p < 0.5) [x, y] = [o + S, o + S * ((p - 0.25) / 0.25)];
+          else if (p < 0.75) [x, y] = [o + S - S * ((p - 0.5) / 0.25), o + S];
+          else [x, y] = [o, o + S - S * ((p - 0.75) / 0.25)];
+          const dx = x - c, dy = y - c;
+          const fx = c + dx * (0.8 + 0.2 * amp) + Math.sin(t * 0.0005) * 10;
+          const fy = c + dy * (0.8 + 0.2 * amp) + Math.cos(t * 0.0006) * 10;
+          i ? ctx.lineTo(fx, fy) : ctx.moveTo(x, y);
+        }
+        ctx.closePath(); ctx.stroke();
+      },
+      butterfly(data, t, pr) {
+        const S = 0.4 * canvas.width, c = canvas.width / 2;
+        ctx.beginPath();
+        for (let i = 0; i < data.length; ++i) {
+          const th = i / data.length * Math.PI * 24 + t * 0.0003;
+          const amp = (data[i] + 1) / 2;
+          const scale = Math.exp(Math.cos(th)) - 2 * Math.cos(4 * th) + Math.pow(Math.sin(th / 12), 5);
+          const x = Math.sin(th) * scale * S * (0.5 + 0.5 * amp) + c;
+          const y = Math.cos(th) * scale * S * (0.5 + 0.5 * amp) + c;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.closePath(); ctx.stroke();
+      },
+      lissajous(data, t, pr) {
+        const S = 0.8 * canvas.width / 3, c = canvas.width / 2;
+        const avg = data.reduce((a, b) => a + Math.abs(b), 0) / data.length;
+        const freqX = 3 + Math.sin(t * 0.0003) * 1.5;
+        const freqY = 2 + Math.cos(t * 0.0004) * 1.5;
+        const phase = t * 0.0005;
+        ctx.beginPath();
+        for (let i = 0; i < data.length; ++i) {
+          const theta = i / data.length * 2 * Math.PI;
+          const r = avg * (0.5 + 0.5 * data[i]);
+          const x = c + Math.sin(freqX * theta + phase) * S * r;
+          const y = c + Math.sin(freqY * theta) * S * r;
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      },
+      spiro(data, t, pr) {
+        const S = 0.6 * canvas.width / 3, c = canvas.width / 2;
+        const inner = 0.3 + Math.sin(t * 0.0002) * 0.2, outer = 0.7, ratio = 0.21 + 0.02 * Math.sin(t * 0.0001);
+        ctx.beginPath();
+        for (let i = 0; i < data.length; ++i) {
+          const theta = i / data.length * 2 * Math.PI;
+          const waveAmp = (data[i] + 1) / 2;
+          const x = c + (S * (outer - inner) * Math.cos(theta) + S * inner * Math.cos((outer - inner) / inner * theta + t * ratio)) * (0.8 + 0.2 * waveAmp);
+          const y = c + (S * (outer - inner) * Math.sin(theta) - S * inner * Math.sin((outer - inner) / inner * theta + t * ratio)) * (0.8 + 0.2 * waveAmp);
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      },
+      harmonograph(data, t, pr) {
+        const S = 0.7 * canvas.width / 4, c = canvas.width / 2;
+        const decay = Math.exp(-t * 0.0002);
+        const avg = (data.reduce((a, b) => a + b, 0) / data.length + 1) * 0.5;
+        ctx.beginPath();
+        for (let i = 0; i < data.length; ++i) {
+          const theta = i / data.length * 2 * Math.PI;
+          const x = c + decay * S * (Math.sin(3 * theta + t * 0.0003) * 0.7 + Math.sin(5 * theta + t * 0.0004) * 0.3) * (0.5 + 0.5 * data[i]);
+          const y = c + decay * S * (Math.sin(4 * theta + t * 0.00035) * 0.6 + Math.sin(6 * theta + t * 0.00025) * 0.4) * (0.5 + 0.5 * data[i]);
+          i ? ctx.lineTo(x, y) : ctx.moveTo(x, y);
+        }
+        ctx.stroke();
+      }
+    };
+
+    // === Canvas Resizing ===
+    function resizeCanvas() {
+      const container = $('canvas-container');
+      const rect = container.getBoundingClientRect();
+      const controlsH = $('controls')?.offsetHeight || 70;
+      const loaderH = $('loader')?.offsetHeight || 30;
+      const maxH = Math.max(150, rect.height - controlsH - loaderH - 40);
+      const maxW = Math.max(160, rect.width * 0.97);
+      const dim = Math.min(maxH, maxW, 900);
+      canvas.width = canvas.height = dim;
+      canvas.style.width = canvas.style.height = `${dim}px`;
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+    document.addEventListener('DOMContentLoaded', resizeCanvas);
+
+    // === Web3-Optimized Tone.js Loader (Script Tag) ===
+    function loadToneJSAndBoot({
+      toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+      setLoaderStatus,
+      runtimeState,
+      boot
+    }) {
+      setLoaderStatus('Loading Audio Engine from Web3...');
+
+      const script = document.createElement('script');
+      script.src = `${toneUrl}?t=${Date.now()}`;
+      script.async = true;
+
+      script.onload = () => {
+        if (window.Tone) {
+          runtimeState.Tone = window.Tone;
+          console.log(`[BOP Matrix] Tone.js v${runtimeState.Tone.version ?? 'Unknown'} loaded via Web3.`);
+          boot();
+        } else {
+          const poll = setInterval(() => {
+            if (window.Tone) {
+              clearInterval(poll);
+              runtimeState.Tone = window.Tone;
+              console.log('[BOP Matrix] Tone.js detected on window.');
+              boot();
+            }
+          }, 50);
+          setTimeout(() => clearInterval(poll), 3000);
+        }
+      };
+
+      script.onerror = () => {
+        setLoaderStatus('Failed to load Tone.js from decentralized source.', true);
+        console.error('[BOP Matrix] Script load error:', toneUrl);
+      };
+
+      document.head.appendChild(script);
+    }
+
+    // === Audio Chain Management ===
+    function disposeAllChains() {
+      Object.values(state.chains).forEach(chain => {
+        Object.values(chain).forEach(node => { try { node?.stop?.(); node?.dispose?.(); } catch {} });
+      });
+      state.chains = {};
+      state.current = null;
+    }
+
+    function setActiveChain(shape) {
+      Object.values(state.chains).forEach(c => c.reverb?.disconnect());
+      const chain = state.chains[shape];
+      chain?.reverb?.toDestination();
+      state.current = shape;
+    }
+
+    async function bufferShapeChain(shape) {
+      if (state.chains[shape] || !state.Tone) return;
+      const pr = presets[shape];
+      const T = state.Tone;
+      const osc1 = new T.Oscillator(pr.osc1[1], pr.osc1[0]).start();
+      const osc2 = pr.osc2 ? new T.Oscillator(pr.osc2[1], pr.osc2[0]).start() : null;
+
+      const volume = new T.Volume(5);
+      const filter = new T.Filter(pr.filter, "lowpass");
+      const lfo = new T.LFO(pr.lfo[0] + "n", pr.lfo[1], pr.lfo[2]).start();
+
+      lfo.connect(filter.frequency);
+      if (osc2) lfo.connect(osc2.detune);
+
+      osc1.connect(volume);
+      if (osc2) osc2.connect(volume);
+      volume.connect(filter);
+
+      const reverb = new T.Freeverb().set(pr.reverb);
+      filter.connect(reverb);
+
+      const analyser = T.context.createAnalyser();
+      analyser.fftSize = 2048;
+      filter.connect(analyser);
+
+      state.chains[shape] = { osc1, osc2, volume, filter, lfo, reverb, analyser };
+    }
+
+    // === Visual Animation Loop ===
+    function visualAnimate() {
+      resizeCanvas();
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      const pr = presets[shapeSel.value];
+      const t = performance.now();
+      const hue = (t * pr.colorSpeed) % 360;
+      const avg = state.isPlaying ? 0.5 : 0.5;
+      const sat = 70 + avg * 30, light = 50 + avg * 20;
+
+      ctx.strokeStyle = `hsl(${hue}, ${sat}%, ${light}%)`;
+      ctx.lineWidth = 2;
+      ctx.lineJoin = ctx.lineCap = 'round';
+
+      const buf = state.isPlaying && state.contextUnlocked
+        ? (() => {
+            const analyser = state.chains[state.current]?.analyser;
+            const data = analyser ? new Float32Array(analyser.fftSize) : new Float32Array(2048);
+            analyser?.getFloatTimeDomainData(data);
+            return data;
+          })()
+        : makeSeedBuffer(shapeSel.value, state.seed);
+
+      (drawFuncs[shapeSel.value] || drawFuncs.circle)(buf, t, pr);
+      state.animId = requestAnimationFrame(visualAnimate);
+    }
+
+    // === Seed Buffer for Visuals ===
+    function makeSeedBuffer(shape, seed, len = 2048) {
+      const rng = mulberry32(seed + "_" + shape);
+      return Float32Array.from({ length: len }, (_, i) => {
+        const t = i / len;
+        const base = Math.sin(2 * Math.PI * t + rng() * 6.28);
+        const harm2 = 0.5 * Math.sin(4 * Math.PI * t + rng() * 6.28);
+        const harm3 = 0.25 * Math.sin(6 * Math.PI * t + rng() * 6.28);
+        return 0.6 * base + 0.3 * harm2 + 0.15 * harm3;
+      });
+    }
+
+    // === Audio Control ===
+    async function unlockAudio() {
+      if (state.contextUnlocked) return;
+      loader.textContent = "Unlocking AudioContext...";
+      await state.Tone.context.resume();
+      state.contextUnlocked = true;
+      setActiveChain(shapeSel.value);
+      startBtn.textContent = "Stop Audio + Draw";
+      muteBtn.disabled = false;
+      state.isPlaying = true;
+      loader.textContent = "Audio running. Shape: " + shapeSel.value;
+    }
+
+    function stopAudio() {
+      if (!state.isPlaying) return;
+      cancelAnimationFrame(state.animId);
+      disposeAllChains();
+      state.isPlaying = false;
+      startBtn.textContent = USE_TWO_BUTTON_MODE ? 'Start Audio + Draw' : 'Start Audio + Draw';
+      muteBtn.disabled = true;
+      muteBtn.textContent = "Mute";
+      if (state.Tone) state.Tone.Destination.mute = false;
+      if (state.sequencePlaying) stopSequence();
+      visualAnimate();
+    }
+
+    // === Two-Button Mode Support ===
+    function handleWarmup() {
+      loader.textContent = "Warming up audio engine...";
+      warmupBtn.disabled = true;
+
+      Promise.all(
+        SHAPES.map(shape => bufferShapeChain(shape).catch(() => {}))
+      ).then(() => {
+        state.audioReady = true;
+        loader.textContent = "Engine warmed up. Ready to start.";
+        startBtn.disabled = false;
+      });
+    }
+
+    // === Sequencer Logic ===
+    function createSequenceUI() {
+      stepSlotsDiv.innerHTML = '';
+      state.sequence.forEach((val, i) => {
+        const slot = Object.assign(document.createElement('div'), {
+          className: 'step-slot',
+          dataset: { index: i },
+          textContent: val || ''
+        });
+        slot.addEventListener('click', () => startRecording(i));
+        slot.addEventListener('contextmenu', e => { e.preventDefault(); clearSlot(i); });
+        let pressTimer;
+        ['touchstart', 'touchend', 'touchmove'].forEach(evt => slot.addEventListener(evt, e => {
+          if (evt === 'touchstart') pressTimer = setTimeout(() => { clearSlot(i); e.preventDefault(); }, 500);
+          else if (evt === 'touchend' || evt === 'touchmove') clearTimeout(pressTimer);
+        }));
+        stepSlotsDiv.appendChild(slot);
+      });
+      updateSequenceUI();
+    }
+
+    function updateSequenceUI() {
+      document.querySelectorAll('#stepSlots .step-slot').forEach((slot, i) => {
+        slot.textContent = state.sequence[i] || '';
+        slot.classList.toggle('record-mode', state.isRecording);
+        slot.classList.toggle('active', state.isRecording && i === state.currentRecordSlot);
+      });
+      playBtn.style.display = state.sequence.every(Boolean) ? 'inline-block' : 'none';
+    }
+
+    function startRecording(i) {
+      if (state.sequencePlaying) return;
+      state.isRecording = true;
+      state.currentRecordSlot = i;
+      updateSequenceUI();
+    }
+
+    function recordStep(key) {
+      if (!state.isRecording || state.currentRecordSlot < 0) return;
+      state.sequence[state.currentRecordSlot] = key;
+      if (++state.currentRecordSlot >= 8) state.isRecording = false;
+      updateSequenceUI();
+    }
+
+    function clearSlot(i) {
+      if (state.sequencePlaying) return;
+      state.sequence[i] = null;
+      if (state.isRecording && i <= state.currentRecordSlot) {
+        state.isRecording = false;
+        state.currentRecordSlot = -1;
+      }
+      updateSequenceUI();
+    }
+
+    function playSequence() {
+      if (state.sequencePlaying || !state.sequence.every(Boolean)) return;
+      state.sequencePlaying = true;
+      state.sequenceStepIndex = 0;
+      playBtn.textContent = "Stop Sequence";
+
+      const step = () => {
+        if (!state.sequencePlaying) return;
+        triggerStep(parseInt(state.sequence[state.sequenceStepIndex]) - 1);
+        state.sequenceStepIndex = (state.sequenceStepIndex + 1) % 8;
+        state.sequenceIntervalId = setTimeout(step, state.stepTime);
+      };
+      step();
+    }
+
+    function stopSequence() {
+      state.sequencePlaying = false;
+      clearTimeout(state.sequenceIntervalId);
+      playBtn.textContent = "Play Sequence";
+    }
+
+    function triggerStep(idx) {
+      if (idx < 0 || idx >= SHAPES.length) return;
+      shapeSel.value = SHAPES[idx];
+      if (state.isPlaying) setActiveChain(SHAPES[idx]);
+      shapeSel.dispatchEvent(new Event('change'));
+    }
+
+    // === UI Events ===
+    if (USE_TWO_BUTTON_MODE) {
+      warmupBtn.addEventListener('click', handleWarmup);
+      startBtn.addEventListener('click', () => state.isPlaying ? stopAudio() : unlockAudio());
+    } else {
+      startBtn.addEventListener('click', () => state.isPlaying ? stopAudio() : (state.audioReady ? unlockAudio() : loader.textContent = "Please wait..."));
+    }
+
+    muteBtn.addEventListener('click', () => {
+      if (!state.Tone) return;
+      const m = state.Tone.Destination.mute = !state.Tone.Destination.mute;
+      muteBtn.textContent = m ? "Unmute" : "Mute";
+    });
+
+    shapeSel.addEventListener('change', () => {
+      if (state.isPlaying) setActiveChain(shapeSel.value);
+    });
+
+    seqBtn.addEventListener('click', () => {
+      state.isSequencerMode = !state.isSequencerMode;
+      sequencerDiv.style.display = state.isSequencerMode ? 'block' : 'none';
+      seqBtn.textContent = state.isSequencerMode ? 'Hide Sequencer' : 'Create Sequence';
+      if (state.isSequencerMode) createSequenceUI();
+      else if (state.sequencePlaying) stopSequence();
+    });
+
+    playBtn.addEventListener('click', () => state.sequencePlaying ? stopSequence() : playSequence());
+    stepTimeInput.addEventListener('change', () => {
+      const val = parseInt(stepTimeInput.value, 10);
+      if (val >= 50 && val <= 2000) state.stepTime = val;
+      else stepTimeInput.value = state.stepTime;
+    });
+
+    canvas.addEventListener('click', () => state.isPlaying ? stopAudio() : unlockAudio());
+
+    // === Keyboard Controls ===
+    document.addEventListener('keydown', e => {
+      if (['INPUT', 'TEXTAREA'].includes(e.target.tagName)) return;
+      const key = e.key;
+      if (key >= '1' && key <= '6') {
+        const idx = Number(key) - 1;
+        if (shapeSel.selectedIndex !== idx) {
+          shapeSel.selectedIndex = idx;
+          shapeSel.dispatchEvent(new Event('change'));
+        }
+        if (state.isSequencerMode && state.isRecording) {
+          recordStep(key);
+          e.preventDefault();
+        }
+      }
+    });
+
+    // === Seed Handling ===
+    function resetToSeed(seed) {
+      stopAudio();
+      disposeAllChains();
+      state.contextUnlocked = false;
+      state.seed = seed;
+      loadPresets(seed);
+      const rng = mulberry32(seed);
+      shapeSel.value = SHAPES[(rng() * SHAPES.length) | 0];
+      visualAnimate();
+      loader.textContent = "Seed updated. Click Start Audio.";
+    }
+
+    seedForm.addEventListener('submit', e => {
+      e.preventDefault();
+      const val = seedInput.value.trim() || 'default';
+      if (val !== state.seed) resetToSeed(val);
+    });
+
+    seedInput.addEventListener('keydown', e => e.key === 'Enter' && seedSetBtn.click());
+
+    // === Init ===
+    loadPresets(state.seed);
+    shapeSel.value = SHAPES[(mulberry32(state.seed)() * SHAPES.length) | 0];
+    visualAnimate(); // Always animate seed visuals
+
+    // Load Tone.js from Web3 source
+    loadToneJSAndBoot({
+      toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+      setLoaderStatus: (msg, isError) => {
+        loader.textContent = msg;
+        if (isError) loader.style.color = '#ff6b6b';
+      },
+      runtimeState: state,
+      boot: () => {
+        loader.textContent = "Tone.js loaded. Pre-buffering audio chains...";
+        startBtn.disabled = !USE_TWO_BUTTON_MODE; // Enable if single-button mode
+        muteBtn.disabled = true;
+
+        // Pre-buffer all chains
+        Promise.all(
+          SHAPES.map(shape => bufferShapeChain(shape).catch(() => {}))
+        ).then(() => {
+          if (USE_TWO_BUTTON_MODE) {
+            loader.textContent = "Ready. Click 'Warm Up Engine' to prepare audio.";
+            warmupBtn.disabled = false;
+          } else {
+            state.audioReady = true;
+            loader.textContent = "Ready. Click 'Start Audio + Draw' to begin.";
+          }
+        });
+      }
+    });
+  </script>
+</body>
+</html>
