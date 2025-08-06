@@ -31,6 +31,41 @@ class ScopeCanvas2 extends HTMLElement {
     this._animate = this._animate.bind(this);
     // Set up drawing functions ported from the original implementation.
     this.drawFuncs = {
+      // Power Hum: Soft, glowing, minimal radial sine pulse
+        hum: (data, t, pr) => {
+          const cw = this._canvas.width;
+          const c = cw / 2;
+          const ctx = this._ctx;
+          const baseRadius = 0.33 * cw + Math.sin(t * 0.0002) * 5; // Very gentle slow throb
+          ctx.save();
+          ctx.globalAlpha = 0.23 + 0.14 * Math.abs(Math.sin(t * 0.0004)); // gentle shimmer
+          ctx.beginPath();
+          // Draw faint main ring
+          ctx.arc(c, c, baseRadius, 0, 2 * Math.PI);
+          ctx.stroke();
+          ctx.strokeStyle = `hsl(195, 80%, 62%)`; // Cyan glow
+
+          ctx.globalAlpha = 0.36;
+          // Draw sine-wave "breath" around the ring
+          ctx.beginPath();
+          const segs = 128;
+          for (let i = 0; i < segs; ++i) {
+            const theta = (i / segs) * 2 * Math.PI;
+            // Subtle pulsing ripple
+            const ripple = 12 * Math.sin(theta * 3 + t * 0.00045) + 6 * Math.sin(theta * 6 - t * 0.00032);
+            // Optionally modulate with live data (if available)
+            let amp = 0;
+            if (data && data.length === segs) amp = data[i] * 7;
+            else if (data) amp = (data[i % data.length] || 0) * 7;
+            const r = baseRadius + ripple + amp;
+            const x = c + Math.cos(theta) * r;
+            const y = c + Math.sin(theta) * r;
+            if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+          }
+          ctx.closePath();
+          ctx.stroke();
+          ctx.restore();
+        },
       circle: (data, t, pr) => {
         const cw = this._canvas.width;
         const S = 0.8 * cw / 2;
@@ -141,8 +176,72 @@ class ScopeCanvas2 extends HTMLElement {
           if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
         }
         ctx.stroke();
-      }
-    };
+      },
+
+// Rose (rhodonea/rows): r = cos(k*theta)
+  rose: (data, t, pr) => {
+    const cw = this._canvas.width;
+    const S = 0.42 * cw;
+    const c = cw / 2;
+    const k = 3 + Math.round(Math.abs(Math.sin(t * 0.00025)) * 4); // 3–7 petals
+    const ctx = this._ctx;
+    ctx.beginPath();
+    for (let i = 0; i < data.length; ++i) {
+      const theta = (i / data.length) * 2 * Math.PI + t * 0.00035;
+      const amp = (data[i] + 1) / 2;
+      const r = S * Math.cos(k * theta) * (0.65 + 0.35 * amp);
+      const x = c + Math.cos(theta) * r;
+      const y = c + Math.sin(theta) * r;
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  },
+
+  // Hypocycloid: classic star curves (like astroids, deltoids)
+  hypocycloid: (data, t, pr) => {
+    const cw = this._canvas.width;
+    const S = 0.39 * cw;
+    const c = cw / 2;
+    // Number of cusps: 3–6
+    const n = 3 + Math.round(3 * Math.abs(Math.cos(t * 0.00023))); // 3–6
+    const ctx = this._ctx;
+    ctx.beginPath();
+    for (let i = 0; i < data.length; ++i) {
+      const theta = (i / data.length) * 2 * Math.PI + t * 0.0004;
+      // Hypocycloid parametric (R = 1, r = 1/n):
+      const R = 1, r = 1 / n;
+      const amp = (data[i] + 1) / 2;
+      const x = c + S * ((R - r) * Math.cos(theta) + r * Math.cos((R - r) / r * theta)) * (0.7 + 0.3 * amp);
+      const y = c + S * ((R - r) * Math.sin(theta) - r * Math.sin((R - r) / r * theta)) * (0.7 + 0.3 * amp);
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  },
+
+  // Epicycloid: like a classic spirograph gear flower
+  epicycloid: (data, t, pr) => {
+    const cw = this._canvas.width;
+    const S = 0.36 * cw;
+    const c = cw / 2;
+    // Number of cusps: 4–7
+    const n = 4 + Math.round(3 * Math.abs(Math.sin(t * 0.00021 + 0.5))); // 4–7
+    const ctx = this._ctx;
+    ctx.beginPath();
+    for (let i = 0; i < data.length; ++i) {
+      const theta = (i / data.length) * 2 * Math.PI + t * 0.00038;
+      // Epicycloid parametric (R = 1, r = 1/n):
+      const R = 1, r = 1 / n;
+      const amp = (data[i] + 1) / 2;
+      const x = c + S * ((R + r) * Math.cos(theta) - r * Math.cos((R + r) / r * theta)) * (0.7 + 0.3 * amp);
+      const y = c + S * ((R + r) * Math.sin(theta) - r * Math.sin((R + r) / r * theta)) * (0.7 + 0.3 * amp);
+      if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+    }
+    ctx.closePath();
+    ctx.stroke();
+  },
+};
   }
 
   connectedCallback() {
