@@ -1,4 +1,4 @@
-// <osc-controls> for the second application exposes basic audio
+// <osc-controls> for the application exposes basic audio
 // controls and a button to reveal or hide the step sequencer.  It
 // dispatches `start-request`, `mute-toggle`, `shape-change` and
 // `toggle-sequencer` events.
@@ -11,7 +11,7 @@ class OscControls2 extends HTMLElement {
     container.id = 'controls';
     this._startBtn = document.createElement('button');
     this._startBtn.id = 'startBtn';
-    this._startBtn.textContent = 'Start Audio + Draw';
+    this._startBtn.textContent = 'POWER ON';
     this._muteBtn = document.createElement('button');
     this._muteBtn.id = 'muteBtn';
     this._muteBtn.textContent = 'Mute';
@@ -97,7 +97,7 @@ class OscControls2 extends HTMLElement {
   updateState({ isAudioStarted, isPlaying, isMuted, shapeKey, sequencerVisible }) {
     this._startBtn.disabled = !isAudioStarted;
     this._muteBtn.disabled = !isAudioStarted;
-    this._startBtn.textContent = isPlaying ? 'Stop Audio + Draw' : 'Start Audio + Draw';
+    this._startBtn.textContent = isPlaying ? 'Stop Audio + Draw' : 'POWER ON';
     this._muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
     if (shapeKey) this._shapeSelect.value = shapeKey;
     this._seqBtn.textContent = sequencerVisible ? 'Hide Sequencer' : 'Create Sequence';

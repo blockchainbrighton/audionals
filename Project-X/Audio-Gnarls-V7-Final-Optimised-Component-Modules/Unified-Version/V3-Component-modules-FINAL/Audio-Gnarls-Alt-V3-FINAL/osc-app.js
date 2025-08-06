@@ -1,5 +1,5 @@
-// The second oscilloscope application has a richer user interface and
-// features compared to the first.  It supports deterministic presets
+// The oscilloscope application has a rich user interface and
+// features.  It supports deterministic presets
 // keyed off of a user‑supplied seed, real time audio synthesis with
 // extensive modulation, and an optional step sequencer.  This class
 // composes the tone loader, the canvas, a control panel and the
@@ -684,22 +684,68 @@ class OscApp2 extends HTMLElement {
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA') return;
     const idx = e.key.charCodeAt(0) - 49; // '1' maps to index 0
     if (idx >= 0 && idx < this.shapes.length) {
-      // When sequencer is recording record the step and consume the event
-      if (this.state.isSequencerMode && this.state.isRecording) {
+      const shapeKey = this.shapes[idx];
+      const state = this.state;
+  
+      // When sequencer is recording, record the step AND play the note immediately
+      if (state.isSequencerMode && state.isRecording) {
         this.recordStep(idx + 1);
+  
+        // Play sound immediately for this step during recording:
+        if (state.contextUnlocked && state.initialShapeBuffered) {
+          // Activate the chain for the shape immediately
+          this.setActiveChain(shapeKey);
+  
+          // Update canvas to reflect current shape and preset
+          this._canvas.shapeKey = shapeKey;
+          this._canvas.preset = state.presets[shapeKey];
+          this._canvas.mode = 'live';
+          this._canvas.isPlaying = true;
+  
+          // Update controls UI state
+          this._controls.updateState({
+            isAudioStarted: state.contextUnlocked,
+            isPlaying: state.isPlaying,
+            isMuted: state.Tone?.Destination?.mute,
+            shapeKey,
+            sequencerVisible: state.isSequencerMode
+          });
+        }
+  
         e.preventDefault();
         return;
       }
-      // Otherwise change shape immediately
-      const shapeKey = this.shapes[idx];
+  
+      // Otherwise change shape immediately (normal playback)
       if (this._controls) {
-        this._controls.updateState({ isAudioStarted: this.state.contextUnlocked, isPlaying: this.state.isPlaying, isMuted: this.state.Tone?.Destination?.mute, shapeKey: shapeKey, sequencerVisible: this.state.isSequencerMode });
-        // Simulate a shape change event
+        this._controls.updateState({
+          isAudioStarted: this.state.contextUnlocked,
+          isPlaying: this.state.isPlaying,
+          isMuted: this.state.Tone?.Destination?.mute,
+          shapeKey,
+          sequencerVisible: this.state.isSequencerMode
+        });
         this._onShapeChange({ detail: { shapeKey } });
       }
       e.preventDefault();
     }
   }
+  
+  recordStep(number) {
+    const state = this.state;
+    if (!state.isRecording) return;
+    const idx = state.currentRecordSlot;
+    if (idx < 0 || idx >= state.sequence.length) return;
+    state.sequence[idx] = number;
+    // Advance to next slot
+    state.currentRecordSlot = (idx + 1) % state.sequence.length;
+    // If we've wrapped around, stop recording
+    if (state.currentRecordSlot === 0) {
+      state.isRecording = false;
+    }
+    this.updateSequenceUI();
+  }
+  
 
   _handleKeyUp(e) {
     // No op – step recording handled on keydown

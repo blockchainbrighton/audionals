@@ -1,4 +1,4 @@
-// This scope-canvas implements the oscilloscope visuals for the second
+// This scope-canvas implements the oscilloscope visuals for the
 // application.  It supports a different set of shapes and respects
 // deterministic presets passed down from the orchestrator.  The
 // properties `analyser`, `preset`, `shapeKey`, `mode`, `isAudioStarted` and
