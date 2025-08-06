@@ -76,19 +76,21 @@ class OscControls2 extends HTMLElement {
         background: #454;
       }
       /* POWER ON/OFF states */
-      #startBtn.power-on {
-        background: #167c26;
-        color: #fff;
-        border-color: #24d840;
-        box-shadow: 0 0 14px #24d84088;
-        text-shadow: 0 1px 2px #0a320e;
-      }
       #startBtn.power-off {
-        background: #b41419;
+        background: #451015;
+        color: #e97c90;
+        border-color: #89232a;
+        box-shadow: 0 0 4px #ff505011, 0 0 0px #0000;
+        text-shadow: none;
+        filter: brightness(0.95);
+      }
+      #startBtn.power-on {
+        background: #ff2a39;
         color: #fff;
-        border-color: #e8474e;
-        box-shadow: 0 0 14px #e8474e77;
-        text-shadow: 0 1px 2px #320a0b;
+        border-color: #ff4e6a;
+        box-shadow: 0 0 18px 5px #ff2a3999, 0 0 4px #ff748499;
+        text-shadow: 0 1px 3px #8d2025cc, 0 0 10px #fff7;
+        filter: brightness(1.10) saturate(1.2);
       }
       /* MUTED state */
       #muteBtn.muted {

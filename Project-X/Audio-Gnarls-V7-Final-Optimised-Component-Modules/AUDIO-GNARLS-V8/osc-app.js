@@ -126,8 +126,8 @@ class OscApp2 extends HTMLElement {
     // Container for step slots
     this._stepSlotsDiv = document.createElement('div');
     this._stepSlotsDiv.id = 'stepSlots';
-    this._sequencerDiv.appendChild(this._stepSlotsDiv);
-    // Sequence controls
+
+    // Sequence controls (define FIRST)
     const seqControlsDiv = document.createElement('div');
     seqControlsDiv.id = 'sequenceControls';
     this._playBtn = document.createElement('button');
@@ -146,7 +146,11 @@ class OscApp2 extends HTMLElement {
     this._stepTimeInput.value = '400';
     this._stepTimeInput.style.width = '60px';
     seqControlsDiv.append(this._playBtn, stepTimeLabel, this._stepTimeInput);
+
+    // NOW append *after* step slots
+    this._sequencerDiv.appendChild(this._stepSlotsDiv);
     this._sequencerDiv.appendChild(seqControlsDiv);
+
     // Loader message
     this._loader = document.createElement('div');
     this._loader.id = 'loader';
@@ -309,10 +313,33 @@ class OscApp2 extends HTMLElement {
         box-shadow: 0 0 12px #f7c469d6;
       }
       #sequenceControls {
-        margin-top: .5em;
+        display: flex;
+        flex-direction: row;
+        align-items: center;
+        justify-content: center;
+        gap: 1.1rem;
+        margin: 1.1em 0 0 0;
+        width: 100%;
       }
       #playBtn {
-        display: inline-block;
+        min-width: 150px;
+        font-size: 1.09rem;
+        padding: 0.44em 1.4em;
+        border-radius: 7px;
+        margin: 0;
+        background: #181818;
+        color: #fff;
+        border: 2px solid #7af6ff;
+        transition: background .19s, color .19s;
+        box-shadow: 0 2px 10px #7af6ff22;
+      }
+      #playBtn:hover {
+        background: #212d3d;
+        color: #fff;
+        border-color: #fff;
+      }
+      #stepTimeInput {
+        margin-left: 0.7em;
       }
     `;
     // Append all top‑level elements
