@@ -12,14 +12,18 @@ class OscControls2 extends HTMLElement {
     this._startBtn = document.createElement('button');
     this._startBtn.id = 'startBtn';
     this._startBtn.textContent = 'POWER ON';
+    this._startBtn.setAttribute('aria-pressed', 'false');
     this._muteBtn = document.createElement('button');
     this._muteBtn.id = 'muteBtn';
     this._muteBtn.textContent = 'Mute';
+    this._muteBtn.setAttribute('aria-pressed', 'false');
     this._shapeSelect = document.createElement('select');
     this._shapeSelect.id = 'shapeSelect';
+    this._shapeSelect.setAttribute('aria-label', 'Shape');
     this._seqBtn = document.createElement('button');
     this._seqBtn.id = 'seqBtn';
     this._seqBtn.textContent = 'Create Sequence';
+    this._seqBtn.setAttribute('aria-pressed', 'false');
     container.append(
       this._startBtn,
       this._muteBtn,
@@ -63,6 +67,10 @@ class OscControls2 extends HTMLElement {
         opacity: 0.5;
         pointer-events: none;
       }
+      button:focus, select:focus {
+        outline: 2px solid #7cc;
+        outline-offset: 2px;
+      }
     `;
     this.shadowRoot.append(style, container);
     // Event forwarding
@@ -98,9 +106,12 @@ class OscControls2 extends HTMLElement {
     this._startBtn.disabled = !isAudioStarted;
     this._muteBtn.disabled = !isAudioStarted;
     this._startBtn.textContent = isPlaying ? 'Stop Audio + Draw' : 'POWER ON';
+    this._startBtn.setAttribute('aria-pressed', isPlaying ? 'true' : 'false');
     this._muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+    this._muteBtn.setAttribute('aria-pressed', isMuted ? 'true' : 'false');
     if (shapeKey) this._shapeSelect.value = shapeKey;
     this._seqBtn.textContent = sequencerVisible ? 'Hide Sequencer' : 'Create Sequence';
+    this._seqBtn.setAttribute('aria-pressed', sequencerVisible ? 'true' : 'false');
   }
 }
 customElements.define('osc-controls', OscControls2);

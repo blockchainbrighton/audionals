@@ -9,11 +9,8 @@ class ScopeCanvas2 extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
     this._canvas = document.createElement('canvas');
-    // Fixed dimensions similar to the original – the canvas will be
-    // sized square.  In the original the canvas resizes with the
-    // viewport, but for simplicity we keep it constant here.
-    this._canvas.width = 600;
-    this._canvas.height = 600;
+    this._canvas.style.width = 'min(92vmin, 720px)';
+    this._canvas.style.height = 'min(92vmin, 720px)';
     this._ctx = this._canvas.getContext('2d');
     this.shadowRoot.appendChild(this._canvas);
     // State properties
@@ -27,8 +24,10 @@ class ScopeCanvas2 extends HTMLElement {
     this._dummyData = null;
     this._liveBuffer = null;
     this._animId = null;
+    this._resizeObserver = null;
     // Bind animation method
     this._animate = this._animate.bind(this);
+    this._handleResize = this._handleResize.bind(this);
     // Set up drawing functions ported from the original implementation.
     this.drawFuncs = {
       circle: (data, t, pr) => {
@@ -147,12 +146,32 @@ class ScopeCanvas2 extends HTMLElement {
 
   connectedCallback() {
     if (!this._animId) this._animate();
+    // Setup responsive canvas
+    this._resizeObserver = new ResizeObserver(this._handleResize);
+    this._resizeObserver.observe(this._canvas);
+    // Initial size
+    this._handleResize();
   }
 
   disconnectedCallback() {
     if (this._animId) {
       cancelAnimationFrame(this._animId);
       this._animId = null;
+    }
+    if (this._resizeObserver) {
+      try { this._resizeObserver.disconnect(); } catch (_) {}
+      this._resizeObserver = null;
+    }
+  }
+
+  _handleResize() {
+    const dpr = Math.max(1, (window.devicePixelRatio || 1));
+    const rect = this._canvas.getBoundingClientRect();
+    const size = Math.max(200, Math.min(720, Math.floor(Math.min(rect.width, rect.height))));
+    const target = Math.floor(size * dpr);
+    if (this._canvas.width !== target || this._canvas.height !== target) {
+      this._canvas.width = target;
+      this._canvas.height = target;
     }
   }
 
