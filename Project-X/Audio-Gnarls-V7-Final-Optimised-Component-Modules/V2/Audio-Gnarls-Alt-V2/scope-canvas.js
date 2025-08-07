@@ -4,6 +4,12 @@
 // and `stop()` to halt the animation and clear the canvas. All
 // drawing logic lives inside this component, isolated from the rest of
 // the application.
+// <scope-canvas> renders the oscilloscope visuals. It exposes a
+// programmatic API: call `start(analyser, visualParams)` with a Web
+// Audio AnalyserNode and a set of visual parameters to begin drawing,
+// and `stop()` to halt the animation and clear the canvas. All
+// drawing logic lives inside this component, isolated from the rest of
+// the application.
 class ScopeCanvas extends HTMLElement {
   constructor() {
     super();
@@ -14,7 +20,6 @@ class ScopeCanvas extends HTMLElement {
     this._particles = [];
     this._render();
   }
-
   _render() {
     const shadow = this.shadowRoot;
     shadow.innerHTML = '';
@@ -37,7 +42,6 @@ class ScopeCanvas extends HTMLElement {
     shadow.appendChild(this.canvas);
     this.ctx = this.canvas.getContext('2d');
   }
-
   /**
    * Start drawing using the supplied analyser and visual parameters. Any
    * existing animation loop is cancelled beforehand. If either
@@ -52,7 +56,6 @@ class ScopeCanvas extends HTMLElement {
     this._visualParams = visualParams;
     this._animate();
   }
-
   /**
    * Stop the current animation and clear the canvas. Resets internal
    * state to allow reuse.
@@ -69,7 +72,6 @@ class ScopeCanvas extends HTMLElement {
     this._visualParams = null;
     this._particles = [];
   }
-
   /**
    * The animation loop. It pulls data from the analyser, applies
    * time-based LFOs and delegates shape rendering to one of the draw
@@ -115,7 +117,6 @@ class ScopeCanvas extends HTMLElement {
     // Schedule next frame
     this._animId = requestAnimationFrame(this._animate);
   };
-
   /**
    * Extracts the hue channel from an hsl/hsla colour string. Falls back
    * to 0 if parsing fails.
@@ -126,7 +127,6 @@ class ScopeCanvas extends HTMLElement {
     const m = /hsla?\(([^,]+)/.exec(c);
     return m ? parseFloat(m[1]) : 0;
   }
-
   /**
    * Collection of shape drawing functions ported from the original
    * implementation. Each function operates in the context of this
@@ -241,8 +241,240 @@ class ScopeCanvas extends HTMLElement {
         this.ctx.arc(x, y, pt.size, 0, 2 * Math.PI);
         this.ctx.fill();
       });
+    },
+    spiral(data, t, p) {
+      const cx = this.canvas.width / 2;
+      const cy = this.canvas.height / 2;
+      const maxRadius = 0.4 * this.canvas.width;
+      const rotRate = (p.visualLFOs?.[0]?.rate || 0.005) * t;
+      const numArms = p.symmetry || 3;
+      const armAngle = (2 * Math.PI) / numArms;
+      
+      for (let arm = 0; arm < numArms; arm++) {
+        this.ctx.save();
+        this.ctx.rotate(arm * armAngle + rotRate);
+        this.ctx.beginPath();
+        
+        for (let i = 0; i < data.length; i++) {
+          const progress = i / data.length;
+          const amp = (data[i] + 1) / 2;
+          const radius = progress * maxRadius * (0.7 + 0.3 * amp);
+          const angle = progress * 4 * Math.PI; // Two full rotations
+          const x = cx + Math.cos(angle) * radius;
+          const y = cy + Math.sin(angle) * radius;
+          
+          i ? this.ctx.lineTo(x, y) : this.ctx.moveTo(x, y);
+        }
+        
+        this.ctx.stroke();
+        this.ctx.restore();
+      }
+    },
+    waveform(data, t, p) {
+      const width = this.canvas.width;
+      const height = this.canvas.height;
+      const centerY = height / 2;
+      const scaleX = width / data.length;
+      const scaleY = height * 0.4;
+      
+      this.ctx.beginPath();
+      
+      for (let i = 0; i < data.length; i++) {
+        const x = i * scaleX;
+        const y = centerY + data[i] * scaleY;
+        
+        i ? this.ctx.lineTo(x, y) : this.ctx.moveTo(x, y);
+      }
+      
+      this.ctx.stroke();
+      
+      // Add mirror effect below
+      this.ctx.save();
+      this.ctx.globalAlpha = 0.5;
+      this.ctx.setTransform(1, 0, 0, -1, 0, 2 * centerY);
+      this.ctx.beginPath();
+      
+      for (let i = 0; i < data.length; i++) {
+        const x = i * scaleX;
+        const y = centerY + data[i] * scaleY;
+        
+        i ? this.ctx.lineTo(x, y) : this.ctx.moveTo(x, y);
+      }
+      
+      this.ctx.stroke();
+      this.ctx.restore();
+    },
+    starburst(data, t, p) {
+      const cx = this.canvas.width / 2;
+      const cy = this.canvas.height / 2;
+      const radius = 0.4 * this.canvas.width;
+      const numRays = p.symmetry || 8;
+      const rotRate = (p.visualLFOs?.[0]?.rate || 0.005) * t;
+      
+      this.ctx.beginPath();
+      
+      for (let i = 0; i < numRays; i++) {
+        const angle = (i / numRays) * 2 * Math.PI + rotRate;
+        const ampIndex = i % data.length;
+        const amp = (data[ampIndex] + 1) / 2;
+        const rayLength = radius * (0.7 + 0.5 * amp);
+        
+        const x1 = cx + Math.cos(angle) * radius * 0.2; // Start from near center
+        const y1 = cy + Math.sin(angle) * radius * 0.2;
+        const x2 = cx + Math.cos(angle) * rayLength;
+        const y2 = cy + Math.sin(angle) * rayLength;
+        
+        this.ctx.moveTo(x1, y1);
+        this.ctx.lineTo(x2, y2);
+      }
+      
+      this.ctx.stroke();
+    },
+    ripple(data, t, p) {
+      const cx = this.canvas.width / 2;
+      const cy = this.canvas.height / 2;
+      const maxRadius = 0.4 * this.canvas.width;
+      const time = t * 2; // Speed up the animation
+      
+      // Create multiple ripple rings
+      const numRipples = 5;
+      const rippleSpacing = maxRadius / numRipples;
+      
+      for (let ripple = 0; ripple < numRipples; ripple++) {
+        const baseRadius = (ripple * rippleSpacing) + (time * 30) % rippleSpacing;
+        const ampIndex = ripple % data.length;
+        const amp = (data[ampIndex] + 1) / 2;
+        const radius = baseRadius * (1 + 0.3 * amp);
+        
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, radius, 0, 2 * Math.PI);
+        this.ctx.globalAlpha = 0.7 - ripple * 0.1;
+        this.ctx.stroke();
+      }
+      
+      // Add a central pulse
+      const centerAmp = (data[0] + 1) / 2;
+      const centerRadius = 10 + 20 * centerAmp;
+      this.ctx.beginPath();
+      this.ctx.arc(cx, cy, centerRadius, 0, 2 * Math.PI);
+      this.ctx.globalAlpha = 0.8;
+      this.ctx.fill();
+    },
+    orbit(data, t, p) {
+      const cx = this.canvas.width / 2;
+      const cy = this.canvas.height / 2;
+      const baseRadius = 0.4 * this.canvas.width;
+      const numBodies = p.particleCount || 5;
+      
+      // Initialize particles if needed
+      if (!this._particles || this._particles.length !== numBodies) {
+        this._particles = Array.from({ length: numBodies }, (_, i) => ({
+          angle: (i / numBodies) * 2 * Math.PI,
+          radius: baseRadius * (0.3 + 0.4 * Math.random()),
+          speed: 0.01 + Math.random() * 0.02,
+          size: 3 + Math.random() * 7,
+          trail: []
+        }));
+      }
+      
+      const time = t * 0.5;
+      
+      this._particles.forEach(body => {
+        // Update position
+        body.angle += body.speed;
+        const x = cx + Math.cos(body.angle) * body.radius;
+        const y = cy + Math.sin(body.angle) * body.radius;
+        
+        // Add to trail
+        body.trail.push({ x, y, time });
+        // Keep only recent positions
+        while (body.trail.length > 20) body.trail.shift();
+        
+        // Draw trail
+        if (body.trail.length > 1) {
+          this.ctx.save();
+          this.ctx.globalAlpha = 0.3;
+          this.ctx.beginPath();
+          this.ctx.moveTo(body.trail[0].x, body.trail[0].y);
+          for (let i = 1; i < body.trail.length; i++) {
+            const alpha = i / body.trail.length;
+            this.ctx.lineTo(body.trail[i].x, body.trail[i].y);
+          }
+          this.ctx.stroke();
+          this.ctx.restore();
+        }
+        
+        // Draw orbit path
+        this.ctx.save();
+        this.ctx.globalAlpha = 0.2;
+        this.ctx.beginPath();
+        this.ctx.arc(cx, cy, body.radius, 0, 2 * Math.PI);
+        this.ctx.stroke();
+        this.ctx.restore();
+        
+        // Draw body
+        const ampIndex = Math.floor((body.angle / (2 * Math.PI)) * data.length) % data.length;
+        const amp = (data[ampIndex] + 1) / 2;
+        const glowSize = body.size * (1 + 0.5 * amp);
+        
+        // Glow effect
+        const gradient = this.ctx.createRadialGradient(x, y, 0, x, y, glowSize);
+        gradient.addColorStop(0, this.ctx.fillStyle);
+        gradient.addColorStop(1, 'transparent');
+        this.ctx.fillStyle = gradient;
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, glowSize, 0, 2 * Math.PI);
+        this.ctx.fill();
+        
+        // Core
+        this.ctx.fillStyle = `hsla(${this._parseHue(p.palette[0])}, 90%, 70%, 1)`;
+        this.ctx.beginPath();
+        this.ctx.arc(x, y, body.size * 0.5, 0, 2 * Math.PI);
+        this.ctx.fill();
+      });
+    },
+    fractal(data, t, p) {
+      const cx = this.canvas.width / 2;
+      const cy = this.canvas.height / 2;
+      const size = 0.3 * this.canvas.width;
+      const depth = 4; // Recursion depth
+      
+      // Get amplitude from audio data
+      const amp = (data[0] + 1) / 2;
+      const variation = 0.2 + 0.3 * amp; // Amount of randomness based on audio
+      
+      const drawBranch = (x, y, length, angle, generation) => {
+        if (generation >= depth) return;
+        
+        const endX = x + Math.cos(angle) * length;
+        const endY = y + Math.sin(angle) * length;
+        
+        this.ctx.beginPath();
+        this.ctx.moveTo(x, y);
+        this.ctx.lineTo(endX, endY);
+        this.ctx.lineWidth = 3 - generation;
+        this.ctx.stroke();
+        
+        // Branching factor influenced by audio
+        const branches = 2 + Math.floor(amp * 3); // 2-5 branches
+        const branchAngle = 0.4 + variation;
+        
+        for (let i = 0; i < branches; i++) {
+          const newAngle = angle - branchAngle + (i / (branches - 1 || 1)) * branchAngle * 2;
+          const newLength = length * (0.7 + Math.random() * 0.2);
+          drawBranch(endX, endY, newLength, newAngle, generation + 1);
+        }
+      };
+      
+      // Start with multiple trunks from bottom center
+      const numTrunks = 1 + Math.floor(amp * 3); // 1-4 trunks
+      const trunkSpread = 0.3 * Math.PI;
+      
+      for (let i = 0; i < numTrunks; i++) {
+        const trunkAngle = -Math.PI/2 - trunkSpread/2 + (i / (numTrunks - 1 || 1)) * trunkSpread;
+        drawBranch(cx, cy + size * 0.8, size * 0.3, trunkAngle, 0);
+      }
     }
   };
 }
-
 customElements.define('scope-canvas', ScopeCanvas);

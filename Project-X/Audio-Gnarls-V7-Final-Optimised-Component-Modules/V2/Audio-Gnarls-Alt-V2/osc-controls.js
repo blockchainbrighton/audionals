@@ -13,8 +13,52 @@ class OscControls extends HTMLElement {
     // Internal state tracking whether the destination is muted.
     this._muted = false;
     this._playing = false;
+    this._toneReady = false; // Track Tone.js readiness
     this._render();
   }
+
+  connectedCallback() {
+    // Listen for keyboard events when element is added to DOM
+    document.addEventListener('keydown', this._onKeyDown);
+  }
+
+  disconnectedCallback() {
+    // Clean up listener when element is removed
+    document.removeEventListener('keydown', this._onKeyDown);
+  }
+
+  _onKeyDown = (event) => {
+    // Only allow shortcuts when Tone is ready and controls are active
+    if (!this._toneReady || this.startBtn.disabled) return;
+
+    const key = event.key;
+    if (!/^[0-9]$/.test(key)) return; // Only 0–9
+
+    // Convert key to index (0 = 0, ..., 9 = 9)
+    const index = parseInt(key, 10);
+    const options = this.modeSelect.querySelectorAll('option');
+    
+    if (index < options.length) {
+      // Update select value
+      this.modeSelect.value = options[index].value;
+      // Dispatch mode-change event
+      this.dispatchEvent(new CustomEvent('mode-change', {
+        bubbles: true,
+        composed: true,
+        detail: { mode: this.modeSelect.value }
+      }));
+
+      // Optional: prevent default behavior for these keys (e.g., prevent input in background)
+      // event.preventDefault();
+
+      // Optional: visual feedback (highlight selected briefly)
+      this.modeSelect.focus();
+      this.modeSelect.style.boxShadow = '0 0 10px rgba(100, 150, 255, 0.6)';
+      setTimeout(() => {
+        if (this.modeSelect) this.modeSelect.style.boxShadow = '';
+      }, 300);
+    }
+  };
 
   _render() {
     const shadow = this.shadowRoot;
@@ -73,11 +117,9 @@ class OscControls extends HTMLElement {
       }
     `;
     shadow.appendChild(style);
-
     // Container for the buttons and select.
     const container = document.createElement('div');
     container.id = 'controls';
-    
     // Start/Regenerate button
     this.startBtn = document.createElement('button');
     this.startBtn.textContent = 'Generate New Experience';
@@ -86,7 +128,6 @@ class OscControls extends HTMLElement {
       this.dispatchEvent(new CustomEvent('start-request', { bubbles: true, composed: true }));
     });
     container.appendChild(this.startBtn);
-
     // Mute/Unmute button
     this.muteBtn = document.createElement('button');
     this.muteBtn.textContent = 'Mute';
@@ -102,14 +143,19 @@ class OscControls extends HTMLElement {
       }));
     });
     container.appendChild(this.muteBtn);
-
     // Visual mode selector
     this.modeSelect = document.createElement('select');
     const modes = [
       { value: 'radial', label: 'Radial Waves' },
       { value: 'polygon', label: 'Dynamic Polygons' },
       { value: 'layers', label: 'Layered Interference' },
-      { value: 'particles', label: 'Particle Flow' }
+      { value: 'particles', label: 'Particle Flow' },
+      { value: 'spiral', label: 'Spiral Patterns' },
+      { value: 'waveform', label: 'Oscilloscope Waveform' },
+      { value: 'starburst', label: 'Starburst Radiance' },
+      { value: 'ripple', label: 'Water Ripple Effect' },
+      { value: 'orbit', label: 'Orbiting Bodies' },
+      { value: 'fractal', label: 'Fractal Growth' }
     ];
     modes.forEach(({ value, label }) => {
       const opt = document.createElement('option');
@@ -126,22 +172,18 @@ class OscControls extends HTMLElement {
       }));
     });
     container.appendChild(this.modeSelect);
-
     // Append controls container
     shadow.appendChild(container);
-
     // Loader message
     this.loaderDiv = document.createElement('div');
     this.loaderDiv.id = 'loader';
     this.loaderDiv.textContent = 'Initializing audio engine...';
     shadow.appendChild(this.loaderDiv);
-
     // Informational text
     const info = document.createElement('div');
     info.id = 'info';
     info.textContent = 'Each generation creates unique, slowly evolving audiovisual patterns.';
     shadow.appendChild(info);
-
     // Tone loader element – hidden but functional. When Tone.js finishes
     // loading it dispatches the `tone-ready` event which we listen for
     // below. The element itself does not render anything visible.
@@ -151,7 +193,6 @@ class OscControls extends HTMLElement {
       toneLoader.setAttribute('tone-url', this.getAttribute('tone-url'));
     }
     shadow.appendChild(toneLoader);
-
     // Event handlers for tone lifecycle.
     // When Tone is ready we enable the controls and update the loader.
     this.addEventListener('tone-ready', (ev) => {
@@ -196,5 +237,4 @@ class OscControls extends HTMLElement {
     return this.modeSelect.value;
   }
 }
-
 customElements.define('osc-controls', OscControls);
