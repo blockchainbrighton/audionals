@@ -1,3 +1,5 @@
+// osc-controls.js
+
 // This component encapsulates the control surface for the oscilloscope
 // synthesizer. It exposes buttons for starting/regenerating the
 // experience, muting/unmuting audio and selecting a visualisation mode.
@@ -6,132 +8,137 @@
 // `start-request`, `mode-change` and `mute-toggle` to decouple the
 // UI from the application logic. The orchestrator should call
 // setPlaying(true|false) to reflect the current playback state.
+// osc-controls.js
 class OscControls extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
 
-    // Find seed from host attribute
     this._seed = this._getSeedFromHost();
-    this._random = this._makeSeededRandom(this._seed);
+    this._soundPresets = this._generateSoundPresets(this._seed);
 
-    // Internal state
     this._muted = false;
     this._playing = false;
     this._toneReady = false;
     this.sequencer = null;
 
-    // Event bindings
-    this._onModeChange = null;
-    this._onStepTrigger = null;
-    this._onSequenceStart = null;
-    this._onSequenceStop = null;
-
-    // Generate deterministic sound profiles (1 per mode)
-    this._soundPresets = this._generateSoundPresets();
-
     this._render();
     this._setupEventListeners();
   }
 
-  /**
-   * Read seed from the host element's data-seed attribute
-   */
   _getSeedFromHost() {
     const app = document.querySelector('osc-app');
     const seedAttr = app?.getAttribute('data-seed');
-    return seedAttr ? parseInt(seedAttr, 10) : 42; // fallback
+    return seedAttr ? parseInt(seedAttr, 10) : 42;
   }
 
-  /**
-   * Creates a seeded random number generator (xorshift)
-   */
-  _makeSeededRandom(seed) {
-    let x = seed;
+  // Simple, repeatable seeded RNG (xorshift-inspired)
+  static makeSeededRandom(seed) {
+    let x = seed || 123456;
     return () => {
-      x = Math.sin(x) * 10000; // deterministic float
-      return x - Math.floor(x); // return fractional part [0,1)
+      x ^= x << 13; x ^= x >> 17; x ^= x << 5;
+      return (x < 0 ? ~x + 1 : x) % 10000 / 10000;
     };
   }
 
-  /**
-   * Generate 10 deterministic sound presets tied to each visualization mode
-   */
-  _generateSoundPresets() {
+  // All synth params for each mode, fully deterministic for a given seed
+  _generateSoundPresets(seed) {
     const modes = [
       'radial', 'polygon', 'layers', 'particles', 'spiral',
       'waveform', 'starburst', 'ripple', 'orbit', 'fractal'
     ];
-
-    return modes.map((mode, index) => {
-      // Use index + seed to make each preset deterministic
-      const rand = this._makeSeededRandom(this._seed + index);
-
-      const getRandInRange = (min, max) => min + rand() * (max - min);
-      const chooseOne = (arr) => arr[Math.floor(rand() * arr.length)];
-
-      // Example sound parameters (Tone.js Synth-like config)
-      return {
+    const presetBank = [];
+    const robustSeed = s => (s * 0xdeadbeef) ^ (s << 7) ^ (s >> 3);
+  
+    modes.forEach((mode, index) => {
+      // Make the seed for this mode more unique
+      const base = robustSeed(seed + index * 971);
+      const rand = OscControls.makeSeededRandom(base);
+  
+      const choose = arr => arr[Math.floor(rand() * arr.length)];
+      const randf = (a, b) => a + rand() * (b - a);
+  
+      // Widen the possible synth architecture
+      const oscCount = 2 + Math.floor(rand() * 3); // 2–4 oscillators
+      const oscTypesAll = ['sine', 'triangle', 'square', 'sawtooth'];
+      const filterTypesAll = ['lowpass', 'bandpass', 'highpass', 'notch', 'peaking'];
+      const scaleModes = {
+        pentatonic: ['C3','D3','E3','G3','A3','C4','D4','E4','G4','A4','C5'],
+        minor: ['A2','B2','C3','D3','E3','F3','G3','A3','B3','C4','D4','E4','F4','G4','A4'],
+        dorian: ['C3','D3','Eb3','F3','G3','A3','Bb3','C4','D4','Eb4','F4','G4','A4','Bb4','C5'],
+        atonal: Array.from({length: 12}, (_, i) => `${choose('CDEFGAB')}#${2+Math.floor(rand()*3)}`)
+      };
+      const scaleNames = Object.keys(scaleModes);
+      const scaleName = choose(scaleNames);
+      const scale = scaleModes[scaleName];
+      const note = choose(scale);
+  
+      presetBank.push({
         mode,
-        oscillator: {
-          type: chooseOne(['sine', 'triangle', 'square', 'sawtooth'])
+        scale,
+        scaleName,
+        note,
+        oscTypes: Array.from({length: oscCount}, () => choose(oscTypesAll)),
+        oscillator: { type: choose(oscTypesAll) },
+        filter: {
+          frequency: randf(500, 6000),   // min 500 Hz for clarity!
+          type: choose(filterTypesAll),
+          rolloff: choose([-12, -24, -48]),
+          Q: randf(0.4, 8)                // min Q = 0.4 for musical resonance
         },
         envelope: {
-          attack: getRandInRange(0.1, 1.5),
-          decay: getRandInRange(0.1, 0.5),
-          sustain: getRandInRange(0.3, 0.8),
-          release: getRandInRange(0.5, 2.0)
-        },
-        filter: {
-          frequency: getRandInRange(400, 5000),
-          type: chooseOne(['lowpass', 'bandpass', 'highpass']),
-          rolloff: -12
+          attack: randf(0.01, 0.35),      // never too slow
+          decay: randf(0.05, 0.8),
+          sustain: randf(0.25, 1.0),      // always some audible sustain
+          release: randf(0.12, 2.5)
         },
         lfo: {
-          frequency: getRandInRange(0.1, 8),
-          depth: rand()
+          type: choose(oscTypesAll),
+          frequency: randf(0.01, 12.0),
+          depth: randf(0.01, 0.9)
         },
-        note: chooseOne(['C2', 'D2', 'E2', 'F2', 'G2', 'A2', 'B2']),
-        modulation: chooseOne(['am', 'fm', 'none']),
-        reverb: rand() > 0.5
-      };
+        phaser: rand() > 0.5 ? {
+          frequency: randf(0.01, 10),
+          octaves: randf(1, 8),
+          baseFrequency: randf(40, 2000)
+        } : null,
+        detune: randf(-100, 100),
+        modulation: choose(['am', 'fm', 'ring', 'none']),
+        reverb: rand() > 0.3,
+        distortion: rand() > 0.5 ? randf(0.01, 1.0) : null,
+        bitcrusher: rand() > 0.7 ? Math.floor(randf(1, 8)) : null,
+        chorus: rand() > 0.5 ? randf(0.5, 4.0) : null,
+      });
     });
+    return presetBank;
   }
+  
 
-  /**
-   * Public method to get the sound preset for a given mode
-   */
+  // Public: get params for a given mode (string)
   getSoundPreset(mode) {
     return this._soundPresets.find(p => p.mode === mode) || this._soundPresets[0];
   }
 
-  /**
-   * Force regeneration of presets (e.g., after seed change)
-   */
+  // Regenerate presets (e.g., on seed change)
   _regeneratePresets() {
-    this._soundPresets = this._generateSoundPresets();
+    this._soundPresets = this._generateSoundPresets(this._seed);
     this.dispatchEvent(new CustomEvent('sound-presets-changed', {
-      bubbles: true,
-      composed: true,
-      detail: { presets: this._soundPresets }
+      bubbles: true, composed: true, detail: { presets: this._soundPresets }
     }));
   }
 
   connectedCallback() {
     document.addEventListener('keydown', this._onKeyDown);
 
-    // Listen for external seed changes
     document.querySelector('osc-app')?.addEventListener('seed-changed', (e) => {
       const newSeed = parseInt(e.detail.seed, 10);
       this._seed = newSeed;
-      this._random = this._makeSeededRandom(newSeed);
       this._regeneratePresets();
       console.log(`[OscControls] Seed updated to ${newSeed}. Sound presets regenerated.`);
     });
   }
 
   disconnectedCallback() {
-    // Clean up all listeners when element is removed
     document.removeEventListener('keydown', this._onKeyDown);
     this.removeEventListener('mode-change', this._onModeChange);
     if (this._onStepTrigger) document.removeEventListener('step-trigger', this._onStepTrigger);
@@ -177,35 +184,19 @@ class OscControls extends HTMLElement {
   }
 
   _onKeyDown = (event) => {
-    // Only allow shortcuts when Tone is ready and controls are active
     if (!this._toneReady || this.startBtn.disabled) return;
-
     const key = event.key;
-    if (!/^[0-9]$/.test(key)) return; // Only 0–9
-
-    // Convert key to index (0 = 0, ..., 9 = 9)
+    if (!/^[0-9]$/.test(key)) return;
     const index = parseInt(key, 10);
     const options = this.modeSelect.querySelectorAll('option');
-    
     if (index < options.length) {
-      // Update select value
       this.modeSelect.value = options[index].value;
-      // Dispatch mode-change event
       this.dispatchEvent(new CustomEvent('mode-change', {
-        bubbles: true,
-        composed: true,
-        detail: { mode: this.modeSelect.value }
+        bubbles: true, composed: true, detail: { mode: this.modeSelect.value }
       }));
-
-      // Optional: visual feedback (highlight selected briefly)
       this.modeSelect.focus();
       this.modeSelect.style.boxShadow = '0 0 10px rgba(100, 150, 255, 0.6)';
-      setTimeout(() => {
-        if (this.modeSelect) this.modeSelect.style.boxShadow = '';
-      }, 300);
-
-      // Prevent default only if you want to block browser defaults (e.g., address bar focus)
-      // event.preventDefault();
+      setTimeout(() => { if (this.modeSelect) this.modeSelect.style.boxShadow = ''; }, 300);
     }
   };
 
@@ -382,19 +373,11 @@ class OscControls extends HTMLElement {
     this._playing = playing;
     this.startBtn.textContent = playing ? 'Regenerate Experience' : 'Generate New Experience';
     this.muteBtn.disabled = !playing;
-    // When stopping, reset mute state and label
     if (!playing) {
       this._muted = false;
       this.muteBtn.textContent = 'Mute';
     }
   }
-
-  /**
-   * Optional getter for the current mode, exposed for convenience.
-   */
-  get mode() {
-    return this.modeSelect.value;
-  }
+  get mode() { return this.modeSelect.value; }
 }
-
 customElements.define('osc-controls', OscControls);

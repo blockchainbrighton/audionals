@@ -162,7 +162,10 @@ class OscApp extends HTMLElement {
     await this.Tone.start();
     // Generate audio and visuals
     if (this.synth) this.synth.dispose();
-    this.synth = new OscSynth(this.Tone);
+    const preset = this.controls.getSoundPreset(this.currentMode);
+    console.log('[Preset for', this.currentMode, ']:', preset);
+
+    this.synth = new OscSynth(this.Tone, preset);
     const ana = this.synth.connect(this.Tone.Destination);
     this.visualParams = generateVisualParams(this.currentMode);
     this.isPlaying = true;
