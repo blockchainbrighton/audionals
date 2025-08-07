@@ -2,6 +2,8 @@
 // dynamically imports Tone.js from an Ordinals inscription and dispatches
 // a `tone-ready` event when available.  No UI is rendered by this
 // component.
+// THIS IS A WEB3 APP - ALL COMPONENTS, MODULES AND LIBRARIES MUST BE ON-CHAIN - THIS INCLUDES FALLBACKS
+// NO CDN FALLBACKS - THEY WILL NOT WORK IN WEB3
 class ToneLoader extends HTMLElement {
   constructor() {
     super();
