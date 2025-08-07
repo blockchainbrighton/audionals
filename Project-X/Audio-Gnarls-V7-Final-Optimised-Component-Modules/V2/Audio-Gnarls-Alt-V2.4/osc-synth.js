@@ -11,6 +11,7 @@ export class OscSynth {
     this._buildChain();
   }
 
+
   _clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
   }
@@ -221,11 +222,15 @@ export class OscSynth {
   /**
    * Only voices with both (decay + release < 1.2s) AND (sustain < 0.5) are considered "transient" and get looped.
    * All other voices are played as a single long note and never retriggered.
+   * This version always derives loop interval from the **current BPM**.
    */
   _setupAutoLoopers() {
     this.activeLoopers.forEach(l => clearInterval(l));
     this.activeLoopers = [];
-    const barLen = 2.0; // seconds per bar at 120 BPM
+    const T = this.Tone;
+    const bpm = T && T.Transport && T.Transport.bpm ? T.Transport.bpm.value : 120;
+    const beatsPerBar = 4;
+    const barLen = 60 / bpm * beatsPerBar; // seconds per bar at current BPM
     this.voices.forEach((voice, idx) => {
       const env = this.params.bank?.[idx]?.envelope || {};
       const note = this.params.bank?.[idx]?.note || 'C3';
@@ -235,7 +240,7 @@ export class OscSynth {
         ((env.sustain ?? 0.9) < 0.5);
 
       if (isTransient) {
-        // Loop at every bar (2.0s)
+        // Loop at every bar (according to BPM)
         const looper = setInterval(() => {
           try { voice.triggerAttackRelease(note, '8n', undefined, 0.9); } catch {}
         }, barLen * 1000);
@@ -259,7 +264,8 @@ export class OscSynth {
     ana.fftSize = 2048;
     master.connect(ana);
     this.analyser = ana;
-    T.Transport.bpm.value = 120;
+    // Always update loopers to use the *actual* BPM whenever connect is called.
+    this._setupAutoLoopers();
     this._ensureAudible();
     return ana;
   }
