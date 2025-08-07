@@ -1,0 +1,301 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8" />
+<title>OscArt – Stateless Seed-Driven Oscillator Art</title>
+<style>
+  html,body{margin:0;height:100%;background:#000;color:#fff;font-family:monospace;display:flex;flex-direction:column;align-items:center;justify-content:center}
+  canvas{background:#000}
+  #info{position:fixed;top:0;left:0;padding:.5em;font-size:.75em;pointer-events:none}
+</style>
+
+<canvas id="c"></canvas>
+<pre id="info">
+Seed: <input id="seed" value="0" size="10">
+Click to start • keys 0-9 = sounds 0-9
+← → step • space play/pause
+</pre>
+
+<script type="module">
+/* ---------- tiny deterministic RNG ---------- */
+const mulberry32 = s => () => {  // returns float 0..1
+  let t = s += 0x6D2B79F5;
+  t = Math.imul(t ^ (t >>> 15), t | 1);
+  t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+  return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+};
+
+/* ---------- sound engine ---------- */
+class Sound {
+  constructor(seed, index, ac) {
+    this.index = index;
+    const rng = mulberry32(seed + index * 12345);
+    // pick deterministic params
+    this.type = ['sine','square','sawtooth','triangle'][Math.floor(rng()*4)];
+    this.detune = rng()*300-150;        // cents
+    this.attack = rng()*.2+.05;       // s
+    this.decay  = rng()*.5+.1;        // s
+    this.sustain= rng()*.5+.1;        // gain
+    this.release= rng()*1+.1;         // s
+    this.cutoff = 200+rng()*2000;      // Hz
+    this.q      = rng()*10+1;
+    this.lfo    = rng()*5+.1;         // Hz
+    this.lfoAmt = rng()*.9+.1;
+
+    // build graph
+    this.ctx = ac;
+    this.osc = ac.createOscillator();
+    this.osc.type = this.type;
+    this.filter = ac.createBiquadFilter();
+    this.filter.type = 'lowpass';
+    this.filter.frequency.value = this.cutoff;
+    this.filter.Q.value = this.q;
+    this.gain = ac.createGain();
+    this.lfoOsc = ac.createOscillator();
+    this.lfoGain = ac.createGain();
+    this.lfoOsc.type = 'sine';
+    this.lfoOsc.frequency.value = this.lfo;
+    this.lfoGain.gain.value = this.lfoAmt * this.cutoff;
+    this.lfoOsc.start();
+    this.lfoOsc.connect(this.lfoGain);
+    this.lfoGain.connect(this.filter.frequency);
+    this.osc.connect(this.filter);
+    this.filter.connect(this.gain);
+    this.gain.connect(ac.destination);
+    this.osc.start();
+    this.gain.gain.setValueAtTime(0, ac.currentTime);
+  }
+  trigger(time) {
+    const t = this.ctx.currentTime;
+    const g = this.gain.gain;
+    g.cancelScheduledValues(t);
+    g.setValueAtTime(0, t);
+    g.linearRampToValueAtTime(.5, t + this.attack);
+    g.setTargetAtTime(this.sustain, t + this.attack + this.decay, this.decay/5);
+    g.setTargetAtTime(0, time, this.release/5);
+  }
+}
+
+/* ---------- visual engine ---------- */
+const palettes = [
+  ['#00ffff','#ff00ff','#ffff00'],
+  ['#ff006e','#8338ec','#3a86ff'],
+  ['#f72585','#7209b7','#560bad'],
+  ['#ffb703','#fb8500','#023047']
+];
+
+class Visual {
+  constructor(seed, index, canvas) {
+    this.canvas = canvas;
+    this.ctx = canvas.getContext('2d');
+    this.index = index;
+    const rng = mulberry32(seed + index * 54321);
+    
+    // Deterministic visual parameters
+    this.type = Math.floor(rng() * 4); // 0:circles, 1:lines, 2:particles, 3:orbit
+    this.palette = palettes[Math.floor(rng() * palettes.length)];
+    this.speed = rng() * 2 + 0.5;
+    this.scale = rng() * 50 + 20;
+    this.density = Math.floor(rng() * 20) + 5;
+    this.rotation = rng() * Math.PI * 2;
+    
+    // Audio-reactive params
+    this.audioScale = 1;
+    this.lfoPhase = 0;
+    
+    // For particle system
+    if (this.type === 2) {
+      this.particles = Array(this.density).fill().map(() => ({
+        x: rng() * canvas.width,
+        y: rng() * canvas.height,
+        vx: (rng() - 0.5) * 2,
+        vy: (rng() - 0.5) * 2,
+        size: rng() * 5 + 2
+      }));
+    }
+  }
+  
+  update(audioData, deltaTime) {
+    this.lfoPhase += this.speed * deltaTime;
+    this.audioScale = 1 + audioData * 3;
+  }
+  
+  draw() {
+    const { ctx, canvas } = this;
+    ctx.save();
+    ctx.globalCompositeOperation = 'screen';
+    
+    switch(this.type) {
+      case 0: // Circles
+        ctx.translate(canvas.width/2, canvas.height/2);
+        ctx.rotate(this.rotation + this.lfoPhase * 0.1);
+        this.palette.forEach((color, i) => {
+          ctx.strokeStyle = color;
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          const radius = this.scale * (i + 1) * this.audioScale;
+          ctx.arc(0, 0, radius, 0, Math.PI * 2);
+          ctx.stroke();
+        });
+        break;
+        
+      case 1: // Lines
+        ctx.translate(canvas.width/2, canvas.height/2);
+        ctx.rotate(this.rotation + this.lfoPhase);
+        for (let i = 0; i < 10; i++) {
+          ctx.strokeStyle = this.palette[i % this.palette.length];
+          ctx.lineWidth = 2 * this.audioScale;
+          ctx.beginPath();
+          const angle = (i / 10) * Math.PI * 2;
+          const length = this.scale * 2 * this.audioScale;
+          ctx.moveTo(0, 0);
+          ctx.lineTo(Math.cos(angle) * length, Math.sin(angle) * length);
+          ctx.stroke();
+        }
+        break;
+        
+      case 2: // Particles
+        this.particles.forEach((p, i) => {
+          const color = this.palette[i % this.palette.length];
+          ctx.fillStyle = color;
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size * this.audioScale, 0, Math.PI * 2);
+          ctx.fill();
+          
+          // Update position
+          p.x += p.vx * this.speed * this.audioScale;
+          p.y += p.vy * this.speed * this.audioScale;
+          
+          // Wrap around edges
+          if (p.x < 0) p.x = canvas.width;
+          if (p.x > canvas.width) p.x = 0;
+          if (p.y < 0) p.y = canvas.height;
+          if (p.y > canvas.height) p.y = 0;
+        });
+        break;
+        
+      case 3: // Orbiting shapes
+        ctx.translate(canvas.width/2, canvas.height/2);
+        for (let i = 0; i < 3; i++) {
+          ctx.save();
+          ctx.rotate(this.lfoPhase * (i + 1) * 0.3);
+          ctx.strokeStyle = this.palette[i];
+          ctx.lineWidth = 3;
+          const radius = this.scale * (i + 1) * this.audioScale;
+          const x = Math.cos(this.lfoPhase * (i + 1)) * radius;
+          const y = Math.sin(this.lfoPhase * (i + 1)) * radius;
+          
+          // Draw shape
+          ctx.beginPath();
+          ctx.arc(x, y, 20 * this.audioScale, 0, Math.PI*2);
+          ctx.stroke();
+          ctx.restore();
+        }
+        break;
+    }
+    
+    ctx.restore();
+  }
+}
+
+/* ---------- sequencer ---------- */
+class Sequencer {
+  constructor(steps = 8) {
+    this.steps = Array(steps).fill(null);
+    this.current = 0;
+    this.playing = false;
+    this.nextTime = 0;
+  }
+  set(stepIndex, soundIndex) {
+    this.steps[stepIndex] = soundIndex;
+  }
+  toggle() {
+    this.playing = !this.playing;
+    if (this.playing) this.nextTime = 0;
+  }
+  process(sounds, ac) {
+    if (!this.playing) return;
+    const now = ac.currentTime;
+    if (now >= this.nextTime) {
+      const soundIndex = this.steps[this.current];
+      if (soundIndex != null) sounds[soundIndex]?.trigger(now + 0.03);
+      this.current = (this.current + 1) % this.steps.length;
+      this.nextTime = now + (60/120); // 120 BPM
+    }
+  }
+}
+
+/* ---------- main orchestrator ---------- */
+let ac, sounds = [], visuals = [];
+let analyser, dataArray;
+const seq = new Sequencer(8);
+const canvas = document.getElementById('c');
+const resize = () => {
+  canvas.width = innerWidth * devicePixelRatio;
+  canvas.height = innerHeight * devicePixelRatio;
+  canvas.style.width = innerWidth + 'px';
+  canvas.style.height = innerHeight + 'px';
+};
+window.addEventListener('resize', resize);
+resize();
+
+function init(seed) {
+  if (ac) ac.close();
+  ac = new (window.AudioContext || window.webkitAudioContext)();
+  sounds = Array.from({length:10}, (_,i)=>new Sound(seed, i, ac));
+  visuals = Array.from({length:10}, (_,i)=>new Visual(seed, i, canvas));
+  
+  // shared analyser for visuals
+  analyser = ac.createAnalyser();
+  analyser.fftSize = 256;
+  dataArray = new Uint8Array(analyser.frequencyBinCount);
+  sounds.forEach(s=>s.gain.connect(analyser));
+}
+
+function render(t) {
+  requestAnimationFrame(render);
+  
+  // update audio analyser
+  analyser.getByteFrequencyData(dataArray);
+  const avg = dataArray.reduce((a,b)=>a+b,0)/dataArray.length/255;
+  
+  // clear with trail effect
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = 'rgba(0,0,0,0.1)';
+  ctx.fillRect(0,0,canvas.width,canvas.height);
+  
+  // draw current active visual (or all if you prefer)
+  const active = seq.steps[seq.current] ?? 0;
+  visuals[active]?.update(avg, 1/60);
+  visuals[active]?.draw();
+  
+  // sequencer tick
+  seq.process(sounds, ac);
+}
+requestAnimationFrame(render);
+
+/* ---------- controls ---------- */
+document.getElementById('seed').addEventListener('change', e=>{
+  init(parseInt(e.target.value)||0);
+});
+
+window.addEventListener('keydown', e=>{
+  if (e.code.startsWith('Digit')) {
+    const n = parseInt(e.code.slice(-1));
+    if (n <= 9) {
+      sounds[n]?.trigger(ac.currentTime + 0.01);
+      seq.set(seq.current, n);
+    }
+  }
+  if (e.code === 'ArrowLeft') seq.current = (seq.current - 1 + 8) % 8;
+  if (e.code === 'ArrowRight') seq.current = (seq.current + 1) % 8;
+  if (e.code === 'Space') {
+    e.preventDefault();
+    seq.toggle();
+  }
+});
+
+/* ---------- first run ---------- */
+init(0);
+c.onclick = () => ac.state === 'suspended' && ac.resume();
+</script>
+</html>
