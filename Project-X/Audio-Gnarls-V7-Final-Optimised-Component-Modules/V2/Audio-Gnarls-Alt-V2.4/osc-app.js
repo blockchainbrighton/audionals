@@ -150,6 +150,17 @@ class OscApp extends HTMLElement {
       const muted = ev.detail?.muted;
       this.Tone.Destination.mute = !!muted;
     });
+
+    // When the step sequencer triggers a step, play a corresponding
+    // voice from the current sound bank.  The index cycles through the
+    // available voices.  This enables users to create melodies and
+    // rhythms manually via the sequencer without any built‑in pattern.
+    this.addEventListener('step-trigger', (ev) => {
+      if (this.synth && typeof this.synth.triggerVoice === 'function') {
+        const stepIndex = ev.detail?.index ?? 0;
+        try { this.synth.triggerVoice(stepIndex); } catch {}
+      }
+    });
   }
 
   async startExperience() {
@@ -166,6 +177,8 @@ class OscApp extends HTMLElement {
     console.log('[Preset for', this.currentMode, ']:', preset);
 
     this.synth = new OscSynth(this.Tone, preset);
+    this.Tone.Transport.bpm.value = preset.tempo || 120;
+    
     const ana = this.synth.connect(this.Tone.Destination);
     this.visualParams = generateVisualParams(this.currentMode);
     this.isPlaying = true;

@@ -26,6 +26,11 @@ class OscControls extends HTMLElement {
     this._setupEventListeners();
   }
 
+  
+  _clamp(value, min, max) {
+    return Math.min(Math.max(value, min), max);
+  }
+
   _getSeedFromHost() {
     const app = document.querySelector('osc-app');
     const seedAttr = app?.getAttribute('data-seed');
@@ -43,31 +48,19 @@ class OscControls extends HTMLElement {
 
   // All synth params for each mode, fully deterministic for a given seed
   _generateSoundPresets(seed) {
-    // Define available visual modes.  Each mode receives its own audio preset
-    // derived from the user provided seed.  To ensure musical coherence
-    // across all modes we generate a harmonically related sound bank for
-    // each mode.  The bank contains 8–10 notes drawn from a common
-    // scale along with a deterministic rhythmic pattern.  See the
-    // README for details on the generative algorithm.
     const modes = [
       'radial', 'polygon', 'layers', 'particles', 'spiral',
       'waveform', 'starburst', 'ripple', 'orbit', 'fractal'
     ];
     const presetBank = [];
-    // Hash the seed per mode to derive unique but repeatable random streams
     const robustSeed = s => (s * 0xdeadbeef) ^ (s << 7) ^ (s >> 3);
-
+  
     modes.forEach((mode, index) => {
-      // Derive a unique seed per mode.  Multiplying by a prime ensures
-      // different modes do not collide.
       const base = robustSeed(seed + index * 971);
       const rand = OscControls.makeSeededRandom(base);
       const choose = arr => arr[Math.floor(rand() * arr.length)];
       const randf = (a, b) => a + rand() * (b - a);
-
-      // Define available scales.  Each scale contains notes that relate
-      // harmonically.  Adding additional modes like dorian or atonal
-      // provides creative variety while keeping pitch material cohesive.
+  
       const scaleModes = {
         pentatonic: ['C3','D3','E3','G3','A3','C4','D4','E4','G4','A4','C5'],
         minor: ['A2','B2','C3','D3','E3','F3','G3','A3','B3','C4','D4','E4','F4','G4','A4'],
@@ -77,104 +70,98 @@ class OscControls extends HTMLElement {
       const scaleNames = Object.keys(scaleModes);
       const scaleName = choose(scaleNames);
       const scale = scaleModes[scaleName];
-      // Determine the number of voices in the bank.  8–10 voices keeps
-      // things harmonically dense without overcrowding the texture.
-      const numNotes = 8 + Math.floor(rand() * 3);
-      // Construct a list of note objects.  Each entry includes a pitch
-      // (drawn from the scale), a rhythmic duration and a velocity.  A
-      // mixture of short and long durations encourages both percussive
-      // and sustained behaviour.
-      const durationOptions = ['16n','8n','8n','4n','2n'];
-      const notes = Array.from({ length: numNotes }, () => {
-        return {
-          note: choose(scale),
-          duration: choose(durationOptions),
-          velocity: randf(0.5, 1.0)
+  
+      const numVoices = 8 + Math.floor(rand() * 3);
+      const voiceTypes = ['Synth','MonoSynth','FMSynth','AMSynth','MembraneSynth','MetalSynth','PluckSynth'];
+      const bank = [];
+  
+      for (let i = 0; i < numVoices; i++) {
+        const pitch = i === 0 ? scale[0] : choose(scale);
+        const instType = choose(voiceTypes);
+  
+        const isPercussive = i < Math.floor(numVoices / 3);
+        const env = isPercussive ? {
+          // Prevent attack too short (clicks), decay too fast (inaudible)
+          attack: this._clamp(randf(0.005, 0.05), 0.001, 0.1),
+          decay: this._clamp(randf(0.05, 0.4), 0.02, 0.5),
+          sustain: this._clamp(randf(0.2, 0.6), 0.1, 0.8), // avoid full decay
+          release: this._clamp(randf(0.1, 1.5), 0.1, 2.0)
+        } : {
+          // Pads: prevent attack too long (no onset), release too short (abrupt)
+          attack: this._clamp(randf(0.1, 1.0), 0.05, 3.0),
+          decay: this._clamp(randf(0.2, 1.2), 0.1, 2.0),
+          sustain: this._clamp(randf(0.5, 1.0), 0.3, 1.0),
+          release: this._clamp(randf(1.0, 4.0), 0.5, 6.0)
         };
-      });
-      // Build a deterministic 16‑step sequence.  The first beat of every
-      // half‑measure emphasises the root (index 0) while subsequent
-      // positions choose other notes.  This simple pattern yields
-      // musically coherent rhythms reminiscent of basslines.
-      const sequenceLength = 16;
-      const sequence = [];
-      for (let i = 0; i < sequenceLength; i++) {
-        if (i % 4 === 0) {
-          sequence.push(0);
-        } else {
-          sequence.push(Math.floor(rand() * numNotes));
-        }
+  
+        const oscType = choose(['sine','triangle','square','sawtooth']);
+  
+        // Ensure volume is in audible range: -6 to -18 dB
+        const volume = this._clamp(
+          isPercussive
+            ? -6 - randf(0, 6)    // -6 to -12
+            : -12 - randf(0, 6),  // -12 to -18
+          -24, -3  // hard clamp: no quieter than -24 dB, no louder than -3 dB
+        );
+  
+        bank.push({
+          note: pitch,
+          inst: instType,
+          envelope: env,
+          oscType,
+          volume
+        });
       }
-      // Tempo between 70 and 120 BPM for variety.  Slower tempos favour
-      // evolving pads, faster tempos favour percussive patterns.
-      const tempo = Math.round(randf(70, 120));
-      // Step interval: use 8th notes by default.  More complex
-      // subdivisions could be derived from the seed but are fixed for
-      // simplicity.
-      const stepInterval = '8n';
-      // Decide whether to include a base drone oscillator.  When enabled
-      // the drone plays the root note at a low volume, creating a
-      // foundation for melodic lines.  The oscillator type and volume
-      // are derived deterministically.
+  
+      // Drone: ensure it's present but not too quiet
       const droneEnabled = rand() > 0.5;
       const drone = droneEnabled ? {
-        note: notes[0].note,
-        type: choose(['sine','triangle','square','sawtooth']),
-        volume: -12 - randf(0, 10) // between -12 and -22 dB
+        note: scale[0],
+        type: choose(['sine','triangle']),
+        volume: this._clamp(-12 - randf(0, 6), -18, -6) // -12 to -18, clamped to -18..-6
       } : null;
-      // Core synth parameters – these mirror the original synth
-      // definitions but are clamped to safe ranges.  We retain
-      // oscillator.type and envelope definitions here for backward
-      // compatibility.
+  
       const oscTypesAll = ['sine', 'triangle', 'square', 'sawtooth'];
       const filterTypesAll = ['lowpass', 'bandpass', 'highpass', 'notch', 'peaking'];
+  
+      // 🔊 Critical: Add tempo to every preset
+      const tempo = Math.floor(randf(80, 160)); // 80–159 BPM
+  
       const preset = {
         mode,
         scale,
         scaleName,
-        notes,
-        sequence,
-        tempo,
-        stepInterval,
+        bank,
         drone,
-        oscillator: { type: choose(oscTypesAll) },
+        tempo, // ✅ Now included
         filter: {
-          frequency: randf(500, 6000),
+          frequency: this._clamp(randf(400, 6000), 200, 8000), // avoid extreme cutoff
           type: choose(filterTypesAll),
           rolloff: choose([-12, -24, -48]),
-          Q: randf(0.4, 8)
+          Q: this._clamp(randf(0.4, 8), 0.2, 10)
         },
-        envelope: {
-          attack: randf(0.01, 0.35),
-          decay: randf(0.05, 0.8),
-          sustain: randf(0.25, 1.0),
-          release: randf(0.12, 2.5)
-        },
-        // LFO to modulate filter frequency for evolving textures.  We
-        // constrain the frequency range to slowly varying rates and the
-        // depth to modest values to avoid drastic swings.
         lfo: {
           type: choose(oscTypesAll),
-          frequency: randf(0.01, 0.4),
-          depth: randf(0.05, 0.7)
+          frequency: this._clamp(randf(0.01, 0.4), 0.001, 2),
+          depth: this._clamp(randf(0.05, 0.7), 0.01, 1) // avoid zero depth
         },
         phaser: rand() > 0.5 ? {
-          frequency: randf(0.1, 4),
-          octaves: randf(1, 8),
-          baseFrequency: randf(40, 1000)
+          frequency: this._clamp(randf(0.1, 4), 0.01, 20),
+          octaves: this._clamp(randf(1, 8), 0.5, 8),
+          baseFrequency: this._clamp(randf(40, 1000), 20, 5000)
         } : null,
-        detune: randf(-50, 50),
-        modulation: choose(['am', 'fm', 'ring', 'none']),
-        reverb: rand() > 0.4,
-        distortion: rand() > 0.6 ? randf(0.05, 0.8) : null,
+        distortion: rand() > 0.6 ? this._clamp(randf(0.05, 0.8), 0.01, 1) : null,
         bitcrusher: rand() > 0.8 ? Math.floor(randf(1, 6)) : null,
-        chorus: rand() > 0.5 ? randf(0.5, 4.0) : null
+        chorus: rand() > 0.5 ? this._clamp(randf(0.5, 4.0), 0.1, 5.0) : null,
+        reverb: rand() > 0.4,
+        detune: randf(-50, 50)
       };
+  
       presetBank.push(preset);
     });
+  
     return presetBank;
   }
-  
 
   // Public: get params for a given mode (string)
   getSoundPreset(mode) {

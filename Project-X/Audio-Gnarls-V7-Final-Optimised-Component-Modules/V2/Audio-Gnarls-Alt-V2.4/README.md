@@ -11,27 +11,22 @@ This version of the oscilloscope synthesiser has been thoroughly
 refactored to maximise performance, maintainability and creative
 flexibility.  The key improvements are summarised below:
 
-### Deterministic sound bank and sequencer
+### Deterministic sound bank
 
-- **Seed‑driven presets**:  Each visual mode now derives a unique
-  sound preset from the globally supplied `data-seed`.  A robust
-  pseudo‑random generator produces a shared scale, a bank of 8–10
-  notes, a rhythmic sequence, a tempo and a drone definition.  This
-  ensures that all modes in a session share harmonic material and feel
-  musically related while still being distinct from one another.
-- **Polyphonic pattern playback**:  The new `OscSynth` schedules
-  notes deterministically via `Tone.Loop`.  A bass‑style pattern
-  emphasises the root on the downbeat and fills in the remaining
-  steps with other notes from the bank.  Note durations and
-  velocities vary, yielding both percussive hits and sustained
-  textures.
+- **Seed‑driven presets**:  Each visual mode derives a unique sound
+  preset from the globally supplied `data-seed`.  A robust
+  pseudo‑random generator produces a shared scale and a bank of
+  eight to ten **independent voices**.  These voices are harmonically
+  related and vary in instrument type (e.g. `Synth`, `FMSynth`,
+  `MembraneSynth`), envelope shape and oscillator character.  Some
+  voices are percussive and hit hard; others sustain and evolve over
+  several seconds.  Because the sound bank contains discrete voices
+  rather than a pre‑programmed melody, you are free to create your
+  own rhythms and melodies via the built‑in step sequencer or other
+  controllers.
 - **Drone layer**:  Presets may include an optional low‑volume drone
-  oscillator which provides a stable tonal centre over which the
-  sequence plays.
-- **Tempo and interval control**:  Each preset specifies a tempo
-  (70–120 BPM) and step interval (8th notes).  The central
-  `osc-app` configures the Tone.Transport accordingly when a
-  generation is started.
+  oscillator which provides a stable tonal centre while the voices are
+  triggered.
 
 ### Modular audio graph
 
@@ -48,7 +43,17 @@ flexibility.  The key improvements are summarised below:
   master volume; its FFT buffer is re‑used across animation frames
   to minimise garbage collection and improve render smoothness.
 
-### Performance improvements
+### Interactive step sequencer
+
+The step sequencer component now drives the sound bank directly.  Each
+triggered step calls `synth.triggerVoice(index)`, where `index` is
+the step number.  This maps the eight sequencer slots onto the
+voices in the current bank (wrapping as necessary).  In this way you
+can compose rhythms and melodies by hand using the step sequencer.
+There is no pre‑programmed pattern in the audio engine – you
+are in full control of which voices play and when.
+
+### Performance improvements and reliability
 
 - **Typed array reuse**:  The oscilloscope canvas now allocates the
   audio data buffer once per generation rather than on each animation
@@ -62,6 +67,21 @@ flexibility.  The key improvements are summarised below:
   concise CustomEvents.  The orchestrator listens for `start-request`,
   `mode-change` and `mute-toggle` events and coordinates audio and
   visual modules accordingly.
+
+  - **Audibility safeguards**:  An automatic safety check runs after
+    each synthesiser is connected.  If the analyser detects near‑silence
+    (for instance because a filter cutoff is too low or because all
+    envelope amplitudes happen to be quiet) the code gently raises the
+    master gain and resets the filter frequency to a midrange value.
+    This ensures that every preset produces audible sound without
+    sudden jumps in volume.
+
+  - **Instantaneous voice switching**:  When you trigger a new voice via
+    the step sequencer or keyboard, the previously sounding voices are
+    immediately released before the new voice plays.  This prevents
+    overlapping envelopes from creating a sluggish or smeared
+    transition and makes it possible to jump between hard‑hitting
+    and evolving sounds with zero latency.
 
 ### Running the updated app
 
