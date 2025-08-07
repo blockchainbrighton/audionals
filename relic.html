@@ -1,0 +1,722 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+    <meta name="theme-color" content="#000000" />
+    <!-- Optional inline seed for minting. Will be overridden by ?seed= or #seed= if present. -->
+    <meta name="relic-seed" content="" />
+    <title>Generative Web3 Artifact — Audio-Visual Relic</title>
+    <style>
+      :root {
+        --bg: #0b0b10;
+        --fg: #e6e6ea;
+        --muted: #8a8a92;
+        --accent: #9AE6B4;
+      }
+      html, body {
+        margin: 0;
+        padding: 0;
+        background: var(--bg);
+        color: var(--fg);
+        font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+        height: 100%;
+        overflow: hidden;
+      }
+      .frame {
+        position: fixed;
+        inset: 0;
+        display: grid;
+        grid-template-rows: auto 1fr auto;
+      }
+      header {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 10px 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        background: linear-gradient(180deg, rgba(255,255,255,0.025), rgba(0,0,0,0));
+      }
+      header .title {
+        font-weight: 600;
+        letter-spacing: 0.4px;
+        color: var(--fg);
+        opacity: 0.9;
+      }
+      header .spacer { flex: 1; }
+      .seed-box {
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        background: rgba(255,255,255,0.04);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 10px;
+        padding: 6px 8px;
+      }
+      .seed-label { font-size: 12px; color: var(--muted); }
+      .seed-value { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size: 12px; }
+      .seed-input {
+        width: 260px;
+        background: transparent;
+        color: var(--fg);
+        border: none;
+        outline: none;
+        font-family: ui-monospace, monospace;
+        font-size: 12px;
+      }
+      .button {
+        background: rgba(255,255,255,0.08);
+        color: var(--fg);
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 8px;
+        padding: 6px 10px;
+        font-size: 12px;
+        cursor: pointer;
+      }
+      .button:hover { background: rgba(255,255,255,0.12); }
+
+      .grid {
+        position: relative;
+        display: grid;
+        grid-template-columns: repeat(5, 1fr);
+        grid-template-rows: repeat(2, 1fr);
+        gap: 10px;
+        padding: 10px;
+      }
+      .cell {
+        position: relative;
+        border-radius: 12px;
+        overflow: clip;
+        background: radial-gradient(1200px 80% at 10% 0%, rgba(255,255,255,0.03), rgba(0,0,0,0));
+        border: 1px solid rgba(255,255,255,0.06);
+      }
+      canvas { display: block; width: 100%; height: 100%; }
+
+      footer {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        padding: 10px 12px;
+        border-top: 1px solid rgba(255,255,255,0.06);
+        background: linear-gradient(0deg, rgba(255,255,255,0.025), rgba(0,0,0,0));
+        font-size: 12px;
+        color: var(--muted);
+      }
+      .hint { opacity: 0.8; }
+
+      .overlay {
+        position: absolute;
+        inset: 0;
+        display: none;
+        align-items: center;
+        justify-content: center;
+        background: radial-gradient(1200px 80% at 50% 10%, rgba(0,0,0,0.0), rgba(0,0,0,0.6));
+        pointer-events: none;
+      }
+      .overlay.visible { display: flex; pointer-events: auto; }
+      .overlay .unmute {
+        padding: 10px 14px;
+        border-radius: 10px;
+        background: rgba(0,0,0,0.4);
+        border: 1px solid rgba(255,255,255,0.15);
+        color: var(--fg);
+        cursor: pointer;
+        backdrop-filter: blur(6px);
+      }
+
+      .badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        padding: 4px 8px;
+        border-radius: 999px;
+        border: 1px solid rgba(255,255,255,0.12);
+        background: rgba(255,255,255,0.04);
+        font-size: 11px;
+        color: var(--muted);
+      }
+      .legend {
+        display: grid;
+        grid-auto-flow: column;
+        gap: 8px;
+      }
+    </style>
+
+    <!-- Configurable Tone.js Ordinals inscription loader. Replace data-ord-src with your inscription content URL. -->
+    <script id="tone-ord-loader" data-ord-src="">
+      (function() {
+        const el = document.getElementById('tone-ord-loader');
+        const ordSrc = el ? el.getAttribute('data-ord-src') : '';
+        if (!ordSrc) return; // No-op if not provided
+        const s = document.createElement('script');
+        s.src = ordSrc; // e.g., https://ordinals.com/content/<INSCRIPTION_ID>
+        s.async = true;
+        document.head.appendChild(s);
+      })();
+    </script>
+  </head>
+  <body>
+    <div class="frame">
+      <header>
+        <div class="badge" title="Modular, stateless, deterministic">
+          <span>Relic</span>
+          <span>·</span>
+          <span>10 AV Identities</span>
+        </div>
+        <div class="spacer"></div>
+        <div class="seed-box" title="Seed = provenance. Deterministic.">
+          <span class="seed-label">seed</span>
+          <input id="seed-input" class="seed-input" spellcheck="false" placeholder="enter seed (hex, text)" />
+          <button id="seed-apply" class="button">Remint</button>
+        </div>
+      </header>
+
+      <main class="grid" id="grid"></main>
+
+      <footer>
+        <div class="hint">Deterministic demo ritual plays automatically. Change seed to remint.</div>
+        <div class="legend" id="legend"></div>
+      </footer>
+
+      <div class="overlay" id="overlay">
+        <button class="unmute" id="unmute">Click to enable sound</button>
+      </div>
+    </div>
+
+    <script>
+      // --- Stateless Utilities -------------------------------------------------
+      function xmur3Hash(str) {
+        let h = 1779033703 ^ str.length;
+        for (let i = 0; i < str.length; i++) {
+          h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+          h = (h << 13) | (h >>> 19);
+        }
+        return function() {
+          h = Math.imul(h ^ (h >>> 16), 2246822507);
+          h = Math.imul(h ^ (h >>> 13), 3266489909);
+          h ^= h >>> 16;
+          return h >>> 0;
+        };
+      }
+
+      function mulberry32(seed) {
+        let t = seed >>> 0;
+        return function() {
+          t += 0x6D2B79F5;
+          let r = Math.imul(t ^ (t >>> 15), 1 | t);
+          r ^= r + Math.imul(r ^ (r >>> 7), 61 | r);
+          return ((r ^ (r >>> 14)) >>> 0) / 4294967296;
+        };
+      }
+
+      function deriveRngFromSeed(seedString) {
+        const h = xmur3Hash(seedString);
+        const s1 = h();
+        return mulberry32(s1);
+      }
+
+      function hashToUint(seedString) {
+        const h = xmur3Hash(seedString);
+        return h();
+      }
+
+      function seededChoice(rng, arr) {
+        return arr[Math.floor(rng() * arr.length) % arr.length];
+      }
+
+      function mapRange(value, inMin, inMax, outMin, outMax) {
+        const t = (value - inMin) / (inMax - inMin);
+        return outMin + (outMax - outMin) * t;
+      }
+
+      function clamp01(x) { return Math.max(0, Math.min(1, x)); }
+
+      function pickPalette(seedString) {
+        const rng = deriveRngFromSeed(seedString + ':palette');
+        const baseHue = Math.floor(rng() * 360);
+        const spread = 40 + Math.floor(rng() * 80);
+        const sat = 50 + Math.floor(rng() * 40);
+        const light = 50 + Math.floor(rng() * 20);
+        return new Array(10).fill(0).map((_, i) => {
+          const h = (baseHue + i * (spread / 2) + Math.floor(rng() * 20)) % 360;
+          const s = clamp01((sat + rng() * 10) / 100);
+          const l = clamp01((light + (rng() - 0.5) * 10) / 100);
+          return { h, s, l };
+        });
+      }
+
+      function hslToRgba(h, s, l, a=1) {
+        const c = (1 - Math.abs(2*l - 1)) * s;
+        const hp = h / 60;
+        const x = c * (1 - Math.abs((hp % 2) - 1));
+        let r=0,g=0,b=0;
+        if (0 <= hp && hp < 1) { r=c; g=x; b=0; }
+        else if (1 <= hp && hp < 2) { r=x; g=c; b=0; }
+        else if (2 <= hp && hp < 3) { r=0; g=c; b=x; }
+        else if (3 <= hp && hp < 4) { r=0; g=x; b=c; }
+        else if (4 <= hp && hp < 5) { r=x; g=0; b=c; }
+        else if (5 <= hp && hp < 6) { r=c; g=0; b=x; }
+        const m = l - c/2;
+        const rr = Math.round((r+m)*255);
+        const gg = Math.round((g+m)*255);
+        const bb = Math.round((b+m)*255);
+        return `rgba(${rr}, ${gg}, ${bb}, ${a})`;
+      }
+
+      function parseSeedFromEnv() {
+        const url = new URL(window.location.href);
+        const qpSeed = url.searchParams.get('seed');
+        if (qpSeed) return qpSeed;
+        if (window.location.hash && window.location.hash.startsWith('#seed=')) {
+          return decodeURIComponent(window.location.hash.slice('#seed='.length));
+        }
+        const meta = document.querySelector('meta[name="relic-seed"]');
+        if (meta && meta.getAttribute('content')) return meta.getAttribute('content');
+        const bodySeed = document.body.getAttribute('data-seed');
+        if (bodySeed) return bodySeed;
+        if (window.RELIC_SEED) return String(window.RELIC_SEED);
+        // Default
+        return 'relic-'.concat(hashToUint(String(Date.now())).toString(16));
+      }
+
+      function seedSummary(seed) {
+        const u = hashToUint(seed);
+        const a = (u >>> 0).toString(16).padStart(8, '0');
+        return `0x${a}`;
+      }
+
+      // --- Stateless PatternRelic --------------------------------------------
+      function PatternRelic_generateDemo(seedString, numVoices) {
+        const rng = deriveRngFromSeed(seedString + ':pattern');
+        const steps = rng() < 0.5 ? 16 : 32;
+        const densityBase = 0.3 + rng() * 0.5; // 0.3..0.8
+        const swing = (rng() - 0.5) * 0.12; // -6%..+6%
+        const accents = new Set();
+        for (let i = 0; i < steps; i++) if (rng() < 0.15) accents.add(i);
+        const perVoice = [];
+        for (let v = 0; v < numVoices; v++) {
+          const voiceSeed = seedString + `:v${v}`;
+          const vrng = deriveRngFromSeed(voiceSeed);
+          const density = clamp01(densityBase + (vrng() - 0.5) * 0.2);
+          const motifSpan = 3 + Math.floor(vrng() * 5); // 3..7
+          const rootOffset = Math.floor(vrng() * 12) - 6; // -6..+5
+          const pattern = new Array(steps).fill(null).map((_, i) => {
+            if (vrng() < density) {
+              const degree = (i % motifSpan) + (vrng() < 0.1 ? 12 : 0);
+              const vel = 0.6 + vrng() * 0.4;
+              const gate = 0.2 + vrng() * 0.6;
+              return { degree, vel, gate, rootOffset };
+            }
+            return null;
+          });
+          perVoice.push({ pattern, accents });
+        }
+        return { steps, perVoice, swing };
+      }
+
+      // --- Stateless SynthRelic (WebAudio implementation) ---------------------
+      function SynthRelic_createWebAudio(ac, voiceIo, voiceParams) {
+        // Returns stateless play(note) closure. note = { freq, time, duration, velocity }
+        return {
+          play(note) {
+            const { freq, time, duration, velocity } = note;
+            const osc = ac.createOscillator();
+            const gain = ac.createGain();
+            const filter = ac.createBiquadFilter();
+            const pan = ac.createStereoPanner();
+
+            osc.type = voiceParams.wave;
+            osc.frequency.setValueAtTime(freq, time);
+
+            const peak = Math.max(0.0001, Math.min(1, velocity)) * voiceParams.amp;
+            const atk = voiceParams.envA;
+            const dec = voiceParams.envD;
+            const sus = voiceParams.envS;
+            const rel = voiceParams.envR;
+
+            gain.gain.setValueAtTime(0.0001, time);
+            gain.gain.exponentialRampToValueAtTime(peak, time + atk);
+            gain.gain.exponentialRampToValueAtTime(Math.max(peak * sus, 0.0001), time + atk + dec);
+            gain.gain.setTargetAtTime(0.0001, time + duration, rel);
+
+            filter.type = voiceParams.filterType;
+            const baseCut = voiceParams.filterCutoff;
+            const modAmt = voiceParams.filterMod;
+            filter.frequency.setValueAtTime(baseCut + modAmt * velocity, time);
+            filter.Q.setValueAtTime(voiceParams.filterQ, time);
+
+            pan.pan.setValueAtTime(voiceParams.pan, time);
+
+            // Connect: osc -> filter -> gain -> pan -> voiceIo.destination
+            osc.connect(filter);
+            filter.connect(gain);
+            gain.connect(pan);
+            pan.connect(voiceIo.destination);
+
+            // Auto-stop
+            osc.start(time);
+            osc.stop(time + duration + Math.max(rel * 2, 0.05));
+          }
+        };
+      }
+
+      // --- Stateless ScopeRelic ----------------------------------------------
+      function ScopeRelic_drawIntoCell(ctx, analyser, style, t, cellRect) {
+        const { width, height } = cellRect;
+        const bufferLength = analyser.fftSize;
+        const data = new Float32Array(bufferLength);
+        analyser.getFloatTimeDomainData(data);
+
+        // Background fade for trail effect
+        ctx.globalCompositeOperation = 'source-over';
+        ctx.fillStyle = 'rgba(0,0,0,0.10)';
+        ctx.fillRect(0, 0, width, height);
+
+        // Draw waveform / orbit
+        const midX = width / 2;
+        const midY = height / 2;
+        const scale = Math.min(width, height) * 0.42;
+        const hue = style.hsl.h;
+        const col = hslToRgba(hue, style.hsl.s, style.hsl.l, 0.95);
+        ctx.strokeStyle = col;
+        ctx.lineWidth = 1.6 + style.thickness;
+        ctx.beginPath();
+
+        const mode = style.mode;
+        const speed = style.speed;
+        const twist = style.twist;
+
+        for (let i = 0; i < bufferLength; i++) {
+          const xNorm = i / (bufferLength - 1);
+          const v = data[i];
+          const omega = 2 * Math.PI * (xNorm * twist + t * speed);
+
+          let x, y;
+          if (mode === 'osc') {
+            x = midX + (xNorm - 0.5) * width * 0.92;
+            y = midY + v * scale;
+          } else if (mode === 'lissa') {
+            // Lissajous-like orbit from the audio and seed params
+            const a = 1 + (style.a % 5);
+            const b = 1 + (style.b % 7);
+            x = midX + Math.sin(a * omega + v * 2.4) * scale * (0.6 + style.ratio * 0.3);
+            y = midY + Math.sin(b * omega + v * 1.8 + style.phase) * scale * (0.6 + (1 - style.ratio) * 0.3);
+          } else {
+            // Polar spiral
+            const r = scale * (0.2 + 0.8 * Math.abs(v));
+            x = midX + r * Math.cos(omega + v * 3.0);
+            y = midY + r * Math.sin(omega - v * 2.2);
+          }
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+
+        // Accent glow
+        if (style.glow > 0) {
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.strokeStyle = hslToRgba(hue, style.hsl.s, style.hsl.l, 0.12);
+          ctx.lineWidth = (1.6 + style.thickness) * 4 * style.glow;
+          ctx.stroke();
+          ctx.globalCompositeOperation = 'source-over';
+        }
+      }
+
+      // --- RelicApp (Orchestrator) -------------------------------------------
+      const RelicApp = (function() {
+        const NUM_VOICES = 10;
+
+        function computeScale(seedString) {
+          const rng = deriveRngFromSeed(seedString + ':scale');
+          const modes = [
+            { name: 'ionian', steps: [0,2,4,5,7,9,11] },
+            { name: 'dorian', steps: [0,2,3,5,7,9,10] },
+            { name: 'phrygian', steps: [0,1,3,5,7,8,10] },
+            { name: 'lydian', steps: [0,2,4,6,7,9,11] },
+            { name: 'mixolydian', steps: [0,2,4,5,7,9,10] },
+            { name: 'aeolian', steps: [0,2,3,5,7,8,10] },
+            { name: 'locrian', steps: [0,1,3,5,6,8,10] }
+          ];
+          const mode = seededChoice(rng, modes);
+          const root = Math.floor(rng() * 12); // 0..11
+          const octaveBase = 2 + Math.floor(rng() * 2); // 2..3
+          return { mode, root, octaveBase };
+        }
+
+        function degreeToFreq(degree, root, octaveBase) {
+          const a4 = 440;
+          const a4Midi = 69;
+          const midi = a4Midi + (root - 9) + degree; // C=60
+          const freq = a4 * Math.pow(2, (midi - a4Midi + octaveBase*12) / 12);
+          return freq;
+        }
+
+        function createVoiceParams(seedString, voiceIndex, palette) {
+          const rng = deriveRngFromSeed(seedString + `:voice:${voiceIndex}`);
+          const waves = ['sine', 'triangle', 'sawtooth', 'square'];
+          const filterTypes = ['lowpass', 'bandpass', 'highpass'];
+          const wave = seededChoice(rng, waves);
+          const filterType = seededChoice(rng, filterTypes);
+          const envA = 0.002 + rng() * 0.06;
+          const envD = 0.05 + rng() * 0.25;
+          const envS = 0.2 + rng() * 0.6;
+          const envR = 0.03 + rng() * 0.25;
+          const amp = 0.15 + rng() * 0.20;
+          const filterCutoff = 500 + rng() * 4000;
+          const filterQ = 1 + rng() * 10;
+          const filterMod = 600 + rng() * 3200;
+          const pan = -0.9 + rng() * 1.8;
+
+          // Visual style
+          const modes = ['osc', 'lissa', 'polar'];
+          const vmode = seededChoice(rng, modes);
+          const style = {
+            mode: vmode,
+            speed: 0.2 + rng() * 0.8,
+            twist: 1 + rng() * 3,
+            thickness: rng() * 0.6,
+            glow: rng() * 0.8,
+            a: Math.floor(rng() * 9) + 1,
+            b: Math.floor(rng() * 11) + 1,
+            ratio: rng(),
+            phase: rng() * Math.PI * 2,
+            hsl: palette[voiceIndex % palette.length]
+          };
+
+          return { wave, filterType, envA, envD, envS, envR, amp, filterCutoff, filterQ, filterMod, pan, style };
+        }
+
+        function createVoiceIo(ac, master) {
+          const voiceOut = ac.createGain();
+          const analyser = ac.createAnalyser();
+          analyser.fftSize = 1024; // power of two
+          analyser.smoothingTimeConstant = 0.8;
+          voiceOut.gain.value = 1.0;
+          voiceOut.connect(analyser);
+          voiceOut.connect(master);
+          return { destination: voiceOut, analyser };
+        }
+
+        function schedulePattern(ac, tempoBpm, pattern, perVoiceSynths, scaleInfo, startAt) {
+          const sixteenth = 60 / tempoBpm / 4;
+          const totalSteps = pattern.steps;
+          const { root, octaveBase, mode } = scaleInfo;
+          const lookahead = 0.1; // seconds
+
+          let stepIndex = 0;
+          let nextNoteTime = startAt;
+
+          function nextTick() {
+            const now = ac.currentTime;
+            while (nextNoteTime < now + lookahead) {
+              const swing = pattern.swing;
+              const swingOffset = (stepIndex % 2 === 1) ? swing * sixteenth : 0;
+
+              for (let v = 0; v < perVoiceSynths.length; v++) {
+                const step = pattern.perVoice[v].pattern[stepIndex % totalSteps];
+                if (step) {
+                  const deg = step.degree % mode.steps.length;
+                  const octaveJump = Math.floor(step.degree / mode.steps.length);
+                  const midiDegree = mode.steps[deg] + step.rootOffset + octaveJump * 12;
+                  const freq = degreeToFreq(midiDegree, root, octaveBase);
+
+                  const duration = sixteenth * (1.0 + step.gate);
+                  const velocity = step.vel;
+                  const time = nextNoteTime + swingOffset + 0.02; // safety offset
+
+                  perVoiceSynths[v].play({ freq, time, duration, velocity });
+                }
+              }
+
+              stepIndex++;
+              nextNoteTime += sixteenth;
+            }
+            timerId = setTimeout(nextTick, 25);
+          }
+
+          let timerId = setTimeout(nextTick, 0);
+          return () => clearTimeout(timerId);
+        }
+
+        function createCanvases(container, count) {
+          container.innerHTML = '';
+          const cells = [];
+          for (let i = 0; i < count; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            const canvas = document.createElement('canvas');
+            canvas.width = 400; canvas.height = 300;
+            cell.appendChild(canvas);
+            container.appendChild(cell);
+            cells.push({ cell, canvas, ctx: canvas.getContext('2d') });
+          }
+          return cells;
+        }
+
+        function resizeCanvases(cells) {
+          const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+          for (const { cell, canvas } of cells) {
+            const rect = cell.getBoundingClientRect();
+            canvas.width = Math.max(4, Math.floor(rect.width * dpr));
+            canvas.height = Math.max(4, Math.floor(rect.height * dpr));
+          }
+        }
+
+        function renderLoop(cells, voiceIos, voiceParams) {
+          let running = true;
+          function frame(tsMs) {
+            if (!running) return;
+            for (let i = 0; i < cells.length; i++) {
+              const { canvas, ctx } = cells[i];
+              const analyser = voiceIos[i].analyser;
+              const style = voiceParams[i].style;
+              ScopeRelic_drawIntoCell(ctx, analyser, style, tsMs / 1000, { width: canvas.width, height: canvas.height });
+            }
+            requestAnimationFrame(frame);
+          }
+          const rafId = requestAnimationFrame(frame);
+          return () => { running = false; cancelAnimationFrame(rafId); };
+        }
+
+        function hookInteractions(cells, ac, perVoiceSynths, scaleInfo) {
+          // Click on a cell to trigger a note for that voice.
+          cells.forEach((cellObj, i) => {
+            cellObj.cell.addEventListener('click', () => {
+              const a4 = 440; const a4Midi = 69;
+              const midi = a4Midi + (scaleInfo.root - 9) + (scaleInfo.octaveBase*12) + (i % 7);
+              const freq = a4 * Math.pow(2, (midi - a4Midi) / 12);
+              const time = ac.currentTime + 0.01;
+              perVoiceSynths[i].play({ freq, time, duration: 0.2 + (i%3)*0.05, velocity: 0.9 });
+            });
+          });
+
+          // Number keys 1..0 map to voices 0..9
+          window.addEventListener('keydown', (e) => {
+            const map = { '1':0,'2':1,'3':2,'4':3,'5':4,'6':5,'7':6,'8':7,'9':8,'0':9 };
+            if (map.hasOwnProperty(e.key)) {
+              const i = map[e.key];
+              const a4 = 440; const a4Midi = 69;
+              const midi = a4Midi + (scaleInfo.root - 9) + (scaleInfo.octaveBase*12) + (i % 7);
+              const freq = a4 * Math.pow(2, (midi - a4Midi) / 12);
+              const time = ac.currentTime + 0.01;
+              perVoiceSynths[i].play({ freq, time, duration: 0.22, velocity: 0.85 });
+            }
+          });
+        }
+
+        function createLegend(el, tempoBpm, scaleInfo, seed) {
+          el.innerHTML = '';
+          const a = document.createElement('div');
+          a.className = 'badge'; a.textContent = `seed: ${seedSummary(seed)}`; el.appendChild(a);
+          const b = document.createElement('div');
+          b.className = 'badge'; b.textContent = `${tempoBpm} BPM`; el.appendChild(b);
+          const c = document.createElement('div');
+          c.className = 'badge'; c.textContent = `${scaleInfo.mode.name} · root ${scaleInfo.root}`; el.appendChild(c);
+        }
+
+        async function boot(seedString) {
+          const overlay = document.getElementById('overlay');
+          const unmute = document.getElementById('unmute');
+          const grid = document.getElementById('grid');
+          const legend = document.getElementById('legend');
+
+          // Prepare canvases
+          const cells = createCanvases(grid, NUM_VOICES);
+          resizeCanvases(cells);
+          window.addEventListener('resize', () => resizeCanvases(cells));
+
+          // Audio setup
+          const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+          const ac = new AudioContextClass({ latencyHint: 'interactive' });
+          const master = ac.createGain();
+          master.gain.value = 0.9;
+          master.connect(ac.destination);
+
+          // Voice IO and params
+          const palette = pickPalette(seedString);
+          const voiceParams = new Array(NUM_VOICES).fill(0).map((_, i) => createVoiceParams(seedString, i, palette));
+          const voiceIos = new Array(NUM_VOICES).fill(0).map(() => createVoiceIo(ac, master));
+
+          // Create synths (stateless closures)
+          const perVoiceSynths = voiceParams.map((vp, i) => SynthRelic_createWebAudio(ac, voiceIos[i], vp));
+
+          // Pattern
+          const tempoRng = deriveRngFromSeed(seedString + ':tempo');
+          const tempoBpm = Math.round(80 + tempoRng() * 80); // 80..160
+          const pattern = PatternRelic_generateDemo(seedString, NUM_VOICES);
+          const scaleInfo = computeScale(seedString);
+
+          // Legend
+          createLegend(legend, tempoBpm, scaleInfo, seedString);
+
+          // Start visuals immediately
+          const stopRender = renderLoop(cells, voiceIos, voiceParams);
+          // Interactions
+          hookInteractions(cells, ac, perVoiceSynths, scaleInfo);
+
+          // Autoplay policy handling
+          async function ensureAudioRunning() {
+            if (ac.state !== 'running') {
+              try { await ac.resume(); } catch (_) {}
+            }
+            const needsGesture = ac.state !== 'running';
+            overlay.classList.toggle('visible', needsGesture);
+            return !needsGesture;
+          }
+
+          unmute.addEventListener('click', async () => {
+            try { await ac.resume(); } catch (_) {}
+            overlay.classList.remove('visible');
+          });
+
+          // Try to start audio and schedule
+          let cancelScheduler = () => {};
+          const tryStart = async () => {
+            const ok = await ensureAudioRunning();
+            if (ok) {
+              const startAt = ac.currentTime + 0.05;
+              cancelScheduler = schedulePattern(ac, tempoBpm, pattern, perVoiceSynths, scaleInfo, startAt);
+            }
+          };
+          tryStart();
+
+          return {
+            async destroy() {
+              cancelScheduler();
+              stopRender();
+              try { await ac.close(); } catch (_) {}
+            }
+          };
+        }
+
+        return { boot };
+      })();
+
+      // --- Minimal UI wiring --------------------------------------------------
+      (function main() {
+        const seedInput = document.getElementById('seed-input');
+        const seedApply = document.getElementById('seed-apply');
+        let currentSeed = parseSeedFromEnv();
+        seedInput.value = currentSeed;
+
+        let app = null;
+        function mount(seed) {
+          if (app && app.destroy) app.destroy();
+          RelicApp.boot(seed).then((inst) => { app = inst; });
+        }
+
+        seedApply.addEventListener('click', () => {
+          const newSeed = seedInput.value.trim() || currentSeed;
+          currentSeed = newSeed;
+          const url = new URL(window.location.href);
+          url.searchParams.set('seed', newSeed);
+          history.replaceState({}, '', url.toString());
+          mount(currentSeed);
+        });
+
+        // Auto-mount
+        mount(currentSeed);
+      })();
+    </script>
+  </body>
+</html>
