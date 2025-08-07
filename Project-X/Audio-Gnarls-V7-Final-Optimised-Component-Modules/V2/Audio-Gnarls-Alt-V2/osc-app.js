@@ -10,6 +10,7 @@ import './tone-loader.js';
 import './step-sequencer.js';
 import './osc-controls.js';
 import './scope-canvas.js';
+import { OscSynth } from './osc-synth.js';
 
 // --- Helper utilities copied from the original implementation ---
 const rand = (a, b) => Math.random() * (b - a) + a;
@@ -102,13 +103,15 @@ function disposeAll(nodes) {
   });
 }
 
+// (rand, randi, pick, generateVisualParams: keep as before...)
+
 class OscApp extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
     this.isPlaying = false;
     this.Tone = null;
-    this.nodes = {};
+    this.synth = null;
     this.visualParams = null;
     this.currentMode = 'radial';
     this._render();
@@ -118,35 +121,23 @@ class OscApp extends HTMLElement {
     const shadow = this.shadowRoot;
     shadow.innerHTML = '';
     const style = document.createElement('style');
-    // No additional styling here; the body styles are defined in index.html
     style.textContent = '';
     shadow.appendChild(style);
-    // Create child components
     this.scopeCanvas = document.createElement('scope-canvas');
     this.controls = document.createElement('osc-controls');
-    // Forward any tone-url attribute from host down to controls so it can
-    // pass it into its internal tone-loader.
     if (this.hasAttribute('tone-url')) {
       this.controls.setAttribute('tone-url', this.getAttribute('tone-url'));
     }
     shadow.appendChild(this.scopeCanvas);
     shadow.appendChild(this.controls);
-    // Event handlers
     this._bindEvents();
   }
 
   _bindEvents() {
-    // When Tone.js is ready store the reference and optionally update UI.
     this.addEventListener('tone-ready', (ev) => {
-      if (!this.Tone) {
-        this.Tone = ev.detail?.Tone;
-      }
+      if (!this.Tone) this.Tone = ev.detail?.Tone;
     });
-    // Delegate start requests
-    this.addEventListener('start-request', () => {
-      this.startExperience();
-    });
-    // Mode change requests regenerate visuals and audio if playing
+    this.addEventListener('start-request', () => this.startExperience());
     this.addEventListener('mode-change', (ev) => {
       this.currentMode = ev.detail?.mode || this.currentMode;
       if (this.isPlaying) {
@@ -154,7 +145,6 @@ class OscApp extends HTMLElement {
         this.startExperience();
       }
     });
-    // Mute toggling simply forwards to Tone's Destination
     this.addEventListener('mute-toggle', (ev) => {
       if (!this.Tone) return;
       const muted = ev.detail?.muted;
@@ -162,76 +152,36 @@ class OscApp extends HTMLElement {
     });
   }
 
-  /**
-   * Kick off audio synthesis and start drawing. If an experience is
-   * already running it is stopped first. This method communicates
-   * progress through the controls' loader message.
-   */
   async startExperience() {
-    if (!this.Tone) {
-      // Should not happen because controls are disabled until tone-ready.
-      return;
-    }
-    // Stop any existing experience
-    if (this.isPlaying) {
-      this.stopExperience();
-    }
-    // Update status
+    if (!this.Tone) return;
+    if (this.isPlaying) this.stopExperience();
     if (this.controls.loaderDiv) {
       this.controls.loaderDiv.textContent = 'Generating unique experience...';
       this.controls.loaderDiv.style.color = '#aaa';
     }
     await this.Tone.start();
     // Generate audio and visuals
-    disposeAll(this.nodes);
-    this.nodes = {};
-    const audio = generateAudioParams(this.Tone);
-    const visual = generateVisualParams(this.currentMode);
-    this.visualParams = visual;
-    // Wire up audio graph
-    audio.oscillators.forEach(o => o.connect(audio.filter));
-    let out = audio.filter;
-    if (audio.phaser) {
-      out.connect(audio.phaser);
-      out = audio.phaser;
-    }
-    out.connect(audio.master);
-    audio.master.toDestination();
-    // Create analyser on the underlying audio context
-    const ana = this.Tone.context.createAnalyser();
-    ana.fftSize = 2048;
-    audio.master.connect(ana);
-    // Store nodes for later disposal
-    this.nodes = { ...audio, analyser: ana };
+    if (this.synth) this.synth.dispose();
+    this.synth = new OscSynth(this.Tone);
+    const ana = this.synth.connect(this.Tone.Destination);
+    this.visualParams = generateVisualParams(this.currentMode);
     this.isPlaying = true;
-    // Update UI states via controls API
     this.controls.setPlaying(true);
     if (this.controls.loaderDiv) {
       this.controls.loaderDiv.textContent = 'Experience active. Generating visuals...';
       this.controls.loaderDiv.style.color = '#aaa';
     }
-    // Start animation on the canvas
-    this.scopeCanvas.start(ana, visual);
+    this.scopeCanvas.start(ana, this.visualParams);
   }
 
-  /**
-   * Stop the current audio and visual experience, cleaning up all
-   * resources. Updates the UI to reflect that the engine is ready again.
-   */
   stopExperience() {
     if (!this.isPlaying) return;
-    // Stop animation on canvas
     this.scopeCanvas.stop();
-    // Dispose of Tone nodes
-    disposeAll(this.nodes);
-    this.nodes = {};
+    if (this.synth) this.synth.dispose();
+    this.synth = null;
     this.isPlaying = false;
     this.controls.setPlaying(false);
-    // Unmute destination when stopping
-    if (this.Tone) {
-      this.Tone.Destination.mute = false;
-    }
-    // Reset loader message
+    if (this.Tone) this.Tone.Destination.mute = false;
     if (this.controls.loaderDiv) {
       this.controls.loaderDiv.textContent = 'Audio engine ready. Click Start.';
       this.controls.loaderDiv.style.color = '#aaa';

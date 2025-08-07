@@ -10,23 +10,124 @@ class OscControls extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
-    // Internal state tracking whether the destination is muted.
+
+    // Find seed from host attribute
+    this._seed = this._getSeedFromHost();
+    this._random = this._makeSeededRandom(this._seed);
+
+    // Internal state
     this._muted = false;
     this._playing = false;
-    this._toneReady = false; // Track Tone.js readiness
+    this._toneReady = false;
     this.sequencer = null;
+
+    // Event bindings
     this._onModeChange = null;
     this._onStepTrigger = null;
     this._onSequenceStart = null;
     this._onSequenceStop = null;
 
+    // Generate deterministic sound profiles (1 per mode)
+    this._soundPresets = this._generateSoundPresets();
+
     this._render();
     this._setupEventListeners();
   }
 
+  /**
+   * Read seed from the host element's data-seed attribute
+   */
+  _getSeedFromHost() {
+    const app = document.querySelector('osc-app');
+    const seedAttr = app?.getAttribute('data-seed');
+    return seedAttr ? parseInt(seedAttr, 10) : 42; // fallback
+  }
+
+  /**
+   * Creates a seeded random number generator (xorshift)
+   */
+  _makeSeededRandom(seed) {
+    let x = seed;
+    return () => {
+      x = Math.sin(x) * 10000; // deterministic float
+      return x - Math.floor(x); // return fractional part [0,1)
+    };
+  }
+
+  /**
+   * Generate 10 deterministic sound presets tied to each visualization mode
+   */
+  _generateSoundPresets() {
+    const modes = [
+      'radial', 'polygon', 'layers', 'particles', 'spiral',
+      'waveform', 'starburst', 'ripple', 'orbit', 'fractal'
+    ];
+
+    return modes.map((mode, index) => {
+      // Use index + seed to make each preset deterministic
+      const rand = this._makeSeededRandom(this._seed + index);
+
+      const getRandInRange = (min, max) => min + rand() * (max - min);
+      const chooseOne = (arr) => arr[Math.floor(rand() * arr.length)];
+
+      // Example sound parameters (Tone.js Synth-like config)
+      return {
+        mode,
+        oscillator: {
+          type: chooseOne(['sine', 'triangle', 'square', 'sawtooth'])
+        },
+        envelope: {
+          attack: getRandInRange(0.1, 1.5),
+          decay: getRandInRange(0.1, 0.5),
+          sustain: getRandInRange(0.3, 0.8),
+          release: getRandInRange(0.5, 2.0)
+        },
+        filter: {
+          frequency: getRandInRange(400, 5000),
+          type: chooseOne(['lowpass', 'bandpass', 'highpass']),
+          rolloff: -12
+        },
+        lfo: {
+          frequency: getRandInRange(0.1, 8),
+          depth: rand()
+        },
+        note: chooseOne(['C2', 'D2', 'E2', 'F2', 'G2', 'A2', 'B2']),
+        modulation: chooseOne(['am', 'fm', 'none']),
+        reverb: rand() > 0.5
+      };
+    });
+  }
+
+  /**
+   * Public method to get the sound preset for a given mode
+   */
+  getSoundPreset(mode) {
+    return this._soundPresets.find(p => p.mode === mode) || this._soundPresets[0];
+  }
+
+  /**
+   * Force regeneration of presets (e.g., after seed change)
+   */
+  _regeneratePresets() {
+    this._soundPresets = this._generateSoundPresets();
+    this.dispatchEvent(new CustomEvent('sound-presets-changed', {
+      bubbles: true,
+      composed: true,
+      detail: { presets: this._soundPresets }
+    }));
+  }
+
   connectedCallback() {
-    // Listen for keyboard events when element is added to DOM
     document.addEventListener('keydown', this._onKeyDown);
+
+    // Listen for external seed changes
+    document.querySelector('osc-app')?.addEventListener('seed-changed', (e) => {
+      const newSeed = parseInt(e.detail.seed, 10);
+      this._seed = newSeed;
+      this._random = this._makeSeededRandom(newSeed);
+      this._regeneratePresets();
+      console.log(`[OscControls] Seed updated to ${newSeed}. Sound presets regenerated.`);
+    });
   }
 
   disconnectedCallback() {
