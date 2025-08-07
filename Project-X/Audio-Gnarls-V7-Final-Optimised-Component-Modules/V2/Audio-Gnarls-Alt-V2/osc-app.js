@@ -7,6 +7,7 @@
 // routines.
 
 import './tone-loader.js';
+import './step-sequencer.js';
 import './osc-controls.js';
 import './scope-canvas.js';
 

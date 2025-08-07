@@ -14,7 +14,14 @@ class OscControls extends HTMLElement {
     this._muted = false;
     this._playing = false;
     this._toneReady = false; // Track Tone.js readiness
+    this.sequencer = null;
+    this._onModeChange = null;
+    this._onStepTrigger = null;
+    this._onSequenceStart = null;
+    this._onSequenceStop = null;
+
     this._render();
+    this._setupEventListeners();
   }
 
   connectedCallback() {
@@ -23,8 +30,49 @@ class OscControls extends HTMLElement {
   }
 
   disconnectedCallback() {
-    // Clean up listener when element is removed
+    // Clean up all listeners when element is removed
     document.removeEventListener('keydown', this._onKeyDown);
+    this.removeEventListener('mode-change', this._onModeChange);
+    if (this._onStepTrigger) document.removeEventListener('step-trigger', this._onStepTrigger);
+    if (this._onSequenceStart) document.removeEventListener('sequence-start', this._onSequenceStart);
+    if (this._onSequenceStop) document.removeEventListener('sequence-stop', this._onSequenceStop);
+  }
+
+  _setupEventListeners() {
+    // Forward mode-change to step sequencer if recording
+    this._onModeChange = (e) => {
+      if (this.sequencer && typeof this.sequencer.captureMode === 'function') {
+        this.sequencer.captureMode(e.detail.mode);
+      }
+    };
+    this.addEventListener('mode-change', this._onModeChange);
+
+    // Handle step-trigger from sequencer: auto-switch mode
+    this._onStepTrigger = (e) => {
+      const { mode } = e.detail;
+      const option = Array.from(this.modeSelect.options).find(opt => opt.value === mode);
+      if (option) {
+        this.modeSelect.value = mode;
+        this.dispatchEvent(new CustomEvent('mode-change', {
+          bubbles: true,
+          composed: true,
+          detail: { mode }
+        }));
+      }
+    };
+    document.addEventListener('step-trigger', this._onStepTrigger);
+
+    // Optional: react to playback start/stop
+    this._onSequenceStart = () => {
+      // You could disable regenerate during playback if desired
+      // this.startBtn.disabled = true;
+    };
+    document.addEventListener('sequence-start', this._onSequenceStart);
+
+    this._onSequenceStop = () => {
+      // this.startBtn.disabled = false;
+    };
+    document.addEventListener('sequence-stop', this._onSequenceStop);
   }
 
   _onKeyDown = (event) => {
@@ -48,15 +96,15 @@ class OscControls extends HTMLElement {
         detail: { mode: this.modeSelect.value }
       }));
 
-      // Optional: prevent default behavior for these keys (e.g., prevent input in background)
-      // event.preventDefault();
-
       // Optional: visual feedback (highlight selected briefly)
       this.modeSelect.focus();
       this.modeSelect.style.boxShadow = '0 0 10px rgba(100, 150, 255, 0.6)';
       setTimeout(() => {
         if (this.modeSelect) this.modeSelect.style.boxShadow = '';
       }, 300);
+
+      // Prevent default only if you want to block browser defaults (e.g., address bar focus)
+      // event.preventDefault();
     }
   };
 
@@ -117,9 +165,11 @@ class OscControls extends HTMLElement {
       }
     `;
     shadow.appendChild(style);
-    // Container for the buttons and select.
+    
+    // Container for the main buttons and select.
     const container = document.createElement('div');
     container.id = 'controls';
+
     // Start/Regenerate button
     this.startBtn = document.createElement('button');
     this.startBtn.textContent = 'Generate New Experience';
@@ -128,6 +178,7 @@ class OscControls extends HTMLElement {
       this.dispatchEvent(new CustomEvent('start-request', { bubbles: true, composed: true }));
     });
     container.appendChild(this.startBtn);
+
     // Mute/Unmute button
     this.muteBtn = document.createElement('button');
     this.muteBtn.textContent = 'Mute';
@@ -143,6 +194,7 @@ class OscControls extends HTMLElement {
       }));
     });
     container.appendChild(this.muteBtn);
+
     // Visual mode selector
     this.modeSelect = document.createElement('select');
     const modes = [
@@ -172,38 +224,44 @@ class OscControls extends HTMLElement {
       }));
     });
     container.appendChild(this.modeSelect);
+
     // Append controls container
     shadow.appendChild(container);
+
     // Loader message
     this.loaderDiv = document.createElement('div');
     this.loaderDiv.id = 'loader';
     this.loaderDiv.textContent = 'Initializing audio engine...';
     shadow.appendChild(this.loaderDiv);
+
     // Informational text
     const info = document.createElement('div');
     info.id = 'info';
     info.textContent = 'Each generation creates unique, slowly evolving audiovisual patterns.';
     shadow.appendChild(info);
-    // Tone loader element – hidden but functional. When Tone.js finishes
-    // loading it dispatches the `tone-ready` event which we listen for
-    // below. The element itself does not render anything visible.
+
+    // Step Sequencer UI (must be defined first via script import)
+    const sequencer = document.createElement('step-sequencer');
+    shadow.appendChild(sequencer);
+    this.sequencer = sequencer;
+
+    // Tone loader element – hidden but functional
     const toneLoader = document.createElement('tone-loader');
-    // Propagate a custom URL if the host set one.
     if (this.hasAttribute('tone-url')) {
       toneLoader.setAttribute('tone-url', this.getAttribute('tone-url'));
     }
     shadow.appendChild(toneLoader);
-    // Event handlers for tone lifecycle.
-    // When Tone is ready we enable the controls and update the loader.
+
+    // Event handlers for tone lifecycle
     this.addEventListener('tone-ready', (ev) => {
-      // Only respond once.
       if (this._toneReady) return;
       this._toneReady = true;
       this.loaderDiv.textContent = `Tone.js v${ev.detail?.Tone?.version || '?' } ready.`;
       this.startBtn.disabled = false;
       this.modeSelect.disabled = false;
-      // Mute button remains disabled until playback starts.
+      // Mute button remains disabled until playback starts
     });
+
     this.addEventListener('tone-error', (ev) => {
       this.loaderDiv.textContent = 'Failed to load Tone.js. App cannot start.';
       this.loaderDiv.style.color = '#f66';
@@ -223,7 +281,7 @@ class OscControls extends HTMLElement {
     this._playing = playing;
     this.startBtn.textContent = playing ? 'Regenerate Experience' : 'Generate New Experience';
     this.muteBtn.disabled = !playing;
-    // When stopping, reset mute state and label.
+    // When stopping, reset mute state and label
     if (!playing) {
       this._muted = false;
       this.muteBtn.textContent = 'Mute';
@@ -237,4 +295,5 @@ class OscControls extends HTMLElement {
     return this.modeSelect.value;
   }
 }
+
 customElements.define('osc-controls', OscControls);
