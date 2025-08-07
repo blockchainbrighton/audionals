@@ -26,7 +26,7 @@ class OscControls extends HTMLElement {
     this._setupEventListeners();
   }
 
-  
+
   _clamp(value, min, max) {
     return Math.min(Math.max(value, min), max);
   }
@@ -82,7 +82,7 @@ class OscControls extends HTMLElement {
         const isPercussive = i < Math.floor(numVoices / 3);
         const env = isPercussive ? {
           // Prevent attack too short (clicks), decay too fast (inaudible)
-          attack: this._clamp(randf(0.005, 0.05), 0.001, 0.1),
+          attack: this._clamp(randf(0.05, 0.05), 0.001, 0.1),
           decay: this._clamp(randf(0.05, 0.4), 0.02, 0.5),
           sustain: this._clamp(randf(0.2, 0.6), 0.1, 0.8), // avoid full decay
           release: this._clamp(randf(0.1, 1.5), 0.1, 2.0)
