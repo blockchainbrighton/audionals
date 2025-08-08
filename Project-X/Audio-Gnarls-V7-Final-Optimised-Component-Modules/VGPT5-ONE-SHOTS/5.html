@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Seeded Oscilloscope Synth NFT — Waveform-True</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+/* ===========================
+   UI — Minimal Monospace HUD
+   =========================== */
+:root{
+  --bg:#000; --fg:#bfe9bf; --accent:#7aff7a; --dim:#497a49; --warn:#ff6666;
+  --card:#0b0b0b; --grid:#0c1c0c; --grid2:#163316;
+}
+html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--fg);font-family:ui-monospace,Menlo,Consolas,monospace;overflow:hidden;}
+#app{display:grid;grid-template-rows:auto 1fr auto;grid-template-columns:1fr; height:100vh; width:100vw;}
+#topbar{display:flex;gap:.75rem;align-items:center;padding:.5rem .75rem;background:linear-gradient(180deg,#050805,#000);}
+.badge{border:1px solid var(--dim);padding:.2rem .4rem;border-radius:6px;background:var(--card);}
+button,input,select{font:inherit;color:var(--fg);background:#0c0c0c;border:1px solid #1d381d;border-radius:6px;padding:.35rem .55rem;outline:none}
+button:hover{border-color:#2b5a2b}
+button:active{transform:translateY(1px)}
+button[aria-pressed="true"]{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent) inset}
+input[type="number"]{width:5.2rem}
+#scopeWrap{position:relative;background:radial-gradient(100% 100% at 50% 50%, #020 0%, #000 60%);display:grid;grid-template-columns:1fr 280px}
+#scope{display:block;width:100%;height:calc(100vh - 180px); background:#000}
+#right{border-left:1px solid #142414;background:#060906;display:flex;flex-direction:column;gap:.5rem;padding:.5rem}
+.section{border:1px solid #183018;background:#0a120a;border-radius:10px;padding:.5rem}
+.hrow{display:flex;align-items:center;justify-content:space-between;gap:.5rem;flex-wrap:wrap}
+.kbd{padding:.15rem .35rem;border:1px solid #2d4e2d;background:#091209;border-radius:4px;color:#a7e1a7}
+#meters{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.meter{height:8px;background:#061006;border:1px solid #193019;border-radius:6px;overflow:hidden}
+.meter>div{height:100%;width:0;background:linear-gradient(90deg,#1a9a1a,#6ffa6f);transition:width .08s}
+.meter.warn>div{background:linear-gradient(90deg,#b33,#f66)}
+small.dim{color:#7aa57a}
+#bottombar{display:flex;align-items:center;gap:.5rem;padding:.4rem .75rem;border-top:1px solid #0e190e;background:#030703}
+a.link{color:var(--accent);text-decoration:none}
+a.link:hover{filter:brightness(1.2)}
+/* Scope grid aesthetic */
+.grid{
+  position:absolute; inset:0; pointer-events:none;
+  background:
+    linear-gradient(#001800 2px, transparent 2px) 0 0/100% 40px,
+    linear-gradient(90deg,#001800 2px, transparent 2px) 0 0/40px 100%,
+    linear-gradient(#001000 1px, transparent 1px) 0 0/100% 10px,
+    linear-gradient(90deg,#001000 1px, transparent 1px) 0 0/10px 100%;
+  opacity:.45;
+}
+.centerLines{
+  position:absolute; inset:0; pointer-events:none;
+  background:
+    linear-gradient(transparent calc(50% - 1px), #0c3f0c, transparent calc(50% + 1px)),
+    linear-gradient(90deg, transparent calc(50% - 1px), #0c3f0c, transparent calc(50% + 1px));
+  opacity:.55;
+}
+#loaderStatus{color:var(--fg)}
+.status.error{color:var(--warn)}
+/* Tiny list for algo/voice mapping */
+#mapList{max-height:160px;overflow:auto;font-size:.8rem;line-height:1.25rem;border-top:1px dashed #1f331f;padding-top:.25rem}
+li{list-style:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <!-- =========================
+       Top Bar (Power + Seed + Tuning + Transport)
+       ========================= -->
+  <div id="topbar">
+    <button id="powerBtn" title="Toggle Audio Power">Power</button>
+    <span class="badge">Seed: <span id="seedOut">–</span></span>
+    <span class="badge">Tuning: <span id="tuningOut">–</span></span>
+    <span class="badge">Mode: <span id="modeOut">–</span></span>
+    <span class="badge">Algo/Voice: <span id="algoOut">–</span></span>
+    <span id="loaderStatus" class="badge status">Waiting…</span>
+    <span class="badge"><small class="dim">Keys 0–9 trigger voices & visuals</small></span>
+  </div>
+
+  <!-- =========================
+       Scope + Controls
+       ========================= -->
+  <div id="scopeWrap">
+    <canvas id="scope"></canvas>
+    <div class="grid"></div>
+    <div class="centerLines"></div>
+
+    <div id="right">
+      <div class="section">
+        <div class="hrow">
+          <label>BPM <input id="bpm" type="number" min="30" max="240" step="1" value="120" /></label>
+          <label>Swing <input id="swing" type="number" min="0" max="60" step="1" value="0" /></label>
+        </div>
+        <div class="hrow" style="margin-top:.4rem">
+          <button id="recBtn">Rec</button>
+          <button id="playBtn">Play</button>
+          <button id="stopBtn">Stop</button>
+          <button id="loopBtn" aria-pressed="true">Loop</button>
+          <label>Steps <input id="steps" type="number" min="8" max="64" step="1" value="16" /></label>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="hrow">
+          <button id="saveBtn">Save JSON</button>
+          <button id="loadBtn">Load JSON</button>
+          <input id="fileInput" type="file" accept="application/json" style="display:none" />
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="hrow"><span>Meters</span></div>
+        <div id="meters">
+          <div class="meter" title="Left"><div></div></div>
+          <div class="meter" title="Right"><div></div></div>
+        </div>
+      </div>
+
+      <div class="section">
+        <div class="hrow"><span>Voice ↔ Algorithm Mapping</span></div>
+        <ul id="mapList"></ul>
+      </div>
+    </div>
+  </div>
+
+  <!-- =========================
+       Bottom Bar
+       ========================= -->
+  <div id="bottombar">
+    <span class="badge">XY Modes: 1) Lissajous 2) Spiral–Precess 3) Polar Rose 4) Phyllotaxis 5) Figure-8 6) Epicycle Chain 7) VectorScope 8) Torus-Knot 9) Audio Flowfield 10) Harmonic Bloom</span>
+    <span style="flex:1"></span>
+    <a class="link" href="#" id="exportPng">Export PNG</a>
+  </div>
+</div>
+
+<script>
+/* ============================================================
+   EXACT Tone.js on-chain loader (do not modify)
+   ============================================================ */
+function loadToneJSAndBoot({
+  toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+  setLoaderStatus, runtimeState, boot
+}) {
+  setLoaderStatus('Loading Audio Engine...');
+  import(toneUrl).then(() => {
+    runtimeState.Tone = window.Tone;
+    console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+    boot();
+  }).catch(err => {
+    setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+    console.error('[BOP Matrix] Critical Tone.js load error:', err);
+  });
+}
+</script>
+
+<script>
+/* ============================================================
+   Global App State & Utilities
+   ============================================================ */
+const runtimeState = {
+  Tone:null, ctx:null, powered:false, booted:false,
+  seedStr:null, rng:null, tuning:null, modeName:null,
+  voices:[], algoMap:[], currentIndex: null,
+  analyserL:null, analyserR:null, meterData:{L:0,R:0},
+  signatureDone:false, idlePad:null
+};
+
+const els = {
+  powerBtn: document.getElementById('powerBtn'),
+  loaderStatus: document.getElementById('loaderStatus'),
+  seedOut: document.getElementById('seedOut'),
+  tuningOut: document.getElementById('tuningOut'),
+  modeOut: document.getElementById('modeOut'),
+  algoOut: document.getElementById('algoOut'),
+  bpm: document.getElementById('bpm'),
+  swing: document.getElementById('swing'),
+  recBtn: document.getElementById('recBtn'),
+  playBtn: document.getElementById('playBtn'),
+  stopBtn: document.getElementById('stopBtn'),
+  loopBtn: document.getElementById('loopBtn'),
+  steps: document.getElementById('steps'),
+  saveBtn: document.getElementById('saveBtn'),
+  loadBtn: document.getElementById('loadBtn'),
+  fileInput: document.getElementById('fileInput'),
+  mapList: document.getElementById('mapList'),
+  scope: document.getElementById('scope'),
+  meters: [...document.querySelectorAll('.meter')],
+  exportPng: document.getElementById('exportPng')
+};
+
+function setLoaderStatus(text, isError=false){
+  els.loaderStatus.textContent = text;
+  els.loaderStatus.classList.toggle('error', !!isError);
+}
+
+/* Simple 32-bit xorshift seeded PRNG for determinism */
+function makeRNG(seedStr){
+  let h = 2166136261>>>0;
+  for(let i=0;i<seedStr.length;i++){
+    h ^= seedStr.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  let x = (h|0) || 0x12345678;
+  return function rand(){
+    // xorshift32
+    x ^= x<<13; x|=0;
+    x ^= x>>>17; x|=0;
+    x ^= x<<5; x|=0;
+    return ((x>>>0) / 0x100000000);
+  }
+}
+
+function pick(rand, arr){ return arr[Math.floor(rand()*arr.length)] }
+function lerp(a,b,t){ return a+(b-a)*t }
+function rrange(rand,a,b){ return lerp(a,b,rand()) }
+function rint(rand,a,b){ return Math.floor(rrange(rand,a,b+1)) }
+function clamp(x,min,max){ return x<min?min:(x>max?max:x) }
+function shuffleDet(rand, arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(rand()*(i+1));
+    [a[i],a[j]] = [a[j],a[i]];
+  }
+  return a;
+}
+
+/* Seed management */
+function getOrCreateSeed(){
+  const p = new URLSearchParams(location.search);
+  let s = p.get('seed');
+  if(!s){
+    s = (Math.random().toString(36).slice(2)+Date.now().toString(36)).slice(0,16);
+    history.replaceState(null,'',location.pathname+'?seed='+s);
+  }
+  return s;
+}
+
+/* Export PNG */
+els.exportPng.addEventListener('click',(e)=>{
+  e.preventDefault();
+  const link = document.createElement('a');
+  link.download = `scope-${runtimeState.seedStr}.png`;
+  link.href = els.scope.toDataURL('image/png');
+  link.click();
+});
+
+</script>
+
+<script>
+/* ============================================================
+   Tuning & Note Helpers (12-TET or 19-TET + seeded mode)
+   ============================================================ */
+const TUNINGS = {
+  '12-TET': { steps:12, ratio: Math.pow(2,1/12), degrees:[
+    [0,2,4,5,7,9,11], // Major
+    [0,2,3,5,7,8,10], // Minor
+    [0,2,4,7,9],      // Pentatonic Major
+    [0,3,5,7,10],     // Pentatonic Minor
+    [0,2,4,6,8,10],   // Whole tone
+    [0,1,3,5,7,8,10], // Phrygian-ish
+  ], names:['Major','Minor','Pentatonic','Pentatonic-','Whole-Tone','Phrygian']},
+  '19-TET': { steps:19, ratio: Math.pow(2,1/19), degrees:[
+    [0,3,6,8,11,13,16], // heptatonic-ish in 19-TET
+    [0,2,5,7,10,12,15],
+    [0,4,7,9,12],       // pentatonic-ish
+    [0,5,9,12,14,17],   // whole-ish
+  ], names:['Hep-1','Hep-2','Pent-19','Whole-19']}
+};
+
+function makeTuning(rand){
+  const use19 = rand() < 0.35; // seeded default chance for 19-TET
+  const keyBaseHz = rrange(rand, 216, 330); // seeded base around A3–E4 region
+  const tun = use19 ? TUNINGS['19-TET'] : TUNINGS['12-TET'];
+  const modeIdx = rint(rand,0,tun.degrees.length-1);
+  const degrees = tun.degrees[modeIdx];
+  const name = tun.names[modeIdx];
+  return { system: use19?'19-TET':'12-TET', baseHz:keyBaseHz, ratio:tun.ratio, degrees, modeName:name };
+}
+
+function degreeToHz(tuning, deg, octaveOffset=0){
+  const {baseHz, ratio} = tuning;
+  return baseHz * Math.pow(2, octaveOffset) * Math.pow(ratio, deg);
+}
+
+function seededPitch(rand, tuning){
+  const deg = pick(rand, tuning.degrees);
+  const oct = rint(rand, -1, 1);
+  return degreeToHz(tuning, deg, oct);
+}
+
+</script>
+
+<script>
+/* ============================================================
+   Audio Engine: Master, Analyser, Meters, Sequencer Core
+   ============================================================ */
+const seqState = {
+  recording:false, playing:false, loop:true, stepLen:16, pos:0, pattern:[], swingMs:0,
+};
+
+function initAudio(){
+  const Tone = runtimeState.Tone;
+  runtimeState.ctx = Tone.getContext().rawContext;
+
+  // Master chain: Gain (headroom) → Compressor → Limiter → Destination
+  const masterIn = new Tone.Gain(0.9);
+  const comp = new Tone.Compressor({ threshold: -14, ratio: 3, attack: 0.005, release: 0.12 });
+  const limiter = new Tone.Limiter(-1.0);
+
+  masterIn.chain(comp, limiter, Tone.Destination);
+  runtimeState.masterIn = masterIn;
+
+  // Stereo analysers (waveform-true vectorscope tap AFTER limiter)
+  const split = new Tone.Split();
+  limiter.connect(split);
+
+  // v15 syntax: use object form to set type/size
+  runtimeState.analyserL = new Tone.Analyser({ type: 'waveform', size: 2048 });
+  runtimeState.analyserR = new Tone.Analyser({ type: 'waveform', size: 2048 });
+
+  split.left.connect(runtimeState.analyserL);
+  split.right.connect(runtimeState.analyserR);
+
+  // Transport defaults
+  Tone.Transport.bpm.value = +els.bpm.value || 120;
+  Tone.Transport.swing = clamp((+els.swing.value || 0) / 100, 0, 0.6);
+  Tone.Transport.swingSubdivision = '8n';
+
+  // Sequencer tick (audio-time accurate)
+  const tick = time => {
+    if (!seqState.playing) return;
+    const step = seqState.pos % seqState.stepLen;
+    const note = seqState.pattern[step]; // integer 0–9 or null
+    if (Number.isInteger(note)) triggerVoice(note, time);
+    seqState.pos++;
+    if (!seqState.loop && seqState.pos >= seqState.stepLen) {
+      stopSeq();
+    }
+  };
+  runtimeState.seqId = Tone.Transport.scheduleRepeat(tick, '16n', 0);
+}
+
+function setBPM(val){
+  const Tone = runtimeState.Tone;
+  Tone.Transport.bpm.rampTo(clamp(+val,30,240), 0.05);
+}
+
+function setSwing(val){
+  const Tone = runtimeState.Tone;
+  Tone.Transport.swing = clamp((+val)/100,0,0.6);
+}
+
+/* Meters — simple peak measurement from waveform */
+function updateMeters(){
+  const L = runtimeState.analyserL.getValue();
+  const R = runtimeState.analyserR.getValue();
+  const pkL = Math.min(1, Math.max(0, Math.max(...L.map(v=>Math.abs(v)))));
+  const pkR = Math.min(1, Math.max(0, Math.max(...R.map(v=>Math.abs(v)))));
+  runtimeState.meterData.L = pkL; runtimeState.meterData.R = pkR;
+  els.meters[0].firstElementChild.style.width = (pkL*100).toFixed(1)+'%';
+  els.meters[1].firstElementChild.style.width = (pkR*100).toFixed(1)+'%';
+  els.meters[0].classList.toggle('warn', pkL>0.94);
+  els.meters[1].classList.toggle('warn', pkR>0.94);
+  requestAnimationFrame(updateMeters);
+}
+
+</script>
+
+<script>
+/* ============================================================
+   Voices & FX (10 deterministic designs)
+   Types: FM, AM, Subtractive, Additive, Wavetable-like, Noise-based, Ring Mod, etc.
+   ============================================================ */
+function mkFXChain(rand, Tone){
+  const chain = [];
+
+  // Motion filter (auto sweep)
+  const filter = new Tone.Filter({
+    type: pick(rand, ['lowpass', 'bandpass', 'highpass']),
+    frequency: rrange(rand, 300, 2400),
+    Q: rrange(rand, 0.2, 1.5)
+  });
+  const LFO = new Tone.LFO({
+    frequency: rrange(rand, 0.03, 0.25),
+    min: rrange(rand, 200, 600),
+    max: rrange(rand, 1200, 4000),
+    phase: rrange(rand, 0, 360)
+  }).start();
+  LFO.connect(filter.frequency);
+  chain.push(filter);
+
+  // Mod FX (chorus / vibrato / phaser / none)
+  const modChoice = pick(rand, ['chorus', 'vibrato', 'phaser', 'none']);
+  let mod = null;
+  if (modChoice === 'chorus') {
+    mod = new Tone.Chorus({
+      frequency: rrange(rand, 0.1, 1.5),
+      delayTime: rrange(rand, 2, 8),
+      depth: rrange(rand, 0.1, 0.35),
+      spread: rint(rand, 60, 180)
+    }).start();
+  } else if (modChoice === 'vibrato') {
+    mod = new Tone.Vibrato({ frequency: rrange(rand, 3, 7), depth: rrange(rand, 0.02, 0.12) });
+  } else if (modChoice === 'phaser') {
+    mod = new Tone.Phaser({ frequency: rrange(rand, 0.05, 0.5), octaves: rint(rand, 1, 3), baseFrequency: rrange(rand, 200, 800) });
+  }
+  if (mod) chain.push(mod);
+
+  // Gentle distortion/bitcrush only (NO Saturator in v15)
+  const distChoice = pick(rand, ['distortion', 'bitcrush', 'none']);
+  let dist = null;
+  if (distChoice === 'distortion') dist = new Tone.Distortion(rrange(rand, 0.02, 0.18));
+  else if (distChoice === 'bitcrush') dist = new Tone.BitCrusher({ bits: rint(rand, 4, 7), wet: rrange(rand, 0.1, 0.35) });
+  if (dist) chain.push(dist);
+
+  // Ping-pong delay
+  const ppd = new Tone.PingPongDelay({
+    delayTime: pick(rand, ['8n', '4n', '16n']),
+    feedback: rrange(rand, 0.08, 0.28),
+    wet: rrange(rand, 0.05, 0.15)
+  });
+  chain.push(ppd);
+
+  // Reverb
+  const rev = new Tone.Reverb({
+    decay: rrange(rand, 1.2, 4.2),
+    preDelay: rrange(rand, 0.01, 0.06),
+    wet: rrange(rand, 0.05, 0.2)
+  });
+  chain.push(rev);
+
+  // Connect chain sequentially, return head & tail
+  for (let i = 0; i < chain.length - 1; i++) chain[i].connect(chain[i + 1]);
+  return { head: chain[0], tail: chain[chain.length - 1], nodes: chain };
+}
+
+
+function mkEnvelope(Tone){
+  return {attack:0.005, decay:0.02, sustain:0.9, release:0.12}; // clickless sustainers
+}
+
+function ensureAudible(g){
+  // gentle auto-leveling
+  g.gain.value = clamp(g.gain.value, 0.08, 0.5);
+}
+
+function mkVoices(rand, Tone, tuning){
+  const voices = [];
+  const types = [
+    'FM','AM','Subtractive','Additive','Wavetable','Noise','RingMod','FM-Soft','Subtractive-HP','Additive-Cluster'
+  ];
+
+  for(let i=0;i<10;i++){
+    const fx = mkFXChain(rand, Tone);
+    const outGain = new Tone.Gain(rrange(rand,0.12,0.28));
+    ensureAudible(outGain);
+    fx.tail.connect(outGain);
+    outGain.connect(runtimeState.masterIn);
+
+    let voice = null;
+    const env = mkEnvelope(Tone);
+    const baseFreq = seededPitch(rand, tuning);
+
+    switch(types[i]){
+      case 'FM': {
+        const s = new Tone.FMSynth({
+          modulationIndex: rrange(rand, 4, 18),
+          modulation: {type: pick(rand,['sine','triangle','square'])},
+          oscillator: {type: pick(rand,['sine','triangle','sawtooth'])},
+          envelope: env, modulationEnvelope:{attack:0.002,decay:0.04,sustain:0.8,release:0.1}
+        });
+        s.chain(fx.head);
+        voice = {type:'FM', synth:s, out:outGain, trigger:(time)=>s.triggerAttackRelease(baseFreq, '8n', time)};
+        break;
+      }
+      case 'AM': {
+        const s = new Tone.AMSynth({
+          harmonicity: rrange(rand,0.25,2.5),
+          oscillator:{type:pick(rand,['sine','triangle','sawtooth'])},
+          envelope: env,
+          modulation: {type: pick(rand,['sine','triangle'])},
+          modulationEnvelope:{attack:0.002,decay:0.05,sustain:0.9,release:0.1}
+        });
+        s.chain(fx.head);
+        voice = {type:'AM', synth:s, out:outGain, trigger:(time)=>s.triggerAttackRelease(baseFreq, '8n', time)};
+        break;
+      }
+      case 'Subtractive': {
+        const s = new Tone.Synth({
+          oscillator:{type:pick(rand,['sawtooth','square','triangle'])},
+          envelope: env
+        });
+        const f = new Tone.Filter({type:'lowpass',frequency:rrange(rand,800,2500),Q:rrange(rand,0.3,1.2)});
+        s.connect(f).connect(fx.head);
+        voice = {type:'Subtractive', synth:s, out:outGain, trigger:(time)=>s.triggerAttackRelease(baseFreq, '8n', time)};
+        break;
+      }
+      case 'Additive': {
+        const partials = Array.from({length:rint(rand,4,7)},(_,k)=>rrange(rand,0.2,1));
+        const s = new Tone.Oscillator({type:'sine',frequency:baseFreq});
+        const gain = new Tone.Gain(0.18);
+        // stack sines (simple additive)
+        const oscStack = [s];
+        for(let p=2;p<=partials.length+1;p++){
+          const o = new Tone.Oscillator({type:'sine',frequency:baseFreq*p});
+          const g = new Tone.Gain(partials[p-2]*0.08);
+          o.connect(g); g.connect(gain);
+          oscStack.push(o);
+        }
+        s.connect(gain); gain.connect(fx.head);
+        oscStack.forEach(o=>o.start());
+        voice = {type:'Additive', synth:{osc:oscStack}, out:outGain, trigger:(time)=>{
+          // ramp master gain for a short note gesture
+          fx.head.frequency?.rampTo?.(rrange(rand,500,2500), 0.12);
+        }};
+        break;
+      }
+      case 'Wavetable': {
+        // Custom PeriodicWave via partials
+        const partials = Array.from({length:rint(rand,8,16)},()=>rrange(rand,0,1));
+        const s = new Tone.Oscillator({type:'custom', frequency:baseFreq, partials});
+        const g = new Tone.Gain(0.22);
+        s.connect(g).connect(fx.head); s.start();
+        voice = {type:'Wavetable', synth:s, out:outGain, trigger:(time)=>{
+          // tiny vibrato gesture
+          s.frequency.rampTo(baseFreq*rrange(rand,0.97,1.03), 0.08, time);
+        }};
+        break;
+      }
+      case 'Noise': {
+        const n = new Tone.Noise(pick(rand,['pink','white','brown']));
+        const g = new Tone.Gain(0.08);
+        const f = new Tone.Filter({type:'bandpass',frequency:rrange(rand,600,4000),Q:rrange(rand,0.7,2)});
+        n.connect(f).connect(g).connect(fx.head);
+        n.start();
+        voice = {type:'Noise', synth:n, out:outGain, trigger:(time)=>{
+          g.gain.cancelScheduledValues(time);
+          g.gain.setValueAtTime(0.02,time);
+          g.gain.exponentialRampToValueAtTime(0.001, time+0.25);
+        }};
+        break;
+      }
+      case 'RingMod': {
+        // carrier * modulator using Multiply
+        const car = new Tone.Oscillator({type:pick(rand,['sine','triangle']), frequency:baseFreq});
+        const mod = new Tone.Oscillator({type:'sine', frequency: baseFreq*rrange(rand,0.5,3.5)});
+        const mul = new Tone.Multiply(); // multiply AudioSignals
+        const cG = new Tone.Gain(0.5), mG = new Tone.Gain(0.5);
+        car.connect(cG).connect(mul,0,0); mod.connect(mG).connect(mul,0,1);
+        const g = new Tone.Gain(0.18);
+        mul.connect(g).connect(fx.head);
+        car.start(); mod.start();
+        voice = {type:'RingMod', synth:{car,mod}, out:outGain, trigger:(time)=>{
+          // brief detune swirl
+          car.frequency.rampTo(baseFreq*rrange(rand,0.98,1.02), 0.06, time);
+          mod.frequency.rampTo(mod.frequency.value*rrange(rand,0.95,1.05), 0.06, time);
+        }};
+        break;
+      }
+      case 'FM-Soft': {
+        const s = new Tone.FMSynth({
+          modulationIndex: rrange(rand, 2, 10),
+          oscillator:{type:'sine'},
+          modulation:{type:'sine'},
+          envelope:{attack:0.01,decay:0.08,sustain:0.8,release:0.15},
+          modulationEnvelope:{attack:0.004,decay:0.05,sustain:0.7,release:0.12}
+        });
+        s.chain(fx.head);
+        voice = {type:'FM-Soft', synth:s, out:outGain, trigger:(time)=>s.triggerAttackRelease(baseFreq*rrange(rand,0.9,1.1), '8n', time)};
+        break;
+      }
+      case 'Subtractive-HP': {
+        const s = new Tone.Synth({
+          oscillator:{type:pick(rand,['square','sawtooth'])},
+          envelope:{attack:0.005,decay:0.04,sustain:0.85,release:0.14}
+        });
+        const f = new Tone.Filter({type:'highpass',frequency:rrange(rand,300,1200),Q:rrange(rand,0.4,1.2)});
+        s.connect(f).connect(fx.head);
+        voice = {type:'Subtractive-HP', synth:s, out:outGain, trigger:(time)=>s.triggerAttackRelease(baseFreq, '8n', time)};
+        break;
+      }
+      case 'Additive-Cluster': {
+        const base = baseFreq;
+        const cluster = [0, rrange(rand,0.01,0.04), rrange(rand,0.06,0.12)].map(det=>base*(1+det));
+        const gains = new Tone.Gain(0.18);
+        cluster.forEach(f=>{
+          const o = new Tone.Oscillator({type:pick(rand,['triangle','sine']),frequency:f}).start();
+          const g = new Tone.Gain(0.08);
+          o.connect(g); g.connect(gains);
+        });
+        gains.connect(fx.head);
+        voice = {type:'Additive-Cluster', synth:{}, out:outGain, trigger:(time)=>{
+          gains.gain.cancelScheduledValues(time);
+          gains.gain.setValueAtTime(0.02,time);
+          gains.gain.exponentialRampToValueAtTime(0.18, time+0.05);
+          gains.gain.exponentialRampToValueAtTime(0.08, time+0.25);
+        }};
+        break;
+      }
+    }
+
+    // Pan per voice to widen vectorscope view
+    const pan = new Tone.Panner(rrange(rand,-0.75,0.75));
+    outGain.connect(pan).connect(runtimeState.masterIn);
+    voices.push({index:i, ...voice, fx});
+  }
+  return voices;
+}
+
+function triggerVoice(i, time){
+  const Tone = runtimeState.Tone;
+  const v = runtimeState.voices[i];
+  if(!v) return;
+  // gentle amplitude nudge to avoid silence
+  try{
+    if(v.out?.gain) v.out.gain.rampTo(clamp(v.out.gain.value*1.02,0.12,0.35), 0.03);
+  }catch{}
+  v.trigger?.(time ?? Tone.now());
+  // Switch visual to this voice’s paired algo
+  runtimeState.currentIndex = i;
+  els.algoOut.textContent = `V${i} → ${ALGO_NAMES[runtimeState.algoMap[i]]}`;
+}
+
+</script>
+
+<script>
+/* ============================================================
+   Boot Signature + Idle Pad
+   - Deterministic 3–4s R2D2-like polygliss + chords using all 10 voices
+   - Returns to seed-defined idle pad afterward
+   ============================================================ */
+function scheduleBootSignature(rand){
+  const Tone = runtimeState.Tone;
+  const now = Tone.now()+0.1;
+  const dur = rrange(rand, 3.0, 3.6);
+
+  // Use every voice at least once, some get gliss ornaments
+  const events = [];
+  for(let i=0;i<10;i++){
+    const t = now + (i*dur/14);
+    events.push({i, t});
+  }
+  // Add some fast trills and mini-chords
+  for(let k=0;k<10;k++){
+    const i = rint(rand,0,9);
+    const t = now + rrange(rand, 0, dur-0.25);
+    events.push({i, t});
+    if(rand()<0.6) events.push({i:(i+1)%10, t:t+rrange(rand,0.04,0.12)});
+  }
+
+  // Schedule with quick glissandi (handled inside voices via frequency ramps)
+  events.sort((a,b)=>a.t-b.t).forEach(ev=>triggerVoice(ev.i, ev.t));
+
+  // After signature, start idle pad sustain (subtle)
+  const idleStart = now + dur + 0.05;
+  Tone.Transport.scheduleOnce(()=>startIdlePad(rand), idleStart);
+  Tone.Transport.scheduleOnce(()=>{ runtimeState.signatureDone = true; }, idleStart+0.1);
+}
+
+function startIdlePad(rand){
+  if(runtimeState.idlePad) return;
+  const Tone = runtimeState.Tone;
+  const g = new Tone.Gain(0.08).connect(runtimeState.masterIn);
+  const base = seededPitch(rand, runtimeState.tuning);
+  const o1 = new Tone.Oscillator({type:'sine',frequency:base}).start();
+  const o2 = new Tone.Oscillator({type:'triangle',frequency:base*2}).start();
+  const slow = new Tone.LFO({frequency:rrange(rand,0.02,0.08), min:0.05, max:0.18}).start();
+  slow.connect(g.gain);
+  o1.connect(g); o2.connect(g);
+  runtimeState.idlePad = {g,o1,o2,slow};
+}
+
+</script>
+
+<script>
+/* ============================================================
+   Sequencer (record 8–64 steps of key events)
+   Transport synced, JSON save/load, seeded default swing
+   ============================================================ */
+function initSequencer(rand){
+  seqState.stepLen = clamp(+els.steps.value||16,8,64);
+  seqState.pattern = Array.from({length:seqState.stepLen},()=>null);
+  els.loopBtn.setAttribute('aria-pressed','true');
+  // Seeded default swing
+  els.swing.value = Math.round(rrange(rand, 4, 22));
+  setSwing(+els.swing.value);
+}
+
+function startRec(){
+  seqState.recording = true;
+  els.recBtn.setAttribute('aria-pressed','true');
+}
+function stopRec(){
+  seqState.recording = false;
+  els.recBtn.setAttribute('aria-pressed','false');
+}
+function playSeq(){
+  const Tone = runtimeState.Tone;
+  seqState.playing = true; seqState.pos = 0;
+  els.playBtn.setAttribute('aria-pressed','true');
+  Tone.Transport.start('+0.05');
+}
+function stopSeq(){
+  const Tone = runtimeState.Tone;
+  seqState.playing = false;
+  els.playBtn.setAttribute('aria-pressed','false');
+  Tone.Transport.stop();
+}
+function toggleLoop(){
+  seqState.loop = !seqState.loop;
+  els.loopBtn.setAttribute('aria-pressed', seqState.loop?'true':'false');
+}
+function setSteps(n){
+  n = clamp(+n,8,64);
+  const old = seqState.pattern.slice();
+  seqState.stepLen = n;
+  seqState.pattern = Array.from({length:n},(v,i)=> old[i] ?? null);
+}
+
+function handleNoteForRec(idx){
+  if(!seqState.recording) return;
+  const step = seqState.pos % seqState.stepLen;
+  seqState.pattern[step] = idx;
+}
+
+function saveJSON(){
+  const data = {
+    seed: runtimeState.seedStr,
+    bpm: +els.bpm.value,
+    swing: +els.swing.value,
+    steps: seqState.stepLen,
+    pattern: seqState.pattern
+  };
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `sequence-${runtimeState.seedStr}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function loadJSONFile(file){
+  const r = new FileReader();
+  r.onload = ()=>{
+    try{
+      const data = JSON.parse(r.result);
+      if(data.seed && data.seed!==runtimeState.seedStr){
+        // keep determinism but allow loading into a different seed; warn only
+        console.warn('Sequence seed differs; loading pattern only.');
+      }
+      els.bpm.value = clamp(data.bpm||120,30,240); setBPM(els.bpm.value);
+      els.swing.value = clamp(data.swing||0,0,60); setSwing(els.swing.value);
+      els.steps.value = clamp(data.steps||16,8,64); setSteps(els.steps.value);
+      seqState.pattern = (data.pattern||[]).slice(0,seqState.stepLen);
+    }catch(e){ alert('Invalid JSON'); }
+  };
+  r.readAsText(file);
+}
+
+els.saveBtn.addEventListener('click', saveJSON);
+els.loadBtn.addEventListener('click', ()=>els.fileInput.click());
+els.fileInput.addEventListener('change', e=>{
+  const f = e.target.files?.[0]; if(f) loadJSONFile(f);
+});
+
+</script>
+
+<script>
+/* ============================================================
+   Visualization — 10 deterministic XY algorithms
+   Includes a waveform-true VectorScope with oversampled buffer
+   ============================================================ */
+const ALGO = {
+  Lissajous: 0, SpiralPrecess:1, PolarRose:2, Phyllotaxis:3, Figure8:4,
+  Epicycle:5, VectorScope:6, TorusKnot:7, Flowfield:8, HarmonicBloom:9
+};
+const ALGO_NAMES = [
+  'Lissajous Core','Spiral–Precess','Polar Rose Sweep','Phyllotaxis Orbit',
+  'Figure-8 Morph','Epicycle Chain','VectorScope XY','Torus-Knot Projection',
+  'Audio Flowfield','Harmonic Bloom'
+];
+
+function buildAlgoMap(rand){
+  // permutation 0..9 (voice index → algorithm)
+  return shuffleDet(rand, [0,1,2,3,4,5,6,7,8,9]);
+}
+
+function scopeRenderer(){
+  const canvas = els.scope;
+  const ctx = canvas.getContext('2d');
+  function resize(){
+    canvas.width = canvas.clientWidth = canvas.offsetWidth;
+    canvas.height = canvas.clientHeight = canvas.offsetHeight;
+  }
+  addEventListener('resize', resize, {passive:true});
+  resize();
+
+  let t0 = performance.now();
+
+  function draw(){
+    const t1 = performance.now();
+    const dt = (t1 - t0)/1000; t0 = t1;
+
+    const w = canvas.width, h = canvas.height;
+    ctx.clearRect(0,0,w,h);
+
+    const idx = runtimeState.currentIndex ?? 0;
+    const algo = runtimeState.algoMap[idx] ?? 0;
+
+    // band energy (for hybrid modes)
+    const L = runtimeState.analyserL.getValue();
+    const R = runtimeState.analyserR.getValue();
+    const energy = (arr)=>{
+      // simple band split energy
+      let lo=0,hi=0;
+      for(let i=0;i<arr.length;i++){
+        const v = Math.abs(arr[i]);
+        if(i<arr.length/3) lo += v; else hi += v;
+      }
+      return {lo:lo/arr.length, hi:hi/arr.length};
+    }
+    const eL = energy(L), eR = energy(R);
+    const band = {lo:(eL.lo+eR.lo)*0.5, hi:(eL.hi+eR.hi)*0.5};
+
+    // Draw different modes
+    ctx.save();
+    ctx.translate(w/2, h/2);
+    ctx.strokeStyle = '#8bff8b';
+    ctx.lineWidth = 1.2;
+    ctx.globalCompositeOperation = 'lighter';
+
+    switch(algo){
+      case ALGO.Lissajous: drawLissajous(ctx, t1, w,h); break;
+      case ALGO.SpiralPrecess: drawSpiral(ctx, t1, w,h); break;
+      case ALGO.PolarRose: drawPolarRose(ctx, t1, w,h); break;
+      case ALGO.Phyllotaxis: drawPhyllotaxis(ctx, t1, w,h); break;
+      case ALGO.Figure8: drawFig8(ctx, t1, w,h); break;
+      case ALGO.Epicycle: drawEpicycle(ctx, t1, w,h); break;
+      case ALGO.VectorScope: drawVectorScope(ctx, L, R, w, h); break;
+      case ALGO.TorusKnot: drawTorusKnot(ctx, t1, w,h); break;
+      case ALGO.Flowfield: drawFlowfield(ctx, t1, w,h, band); break;
+      case ALGO.HarmonicBloom: drawHarmonicBloom(ctx, t1, w,h, band); break;
+    }
+
+    ctx.restore();
+
+    requestAnimationFrame(draw);
+  }
+  requestAnimationFrame(draw);
+}
+
+function drawPolyline(ctx, pts){
+  ctx.beginPath();
+  for(let i=0;i<pts.length;i++){
+    const p=pts[i];
+    if(i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
+  }
+  ctx.stroke();
+}
+
+/* 1) Lissajous Core */
+function drawLissajous(ctx, t, w,h){
+  const T = t*0.001;
+  const a = 2+((runtimeState.currentIndex||0)%5);
+  const b = 3+((runtimeState.currentIndex||0)%7);
+  const delta = ( (runtimeState.currentIndex||0)*0.27 ) % (Math.PI*2);
+  const R = Math.min(w,h)*0.36;
+  const N = 1200, pts = new Array(N);
+  for(let i=0;i<N;i++){
+    const u = i/N*Math.PI*2;
+    pts[i] = {x: R*Math.sin(a*u+delta), y: R*Math.sin(b*u)};
+  }
+  drawPolyline(ctx, pts);
+}
+
+/* 2) Spiral–Precess (AM+PM spiral) */
+function drawSpiral(ctx, t, w,h){
+  const T = t*0.001;
+  const R = Math.min(w,h)*0.4;
+  const N = 1400, pts = new Array(N);
+  const a = 0.15+(runtimeState.currentIndex||0)*0.02;
+  const pm = 0.8+0.2*Math.sin(T*0.6);
+  for(let i=0;i<N;i++){
+    const u = i/N*10*Math.PI;
+    const r = R * (i/N);
+    const th = u + pm*Math.sin(u*1.3);
+    pts[i] = {x: r*Math.cos(th), y: r*Math.sin(th)*Math.cos(a*u)};
+  }
+  drawPolyline(ctx, pts);
+}
+
+/* 3) Polar Rose Sweep */
+function drawPolarRose(ctx, t, w,h){
+  const T=t*0.001;
+  const k = 3 + ((runtimeState.currentIndex||0)%4);
+  const R = Math.min(w,h)*0.42;
+  const N=1500, pts=new Array(N);
+  for(let i=0;i<N;i++){
+    const u=i/N*2*Math.PI;
+    const r = R*Math.cos(k*u+T*0.5);
+    pts[i]={x:r*Math.cos(u), y:r*Math.sin(u)};
+  }
+  drawPolyline(ctx, pts);
+}
+
+/* 4) Phyllotaxis Orbit */
+function drawPhyllotaxis(ctx,t,w,h){
+  const T=t*0.001;
+  const n=1400, a = Math.PI*(3-Math.sqrt(5));
+  const R=Math.min(w,h)*0.42, pts=[];
+  for(let i=0;i<n;i++){
+    const r=R*Math.sqrt(i)/Math.sqrt(n);
+    const th=i*a + 0.2*Math.sin(T+i*0.002);
+    pts.push({x:r*Math.cos(th), y:r*Math.sin(th)});
+  }
+  drawPolyline(ctx, pts);
+}
+
+/* 5) Figure-8 Morph */
+function drawFig8(ctx,t,w,h){
+  const T=t*0.001, R=Math.min(w,h)*0.42;
+  const N=1200, pts=new Array(N);
+  const m=1.0+0.4*Math.sin(T*0.8);
+  for(let i=0;i<N;i++){
+    const u=i/N*2*Math.PI;
+    const x = R*Math.sin(u);
+    const y = R*Math.sin(2*u)*m;
+    pts[i]={x,y};
+  }
+  drawPolyline(ctx, pts);
+}
+
+/* 6) Epicycle Chain */
+function drawEpicycle(ctx,t,w,h){
+  const T=t*0.001, R=Math.min(w,h)*0.18;
+  const N=1200, pts=new Array(N);
+  const n=3+((runtimeState.currentIndex||0)%4);
+  for(let i=0;i<N;i++){
+    const u=i/N*2*Math.PI;
+    let x=0,y=0, r=R;
+    for(let k=1;k<=n;k++){
+      const w = k*(1.7+0.2*Math.sin(T*0.5+k));
+      x += r*Math.cos(w*u+T*k*0.2);
+      y += r*Math.sin(w*u+T*k*0.2);
+      r *= 0.55;
+    }
+    pts[i]={x,y};
+  }
+  drawPolyline(ctx, pts);
+}
+
+/* 7) VectorScope XY (waveform-true, oversampled draw) */
+function drawVectorScope(ctx, L, R, w,h){
+  const N = Math.min(L.length, R.length);
+  // Oversample by interpolation to reduce alias (x2)
+  const up = 2, M = (N-1)*up;
+  const pts = new Array(M);
+  const sx = Math.min(w,h)*0.44;
+  let idx=0;
+  for(let i=0;i<N-1;i++){
+    const l0=L[i], r0=R[i], l1=L[i+1], r1=R[i+1];
+    for(let k=0;k<up;k++){
+      const a = k/up;
+      const lx = l0 + (l1-l0)*a;
+      const ry = r0 + (r1-r0)*a;
+      pts[idx++] = {x: lx*sx, y: ry*sx};
+    }
+  }
+  ctx.lineWidth = 1.0;
+  drawPolyline(ctx, pts);
+}
+
+/* 8) Torus-Knot Projection */
+function drawTorusKnot(ctx,t,w,h){
+  const T=t*0.001;
+  const p=2+((runtimeState.currentIndex||0)%3);
+  const q=3+((runtimeState.currentIndex||0)%4);
+  const R = Math.min(w,h)*0.34;
+  const N=1600, pts=new Array(N);
+  for(let i=0;i<N;i++){
+    const u=i/N*2*Math.PI;
+    const x=(2+Math.cos(q*u))*Math.cos(p*u);
+    const y=(2+Math.cos(q*u))*Math.sin(p*u);
+    pts[i]={x:x*R*0.25, y:y*R*0.25};
+  }
+  drawPolyline(ctx, pts);
+}
+
+/* 9) Audio Flowfield (hybrid particle, line-centric) */
+const flowParticles = Array.from({length:800},()=>({x:0,y:0,vx:0,vy:0}));
+function drawFlowfield(ctx,t,w,h,band){
+  const R = Math.min(w,h)*0.48;
+  const L = runtimeState.analyserL.getValue();
+  const N = L.length;
+  const energy = band.hi*0.8 + band.lo*0.2;
+  ctx.beginPath();
+  for(let p of flowParticles){
+    if(!p.inited){ p.x=(Math.random()-0.5)*R; p.y=(Math.random()-0.5)*R; p.inited=true; }
+    const i = (Math.abs((p.x+p.y)|0))%N;
+    const a = L[i]*6.28;
+    const sp = 0.3 + energy*4.0;
+    p.vx = Math.cos(a)*sp; p.vy = Math.sin(a)*sp;
+    p.x += p.vx; p.y += p.vy;
+    // wrap
+    if(p.x<-R) p.x=R; if(p.x>R) p.x=-R;
+    if(p.y<-R) p.y=R; if(p.y>R) p.y=-R;
+    ctx.lineTo(p.x, p.y);
+  }
+  ctx.stroke();
+}
+
+/* 10) Harmonic Bloom (hybrid particle) */
+const bloomPts = Array.from({length:900},(_,i)=>({i,x:0,y:0}));
+function drawHarmonicBloom(ctx,t,w,h,band){
+  const T=t*0.001; const R=Math.min(w,h)*0.45;
+  const N=bloomPts.length;
+  const e = clamp(band.hi*1.8, 0.05, 1.0);
+  ctx.beginPath();
+  for(let p of bloomPts){
+    const u = p.i/N*2*Math.PI;
+    const r = R*(0.35+0.6*e*Math.abs(Math.sin(3*u + T)));
+    p.x = r*Math.cos(u); p.y = r*Math.sin(u);
+    ctx.lineTo(p.x,p.y);
+  }
+  ctx.closePath(); ctx.stroke();
+}
+
+</script>
+
+<script>
+/* ============================================================
+   Keyboard, UI Wiring, Mapping list
+   ============================================================ */
+function updateMapList(){
+  els.mapList.innerHTML = '';
+  runtimeState.algoMap.forEach((algo, i)=>{
+    const li = document.createElement('li');
+    li.textContent = `V${i} (${runtimeState.voices[i].type})  →  ${ALGO_NAMES[algo]}`;
+    els.mapList.appendChild(li);
+  });
+}
+
+addEventListener('keydown', (e)=>{
+  if(e.repeat) return;
+  if(e.key>='0' && e.key<='9'){
+    const idx = (+e.key + 10) % 10; // '0' maps to 0
+    triggerVoice(idx);
+    handleNoteForRec(idx);
+  }
+});
+
+els.powerBtn.addEventListener('click', async ()=>{
+  if(runtimeState.powered) return;
+  setLoaderStatus('Booting engine…');
+  await runtimeState.Tone.start();
+  runtimeState.powered = true;
+  setLoaderStatus('Engine ready.');
+  // Start meters
+  requestAnimationFrame(updateMeters);
+  // Schedule signature only once
+  if(!runtimeState.booted){
+    runtimeState.booted = true;
+    scheduleBootSignature(runtimeState.rng);
+  }
+});
+
+els.bpm.addEventListener('change', e=>setBPM(e.target.value));
+els.swing.addEventListener('change', e=>setSwing(e.target.value));
+els.recBtn.addEventListener('click', ()=> seqState.recording ? stopRec() : startRec());
+els.playBtn.addEventListener('click', ()=> seqState.playing ? stopSeq() : playSeq());
+els.stopBtn.addEventListener('click', ()=> stopSeq());
+els.loopBtn.addEventListener('click', toggleLoop);
+els.steps.addEventListener('change', e=> setSteps(e.target.value));
+
+</script>
+
+<script>
+/* ============================================================
+   Boot Entrypoint — Seed, Tone Loader, Build Everything
+   ============================================================ */
+function boot(){
+  // 1) Seed & RNG
+  runtimeState.seedStr = getOrCreateSeed();
+  runtimeState.rng = makeRNG(runtimeState.seedStr);
+  els.seedOut.textContent = runtimeState.seedStr;
+
+  // 2) Tuning choice (12-TET / 19-TET) + mode
+  runtimeState.tuning = makeTuning(runtimeState.rng);
+  runtimeState.modeName = runtimeState.tuning.modeName;
+  els.tuningOut.textContent = runtimeState.tuning.system;
+  els.modeOut.textContent = runtimeState.modeName;
+
+  // 3) Audio init
+  initAudio();
+
+  // 4) Voices (10) with deterministic FX, plus algo permutation
+  runtimeState.voices = mkVoices(runtimeState.rng, runtimeState.Tone, runtimeState.tuning);
+  runtimeState.algoMap = buildAlgoMap(runtimeState.rng);
+  updateMapList();
+  els.algoOut.textContent = `V0 → ${ALGO_NAMES[runtimeState.algoMap[0]]}`;
+  runtimeState.currentIndex = 0;
+
+  // 5) Sequencer seeded defaults
+  initSequencer(runtimeState.rng);
+  els.bpm.value = Math.round(rrange(runtimeState.rng, 96, 132));
+  setBPM(els.bpm.value);
+
+  // 6) Scope renderer
+  scopeRenderer();
+
+  setLoaderStatus('Ready. Click Power, then play or press 0–9.');
+}
+
+// Kick loader
+loadToneJSAndBoot({ setLoaderStatus, runtimeState, boot });
+
+</script>
+</body>
+</html>

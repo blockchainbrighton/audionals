@@ -1,0 +1,814 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOP Matrix</title>
+    <style>
+        :root {
+            --bg-color: #000;
+            --fg-color: #fff;
+            --accent-color: #0ff; /* Default, will be overridden by seed */
+            --scope-bg: #000;
+            --scope-line: #fff;
+            --graticule-color: rgba(255, 255, 255, 0.1);
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+
+        #loader {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+            font-size: 1.5em;
+        }
+
+        #container {
+            display: flex;
+            flex: 1;
+            flex-direction: column;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        #scope-container {
+            flex: 1;
+            position: relative;
+            border: 1px solid var(--fg-color);
+            margin-bottom: 10px;
+            overflow: hidden;
+        }
+
+        canvas {
+            background-color: var(--scope-bg);
+        }
+
+        #ui {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        button {
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            border: 1px solid var(--fg-color);
+            padding: 5px 10px;
+            cursor: pointer;
+            font-family: inherit;
+        }
+
+        button:hover {
+            background-color: var(--fg-color);
+            color: var(--bg-color);
+        }
+
+        button.recording {
+            color: var(--accent-color);
+            border-color: var(--accent-color);
+        }
+
+        button.recording:hover {
+            background-color: var(--accent-color);
+            color: var(--bg-color);
+        }
+
+        input[type="number"], input[type="text"] {
+            background-color: var(--bg-color);
+            color: var(--fg-color);
+            border: 1px solid var(--fg-color);
+            padding: 3px 5px;
+            width: 80px;
+        }
+
+        #level-meter {
+            width: 100px;
+            height: 10px;
+            border: 1px solid var(--fg-color);
+            position: relative;
+        }
+
+        #level-meter-fill {
+            height: 100%;
+            width: 0%;
+            background-color: var(--fg-color);
+            transition: width 0.1s;
+        }
+
+        .hidden { display: none; }
+    </style>
+</head>
+<body>
+    <div id="loader">Initializing...</div>
+    <div id="container" class="hidden">
+        <div id="scope-container">
+            <canvas id="scope"></canvas>
+        </div>
+        <div id="ui">
+            <div class="control-group">
+                <button id="power-btn">Power</button>
+                <span>Seed: <input type="text" id="seed-display" readonly></span>
+            </div>
+            <div class="control-group">
+                <label>BPM: <input type="number" id="bpm" min="20" max="300" value="120"></label>
+                <button id="loop-btn">Loop</button>
+            </div>
+            <div class="control-group">
+                <button id="rec-btn">Rec</button>
+                <button id="play-btn">Play</button>
+                <button id="stop-btn">Stop</button>
+                <button id="save-btn">Save</button>
+                <button id="load-btn">Load</button>
+            </div>
+            <div class="control-group">
+                <div id="level-meter"><div id="level-meter-fill"></div></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // --- Seeded PRNG (sfc32) ---
+        function sfc32(a, b, c, d) {
+            return function() {
+                a |= 0; b |= 0; c |= 0; d |= 0;
+                var t = (a + b) | 0;
+                a = b ^ b >>> 9;
+                b = c + (c << 3) | 0;
+                c = (c << 21) | (c >>> 11);
+                d = d + 1 | 0;
+                t = t + d | 0;
+                c = c + t | 0;
+                return (t >>> 0) / 4294967296;
+            }
+        }
+
+        // --- Main App State ---
+        const app = {
+            isPoweredOn: false,
+            isRecording: false,
+            isPlaying: false,
+            isLooping: true,
+            currentSeed: null,
+            rng: null,
+            voices: [],
+            sequence: [],
+            currentStep: 0,
+            nextStepTime: 0,
+            stepDuration: 0,
+            toneLoaded: false,
+            visuals: {
+                scope: null,
+                ctx: null,
+                width: 0,
+                height: 0,
+                algorithms: [],
+                currentAlgorithm: 0,
+                time: 0
+            },
+            audio: {
+                masterLimiter: null,
+                transport: null,
+                context: null
+            }
+        };
+
+        // --- Tone.js Loader (as provided) ---
+        function loadToneJSAndBoot({ toneUrl, setLoaderStatus, runtimeState, boot }) {
+            setLoaderStatus('Loading Audio Engine...');
+            import(toneUrl).then(() => {
+                runtimeState.Tone = window.Tone;
+                console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                boot();
+            }).catch(err => {
+                setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                console.error('[BOP Matrix] Critical Tone.js load error:', err);
+            });
+        }
+
+
+        // --- Seeding & Initialization ---
+        function generateSeed() {
+            return Math.floor(Math.random() * 10000000000).toString();
+        }
+
+        function seedApp(seedStr) {
+            app.currentSeed = seedStr;
+            document.getElementById('seed-display').value = seedStr;
+
+            // Create seeded RNG
+            let seed = 0;
+            for (let i = 0; i < seedStr.length; i++) {
+                seed = ((seed << 5) - seed + seedStr.charCodeAt(i)) | 0;
+            }
+            const hash = seed >>> 0;
+            app.rng = sfc32(hash, hash << 10, hash >> 4, hash * 13);
+
+            // Derive accent color
+            const hue = Math.floor(app.rng() * 360);
+            document.documentElement.style.setProperty('--accent-color', `hsl(${hue}, 100%, 50%)`);
+
+            // Derive BPM
+            const bpm = 60 + Math.floor(app.rng() * 100);
+            document.getElementById('bpm').value = bpm;
+            if (app.audio.transport) {
+                app.audio.transport.bpm.value = bpm;
+            }
+
+            // Derive algorithm mapping (permutation of 0-9)
+            const indices = Array.from({ length: 10 }, (_, i) => i);
+            for (let i = indices.length - 1; i > 0; i--) {
+                const j = Math.floor(app.rng() * (i + 1));
+                [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+            app.visuals.algorithms = indices;
+        }
+
+        // --- Audio Engine Boot & Voice Creation ---
+        function createVoices() {
+            if (!app.toneLoaded || !app.rng) return;
+
+            const Tone = window.Tone;
+            app.voices = [];
+            const masterGain = new Tone.Gain(0.8).toDestination();
+            app.audio.masterLimiter = new Tone.Limiter(-1).connect(masterGain);
+
+            for (let i = 0; i < 10; i++) {
+                const voice = createVoice(i);
+                voice.output.connect(app.audio.masterLimiter);
+                app.voices.push(voice);
+            }
+        }
+
+        function createVoice(index) {
+            const Tone = window.Tone;
+            const rng = app.rng;
+
+            // --- 1. Oscillator / Source ---
+            let source;
+            const sourceType = Math.floor(rng() * 6); // 0-5
+
+            const baseFreq = 110 * Math.pow(2, Math.floor(rng() * 4)); // A2, A3, A4, A5
+
+            if (sourceType === 0) { // FM
+                const modFreq = 50 + rng() * 500;
+                const modIndex = 1 + rng() * 20;
+                const osc = new Tone.Oscillator(baseFreq, "sine").start();
+                const mod = new Tone.Oscillator(modFreq, "sine").start();
+                const gain = new Tone.Gain(modIndex);
+                mod.connect(gain);
+                gain.connect(osc.frequency);
+                source = osc;
+            } else if (sourceType === 1) { // AM
+                const modFreq = 1 + rng() * 50;
+                const carrier = new Tone.Oscillator(baseFreq, "sine").start();
+                const modulator = new Tone.Oscillator(modFreq, "sine").start();
+                const am = new Tone.AmplitudeEnvelope({ attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.5 });
+                modulator.connect(am.gain);
+                carrier.connect(am);
+                source = am;
+            } else if (sourceType === 2) { // Subtractive
+                const filterType = ['lowpass', 'highpass', 'bandpass'][Math.floor(rng() * 3)];
+                const filterFreq = 200 + rng() * 3000;
+                const filterQ = 0.5 + rng() * 10;
+                const noise = new Tone.Noise("white").start();
+                const filter = new Tone.Filter(filterFreq, filterType).Q.value = filterQ;
+                noise.connect(filter);
+                source = filter;
+            } else if (sourceType === 3) { // Additive (simplified with harmonics)
+                const real = new Float32Array(8).map(() => rng() * 2 - 1);
+                const imag = new Float32Array(8).map(() => rng() * 2 - 1);
+                const wave = new Tone.Waveform(real, imag);
+                source = new Tone.Oscillator({ frequency: baseFreq, type: "custom" });
+                source.set({ partials: real });
+                source.start();
+            } else if (sourceType === 4) { // Wavetable-like (PeriodicWave)
+                const real = new Float32Array(32).map(() => rng() * 2 - 1);
+                const imag = new Float32Array(32).map(() => rng() * 2 - 1);
+                const periodicWave = new Tone.PeriodicWave(real, imag);
+                source = new Tone.Oscillator({ frequency: baseFreq, type: "custom" });
+                source.set({ periodicWave });
+                source.start();
+            } else { // 5: Noise / Ring Mod
+                const noise = new Tone.Noise("pink").start();
+                const modOsc = new Tone.Oscillator(100 + rng() * 500, "sine").start();
+                const gain = new Tone.Gain();
+                modOsc.connect(gain.gain);
+                noise.connect(gain);
+                source = gain;
+            }
+
+            // --- 2. Envelope ---
+            const env = new Tone.AmplitudeEnvelope({
+                attack: 0.01 + rng() * 0.1,
+                decay: 0.1 + rng() * 0.5,
+                sustain: 0.3 + rng() * 0.7,
+                release: 0.1 + rng() * 1.0
+            }).toDestination(); // Temporary toDestination for audibility check
+            source.connect(env);
+
+            // Audibility check
+            env.triggerAttackRelease("8n");
+            // In a real scenario, you'd analyze the output signal here.
+            // For simplicity, we assume it's audible.
+            env.disconnect(); // Disconnect from temp destination
+
+            // --- 3. FX Chain (unique permutation) ---
+            const fxTypes = ['reverb', 'pingpong', 'chorus', 'distortion', 'filter'];
+            const fxChain = [];
+            for (let i = fxTypes.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [fxTypes[i], fxTypes[j]] = [fxTypes[j], fxTypes[i]];
+            }
+            const fxCount = 2 + Math.floor(rng() * 3); // 2-4 FX
+            const selectedFX = fxTypes.slice(0, fxCount);
+
+            let lastNode = env;
+            for (const type of selectedFX) {
+                let fx;
+                if (type === 'reverb') {
+                    fx = new Tone.Reverb(1 + rng() * 2).generate();
+                } else if (type === 'pingpong') {
+                    fx = new Tone.PingPongDelay(0.1 + rng() * 0.4, 0.2 + rng() * 0.6);
+                } else if (type === 'chorus') {
+                    fx = new Tone.Chorus(2 + rng() * 2, 2 + rng() * 5, 0.3 + rng() * 0.4);
+                } else if (type === 'distortion') {
+                    fx = new Tone.Distortion(0.2 + rng() * 0.6);
+                } else if (type === 'filter') {
+                    const freq = 200 + rng() * 5000;
+                    const type = ['lowpass', 'highpass', 'bandpass'][Math.floor(rng() * 3)];
+                    fx = new Tone.Filter(freq, type);
+                    // Add LFO to filter frequency for movement
+                    const lfo = new Tone.LFO(0.1 + rng() * 5, freq * 0.5, freq * 2).start();
+                    lfo.connect(fx.frequency);
+                }
+                lastNode.connect(fx);
+                lastNode = fx;
+                fxChain.push(fx);
+            }
+
+            return {
+                source: source,
+                envelope: env,
+                fxChain: fxChain,
+                output: lastNode,
+                baseFreq: baseFreq,
+                triggerAttack: () => env.triggerAttack(),
+                triggerRelease: () => env.triggerRelease()
+            };
+        }
+
+        // --- Boot Signature ---
+        async function playBootSignature() {
+            if (!app.toneLoaded || !app.rng) return;
+
+            const Tone = window.Tone;
+            const now = Tone.now();
+            
+            // Set scope to use accent color temporarily
+            const originalStyle = app.visuals.ctx.strokeStyle;
+            app.visuals.ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--accent-color');
+
+            // Play a short polyphonic sequence using all 10 voices
+            for (let i = 0; i < 10; i++) {
+                const voice = app.voices[i];
+                const timeOffset = i * 0.1; // Staggered start
+                const duration = 0.5 + app.rng() * 1.0;
+                voice.source.frequency.value = voice.baseFreq * (1 + app.rng() * 2); // Slight pitch variation
+                voice.envelope.triggerAttackRelease(duration, now + timeOffset);
+            }
+
+            // Play a final chord
+            const chordDelay = 1.5;
+            const chordNotes = app.voices.map(v => Tone.Frequency(v.baseFreq).toNote());
+            const polySynth = new Tone.PolySynth(Tone.Synth).toDestination();
+            polySynth.triggerAttackRelease(chordNotes, "4n", now + chordDelay);
+            
+            // Schedule reverting to monochrome style after signature finishes
+            setTimeout(() => {
+                app.visuals.ctx.strokeStyle = originalStyle;
+                // Play idle pad
+                const idleVoice = app.voices[0]; // Use first voice for idle
+                idleVoice.source.frequency.value = idleVoice.baseFreq;
+                idleVoice.envelope.triggerAttack();
+            }, (chordDelay + 0.5) * 1000); // 0.5s after chord
+        }
+
+        // --- Sequencer ---
+        function initSequence() {
+            const length = 16; // Fixed for simplicity, can be 8-64
+            app.sequence = Array(length).fill(0).map(() => []);
+        }
+
+        function recordStep(stepIndex, voiceIndex) {
+            if (!app.isRecording) return;
+            if (!app.sequence[stepIndex].includes(voiceIndex)) {
+                app.sequence[stepIndex].push(voiceIndex);
+            }
+        }
+
+        function scheduleStep(stepIndex) {
+            if (stepIndex >= app.sequence.length) {
+                if (app.isLooping) {
+                    stepIndex = 0;
+                } else {
+                    stopTransport();
+                    return;
+                }
+            }
+
+            const Tone = window.Tone;
+            const events = app.sequence[stepIndex];
+            for (const voiceIndex of events) {
+                const voice = app.voices[voiceIndex];
+                if (voice) {
+                    voice.triggerAttackRelease("16n"); // Or step duration
+                }
+            }
+            
+            app.currentStep = stepIndex;
+            updateUI();
+            
+            // Schedule next step
+            app.nextStepTime += app.stepDuration;
+            Tone.Draw.schedule(() => {
+                scheduleStep((stepIndex + 1) % app.sequence.length);
+            }, app.nextStepTime);
+        }
+
+        function startTransport() {
+            if (!app.toneLoaded || app.isPlaying) return;
+            const Tone = window.Tone;
+            app.audio.transport = Tone.Transport;
+            const bpm = parseInt(document.getElementById('bpm').value) || 120;
+            app.audio.transport.bpm.value = bpm;
+            app.stepDuration = Tone.Time("16n").toSeconds(); // 16th note steps
+            app.nextStepTime = Tone.now();
+            app.currentStep = 0;
+            app.isPlaying = true;
+            scheduleStep(0);
+            app.audio.transport.start();
+            updateUI();
+        }
+
+        function stopTransport() {
+            if (!app.toneLoaded) return;
+            const Tone = window.Tone;
+            app.audio.transport.stop();
+            app.audio.transport.cancel(); // Clear scheduled events
+            app.isPlaying = false;
+            app.currentStep = 0;
+            updateUI();
+        }
+
+        // --- Visualization ---
+        function initScope() {
+            const canvas = document.getElementById('scope');
+            app.visuals.scope = canvas;
+            app.visuals.ctx = canvas.getContext('2d');
+            onResize();
+            window.addEventListener('resize', onResize);
+            requestAnimationFrame(drawScope);
+        }
+
+        function onResize() {
+            const container = document.getElementById('scope-container');
+            app.visuals.width = container.clientWidth;
+            app.visuals.height = container.clientHeight;
+            app.visuals.scope.width = app.visuals.width;
+            app.visuals.scope.height = app.visuals.height;
+        }
+
+        function drawScope() {
+            if (!app.isPoweredOn) return;
+
+            const ctx = app.visuals.ctx;
+            const w = app.visuals.width;
+            const h = app.visuals.height;
+            const rng = app.rng;
+
+            // Clear with slight fade for motion trails
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, w, h);
+
+            // Draw faint graticule
+            ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--graticule-color');
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            for (let i = 0; i <= 10; i++) {
+                const x = (w / 10) * i;
+                const y = (h / 10) * i;
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h);
+                ctx.moveTo(0, y);
+                ctx.lineTo(w, y);
+            }
+            ctx.stroke();
+
+            // Draw center lines
+            ctx.beginPath();
+            ctx.moveTo(w / 2, 0);
+            ctx.lineTo(w / 2, h);
+            ctx.moveTo(0, h / 2);
+            ctx.lineTo(w, h / 2);
+            ctx.stroke();
+
+            // Draw based on current algorithm (deterministic for step/voice)
+            const voiceIndex = app.currentStep % 10; // Cycle through algorithms
+            const algIndex = app.visuals.algorithms[voiceIndex];
+            app.visuals.currentAlgorithm = algIndex;
+            
+            // Use a deterministic time base for visuals
+            app.visuals.time = (app.visuals.time + 0.016) % 1000; // Approx 60fps
+            
+            drawAlgorithm(ctx, w, h, algIndex, app.visuals.time, rng);
+
+            requestAnimationFrame(drawScope);
+        }
+
+        function drawAlgorithm(ctx, w, h, algIndex, t, rng) {
+            ctx.beginPath();
+            const cx = w / 2;
+            const cy = h / 2;
+            const scale = Math.min(w, h) * 0.4;
+
+            if (algIndex === 0) { // Lissajous Core
+                const a = 3 + Math.sin(t * 0.1) * 2;
+                const b = 2 + Math.cos(t * 0.13) * 1.5;
+                const delta = Math.sin(t * 0.05);
+                for (let i = 0; i <= 1000; i++) {
+                    const theta = (i / 1000) * Math.PI * 2;
+                    const x = Math.sin(a * theta + delta) * scale;
+                    const y = Math.sin(b * theta) * scale;
+                    if (i === 0) ctx.moveTo(cx + x, cy + y);
+                    else ctx.lineTo(cx + x, cy + y);
+                }
+            } else if (algIndex === 1) { // Spiral–Precess
+                for (let i = 0; i <= 1000; i++) {
+                    const theta = (i / 1000) * Math.PI * 10 + t;
+                    const r = (i / 1000) * scale;
+                    const amp_mod = 1 + 0.5 * Math.sin(theta * 2 + t * 2);
+                    const x = r * Math.cos(theta) * amp_mod;
+                    const y = r * Math.sin(theta) * amp_mod;
+                    if (i === 0) ctx.moveTo(cx + x, cy + y);
+                    else ctx.lineTo(cx + x, cy + y);
+                }
+            } else if (algIndex === 2) { // Polar Rose Sweep
+                const k = 3 + Math.floor(Math.sin(t * 0.1) * 3);
+                for (let i = 0; i <= 1000; i++) {
+                    const theta = (i / 1000) * Math.PI * 2;
+                    const r = Math.cos(k * theta) * scale;
+                    const x = r * Math.cos(theta + t * 0.5);
+                    const y = r * Math.sin(theta + t * 0.5);
+                    if (i === 0) ctx.moveTo(cx + x, cy + y);
+                    else ctx.lineTo(cx + x, cy + y);
+                }
+            } else if (algIndex === 3) { // Phyllotaxis Orbit
+                const angle = 137.5 * (Math.PI / 180); // Golden angle
+                for (let i = 0; i < 200; i++) {
+                    const r = Math.sqrt(i) * (scale / 15);
+                    const theta = i * angle + t;
+                    const x = r * Math.cos(theta);
+                    const y = r * Math.sin(theta);
+                    ctx.moveTo(cx + x, cy + y);
+                    ctx.arc(cx + x, cy + y, 2, 0, Math.PI * 2);
+                }
+            } else if (algIndex === 4) { // Figure-8 Morph
+                for (let i = 0; i <= 1000; i++) {
+                    const theta = (i / 1000) * Math.PI * 2;
+                    const morph = Math.sin(t * 0.5);
+                    const x = scale * Math.sin(theta);
+                    const y = scale * Math.sin(2 * theta) * (1 - morph) + scale * Math.sin(3 * theta) * morph;
+                    if (i === 0) ctx.moveTo(cx + x, cy + y);
+                    else ctx.lineTo(cx + x, cy + y);
+                }
+            } else if (algIndex === 5) { // Epicycle Chain
+                let x = 0, y = 0;
+                for (let i = 0; i < 5; i++) {
+                    const R = scale / (i + 1);
+                    const freq = 1 + i * 0.5;
+                    x += R * Math.cos(freq * t + i);
+                    y += R * Math.sin(freq * t + i);
+                }
+                ctx.arc(cx + x, cy + y, 5, 0, Math.PI * 2);
+            } else if (algIndex === 6) { // VectorScope XY (placeholder: Lissajous)
+                // A true vectorscope would need audio input analysis.
+                // This is a visual placeholder.
+                const a = 1;
+                const b = 1 + Math.sin(t * 0.1) * 0.5;
+                const delta = t * 0.1;
+                for (let i = 0; i <= 1000; i++) {
+                    const theta = (i / 1000) * Math.PI * 2;
+                    const x = Math.sin(a * theta + delta) * scale;
+                    const y = Math.sin(b * theta) * scale;
+                    if (i === 0) ctx.moveTo(cx + x, cy + y);
+                    else ctx.lineTo(cx + x, cy + y);
+                }
+            } else if (algIndex === 7) { // Torus-Knot Projection
+                const p = 2 + Math.floor(Math.sin(t * 0.05) * 3);
+                const q = 3 + Math.floor(Math.cos(t * 0.07) * 2);
+                for (let i = 0; i <= 1000; i++) {
+                    const theta = (i / 1000) * Math.PI * 2 * q;
+                    const phi = p * theta / q;
+                    const r = 0.8 + 0.2 * Math.cos(q * theta / p);
+                    const x = r * Math.cos(theta) * scale;
+                    const y = r * Math.sin(phi) * scale;
+                    if (i === 0) ctx.moveTo(cx + x, cy + y);
+                    else ctx.lineTo(cx + x, cy + y);
+                }
+            } else if (algIndex === 8) { // Audio Flowfield (simplified)
+                const gridSize = 20;
+                const cellW = w / gridSize;
+                const cellH = h / gridSize;
+                for (let i = 0; i < gridSize; i++) {
+                    for (let j = 0; j < gridSize; j++) {
+                        const x = i * cellW + cellW / 2;
+                        const y = j * cellH + cellH / 2;
+                        // Simple noise-based angle
+                        const angle = (rng() * 2 - 1) * Math.PI + t * 0.1;
+                        const len = 10;
+                        ctx.moveTo(x, y);
+                        ctx.lineTo(x + Math.cos(angle) * len, y + Math.sin(angle) * len);
+                    }
+                }
+            } else if (algIndex === 9) { // Harmonic Bloom (simplified)
+                for (let i = 0; i < 50; i++) {
+                    const angle = rng() * Math.PI * 2;
+                    const radius = rng() * scale;
+                    const x = Math.cos(angle) * radius;
+                    const y = Math.sin(angle) * radius;
+                    const size = 2 + 5 * Math.sin(t + i);
+                    ctx.moveTo(cx + x, cy + y);
+                    ctx.arc(cx + x, cy + y, size, 0, Math.PI * 2);
+                }
+            }
+            ctx.stroke();
+        }
+
+        // --- UI ---
+        function setupUI() {
+            document.getElementById('power-btn').addEventListener('click', togglePower);
+            document.getElementById('rec-btn').addEventListener('click', toggleRecord);
+            document.getElementById('play-btn').addEventListener('click', startTransport);
+            document.getElementById('stop-btn').addEventListener('click', stopTransport);
+            document.getElementById('loop-btn').addEventListener('click', toggleLoop);
+            document.getElementById('save-btn').addEventListener('click', saveSequence);
+            document.getElementById('load-btn').addEventListener('click', loadSequence);
+            document.getElementById('bpm').addEventListener('change', (e) => {
+                if (app.audio.transport) {
+                    app.audio.transport.bpm.value = parseInt(e.target.value) || 120;
+                }
+            });
+
+            // Keyboard controls 0-9
+            document.addEventListener('keydown', (e) => {
+                if (!app.isPoweredOn) return;
+                const key = e.key;
+                if (key >= '0' && key <= '9') {
+                    const voiceIndex = parseInt(key);
+                    if (app.isRecording) {
+                        recordStep(app.currentStep, voiceIndex);
+                    }
+                    // Trigger sound for immediate feedback
+                    if (app.voices[voiceIndex]) {
+                        app.voices[voiceIndex].triggerAttackRelease("8n");
+                    }
+                }
+            });
+        }
+
+        function togglePower() {
+            app.isPoweredOn = !app.isPoweredOn;
+            document.getElementById('container').classList.toggle('hidden', !app.isPoweredOn);
+            document.getElementById('loader').classList.toggle('hidden', app.isPoweredOn);
+            
+            if (app.isPoweredOn) {
+                if (!app.currentSeed) {
+                    seedApp(generateSeed());
+                }
+                if (app.toneLoaded) {
+                    createVoices();
+                    initSequence();
+                    playBootSignature();
+                }
+            } else {
+                stopTransport();
+                // Reset visuals
+                const ctx = app.visuals.ctx;
+                ctx.fillStyle = getComputedStyle(document.documentElement).getPropertyValue('--bg-color');
+                ctx.fillRect(0, 0, app.visuals.width, app.visuals.height);
+            }
+        }
+
+        function toggleRecord() {
+            app.isRecording = !app.isRecording;
+            document.getElementById('rec-btn').classList.toggle('recording', app.isRecording);
+        }
+
+        function toggleLoop() {
+            app.isLooping = !app.isLooping;
+            document.getElementById('loop-btn').textContent = app.isLooping ? 'Loop' : 'Once';
+        }
+
+        function updateUI() {
+            // Update level meter (placeholder)
+            const level = app.isPlaying ? 50 + Math.random() * 50 : 0;
+            document.getElementById('level-meter-fill').style.width = `${level}%`;
+        }
+
+        function saveSequence() {
+            const dataStr = JSON.stringify({ seed: app.currentSeed, sequence: app.sequence, bpm: document.getElementById('bpm').value });
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            const exportFileDefaultName = `bop_matrix_seq_${app.currentSeed}.json`;
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+
+        function loadSequence() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = '.json';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = event => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        if (data.seed && data.sequence) {
+                            stopTransport();
+                            seedApp(data.seed); // This will re-seed the app
+                            app.sequence = data.sequence;
+                            document.getElementById('bpm').value = data.bpm || 120;
+                            if (app.audio.transport) {
+                                app.audio.transport.bpm.value = data.bpm || 120;
+                            }
+                            // Re-create voices with new seed
+                            if (app.toneLoaded) {
+                                createVoices();
+                            }
+                        }
+                    } catch (err) {
+                        console.error("Failed to load sequence:", err);
+                        alert("Invalid sequence file.");
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        // --- Boot Process ---
+        function bootApp() {
+            app.toneLoaded = true;
+            console.log('[BOP Matrix] Booting application...');
+            setupUI();
+            initScope();
+            console.log('[BOP Matrix] Application booted.');
+        }
+
+        // --- Entry Point ---
+        window.addEventListener('DOMContentLoaded', () => {
+            const loaderElement = document.getElementById('loader');
+            const setLoaderStatus = (msg, isError = false) => {
+                loaderElement.textContent = msg;
+                if (isError) {
+                    loaderElement.style.color = 'red';
+                }
+            };
+
+            loadToneJSAndBoot({
+                toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+                setLoaderStatus: setLoaderStatus,
+                runtimeState: window,
+                boot: bootApp
+            });
+        });
+    </script>
+</body>
+</html>

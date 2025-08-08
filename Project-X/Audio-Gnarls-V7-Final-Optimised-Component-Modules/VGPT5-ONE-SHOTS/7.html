@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Seeded Oscilloscope Synth — Tech Plate NFT</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --bg:#0a0a0a; --plate:#121316; --chrome:#20242a; --rim:#2b3038; --lite:#9ad7ff;
+    --txt:#dfe7ee; --muted:#8aa0b3; --accent:#3eea8c; --warn:#ffb86c; --err:#ff5f5f;
+    --grid:#0f1620; --led-off:#1b232c; --led-on:#41ff8b; --led-cpu:#7aa6ff;
+  }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--txt);font:12px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;}
+  #wrap{display:flex;align-items:center;justify-content:center;height:100%;}
+  /* Tech Plate */
+  #plate{
+    width:min(1200px,96vw); height:min(720px,92vh); background:linear-gradient(180deg,#0f1114,#0c0d10);
+    position:relative; border-radius:16px; padding:10px; box-shadow:
+      inset 0 0 0 1px #1e2228, inset 0 0 24px rgba(255,255,255,.04),
+      0 10px 40px rgba(0,0,0,.55), 0 2px 0 0 #000;
+  }
+  #bezel{
+    position:absolute; inset:0; border-radius:16px; pointer-events:none;
+    box-shadow: inset 0 0 0 2px var(--chrome), inset 0 0 0 5px #0a0b0d, inset 0 0 80px rgba(255,255,255,.05);
+  }
+  #hud{
+    position:absolute; left:14px; right:14px; top:14px; height:62px; display:flex; gap:10px; align-items:center;
+    background:linear-gradient(180deg,#131720,#0f131a); border-radius:12px; box-shadow:inset 0 0 0 1px #1c232d;
+    padding:10px;
+  }
+  .group{display:flex;align-items:center; gap:8px; background:#0d1218; padding:8px; border-radius:10px; box-shadow:inset 0 0 0 1px #1b2330;}
+  .label{color:var(--muted); font-size:11px; letter-spacing:.4px;}
+  .value{font-weight:600; color:#dff1ff;}
+  button, select, input[type="number"]{
+    background:#0c1116; color:#dfe7ee; border:1px solid #1f2a36; border-radius:8px; padding:6px 10px; font:12px ui-monospace;
+  }
+  button:hover{border-color:#2c3b4e}
+  button:active{transform:translateY(1px)}
+  #leds{display:flex; gap:10px; align-items:center}
+  .led{width:10px;height:10px;border-radius:50%;box-shadow:0 0 0 1px #1f2a36, inset 0 0 4px #000; background:var(--led-off);}
+  .led.on{background:var(--led-on); box-shadow:0 0 8px var(--led-on), 0 0 0 1px #2c3;}
+  .led.cpu{background:var(--led-off);}
+  .led.cpu.on{background:var(--led-cpu); box-shadow:0 0 8px var(--led-cpu), 0 0 0 1px #59f;}
+  #scopeWrap{
+    position:absolute; left:14px; right:14px; top:92px; bottom:118px; border-radius:14px; overflow:hidden;
+    background:radial-gradient(1200px 1200px at 50% 50%, #0a0e15 0%, #080a0f 60%, #07090d 100%);
+    box-shadow:inset 0 0 0 1px #19202a, inset 0 0 60px rgba(0,0,0,.6);
+  }
+  #scope{width:100%; height:100%; display:block;}
+  /* grid overlay */
+  #gridOverlay{position:absolute; inset:0; pointer-events:none; opacity:.28; mix-blend-mode:screen;}
+  /* Controls footer */
+  #footer{
+    position:absolute; left:14px; right:14px; bottom:14px; height:92px; display:flex; gap:10px; align-items:center;
+    background:linear-gradient(180deg,#12151b,#0f1216); border-radius:12px; box-shadow:inset 0 0 0 1px #1c232d;
+    padding:10px;
+  }
+  .spacer{flex:1}
+  #bootLog{
+    position:absolute; right:14px; top:92px; width:min(420px,38vw); bottom:118px; transform:translateX(110%);
+    background:#0a0f14cc; border-left:1px solid #1c2934; border-radius:12px 0 0 12px; backdrop-filter: blur(6px);
+    transition:transform .25s ease; padding:12px; overflow:auto; font-size:11px; line-height:1.35;
+  }
+  #bootLog.open{transform:translateX(0)}
+  #bootLog h3{margin:6px 0 8px 0; font-size:12px; color:#bfe6ff}
+  #logBtn{position:absolute; right:14px; top:62px; transform:translateY(-50%); z-index:3}
+  .tiny{font-size:10px; color:#9fb3c8}
+  .kbd{display:inline-block; padding:2px 5px; border-radius:4px; border:1px solid #223042; background:#0b1118; color:#bfe6ff; font-size:10px;}
+</style>
+</head>
+<body>
+<div id="wrap">
+  <div id="plate">
+    <div id="bezel"></div>
+
+    <div id="hud">
+      <div class="group">
+        <button id="powerBtn">Power</button>
+        <div class="label">Seed</div>
+        <div id="seedOut" class="value">—</div>
+        <button id="regenSeed">Re-seed</button>
+      </div>
+
+      <div class="group">
+        <div class="label">BPM</div>
+        <input id="bpm" type="number" min="20" max="240" step="1" value="120" />
+        <button id="tap">Tap</button>
+      </div>
+
+      <div class="group">
+        <button id="rec">Rec</button>
+        <button id="play">Play</button>
+        <button id="stop">Stop</button>
+        <button id="loop">Loop: Off</button>
+        <div class="label">Len</div>
+        <select id="steps">
+          <option>8</option><option>12</option><option selected>16</option>
+          <option>24</option><option>32</option><option>48</option><option>64</option>
+        </select>
+        <button id="save">Save</button>
+        <button id="load">Load</button><input id="file" type="file" accept="application/json" style="display:none"/>
+      </div>
+
+      <div class="group">
+        <div class="label">Quality</div>
+        <button id="quality">x1</button>
+      </div>
+
+      <div id="leds" class="group">
+        <div class="label">LED</div>
+        <div class="tiny">Audio</div><div id="ledAudio" class="led"></div>
+        <div class="tiny">CPU</div><div id="ledCPU" class="led cpu"></div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <button id="logBtn">Boot Log</button>
+    </div>
+
+    <div id="scopeWrap">
+      <canvas id="scope"></canvas>
+      <canvas id="gridOverlay"></canvas>
+    </div>
+
+    <div id="footer">
+      <div class="group">
+        <div class="label">Keys</div>
+        <div class="tiny">Use <span class="kbd">0–9</span> to trigger voices & visuals</div>
+      </div>
+      <div class="group">
+        <div class="label">Algo</div>
+        <div id="algoName" class="value">—</div>
+      </div>
+      <div class="group">
+        <div class="label">Sig</div>
+        <div id="sigState" class="value">idle</div>
+      </div>
+      <div class="spacer"></div>
+      <div class="group">
+        <div class="label">Status</div>
+        <div id="status" class="value">Waiting for Power…</div>
+      </div>
+    </div>
+
+    <aside id="bootLog"></aside>
+  </div>
+</div>
+
+<script>
+/** ------------------------------
+ *  Deterministic PRNG + Seed Utils
+ *  ------------------------------ */
+const runtimeState = { Tone:null, started:false, quality:1, prng:null, seed:"" };
+const bootLines = [];
+const log = (s)=>{ bootLines.push(s); updateBootLog(); console.log(s); };
+
+function hash32(str){
+  // xfnv1a hash to 32-bit
+  let h = 0x811c9dc5;
+  for (let i=0;i<str.length;i++){ h ^= str.charCodeAt(i); h = Math.imul(h, 0x01000193); }
+  return h>>>0;
+}
+// Mulberry32
+function mulberry32(a){
+  return function(){
+    let t = a += 0x6D2B79F5;
+    t = Math.imul(t ^ t>>>15, t | 1);
+    t ^= t + Math.imul(t ^ t>>>7, t | 61);
+    return ((t ^ t>>>14) >>> 0) / 4294967296;
+  }
+}
+function seeded(seedStr){
+  const base = hash32(seedStr);
+  let taps = 0;
+  const gen = ()=>{ taps++; return rng(); }
+  const rng = mulberry32(base);
+  gen.taps = ()=>taps;
+  gen.pick = (arr)=> arr[Math.floor(gen()*arr.length)];
+  gen.range = (a,b)=> a + gen()*(b-a);
+  gen.irange = (a,b)=> Math.floor(gen.range(a,b+1));
+  gen.bool = (p=0.5)=> gen() < p;
+  return gen;
+}
+
+/** ------------------------------
+ *  Tone.js On-chain Loader (exact as provided)
+ *  ------------------------------ */
+function loadToneJSAndBoot({
+  toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+  setLoaderStatus, runtimeState, boot
+}) {
+  setLoaderStatus('Loading Audio Engine...');
+  import(toneUrl).then(() => {
+    runtimeState.Tone = window.Tone;
+    console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+    boot();
+  }).catch(err => {
+    setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+    console.error('[BOP Matrix] Critical Tone.js load error:', err);
+  });
+}
+
+/** ------------------------------
+ *  UI Elements
+ *  ------------------------------ */
+const els = {
+  seedOut: document.getElementById('seedOut'),
+  power: document.getElementById('powerBtn'),
+  regen: document.getElementById('regenSeed'),
+  bpm: document.getElementById('bpm'),
+  tap: document.getElementById('tap'),
+  rec: document.getElementById('rec'),
+  play: document.getElementById('play'),
+  stop: document.getElementById('stop'),
+  loop: document.getElementById('loop'),
+  steps: document.getElementById('steps'),
+  saveBtn: document.getElementById('save'),
+  loadBtn: document.getElementById('load'),
+  file: document.getElementById('file'),
+  quality: document.getElementById('quality'),
+  ledAudio: document.getElementById('ledAudio'),
+  ledCPU: document.getElementById('ledCPU'),
+  status: document.getElementById('status'),
+  algoName: document.getElementById('algoName'),
+  sigState: document.getElementById('sigState'),
+  logBtn: document.getElementById('logBtn'),
+  bootLog: document.getElementById('bootLog'),
+  scope: document.getElementById('scope'),
+  grid: document.getElementById('gridOverlay'),
+};
+function setLoaderStatus(text, bad=false){ els.status.textContent = text; if(bad){ els.status.style.color='var(--err)'; } }
+
+/** ------------------------------
+ *  Seed acquisition & wiring
+ *  ------------------------------ */
+function getOrMakeSeed(){
+  const url = new URL(location.href);
+  let s = url.searchParams.get('seed');
+  if(!s){ s = (Math.random().toString(36).slice(2)+Date.now().toString(36)).slice(0,16); history.replaceState({}, "", `?seed=${s}`); }
+  runtimeState.seed = s;
+  runtimeState.prng = seeded(s);
+  els.seedOut.textContent = s;
+}
+getOrMakeSeed();
+
+/** ------------------------------
+ *  Audio Graph (pre-allocated) + Sequencer
+ *  ------------------------------ */
+const graph = {
+  voices: [], // {type,name,trigger(note|freq), fxChain[], vGain, env, visAlgoIndex}
+  master:null, limiter:null, meter:null,
+  patterns: [], stepLen:16, bpm:120, loop:false, rec:false, playing:false,
+  quality:1, idle:{ active:false, obj:null }
+};
+const VIS_ALGOS = [
+  'Lissajous Core','Spiral–Precess','Polar Rose Sweep','Phyllotaxis Orbit','Figure-8 Morph',
+  'Epicycle Chain','VectorScope XY','Torus-Knot Projection','Audio Flowfield','Harmonic Bloom'
+];
+const algoPermutation = []; // seed-derived mapping voice -> algo index
+
+function bootAudio(){
+  const Tone = runtimeState.Tone;
+  const R = runtimeState.prng;
+
+  // Context + Transport safety
+  const ctx = Tone.getContext?.() || Tone.context;
+  if (ctx) {
+    try { ctx.latencyHint = 'interactive'; } catch {}
+    try { ctx.lookAhead = 0.03; } catch {}
+  }
+  Tone.Transport.bpm.value = graph.bpm = parseInt(els.bpm.value,10);
+  Tone.Transport.swing = 0; // deterministic
+
+  // Master bus: gentle glue before limiter
+  graph.master = new Tone.Gain(0.9).toDestination();
+  const comp = new Tone.Compressor({ threshold: -14, ratio: 2, attack: 0.005, release: 0.12 });
+  graph.limiter = new Tone.Limiter(-1.0);
+  graph.meter = new Tone.Meter({ channels: 1, smoothing: 0.7 });
+
+  comp.connect(graph.limiter);
+  graph.limiter.connect(graph.master);
+  graph.meter.connect(graph.limiter);
+
+  // Voices + visual pairing
+  const voiceTypes = [
+    'FM','AM','Subtractive','Additive','Wavetable','Noise','RingMod','FM-Soft','Subtractive-HP','Wavetable-Add'
+  ];
+  const algoIdx = [...Array(10).keys()];
+  for(let i=algoIdx.length-1;i>0;i--){ const j = R.irange(0,i); [algoIdx[i],algoIdx[j]]=[algoIdx[j],algoIdx[i]]; }
+
+  graph.voices = [];
+  for(let i=0;i<10;i++){
+    const v = makeVoice(i, R.pick(voiceTypes), R);
+    v.visAlgoIndex = algoIdx[i];
+    graph.voices.push(v);
+  }
+
+  log(`Seed ${runtimeState.seed} -> PRNG taps so far: ${runtimeState.prng.taps()}`);
+  log('Voice → Visual mapping:'); graph.voices.forEach((v,i)=>log(`  V${i} ${v.name.padEnd(14)} → ${VIS_ALGOS[v.visAlgoIndex]}`));
+  els.algoName.textContent = '—';
+
+  // Sequencer
+  graph.stepLen = parseInt(els.steps.value,10);
+  graph.patterns = Array.from({length:graph.stepLen}, ()=>({ keys:[] }));
+  graph.loop = false;
+
+  // Start with lighter FX during boot
+  setHeavyWetScale(0.55);
+  scheduleBootSignature();
+
+  els.ledAudio.classList.add('on');
+}
+
+
+/** Make a single voice with prebuilt chain (deterministic) */
+function makeVoice(index, kind, R){
+  const Tone = runtimeState.Tone;
+  const name = kind;
+
+  const vGain = new Tone.Gain(0).connect(graph.meter); // meter → comp → limiter → master
+  const env = new Tone.AmplitudeEnvelope({ attack:0.01, decay:0.15, sustain:0.85, release:0.15 }).connect(vGain);
+
+  const baseHz = [110,138.59,164.81,196,220,261.63,329.63,392,440,523.25];
+  const baseFreq = baseHz[index%baseHz.length];
+  const detuneCents = Math.floor(R.range(-8,8));
+  const pan = new Tone.Panner(R.range(-0.7,0.7)).connect(env);
+
+  // --- FX chain (same choices, slightly safer defaults) ---
+  function mkFX(){
+    const chain = [];
+    if(R.bool(0.8)){
+      const af = new runtimeState.Tone.AutoFilter({
+        frequency: R.range(0.04,0.12),
+        depth: R.range(0.25,0.8),
+        baseFrequency: Math.max(250, R.range(300,3200)),
+        octaves: R.range(0.5, 2.0),
+        type: 'sine'
+      }).start();
+      chain.push(af);
+    }
+    if(R.bool(0.85)){
+      chain.push(new Tone.Reverb({ decay: R.range(1.0, 3.2), wet: R.range(0.12,0.28) }));
+    }
+    if(R.bool(0.6)){
+      chain.push(new Tone.PingPongDelay({ delayTime: R.range(0.12,0.28), feedback: R.range(0.18,0.42), wet: R.range(0.08,0.2) }));
+    }
+    if(R.bool(0.5)){
+      chain.push(new Tone.Chorus({ frequency: R.range(0.18,0.7), delayTime: R.range(2,6), depth: R.range(0.12,0.38), wet: R.range(0.06,0.18) }).start());
+    }
+    if(R.bool(0.45)){
+      chain.push(new Tone.BitCrusher({ bits: R.irange(5,7), wet: R.range(0.06,0.16) }));
+    } else if(R.bool(0.3)){
+      chain.push(new Tone.Distortion({ distortion: R.range(0.05,0.2), oversample: runtimeState.quality>1?'2x':'none', wet: R.range(0.06,0.18) }));
+    }
+    // connect
+    let head = pan;
+    for(const fx of chain){ head.connect(fx); head = fx; }
+    head.connect(vGain);
+    return chain;
+  }
+  const fxChain = mkFX();
+
+  // --- Sources by type ---
+  let src, trig;
+  const cutoff = Math.max(300, R.range(400, 4200));
+  const res = R.range(0.05, 0.35);
+
+  switch(kind){
+    case 'FM':
+    case 'FM-Soft': {
+      const harm = R.range(0.6, 3.2);
+      const modIdx = kind==='FM-Soft' ? R.range(0.12,1.1) : R.range(0.6,3.0);
+      src = new Tone.FMOscillator({
+        type: R.pick(['sine','triangle','sawtooth']),
+        frequency: baseFreq,
+        harmonicity: harm,
+        modulationIndex: modIdx,
+        modulationType: R.pick(['sine','triangle']),
+        detune: detuneCents
+      }).connect(pan).start();
+      trig = (t, vel=0.85)=> { env.attack=0.01; env.decay=0.12; env.release=0.12; vGain.gain.rampTo(vel,0.006, t); env.triggerAttackRelease(0.22, t); };
+      break;
+    }
+    case 'AM': {
+      src = new Tone.AMOscillator({
+        type: R.pick(['sine','square','triangle']),
+        frequency: baseFreq,
+        harmonicity: R.range(0.6,2.6),
+        modulationType: R.pick(['sine','triangle']),
+        detune: detuneCents
+      }).connect(pan).start();
+      trig = (t, vel=0.82)=> { env.attack=0.01; env.decay=0.18; env.release=0.16; vGain.gain.rampTo(vel,0.006, t); env.triggerAttackRelease(0.28, t); };
+      break;
+    }
+    case 'Subtractive':
+    case 'Subtractive-HP': {
+      const filt = new Tone.Filter({ type: kind==='Subtractive-HP'?'highpass':'lowpass', frequency: cutoff, Q: res }).connect(pan);
+      const osc = new Tone.Oscillator({ type:R.pick(['sawtooth','square','triangle']), frequency: baseFreq, detune:detuneCents }).connect(filt).start();
+      src = osc;
+      trig = (t, vel=0.78)=>{ env.attack=0.012; env.decay=0.26; env.release=0.2; vGain.gain.rampTo(vel,0.006,t); env.triggerAttackRelease(0.3,t); };
+      break;
+    }
+    case 'Additive': {
+      const partials = Array.from({length: R.irange(3,7)}, ()=> R.range(0.22,0.9));
+      const osc = new Tone.Oscillator({ type:'custom', partials, frequency: baseFreq }).connect(pan).start();
+      src = osc;
+      trig = (t, vel=0.76)=>{ env.attack=0.016; env.decay=0.22; env.release=0.2; vGain.gain.rampTo(vel,0.006,t); env.triggerAttackRelease(0.28,t); };
+      break;
+    }
+    case 'Wavetable':
+    case 'Wavetable-Add': {
+      const partials = Array.from({length:R.irange(5,10)}, ()=> R.range(0.12,0.9));
+      const osc = new Tone.Oscillator({ type:'custom', partials, frequency: baseFreq }).connect(pan).start();
+      if(kind==='Wavetable-Add' && runtimeState.prng.bool(0.6)){
+        new Tone.Oscillator({ type:R.pick(['sine','triangle']), frequency: baseFreq*R.range(1.6,2.3), volume:-9 }).connect(pan).start();
+      }
+      src = osc;
+      trig = (t, vel=0.8)=>{ env.attack=0.014; env.decay=0.25; env.release=0.22; vGain.gain.rampTo(vel,0.006,t); env.triggerAttackRelease(0.3,t); };
+      break;
+    }
+    case 'Noise': {
+      const noise = new Tone.Noise(R.pick(['white','pink','brown'])).start();
+      const nf = new Tone.Filter({ type:'bandpass', frequency: cutoff*runtimeState.prng.range(0.7,1.1), Q: R.range(1.1,3.5) }).connect(pan);
+      noise.connect(nf);
+      src = noise;
+      trig = (t, vel=0.62)=>{ env.attack=0.006; env.decay=0.17; env.release=0.16; vGain.gain.rampTo(vel,0.004,t); env.triggerAttackRelease(0.22,t); };
+      break;
+    }
+    case 'RingMod': {
+      const rm = new Tone.AMOscillator({ frequency: baseFreq, modulationType:'sine', type:'sine', harmonicity:R.range(1.4,3.2) }).connect(pan).start();
+      src = rm;
+      trig = (t, vel=0.78)=>{ env.attack=0.01; env.decay=0.2; env.release=0.18; vGain.gain.rampTo(vel,0.006,t); env.triggerAttackRelease(0.28,t); };
+      break;
+    }
+    default:{
+      const osc = new Tone.Oscillator({ type:'sine', frequency: baseFreq }).connect(pan).start();
+      src = osc;
+      trig = (t, vel=0.7)=>{ env.attack=0.01; env.decay=0.2; env.release=0.2; vGain.gain.rampTo(vel,0.006,t); env.triggerAttackRelease(0.25,t); };
+    }
+  }
+
+  // --- Quality updates (oversampling on/off) ---
+  function updateQuality(q){
+    for(const fx of fxChain){
+      if(fx instanceof runtimeState.Tone.Distortion){ fx.oversample = q>1 ? '2x' : 'none'; }
+    }
+  }
+  updateQuality(runtimeState.quality);
+
+  // --- Logging ---
+  log(`V${index} ${name} | base=${baseFreq}Hz detune=${detuneCents}c fx=${fxChain.map(x=>x.name || x.constructor.name).join('>')||'none'}`);
+
+  // --- Per-voice cooldown + governed trigger ---
+  let lastTrig = -1;
+  function safeTrigger(t, vel){
+    const now = runtimeState.Tone.now();
+    if (lastTrig > 0 && (now - lastTrig) < (GOV.retriggerMs/1000)) return; // cooldown
+    lastTrig = now;
+
+    // Budget & FX wet caps
+    const mode = els.sigState.textContent === 'booting' ? 'boot'
+               : (graph.idle.active ? 'idle' : 'live');
+
+    applyHeavyWetCap(voice, mode==='live' ? 0.35 : 0.28);
+    if (!withinBudget(mode)) {
+      // Out of budget: short ping, very low wet
+      vGain.gain.cancelScheduledValues(t);
+      env.attack = 0.008; env.decay = 0.12; env.release = 0.12;
+      voice.fxChain?.forEach(fx=>fx.wet && (fx.wet.value = Math.min(0.08, fx.wet.value)));
+      vGain.gain.rampTo(Math.min(vel,0.6), 0.004, t);
+      env.triggerAttackRelease(0.16, t);
+      scheduleActiveWindow(220);
+      return;
+    }
+
+    // Normal trigger
+    trig(t, vel);
+    scheduleActiveWindow(360);
+  }
+
+  const voice = {
+    index, name, src, env, vGain, fxChain, pan,
+    trigger: safeTrigger,
+  };
+  return voice;
+}
+
+/** ------------------------------
+ *  Boot Signature (deterministic 3.5s call/response) & Idle Pad
+ *  ------------------------------ */
+ function scheduleBootSignature(){
+  const Tone = runtimeState.Tone;
+  const R = runtimeState.prng;
+  const voices = graph.voices;
+  els.sigState.textContent = 'booting';
+  log('Boot Signature: scheduling ~3.5s motif (call & response)…');
+
+  const now = Tone.now() + 0.2;
+  const dur = 3.5;
+
+  // Use 3 + 4 lead voices, but ensure all 10 get a touch (staggered)
+  const chordVoices = [...voices].sort(()=>R.range(-1,1)).slice(0,3);
+  const answerVoices = [...voices].filter(v=>!chordVoices.includes(v)).slice(0,4);
+  const everyone = [...voices];
+
+  const baseVel = 0.6 + R.range(0,0.2);
+
+  // Call: 3 stabs, slightly arpeggiated
+  for(let i=0;i<3;i++){
+    const t = now + i*0.36;
+    chordVoices.forEach((v,k)=> v.trigger(t + k*0.035, baseVel + (k*0.06)));
+  }
+
+  // Response: 4 chirp runs
+  for(let i=0;i<4;i++){
+    const t = now + 1.15 + i*0.3;
+    answerVoices.forEach((v,k)=> v.trigger(t + k*0.024, baseVel + 0.04*i));
+  }
+
+  // Everyone once, staggered to avoid burst
+  everyone.forEach((v,i)=> v.trigger(now + 0.08*i, 0.55 + 0.03*(i%4)));
+
+  // End → idle, restore wet scaling
+  Tone.Transport.scheduleOnce(()=>{
+    els.sigState.textContent = 'idle';
+    setHeavyWetScale(1.0); // restore normal wet caps
+    startIdlePad();
+  }, now + dur);
+
+  if(Tone.Transport.state !== 'started') Tone.Transport.start(now);
+}
+
+
+/** Idle pad: subtle sustained layered vibe; deterministic voice subset */
+function startIdlePad(){
+  if(graph.idle.active) return;
+  const Tone = runtimeState.Tone, R = runtimeState.prng;
+  const picks = [...graph.voices].sort(()=>R.range(-1,1)).slice(0,2); // 2 voices only
+  const now = Tone.now() + 0.05;
+  picks.forEach((v,i)=>{
+    v.env.attack = 0.35; v.env.release = 0.55;
+    v.trigger(now + i*0.12, 0.34 + i*0.05);
+  });
+  graph.idle.active = true;
+}
+
+
+/** ------------------------------
+ *  Input Handling (0–9), Sequencer, Save/Load
+ *  ------------------------------ */
+const keyToIndex = {'0':0,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9};
+
+document.addEventListener('keydown', (e)=>{
+  if(!runtimeState.started) return;
+  if(e.repeat) return;
+  const k = e.key;
+  if(k in keyToIndex){
+    const idx = keyToIndex[k];
+    playVoice(idx);
+    if(graph.rec) appendRecord(idx);
+  }
+});
+
+function playVoice(idx){
+  const Tone = runtimeState.Tone;
+  const v = graph.voices[idx]; if(!v) return;
+  const t = Tone.now();
+  v.trigger(t, 0.88);
+  currentAlgo = v.visAlgoIndex;
+  els.algoName.textContent = `V${idx} → ${VIS_ALGOS[currentAlgo]}`;
+  flashAudioLED();
+}
+
+function appendRecord(idx){
+  const pos = Math.floor((runtimeState.Tone.Transport.ticks / runtimeState.Tone.Transport.PPQ) % graph.stepLen);
+  graph.patterns[pos].keys.push(idx);
+}
+
+function toggleRec(){
+  graph.rec = !graph.rec;
+  els.rec.textContent = graph.rec ? 'Rec*' : 'Rec';
+  els.rec.style.color = graph.rec ? 'var(--warn)' : '';
+}
+
+function startPlay(){
+  const Tone = runtimeState.Tone;
+  if(graph.playing) return;
+  graph.playing = true;
+  let step = 0;
+  const ppq = Tone.Transport.PPQ; // 192 by default
+  const stepDur = '16n'; // step grid
+  graph.stepEv = Tone.Transport.scheduleRepeat((time)=>{
+    const cell = graph.patterns[step];
+    for(const k of cell.keys){ graph.voices[k]?.trigger(time, 0.8); }
+    if(++step>=graph.stepLen){ step=0; if(!graph.loop) stopPlay(); }
+  }, stepDur);
+  Tone.Transport.start('+0.05');
+}
+
+function stopPlay(){
+  const Tone = runtimeState.Tone;
+  if(!graph.playing) return;
+  graph.playing = false;
+  if(graph.stepEv!==undefined){ Tone.Transport.clear(graph.stepEv); graph.stepEv = undefined; }
+}
+
+function clearPattern(len){
+  graph.stepLen = len;
+  graph.patterns = Array.from({length:len}, ()=>({keys:[]}));
+}
+
+function savePattern(){
+  const blob = new Blob([JSON.stringify({
+    seed: runtimeState.seed,
+    bpm: graph.bpm,
+    len: graph.stepLen,
+    patt: graph.patterns
+  },null,2)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `osc-seq-${runtimeState.seed}.json`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+function loadPattern(file){
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    try{
+      const o = JSON.parse(reader.result);
+      clearPattern(o.len||16);
+      graph.patterns = o.patt||graph.patterns;
+      graph.bpm = o.bpm||graph.bpm; els.bpm.value = graph.bpm;
+      runtimeState.Tone.Transport.bpm.rampTo(graph.bpm, 0.05);
+      log(`Loaded pattern len=${graph.stepLen} bpm=${graph.bpm}`);
+    }catch(e){ console.error(e); }
+  };
+  reader.readAsText(file);
+}
+
+/** ------------------------------
+ *  Visuals: XY Oscilloscope (10 deterministic algorithms)
+ *  ------------------------------ */
+const scope = els.scope, grid = els.grid;
+const sctx = scope.getContext('2d'), gctx = grid.getContext('2d');
+let currentAlgo = 0;
+let density = 1200; // increased by Quality x2
+let lastFrame = performance.now();
+
+function resize(){
+  const r = devicePixelRatio || 1;
+  scope.width = scope.clientWidth * r;
+  scope.height = scope.clientHeight * r;
+  grid.width = scope.width; grid.height = scope.height;
+  drawGrid();
+}
+window.addEventListener('resize', resize); resize();
+
+function drawGrid(){
+  const w = grid.width, h = grid.height; gctx.clearRect(0,0,w,h);
+  gctx.strokeStyle = '#122030'; gctx.lineWidth = 1;
+  // crosshair
+  gctx.beginPath(); gctx.moveTo(w/2,0); gctx.lineTo(w/2,h); gctx.moveTo(0,h/2); gctx.lineTo(w,h/2); gctx.stroke();
+  // rings
+  gctx.globalAlpha = .8;
+  for(let r=1;r<=4;r++){
+    gctx.beginPath(); gctx.arc(w/2,h/2, (Math.min(w,h)/2)*r/4, 0, Math.PI*2); gctx.stroke();
+  }
+  gctx.globalAlpha = 1;
+}
+
+function ledCPUUpdate(){
+  const now = performance.now();
+  const dt = now - lastFrame; lastFrame = now;
+  // crude CPU led: if frame > 24ms, flash
+  const busy = dt > 24;
+  els.ledCPU.classList.toggle('on', busy);
+}
+
+function flashAudioLED(){
+  els.ledAudio.classList.add('on');
+  clearTimeout(flashAudioLED._t);
+  flashAudioLED._t = setTimeout(()=> els.ledAudio.classList.remove('on'), 80);
+}
+
+// Algorithms
+function renderXY(algo, t, N){
+  const arr = new Float32Array(N*2);
+  const TAU = Math.PI*2;
+  const seed = hash32(runtimeState.seed + '|algo' + algo);
+  function Rn(i){ // cheap deterministic for visuals
+    let x = (seed ^ (i*0x9e3779b9))>>>0;
+    x ^= x<<13; x ^= x>>>17; x^=x<<5; return (x>>>0)/4294967296;
+  }
+  const scale = 0.42; // normalized [-1,1] box scale
+  switch(algo){
+    case 0: // Lissajous Core
+      {
+        const ax = 1 + (seed%4), ay = 2 + ((seed>>3)%5);
+        for(let i=0;i<N;i++){
+          const p = i/N;
+          const x = Math.sin(TAU*(ax*p + 0.10*t));
+          const y = Math.cos(TAU*(ay*p + 0.12*t));
+          arr[i*2] = x*scale; arr[i*2+1] = y*scale;
+        }
+      } break;
+    case 1: // Spiral–Precess
+      {
+        for(let i=0;i<N;i++){
+          const p = i/N, r = p*0.9; const th = TAU*(p*3 + 0.2*Math.sin(0.5*t));
+          const x = r*Math.cos(th + 0.3*Math.sin(0.7*t));
+          const y = r*Math.sin(th + 0.2*Math.cos(0.6*t));
+          arr[i*2] = x*scale*1.4; arr[i*2+1] = y*scale*1.4;
+        }
+      } break;
+    case 2: // Polar Rose Sweep
+      {
+        const k = 3 + ((seed>>5)%4);
+        for(let i=0;i<N;i++){
+          const p=i/N, th=TAU*p*1.2 + 0.2*t, r = Math.cos(k*th)*0.7;
+          arr[i*2]=r*Math.cos(th)*scale*1.2; arr[i*2+1]=r*Math.sin(th)*scale*1.2;
+        }
+      } break;
+    case 3: // Phyllotaxis Orbit
+      {
+        const a = Math.PI*(3-Math.sqrt(5));
+        for(let i=0;i<N;i++){
+          const r = Math.sqrt(i/N)*0.9, th = i*a + 0.15*t;
+          arr[i*2]=r*Math.cos(th)*scale*1.2; arr[i*2+1]=r*Math.sin(th)*scale*1.2;
+        }
+      } break;
+    case 4: // Figure-8 Morph
+      {
+        for(let i=0;i<N;i++){
+          const p=i/N, th=TAU*p;
+          const x = Math.sin(th); const y = Math.sin(2*th + 0.3*Math.sin(t*0.7));
+          arr[i*2]=x*scale*1.2; arr[i*2+1]=y*scale*1.2;
+        }
+      } break;
+    case 5: // Epicycle Chain
+      {
+        const n=3+((seed>>7)%4);
+        for(let i=0;i<N;i++){
+          const p=i/N; let x=0,y=0;
+          for(let k=1;k<=n;k++){
+            x += (1/k)*Math.cos(TAU*(k*p)+0.1*k*t);
+            y += (1/k)*Math.sin(TAU*(k*p)+0.13*k*t);
+          }
+          arr[i*2]=x*scale*0.9; arr[i*2+1]=y*scale*0.9;
+        }
+      } break;
+    case 6: // VectorScope XY (waveform-true-ish)
+      {
+        for(let i=0;i<N;i++){
+          const p=i/N, th=TAU*(p+0.03*t);
+          const x = Math.sin(th)+0.3*Math.sin(3*th);
+          const y = Math.cos(th)+0.25*Math.sin(2*th + 0.2*t);
+          arr[i*2]=x*scale*0.9; arr[i*2+1]=y*scale*0.9;
+        }
+      } break;
+    case 7: // Torus-Knot Projection
+      {
+        const p0=2+((seed>>2)%3), q0=3+((seed>>4)%4);
+        for(let i=0;i<N;i++){
+          const u = TAU*(i/N);
+          const x = (2+Math.cos(q0*u))*Math.cos(p0*u+0.1*t);
+          const y = (2+Math.cos(q0*u))*Math.sin(p0*u+0.12*t);
+          const z = Math.sin(q0*u);
+          arr[i*2]=(x/(3))*scale*1.2; arr[i*2+1]=(y/(3))*scale*1.2;
+        }
+      } break;
+    case 8: // Audio Flowfield (procedural)
+      {
+        for(let i=0;i<N;i++){
+          const p=i/N, th=TAU*p;
+          const n = Rn(i)*0.7;
+          const x = Math.cos(th + n + 0.15*t)* (0.6+n*0.3);
+          const y = Math.sin(th + n + 0.17*t)* (0.6+n*0.3);
+          arr[i*2]=x*scale; arr[i*2+1]=y*scale;
+        }
+      } break;
+    case 9: // Harmonic Bloom (hybrid)
+      {
+        for(let i=0;i<N;i++){
+          const p=i/N, th=TAU*p, r = 0.3 + 0.6*Math.abs(Math.sin(3*th+0.2*t));
+          arr[i*2]=r*Math.cos(th)*scale; arr[i*2+1]=r*Math.sin(th)*scale;
+        }
+      } break;
+  }
+  return arr;
+}
+
+// --- Audio Governor Helpers (NEW) ---
+const GOV = {
+  polyBudget: { boot: 4, idle: 3, live: 6 },
+  activeCount: 0,
+  heavyWetScale: 1.0,       // scaled down in boot
+  retriggerMs: 120,         // per-voice cooldown
+};
+function scheduleActiveWindow(ms=380){
+  GOV.activeCount++;
+  setTimeout(()=> GOV.activeCount = Math.max(0, GOV.activeCount-1), ms);
+}
+function withinBudget(mode){
+  const budget = GOV.polyBudget[mode] ?? GOV.polyBudget.live;
+  return GOV.activeCount < budget;
+}
+function setHeavyWetScale(s=1.0){ GOV.heavyWetScale = s; }
+function applyHeavyWetCap(v, cap=1.0){
+  // Cap Reverb/Delay/Chorus wet; leave drive/crush mostly intact
+  v.fxChain?.forEach(fx=>{
+    const ctor = fx.constructor?.name || '';
+    if(/Reverb|Delay|Chorus|Phaser/i.test(ctor) && fx.wet){
+      const base = fx._baseWet ?? (fx._baseWet = fx.wet.value);
+      fx.wet.value = Math.min(base * GOV.heavyWetScale, cap);
+    }
+  });
+}
+
+function draw(){
+  ledCPUUpdate();
+  const w = scope.width, h = scope.height;
+  sctx.clearRect(0,0,w,h);
+
+  const N = Math.floor(density);
+  const t = performance.now()/1000;
+  const pts = renderXY(currentAlgo, t, N);
+
+  // Glow stroke
+  sctx.translate(w/2, h/2);
+  sctx.globalCompositeOperation='screen';
+  sctx.lineWidth = Math.max(1, w/1200);
+  sctx.strokeStyle = 'rgba(80,220,255,.8)';
+  sctx.beginPath();
+  for(let i=0;i<N;i++){
+    const x = pts[i*2]*w*0.42, y = pts[i*2+1]*h*0.42;
+    if(i===0) sctx.moveTo(x,y); else sctx.lineTo(x,y);
+  }
+  sctx.stroke();
+  sctx.globalCompositeOperation='source-over';
+  sctx.setTransform(1,0,0,1,0,0);
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/** ------------------------------
+ *  Quality Toggle (x1/x2)
+ *  ------------------------------ */
+ function applyQuality(q){
+  runtimeState.quality = q;
+  density = q>1 ? 2200 : 1200;
+
+  // Visual + DSP tuning
+  const Tone = runtimeState.Tone;
+  const ctx = Tone?.getContext?.() || Tone?.context;
+  if (ctx) {
+    try { ctx.lookAhead = q>1 ? 0.035 : 0.03; } catch {}
+  }
+
+  graph.voices.forEach(v=>{
+    v.fxChain?.forEach(fx=>{
+      if(fx instanceof runtimeState.Tone.Distortion){ fx.oversample = q>1 ? '2x' : 'none'; }
+      // reduce chorus/delay wet a touch for x1
+      if(q===1 && fx.wet && /Chorus|Delay/.test(fx.constructor.name)){
+        const base = fx._baseWet ?? (fx._baseWet = fx.wet.value);
+        fx.wet.value = Math.min(base, 0.16);
+      }
+    });
+  });
+
+  els.quality.textContent = q>1 ? 'x2' : 'x1';
+}
+
+/** ------------------------------
+ *  Boot Log panel
+ *  ------------------------------ */
+function updateBootLog(){
+  els.bootLog.innerHTML = `<h3>Boot Log</h3>
+    <div>Seed: <b>${runtimeState.seed}</b></div>
+    <div>PRNG taps: <b>${runtimeState.prng?.taps?.()||0}</b></div>
+    <hr/>
+    <pre>${bootLines.join('\n')}</pre>`;
+}
+
+/** ------------------------------
+ *  Event wiring
+ *  ------------------------------ */
+els.power.addEventListener('click', async ()=>{
+  if(runtimeState.started) return;
+  setLoaderStatus('Powering…');
+  loadToneJSAndBoot({ setLoaderStatus, runtimeState, boot: async ()=>{
+    await runtimeState.Tone.start();
+    runtimeState.started = true;
+    setLoaderStatus('Audio Ready');
+    bootAudio();
+  }});
+});
+
+els.regen.addEventListener('click', ()=>{
+  // new seed; reload with ?seed=…
+  const s = (Math.random().toString(36).slice(2)+Date.now().toString(36)).slice(0,16);
+  location.href = `?seed=${s}`;
+});
+
+els.bpm.addEventListener('change', ()=>{
+  if(!runtimeState.Tone) return;
+  const bpm = parseInt(els.bpm.value,10);
+  runtimeState.Tone.Transport.bpm.rampTo(bpm, 0.05);
+  graph.bpm = bpm;
+});
+
+let tapTimes = [];
+els.tap.addEventListener('click', ()=>{
+  const t = performance.now();
+  tapTimes.push(t);
+  if(tapTimes.length>6) tapTimes.shift();
+  if(tapTimes.length>=2){
+    const diffs = tapTimes.slice(1).map((v,i)=>v-tapTimes[i]);
+    const avg = diffs.reduce((a,b)=>a+b,0)/diffs.length;
+    const bpm = Math.max(20, Math.min(240, Math.round(60000/avg)));
+    els.bpm.value = bpm;
+    if(runtimeState.Tone) runtimeState.Tone.Transport.bpm.rampTo(bpm, 0.05);
+  }
+});
+
+els.rec.addEventListener('click', toggleRec);
+els.play.addEventListener('click', startPlay);
+els.stop.addEventListener('click', ()=>{
+  stopPlay();
+  runtimeState.Tone?.Transport.stop();
+});
+els.loop.addEventListener('click', ()=>{
+  graph.loop = !graph.loop;
+  els.loop.textContent = `Loop: ${graph.loop?'On':'Off'}`;
+});
+els.steps.addEventListener('change', ()=>{
+  const len = parseInt(els.steps.value,10);
+  clearPattern(len);
+});
+
+els.saveBtn.addEventListener('click', savePattern);
+els.loadBtn.addEventListener('click', ()=> els.file.click());
+els.file.addEventListener('change', (e)=> e.target.files[0] && loadPattern(e.target.files[0]));
+
+els.quality.addEventListener('click', ()=>{
+  applyQuality(runtimeState.quality>1 ? 1 : 2);
+});
+
+els.logBtn.addEventListener('click', ()=> els.bootLog.classList.toggle('open'));
+
+/** ------------------------------
+ *  Initialize Algo 0 name, quality x1
+ *  ------------------------------ */
+applyQuality(1);
+els.algoName.textContent = VIS_ALGOS[currentAlgo];
+updateBootLog();
+
+</script>
+</body>
+</html>

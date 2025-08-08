@@ -1,0 +1,1099 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed-Driven Oscilloscope Synthesizer NFT</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a12;
+            --bg-panel: #121220;
+            --accent: #00ccff;
+            --accent-dark: #0088aa;
+            --text: #e0e0ff;
+            --text-dim: #a0a0c0;
+            --success: #00ffaa;
+            --warning: #ffcc00;
+            --error: #ff5555;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+        }
+        
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text);
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 10px;
+            gap: 10px;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 15px;
+            background: var(--bg-panel);
+            border-radius: 8px;
+            box-shadow: 0 0 10px rgba(0, 204, 255, 0.2);
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            color: var(--accent);
+            text-shadow: 0 0 5px rgba(0, 204, 255, 0.5);
+        }
+        
+        .seed-display {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            letter-spacing: 1px;
+        }
+        
+        .checksum {
+            background: rgba(0, 255, 170, 0.1);
+            padding: 5px 10px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            color: var(--success);
+        }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            gap: 10px;
+        }
+        
+        .visualizer-container {
+            flex: 1;
+            background: var(--bg-panel);
+            border-radius: 8px;
+            overflow: hidden;
+            position: relative;
+            box-shadow: 0 0 15px rgba(0, 204, 255, 0.1);
+        }
+        
+        #oscilloscope {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .controls {
+            width: 300px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .control-panel {
+            background: var(--bg-panel);
+            border-radius: 8px;
+            padding: 15px;
+            box-shadow: 0 0 10px rgba(0, 204, 255, 0.1);
+        }
+        
+        .panel-title {
+            font-size: 1.1rem;
+            margin-bottom: 10px;
+            color: var(--accent);
+            border-bottom: 1px solid var(--accent-dark);
+            padding-bottom: 5px;
+        }
+        
+        .transport-controls {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 8px;
+        }
+        
+        .btn {
+            background: rgba(0, 204, 255, 0.1);
+            border: 1px solid var(--accent-dark);
+            color: var(--text);
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        
+        .btn:hover {
+            background: rgba(0, 204, 255, 0.2);
+        }
+        
+        .btn:active {
+            background: rgba(0, 204, 255, 0.3);
+        }
+        
+        .btn.active {
+            background: var(--accent);
+            color: var(--bg-dark);
+            font-weight: bold;
+        }
+        
+        .btn.power {
+            background: rgba(255, 50, 50, 0.2);
+            border-color: #ff3333;
+        }
+        
+        .btn.power.active {
+            background: #ff3333;
+            color: white;
+        }
+        
+        .voice-triggers {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+        }
+        
+        .voice-btn {
+            background: rgba(100, 100, 200, 0.1);
+            border: 1px solid #6666aa;
+            color: #a0a0ff;
+            padding: 12px 0;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-weight: bold;
+        }
+        
+        .voice-btn:hover {
+            background: rgba(100, 100, 200, 0.2);
+        }
+        
+        .voice-btn.active {
+            background: #6666aa;
+            color: white;
+            box-shadow: 0 0 8px rgba(100, 100, 200, 0.5);
+        }
+        
+        .sequencer {
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .sequencer-grid {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 3px;
+        }
+        
+        .step {
+            height: 20px;
+            background: rgba(100, 100, 200, 0.1);
+            border: 1px solid #444477;
+            border-radius: 2px;
+            cursor: pointer;
+        }
+        
+        .step.active {
+            background: #6666aa;
+        }
+        
+        .step.current {
+            background: var(--accent);
+            box-shadow: 0 0 5px var(--accent);
+        }
+        
+        .sequencer-controls {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+        }
+        
+        .bpm-control {
+            display: flex;
+            align-items: center;
+            gap: 5px;
+            flex: 1;
+        }
+        
+        input[type="range"] {
+            flex: 1;
+            height: 5px;
+            background: #333355;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        .file-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        
+        .state-controls {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 8px;
+        }
+        
+        .meter {
+            height: 20px;
+            background: #111122;
+            border-radius: 3px;
+            overflow: hidden;
+            position: relative;
+        }
+        
+        .meter-bar {
+            height: 100%;
+            background: linear-gradient(90deg, #00aa00, #00ff00, #ffff00, #ff0000);
+            width: 0%;
+            transition: width 0.1s;
+        }
+        
+        .status-bar {
+            padding: 8px 15px;
+            background: var(--bg-panel);
+            border-radius: 8px;
+            font-size: 0.9rem;
+            display: flex;
+            justify-content: space-between;
+        }
+        
+        .loader {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 18, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(0, 204, 255, 0.3);
+            border-top: 5px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">OSC-NFT v1.0</div>
+            <div class="seed-display">Seed: <span id="seed-value">LOADING...</span></div>
+            <div class="checksum">Checksum: <span id="checksum-value">--</span></div>
+        </header>
+        
+        <div class="main-content">
+            <div class="visualizer-container">
+                <canvas id="oscilloscope"></canvas>
+                <div id="loader" class="loader">
+                    <div class="spinner"></div>
+                    <div id="loader-status">Initializing...</div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div class="control-panel">
+                    <div class="panel-title">TRANSPORT</div>
+                    <div class="transport-controls">
+                        <button id="power-btn" class="btn power">POWER</button>
+                        <button id="record-btn" class="btn">REC</button>
+                        <button id="play-btn" class="btn">PLAY</button>
+                        <button id="stop-btn" class="btn">STOP</button>
+                        <button id="loop-btn" class="btn">LOOP</button>
+                        <button id="save-pattern" class="btn">SAVE</button>
+                        <button id="load-pattern" class="btn">LOAD</button>
+                        <button id="export-state" class="btn">EXPORT</button>
+                    </div>
+                </div>
+                
+                <div class="control-panel">
+                    <div class="panel-title">VOICES</div>
+                    <div class="voice-triggers">
+                        <button class="voice-btn" data-voice="0">0</button>
+                        <button class="voice-btn" data-voice="1">1</button>
+                        <button class="voice-btn" data-voice="2">2</button>
+                        <button class="voice-btn" data-voice="3">3</button>
+                        <button class="voice-btn" data-voice="4">4</button>
+                        <button class="voice-btn" data-voice="5">5</button>
+                        <button class="voice-btn" data-voice="6">6</button>
+                        <button class="voice-btn" data-voice="7">7</button>
+                        <button class="voice-btn" data-voice="8">8</button>
+                        <button class="voice-btn" data-voice="9">9</button>
+                    </div>
+                </div>
+                
+                <div class="control-panel sequencer">
+                    <div class="panel-title">SEQUENCER</div>
+                    <div class="sequencer-grid" id="sequencer-grid">
+                        <!-- Steps will be generated by JS -->
+                    </div>
+                    <div class="sequencer-controls">
+                        <div class="bpm-control">
+                            <span>BPM:</span>
+                            <input type="range" id="bpm-slider" min="60" max="240" value="120">
+                            <span id="bpm-value">120</span>
+                        </div>
+                        <button id="clear-seq" class="btn">CLEAR</button>
+                    </div>
+                </div>
+                
+                <div class="control-panel">
+                    <div class="panel-title">STATE</div>
+                    <div class="state-controls">
+                        <button id="import-state" class="btn">IMPORT</button>
+                        <button id="reset-state" class="btn">RESET</button>
+                    </div>
+                </div>
+                
+                <div class="control-panel">
+                    <div class="panel-title">LEVEL METER</div>
+                    <div class="meter">
+                        <div class="meter-bar" id="meter-bar"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status-bar">
+            <div>Status: <span id="status-text">Ready</span></div>
+            <div>Version: 1.0 | Deterministic Seed Synth</div>
+        </div>
+    </div>
+
+    <script>
+        // Seed-Driven Oscilloscope Synthesizer NFT
+        // Global state and configuration
+        const SEED_LENGTH = 16;
+        const NUM_VOICES = 10;
+        const SEQUENCER_STEPS = 16;
+        const VISUALIZATION_ALGORITHMS = 10;
+        
+        // Runtime state
+        const runtimeState = {
+            Tone: null,
+            initialized: false,
+            powered: false,
+            seed: null,
+            synthParams: {},
+            fxParams: {},
+            algorithmMapping: [],
+            sequencer: {
+                steps: Array(SEQUENCER_STEPS).fill(0),
+                position: 0,
+                playing: false,
+                recording: false,
+                loop: true,
+                bpm: 120
+            },
+            currentPattern: null,
+            visualizer: {
+                algorithm: 0,
+                canvas: null,
+                ctx: null,
+                width: 0,
+                height: 0
+            },
+            audio: {
+                master: null,
+                voices: [],
+                analyser: null,
+                meter: null
+            }
+        };
+        
+        // PRNG implementation (Mulberry32)
+        function createPRNG(seed) {
+            let state = seed;
+            return function() {
+                state |= 0;
+                state = state + 0x6D2B79F5 | 0;
+                let t = Math.imul(state ^ state >>> 15, 1 | state);
+                t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            };
+        }
+        
+        // Generate a random seed
+        function generateSeed() {
+            const chars = '0123456789abcdef';
+            let result = '';
+            for (let i = 0; i < SEED_LENGTH; i++) {
+                result += chars[Math.floor(Math.random() * chars.length)];
+            }
+            return result;
+        }
+        
+        // Get seed from URL or generate new one
+        function getSeed() {
+            const urlParams = new URLSearchParams(window.location.search);
+            const seed = urlParams.get('seed');
+            return seed || generateSeed();
+        }
+        
+        // Hash function for checksum
+        function simpleHash(str) {
+            let hash = 0;
+            for (let i = 0; i < str.length; i++) {
+                const char = str.charCodeAt(i);
+                hash = ((hash << 5) - hash) + char;
+                hash = hash & hash; // Convert to 32bit integer
+            }
+            return Math.abs(hash);
+        }
+        
+        // Convert hash to base36 checksum
+        function generateChecksum() {
+            const stateString = JSON.stringify({
+                seed: runtimeState.seed,
+                synthParams: runtimeState.synthParams,
+                fxParams: runtimeState.fxParams,
+                algorithmMapping: runtimeState.algorithmMapping,
+                sequencer: runtimeState.sequencer
+            });
+            
+            const hash = simpleHash(stateString);
+            return hash.toString(36).substring(0, 8).toUpperCase();
+        }
+        
+        // Update UI with current state
+        function updateUI() {
+            document.getElementById('seed-value').textContent = runtimeState.seed;
+            document.getElementById('checksum-value').textContent = generateChecksum();
+            document.getElementById('bpm-value').textContent = runtimeState.sequencer.bpm;
+            document.getElementById('bpm-slider').value = runtimeState.sequencer.bpm;
+            
+            // Update sequencer grid
+            const grid = document.getElementById('sequencer-grid');
+            grid.innerHTML = '';
+            for (let i = 0; i < SEQUENCER_STEPS; i++) {
+                const step = document.createElement('div');
+                step.className = 'step';
+                if (runtimeState.sequencer.steps[i]) {
+                    step.classList.add('active');
+                }
+                if (i === runtimeState.sequencer.position) {
+                    step.classList.add('current');
+                }
+                step.dataset.index = i;
+                step.addEventListener('click', () => toggleStep(i));
+                grid.appendChild(step);
+            }
+            
+            // Update power button
+            const powerBtn = document.getElementById('power-btn');
+            powerBtn.classList.toggle('active', runtimeState.powered);
+        }
+        
+        // Toggle sequencer step
+        function toggleStep(index) {
+            runtimeState.sequencer.steps[index] = runtimeState.sequencer.steps[index] ? 0 : 1;
+            updateUI();
+        }
+        
+        // Initialize Tone.js
+        function initTone() {
+            if (!runtimeState.Tone) {
+                console.error('Tone.js not loaded');
+                return;
+            }
+            
+            const Tone = runtimeState.Tone;
+            
+            // Create master output with limiter
+            runtimeState.audio.master = new Tone.Limiter(-1).toDestination();
+            
+            // Create analyzer for visualization
+            runtimeState.audio.analyser = new Tone.Analyser('waveform', 1024);
+            runtimeState.audio.master.connect(runtimeState.audio.analyser);
+            
+            // Create meter for level display
+            runtimeState.audio.meter = new Tone.Meter();
+            runtimeState.audio.master.connect(runtimeState.audio.meter);
+            
+            // Initialize voices
+            runtimeState.audio.voices = [];
+            const rng = createPRNG(parseInt(runtimeState.seed, 16));
+            
+            for (let i = 0; i < NUM_VOICES; i++) {
+                // Create voice parameters from seed
+                const voiceParams = generateVoiceParams(rng, i);
+                runtimeState.synthParams[i] = voiceParams;
+                
+                // Create FX parameters from seed
+                const fxParams = generateFXParams(rng, i);
+                runtimeState.fxParams[i] = fxParams;
+                
+                // Create voice
+                const voice = createVoice(voiceParams, fxParams);
+                runtimeState.audio.voices.push(voice);
+            }
+            
+            // Create algorithm mapping from seed
+            runtimeState.algorithmMapping = generateAlgorithmMapping(rng);
+            
+            // Set up sequencer
+            runtimeState.sequencer.position = 0;
+            
+            // Set up visualization
+            setupVisualizer();
+            
+            // Start meter updates
+            setInterval(updateMeter, 100);
+            
+            runtimeState.initialized = true;
+            updateUI();
+            document.getElementById('status-text').textContent = 'Ready';
+            document.getElementById('loader').classList.add('hidden');
+        }
+        
+        // Generate voice parameters from seed
+        function generateVoiceParams(rng, voiceIndex) {
+            const types = ['sine', 'square', 'sawtooth', 'triangle', 'fm', 'am', 'noise', 'wavetable'];
+            const type = types[Math.floor(rng() * types.length)];
+            
+            return {
+                type: type,
+                frequency: 100 + rng() * 1000,
+                detune: Math.floor(rng() * 100) - 50,
+                volume: -20 - rng() * 20,
+                attack: 0.01 + rng() * 0.5,
+                decay: 0.1 + rng() * 1,
+                sustain: 0.3 + rng() * 0.7,
+                release: 0.1 + rng() * 2,
+                filter: {
+                    type: ['lowpass', 'highpass', 'bandpass'][Math.floor(rng() * 3)],
+                    frequency: 200 + rng() * 5000,
+                    q: 0.5 + rng() * 10
+                }
+            };
+        }
+        
+        // Generate FX parameters from seed
+        function generateFXParams(rng, voiceIndex) {
+            return {
+                reverb: {
+                    decay: 0.5 + rng() * 3,
+                    wet: 0.1 + rng() * 0.5
+                },
+                delay: {
+                    time: 0.1 + rng() * 0.5,
+                    feedback: 0.1 + rng() * 0.7,
+                    wet: 0.1 + rng() * 0.4
+                },
+                filter: {
+                    frequency: 200 + rng() * 5000,
+                    q: 0.5 + rng() * 10,
+                    gain: -10 + rng() * 20
+                }
+            };
+        }
+        
+        // Generate algorithm mapping from seed
+        function generateAlgorithmMapping(rng) {
+            // Create array of indices
+            const indices = Array.from({length: NUM_VOICES}, (_, i) => i);
+            
+            // Shuffle using Fisher-Yates algorithm with seeded RNG
+            for (let i = indices.length - 1; i > 0; i--) {
+                const j = Math.floor(rng() * (i + 1));
+                [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+            
+            return indices;
+        }
+        
+        // Create a voice with parameters
+        function createVoice(voiceParams, fxParams) {
+            const Tone = runtimeState.Tone;
+            
+            // Create synth based on type
+            let synth;
+            switch(voiceParams.type) {
+                case 'fm':
+                    synth = new Tone.FMSynth({
+                        harmonicity: 3,
+                        modulationIndex: 10,
+                        oscillator: {
+                            type: 'sine'
+                        },
+                        envelope: {
+                            attack: voiceParams.attack,
+                            decay: voiceParams.decay,
+                            sustain: voiceParams.sustain,
+                            release: voiceParams.release
+                        },
+                        modulation: {
+                            type: 'square'
+                        },
+                        modulationEnvelope: {
+                            attack: voiceParams.attack,
+                            decay: voiceParams.decay,
+                            sustain: voiceParams.sustain,
+                            release: voiceParams.release
+                        }
+                    });
+                    break;
+                case 'am':
+                    synth = new Tone.AMSynth({
+                        harmonicity: 3,
+                        oscillator: {
+                            type: 'sine'
+                        },
+                        envelope: {
+                            attack: voiceParams.attack,
+                            decay: voiceParams.decay,
+                            sustain: voiceParams.sustain,
+                            release: voiceParams.release
+                        },
+                        modulation: {
+                            type: 'square'
+                        },
+                        modulationEnvelope: {
+                            attack: voiceParams.attack,
+                            decay: voiceParams.decay,
+                            sustain: voiceParams.sustain,
+                            release: voiceParams.release
+                        }
+                    });
+                    break;
+                case 'noise':
+                    synth = new Tone.NoiseSynth({
+                        noise: {
+                            type: 'white'
+                        },
+                        envelope: {
+                            attack: voiceParams.attack,
+                            decay: voiceParams.decay,
+                            sustain: voiceParams.sustain,
+                            release: voiceParams.release
+                        }
+                    });
+                    break;
+                case 'wavetable':
+                    // Create a simple wavetable
+                    const real = new Float32Array(1024);
+                    const imag = new Float32Array(1024);
+                    for (let i = 0; i < 1024; i++) {
+                        real[i] = Math.sin(i * 0.1) * 0.5;
+                        imag[i] = Math.cos(i * 0.15) * 0.3;
+                    }
+                    const periodicWave = new Tone.PeriodicWave(real, imag);
+                    synth = new Tone.Oscillator({
+                        type: 'custom',
+                        periodicWave: periodicWave,
+                        frequency: voiceParams.frequency,
+                        detune: voiceParams.detune,
+                        volume: voiceParams.volume
+                    });
+                    break;
+                default:
+                    synth = new Tone.Synth({
+                        oscillator: {
+                            type: voiceParams.type
+                        },
+                        envelope: {
+                            attack: voiceParams.attack,
+                            decay: voiceParams.decay,
+                            sustain: voiceParams.sustain,
+                            release: voiceParams.release
+                        }
+                    });
+            }
+            
+            // Create FX chain
+            const reverb = new Tone.Reverb(fxParams.reverb.decay).generate();
+            reverb.wet.value = fxParams.reverb.wet;
+            
+            const delay = new Tone.PingPongDelay(fxParams.delay.time, fxParams.delay.feedback);
+            delay.wet.value = fxParams.delay.wet;
+            
+            const filter = new Tone.Filter(fxParams.filter.frequency, fxParams.filter.type);
+            filter.Q.value = fxParams.filter.q;
+            
+            // Connect FX chain
+            synth.chain(filter, delay, reverb, runtimeState.audio.master);
+            
+            return synth;
+        }
+        
+        // Set up visualizer
+        function setupVisualizer() {
+            const canvas = document.getElementById('oscilloscope');
+            runtimeState.visualizer.canvas = canvas;
+            runtimeState.visualizer.ctx = canvas.getContext('2d');
+            
+            function resizeCanvas() {
+                canvas.width = canvas.clientWidth;
+                canvas.height = canvas.clientHeight;
+                runtimeState.visualizer.width = canvas.width;
+                runtimeState.visualizer.height = canvas.height;
+            }
+            
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+            
+            // Start visualization loop
+            requestAnimationFrame(visualize);
+        }
+        
+        // Visualization algorithms
+        function visualize() {
+            if (!runtimeState.powered || !runtimeState.initialized) {
+                requestAnimationFrame(visualize);
+                return;
+            }
+            
+            const ctx = runtimeState.visualizer.ctx;
+            const width = runtimeState.visualizer.width;
+            const height = runtimeState.visualizer.height;
+            
+            // Clear canvas
+            ctx.fillStyle = 'rgba(10, 10, 18, 0.1)';
+            ctx.fillRect(0, 0, width, height);
+            
+            // Get waveform data
+            const waveform = runtimeState.audio.analyser.getValue();
+            
+            // Select visualization algorithm based on current voice
+            const currentVoice = runtimeState.sequencer.position % NUM_VOICES;
+            const algorithmIndex = runtimeState.algorithmMapping[currentVoice];
+            
+            // Apply selected visualization algorithm
+            switch(algorithmIndex) {
+                case 0: // Lissajous Core
+                    drawLissajous(ctx, waveform, width, height);
+                    break;
+                case 1: // Spiral-Precess
+                    drawSpiral(ctx, waveform, width, height);
+                    break;
+                case 2: // Polar Rose Sweep
+                    drawPolarRose(ctx, waveform, width, height);
+                    break;
+                case 3: // Phyllotaxis Orbit
+                    drawPhyllotaxis(ctx, waveform, width, height);
+                    break;
+                case 4: // Figure-8 Morph
+                    drawFigure8(ctx, waveform, width, height);
+                    break;
+                case 5: // Epicycle Chain
+                    drawEpicycles(ctx, waveform, width, height);
+                    break;
+                case 6: // VectorScope XY
+                    drawVectorscope(ctx, waveform, width, height);
+                    break;
+                case 7: // Torus-Knot Projection
+                    drawTorusKnot(ctx, waveform, width, height);
+                    break;
+                case 8: // Audio Flowfield
+                    drawFlowfield(ctx, waveform, width, height);
+                    break;
+                case 9: // Harmonic Bloom
+                    drawHarmonicBloom(ctx, waveform, width, height);
+                    break;
+                default:
+                    drawLissajous(ctx, waveform, width, height);
+            }
+            
+            requestAnimationFrame(visualize);
+        }
+        
+        // Visualization algorithm implementations
+        function drawLissajous(ctx, waveform, width, height) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#00ccff';
+            ctx.lineWidth = 2;
+            
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const scale = Math.min(width, height) * 0.4;
+            
+            for (let i = 0; i < waveform.length - 1; i++) {
+                const x = centerX + waveform[i] * scale;
+                const y = centerY + waveform[i + 1] * scale;
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+        
+        function drawSpiral(ctx, waveform, width, height) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#ff33cc';
+            ctx.lineWidth = 2;
+            
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const maxRadius = Math.min(width, height) * 0.4;
+            
+            for (let i = 0; i < waveform.length; i++) {
+                const angle = (i / waveform.length) * Math.PI * 4;
+                const radius = (waveform[i] + 1) * 0.5 * maxRadius;
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+        
+        function drawPolarRose(ctx, waveform, width, height) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#33ff99';
+            ctx.lineWidth = 2;
+            
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const maxRadius = Math.min(width, height) * 0.4;
+            
+            for (let i = 0; i < waveform.length; i++) {
+                const angle = (i / waveform.length) * Math.PI * 2;
+                const k = 3 + Math.sin(angle * 5) * 2; // Varying k for dynamic effect
+                const radius = Math.abs(Math.cos(k * angle)) * (waveform[i] + 1) * 0.5 * maxRadius;
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.closePath();
+            ctx.stroke();
+        }
+        
+        function drawPhyllotaxis(ctx, waveform, width, height) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#ffcc00';
+            ctx.lineWidth = 2;
+            
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const scale = Math.min(width, height) * 0.02;
+            const goldenAngle = Math.PI * (3 - Math.sqrt(5));
+            
+            for (let i = 0; i < waveform.length; i++) {
+                const radius = Math.sqrt(i) * scale * (waveform[i] + 1);
+                const angle = i * goldenAngle;
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+        
+        function drawFigure8(ctx, waveform, width, height) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#cc66ff';
+            ctx.lineWidth = 2;
+            
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const scale = Math.min(width, height) * 0.4;
+            
+            for (let i = 0; i < waveform.length; i++) {
+                const t = (i / waveform.length) * Math.PI * 2;
+                const x = centerX + Math.sin(t) * scale;
+                const y = centerY + Math.sin(t) * Math.cos(t) * scale * (waveform[i] + 1);
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.closePath();
+            ctx.stroke();
+        }
+        
+        function drawEpicycles(ctx, waveform, width, height) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#00ffcc';
+            ctx.lineWidth = 2;
+            
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const scale = Math.min(width, height) * 0.1;
+            
+            let x = centerX;
+            let y = centerY;
+            
+            for (let i = 0; i < Math.min(waveform.length, 5); i++) {
+                const radius = Math.abs(waveform[i]) * scale * (i + 1);
+                const angle = (i / 5) * Math.PI * 2;
+                
+                ctx.moveTo(x, y);
+                ctx.arc(x, y, radius, 0, Math.PI * 2);
+                
+                x += Math.cos(angle) * radius;
+                y += Math.sin(angle) * radius;
+            }
+            
+            ctx.stroke();
+        }
+        
+        function drawVectorscope(ctx, waveform, width, height) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#ff6600';
+            ctx.lineWidth = 1;
+            
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const scale = Math.min(width, height) * 0.4;
+            
+            for (let i = 0; i < waveform.length - 1; i += 2) {
+                const x = centerX + waveform[i] * scale;
+                const y = centerY + waveform[i + 1] * scale;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+        
+        function drawTorusKnot(ctx, waveform, width, height) {
+            ctx.beginPath();
+            ctx.strokeStyle = '#6600ff';
+            ctx.lineWidth = 2;
+            
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const scale = Math.min(width, height) * 0.3;
+            const p = 3; // Torus knot parameters
+            const q = 2;
+            
+            for (let i = 0; i < waveform.length; i++) {
+                const t = (i / waveform.length) * Math.PI * 2;
+                const r = Math.cos(q * t) + 2;
+                const x = centerX + r * Math.cos(p * t) * scale * (waveform[i] + 1) * 0.5;
+                const y = centerY + r * Math.sin(p * t) * scale * (waveform[i] + 1) * 0.5;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.closePath();
+            ctx.stroke();
+        }
+        
+        function drawFlowfield(ctx, waveform, width, height) {
+            ctx.fillStyle = 'rgba(0, 200, 255, 0.1)';
+            
+            const particleCount = 100;
+            const time = Date.now() * 0.001;
+            
+            for (let i = 0; i < particleCount; i++) {
+                const x = (i / particleCount) * width;
+                const y = (Math.sin(time + i * 0.1) * 0.5 + 0.5) * height;
+                const size = Math.abs(waveform[i % waveform.length]) * 5 + 1;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        function drawHarmonicBloom(ctx, waveform, width, height) {
+            ctx.fillStyle = 'rgba(255, 100, 200, 0.2)';
+            
+            const bloomCount = 20;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const maxRadius = Math.min(width, height) * 0.4;
+            
+            for (let i = 0; i < bloomCount; i++) {
+                const angle = (i / bloomCount) * Math.PI * 2;
+                const radius = Math.abs(waveform[i % waveform.length]) * maxRadius;
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
+                const size = Math.abs(waveform[(i + 10) % waveform.length]) * 10 + 2;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, size, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+        
+        // Update level meter
+        function updateMeter() {
+            if (!runtimeState.audio.meter) return;
+            
+            const level = runtimeState.audio.meter.getValue();
+            const meterBar = document.getElementById('meter-bar');
+            const percent = Math.min(100, Math.max(0, (level + 100) * 0.5));
+            meterBar.style.width = `${percent}%`;
+        }
+        
+        // Trigger a voice
+        function triggerVoice(voiceIndex) {
+            if (!runtimeState.powered || !runtimeState.initialized) return;
+            
+            const voice = runtimeState.audio.voices[voiceIndex];
+            if (!voice) return;
+            
+            // Play note with parameters fr

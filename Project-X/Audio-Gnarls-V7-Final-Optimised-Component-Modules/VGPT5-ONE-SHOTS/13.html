@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Seeded Oscilloscope Synth NFT — Monochrome</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg:#000; --fg:#e6e6e6; --dim:#5a5a5a; --ok:#8ae68a; --warn:#e6b08a;
+    --accent: hsl(200,90%,60%); /* replaced at runtime from seed */
+  }
+  * { box-sizing:border-box }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:13px ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  .app { display:grid; grid-template-rows:auto 1fr auto; height:100vh; }
+  header, footer { padding:8px 10px; border-bottom:1px solid #151515; }
+  footer { border-top:1px solid #151515; border-bottom:none; display:flex; align-items:center; gap:10px; }
+  header { display:flex; align-items:center; gap:10px; }
+  .btn {
+    appearance:none; background:#0d0d0d; color:var(--fg); border:1px solid #1c1c1c; padding:6px 10px; cursor:pointer; border-radius:6px;
+  }
+  .btn:disabled { opacity:.5; cursor:not-allowed }
+  .btn.toggle.on { outline:1px solid var(--fg); }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .label { color:#bdbdbd }
+  .val { color:#fff }
+  .field { display:inline-flex; gap:6px; align-items:center }
+  input[type="number"] { width:74px; background:#0d0d0d; color:var(--fg); border:1px solid #1c1c1c; padding:4px 6px; border-radius:6px; }
+  .scope-wrap { position:relative; height:100%; background:#000; }
+  canvas#scope { width:100%; height:100%; display:block; background:radial-gradient(120% 120% at 50% 50%, #020202, #000 60%); }
+  .graticule { position:absolute; inset:0; pointer-events:none; }
+  .grat { position:absolute; left:0; right:0; top:0; bottom:0; border:1px solid #0b0b0b; }
+  .grat::before, .grat::after {
+    content:""; position:absolute; inset:0; background:
+      repeating-linear-gradient(0deg, transparent 0 31px, rgba(255,255,255,.035) 31px 32px),
+      repeating-linear-gradient(90deg, transparent 0 31px, rgba(255,255,255,.035) 31px 32px);
+  }
+  .meter { width:120px; height:8px; background:#0d0d0d; border:1px solid #1c1c1c; border-radius:999px; overflow:hidden; }
+  .meter > i { display:block; height:100%; width:0%; background:linear-gradient(90deg,#5f5f5f,#cfcfcf); transition:width .08s linear; }
+  .status { margin-left:auto; color:#9a9a9a }
+  .chip { border:1px solid #1c1c1c; padding:3px 6px; border-radius:999px; color:#cfcfcf; }
+  .accent-only { /* elements that turn accented ONLY during boot or recording */
+    color:var(--fg);
+  }
+  .accent-on .accent-only { color:var(--accent) !important; }
+  .accent-on .btn.rec { border-color:var(--accent); box-shadow:0 0 0 1px var(--accent) inset; }
+  .acc-dot { display:inline-block; width:7px; height:7px; border-radius:50%; background:#2a2a2a; margin-right:6px; vertical-align:-1px; }
+  .accent-on .acc-dot { background:var(--accent); }
+</style>
+</head>
+<body>
+<div class="app">
+  <header>
+    <div class="row">
+      <button id="power" class="btn">Power</button>
+      <span class="chip"><span class="label">Seed</span> <span id="seedOut" class="val"></span></span>
+      <span class="chip"><span class="label">BPM</span>
+        <input id="bpm" type="number" min="20" max="300" step="1" value="120" />
+      </span>
+      <button id="rec" class="btn rec">Rec</button>
+      <button id="play" class="btn toggle">Play</button>
+      <button id="stop" class="btn">Stop</button>
+      <button id="loop" class="btn toggle">Loop</button>
+      <span class="chip"><span class="label">Steps</span>
+        <input id="steps" type="number" min="8" max="64" step="1" value="16" />
+      </span>
+      <button id="save" class="btn">Save JSON</button>
+      <input id="load" type="file" accept="application/json" style="display:none" />
+      <button id="loadBtn" class="btn">Load JSON</button>
+      <span class="meter"><i id="lvl"></i></span>
+      <span class="status" id="status"><span class="acc-dot"></span><span class="accent-only">Idle</span></span>
+    </div>
+  </header>
+
+  <div class="scope-wrap" id="wrap">
+    <canvas id="scope"></canvas>
+    <div class="graticule"><div class="grat"></div></div>
+  </div>
+
+  <footer>
+    <div class="row">
+      <span class="label">Keys 0–9:</span><span>trigger voice + its fixed oscilloscope algorithm</span>
+      <span class="label" style="margin-left:14px">Algorithms:</span>
+      <span id="algoNames" class="val"></span>
+    </div>
+  </footer>
+</div>
+
+<script>
+/* ---------------- Deterministic PRNG suite ---------------- */
+function xmur3(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){ h=Math.imul(h ^ str.charCodeAt(i), 3432918353); h=h<<13 | h>>>19; } return ()=>{ h=Math.imul(h ^ (h>>>16), 2246822507); h=Math.imul(h ^ (h>>>13), 3266489909); return (h^=h>>>16)>>>0; } }
+function mulberry32(a){ return function(){ let t=a+=0x6D2B79F5; t=Math.imul(t ^ t>>>15, t | 1); t^=t + Math.imul(t ^ t>>>7, t | 61); return ((t ^ t>>>14)>>>0)/4294967296; } }
+function randInt(rng, a, b){ return Math.floor(rng()*(b-a+1))+a; }
+function pick(rng, arr){ return arr[Math.floor(rng()*arr.length)] }
+function shuffle(rng, a){ for(let i=a.length-1;i>0;i--){ const j=Math.floor(rng()*(i+1)); [a[i],a[j]]=[a[j],a[i]] } return a }
+
+/* ---------------- URL seed handling ---------------- */
+const params = new URLSearchParams(location.search);
+let seed = params.get('seed');
+if(!seed){
+  // Generate a readable deterministic-like seed to freeze session
+  const dt = Date.now().toString(36).slice(-6);
+  const r = Math.floor(Math.random()*1e9).toString(36);
+  seed = `seed-${dt}-${r}`;
+  history.replaceState(null, "", `?seed=${encodeURIComponent(seed)}`);
+}
+document.getElementById('seedOut').textContent = seed;
+
+const seeder = xmur3(seed);
+const rng = mulberry32(seeder());
+const rng2 = mulberry32(seeder());
+const rng3 = mulberry32(seeder());
+
+/* ---------------- Accent color (used only during boot & recording) ---------------- */
+const hue = Math.floor(rng()*360);
+document.documentElement.style.setProperty('--accent', `hsl(${hue}, 90%, 60%)`);
+
+/* ---------------- Runtime state ---------------- */
+const runtimeState = {
+  Tone: null,
+  armed:false, booting:false, recording:false, loop:true,
+  stepCount:16, bpm:120, currentStep:0,
+  algoMap:[], algoNames:[],
+  voices:[], voiceMap:[], // 0-9 -> voice objects
+  seq:[], // array of steps, each step is array of voice indices [0..9]
+  analyser:null, meterBuf:new Float32Array(512),
+  scope: /** @type {HTMLCanvasElement} */ (document.getElementById('scope')),
+  ctx:null, t0: performance.now()/1000,
+  pressed: new Set(),
+};
+runtimeState.ctx = runtimeState.scope.getContext('2d');
+
+/* ---------------- Algorithms — names in requested order ---------------- */
+const ALGO_LIST = [
+  "Lissajous Core",          // 0
+  "Spiral–Precess",          // 1
+  "Polar Rose Sweep",        // 2
+  "Phyllotaxis Orbit",       // 3
+  "Figure-8 Morph",          // 4
+  "Epicycle Chain",          // 5
+  "VectorScope XY",          // 6
+  "Torus-Knot Projection",   // 7
+  "Audio Flowfield",         // 8 (hybrid particle)
+  "Harmonic Bloom"           // 9 (hybrid particle)
+];
+
+/* ---------------- Seeded permutation: voice index -> algorithm index ---------------- */
+runtimeState.algoMap = shuffle(rng, [...Array(10).keys()]);
+runtimeState.algoNames = runtimeState.algoMap.map(i=>ALGO_LIST[i]);
+document.getElementById('algoNames').textContent = runtimeState.algoNames.map((n,i)=>`${i}:${n}`).join('  |  ');
+
+/* ---------------- UI refs ---------------- */
+const qs = id => document.getElementById(id);
+const el = {
+  power: qs('power'), rec: qs('rec'), play: qs('play'), stop: qs('stop'), loop: qs('loop'),
+  bpm: qs('bpm'), steps: qs('steps'),
+  save: qs('save'), load: qs('load'), loadBtn: qs('loadBtn'),
+  lvl: qs('lvl'), status: qs('status'), wrap: qs('wrap'),
+};
+
+/* ---------------- Tone.js loader (exact, as requested) ---------------- */
+function loadToneJSAndBoot({
+  toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+  setLoaderStatus, runtimeState, boot
+}) {
+  setLoaderStatus('Loading Audio Engine...');
+  import(toneUrl).then(() => {
+    runtimeState.Tone = window.Tone;
+    console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+    boot();
+  }).catch(err => {
+    setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+    console.error('[BOP Matrix] Critical Tone.js load error:', err);
+  });
+}
+
+/* ---------------- Status helper ---------------- */
+function setStatus(text, warn=false){
+  el.status.querySelector('.accent-only').textContent = text;
+  if(warn) el.status.style.color = 'var(--warn)'; else el.status.style.color = '';
+}
+
+/* ---------------- Audio graph build ---------------- */
+function boot(){
+  const Tone = runtimeState.Tone;
+  // Master chain: soft comp -> limiter
+  const masterGain = new Tone.Gain(0.9).toDestination();
+  const comp = new Tone.Compressor({threshold:-24, ratio:2.5, attack:0.01, release:0.15}).connect(masterGain);
+  const limiter = new Tone.Limiter(-1).connect(comp);
+
+  // Global analyser for level meter & VectorScope
+  const analyser = new Tone.Analyser("waveform", 512);
+  runtimeState.analyser = analyser;
+
+  // Scale & note library from seed
+  const SCALES = [
+    [0,2,3,5,7,10],         // minor pent
+    [0,2,4,7,9],            // major pent
+    [0,3,5,7,10],           // dorian-ish
+    [0,2,5,7,9],            // sus
+    [0,1,4,5,7,8,11],       // synthetic
+    [0,2,4,5,7,9,11],       // major
+    [0,2,3,5,7,8,10],       // natural minor
+  ];
+  const baseMidi = 36 + randInt(rng,0,12); // choose base
+  const scale = pick(rng, SCALES);
+  const noteLib = Array.from({length:10},(_,i)=> {
+    const deg = scale[i % scale.length];
+    const octave = 1 + Math.floor(i/scale.length);
+    return baseMidi + deg + 12*octave;
+  });
+
+  // Voice factory (10 voices with diverse synthesis + unique FX)
+  const voices = [];
+  const categories = ["FM","AM","Subtractive","Additive","Wavetable","Noise","RingMod","FM","AM","Wavetable"];
+
+  function makeFXChain(seedLocal){
+    const r = mulberry32(seedLocal);
+    const chain = [];
+    // Choose up to 3 distinct FX in deterministic order
+    const choices = shuffle(r, ["reverb","ppd","mod","dist","crush","autof"]);
+    const take = 3 + Math.floor(r()*2); // 3-4 fx
+    for(let i=0;i<take;i++){
+      const c = choices[i];
+      switch(c){
+        case "reverb": chain.push(new Tone.Reverb({decay: 0.8 + r()*2.2, wet: 0.15 + r()*0.25})); break;
+        case "ppd": chain.push(new Tone.PingPongDelay({delayTime:(r()*0.2)+0.05, feedback:0.2+ r()*0.4, wet:0.15+r()*0.25})); break;
+        case "mod": chain.push(new Tone.Chorus({frequency: 0.05 + r()*1.5, depth:0.2 + r()*0.6, delayTime:3 + r()*10, wet:0.2+r()*0.3}).start()); break;
+        case "dist": chain.push(new Tone.Distortion({distortion: 0.05 + r()*0.4, wet:0.1+r()*0.25})); break;
+        case "crush": chain.push(new Tone.BitCrusher({bits: 3 + Math.floor(r()*5), wet:0.1+r()*0.25})); break;
+        case "autof": chain.push(new Tone.AutoFilter({frequency: (r()*0.4)+0.05, baseFrequency: 200 + r()*2400, octaves: 2 + r()*3, depth: 0.2+r()*0.6, filter: {type:"lowpass", Q:0.2+r()*8}}).start()); break;
+      }
+    }
+    return chain;
+  }
+
+  function chainConnect(src, chain, dest){
+    let node = src;
+    for(const fx of chain){ node.connect(fx); node = fx; }
+    node.connect(dest);
+  }
+
+  function midiToFreq(m){ return Tone.Frequency(m, "midi").toFrequency(); }
+
+  function makeVoice(i){
+    const r = mulberry32(seeder()+i*2654435761>>>0);
+    const cat = categories[i];
+    let src, env, gateGain;
+
+    // All voices: gateGain allows clickless ramps
+    gateGain = new Tone.Gain(0).connect(analyser).connect(limiter);
+
+    // Unique FX chain
+    const fx = makeFXChain((seeder() ^ (i*0x9e3779b9)) >>> 0);
+    // Connect: source -> fx[] -> master chain
+    const dest = new Tone.Gain(0.8);
+    chainConnect(dest, fx, gateGain);
+
+    // Envelope for gate
+    env = new Tone.Envelope({attack:0.01+r()*0.08, decay:0.2+r()*0.4, sustain:0.6, release:0.4+r()*0.8});
+    env.connect(dest.gain);
+
+    // Category implementations
+    if(cat==="FM"){
+      const carrier = new Tone.Oscillator({type: pick(r,["sine","triangle","square"]), frequency: 220}).start();
+      const mod = new Tone.Oscillator({type: pick(r,["sine","triangle"]), frequency: 100 + r()*300}).start();
+      const modGain = new Tone.Gain( r()*120 + 20 );
+      mod.connect(modGain);
+      modGain.connect(carrier.frequency);
+      src = carrier;
+    } else if(cat==="AM"){
+      const c = new Tone.Oscillator({type: pick(r,["sawtooth","square","triangle"]), frequency: 110 + r()*330}).start();
+      const m = new Tone.Oscillator({type: "sine", frequency:  3 + r()*14}).start();
+      const g = new Tone.Gain(0.5 + r()*0.5);
+      m.connect(g); g.connect(c.volume);
+      src = c;
+    } else if(cat==="Subtractive"){
+      const noise = new Tone.Noise(pick(r,["white","pink"])).start();
+      const filt = new Tone.Filter({type:"bandpass", frequency: 400 + r()*3200, Q: 0.5 + r()*10});
+      noise.connect(filt); src = filt;
+    } else if(cat==="Additive"){
+      // Sum a few sines
+      const mix = new Tone.Gain(0);
+      const partials = 3 + Math.floor(r()*4);
+      for(let p=1;p<=partials;p++){
+        const o = new Tone.Oscillator({type:"sine", frequency: 100*p*(0.9 + r()*0.2)}).start();
+        const g = new Tone.Gain( 0.25/ p );
+        o.connect(g); g.connect(mix);
+      }
+      mix.gain.value = 0.8;
+      src = mix;
+    } else if(cat==="Wavetable"){
+      // Build PeriodicWave via fixed harmonics
+      const harmonics = 8 + Math.floor(r()*16);
+      const real = new Float32Array(harmonics); const imag = new Float32Array(harmonics);
+      real[0]=0; imag[0]=0;
+      for(let h=1; h<harmonics; h++){ const amp = (1/h) * (0.6 + r()*0.8); real[h]=r()<0.5?amp:0; imag[h]=r()<0.5?amp:0; }
+      const pw = Tone.context.createPeriodicWave(real, imag, {disableNormalization:false});
+      const osc = new Tone.Oscillator({frequency: 150 + r()*300});
+      osc._oscillator.setPeriodicWave(pw); osc.start();
+      src = osc;
+    } else if(cat==="Noise"){
+      const n = new Tone.Noise("white").start();
+      const lf = new Tone.AutoFilter({frequency: 0.1 + r()*0.6, baseFrequency: 400 + r()*1500, octaves: 3, depth: 0.6}).start();
+      n.connect(lf); src = lf;
+    } else if(cat==="RingMod"){
+      const a = new Tone.Oscillator({type: pick(r,["sine","triangle"]), frequency: 180 + r()*300}).start();
+      const b = new Tone.Oscillator({type: "sine", frequency:  200 + r()*300}).start();
+      const mult = new Tone.Multiply(); a.connect(mult); b.connect(mult.factor);
+      src = mult;
+    } else {
+      // Fallback simple tri
+      const o = new Tone.Oscillator({type:"triangle", frequency: 220 + r()*330}).start();
+      src = o;
+    }
+
+    src.connect(dest);
+
+    // Each voice exposes methods
+    return {
+      index:i, cat, src, env, gateGain,
+      fx,
+      noteOn(freq=220, vel=0.8){
+        // Audibility guardrails
+        dest.gain.rampTo(Math.min(Math.max(vel,0.05),1), 0.02);
+        // Modulate frequency if supported
+        if(src.frequency) src.frequency.rampTo(freq, 0.01);
+        env.triggerAttack(Tone.now());
+      },
+      noteOff(){ env.triggerRelease(Tone.now()); },
+    };
+  }
+
+  for(let i=0;i<10;i++){ voices[i] = makeVoice(i); }
+  runtimeState.voices = voices;
+
+  // Sequencer
+  runtimeState.stepCount = parseInt(el.steps.value,10)|0;
+  runtimeState.seq = Array.from({length:64},()=>[]); // fixed capacity, use first N
+
+  // Transport setup
+  Tone.Transport.bpm.value = parseFloat(el.bpm.value);
+  Tone.Transport.scheduleRepeat(time=>{
+    const N = runtimeState.stepCount;
+    const step = runtimeState.currentStep % N;
+
+    // Play any voices on this step
+    const stepVoices = runtimeState.seq[step];
+    for(const v of stepVoices){
+      const midi = noteLib[v % noteLib.length];
+      const freq = midiToFreq(midi + (rng2()<0.25?12:0)); // occasional octave accents
+      voices[v].noteOn(freq, 0.75);
+      Tone.Transport.scheduleOnce(()=>voices[v].noteOff(), "+0.18");
+    }
+
+    // if recording: latch currently pressed keys into this step
+    if(runtimeState.recording){
+      const pressed = [...runtimeState.pressed].map(k=>parseInt(k,10)).filter(n=>n>=0 && n<=9);
+      runtimeState.seq[step] = pressed;
+    }
+
+    runtimeState.currentStep = (runtimeState.currentStep + 1) % N;
+  }, "16n");
+
+  // Idle pad (seeded chord, very soft)
+  function startIdlePad(){
+    const chordIdx = shuffle(rng3,[0,1,2,3,4]).slice(0,3);
+    const padFreqs = chordIdx.map(i=>midiToFreq(noteLib[i]));
+    padFreqs.forEach((f,di)=>{
+      const v = voices[(di*3)%10];
+      v.noteOn(f, 0.25);
+      // sustained; no noteOff to keep gentle pad (release happens when transport stops/next boot)
+    });
+  }
+
+  // Boot signature (3–4s; uses all 10 voices at least once)
+  async function bootSignature(){
+    const dur = 3.4 + (rng()*0.4); // 3–3.8s
+    const t0 = Tone.now();
+    const tokens = [];
+    const order = shuffle(rng, [...Array(10).keys()]);
+    const micro = ()=> (rng()*0.03)-0.015;
+
+    // Trills / chirps / short chords
+    let cursor = 0;
+    for(const vi of order){
+      const base = noteLib[vi];
+      const shape = rng()<0.5 ? "trill" : (rng()<0.5 ? "chirp" : "chord");
+      if(shape==="trill"){
+        for(let k=0;k<3;k++){
+          const m = base + (rng()<0.5?2:-2);
+          tokens.push({vi, time: t0 + cursor + k*0.09 + micro(), len:0.12, midi:m});
+        }
+        cursor += 0.18;
+      } else if(shape==="chirp"){
+        const dir = rng()<0.5?-1:1;
+        for(let k=0;k<2;k++){
+          const m = base + dir*(k?7:0);
+          tokens.push({vi, time: t0 + cursor + k*0.11 + micro(), len:0.14, midi:m});
+        }
+        cursor += 0.16;
+      } else { // chord
+        const chord = [0,2,4].map(o=>base+o);
+        chord.forEach((m,idx)=> tokens.push({vi:(vi+idx)%10, time: t0 + cursor + micro(), len:0.18, midi:m}));
+        cursor += 0.22;
+      }
+    }
+
+    // Ensure within duration window
+    const endBy = t0 + dur;
+    const ToneRef = Tone;
+    tokens.forEach(tok=>{
+      const v = voices[tok.vi];
+      const f = midiToFreq(tok.midi);
+      ToneRef.Transport.scheduleOnce((time)=>{
+        v.noteOn(f, 0.8);
+        ToneRef.Transport.scheduleOnce(()=>v.noteOff(), `+${tok.len}`);
+      }, tok.time);
+    });
+
+    // Accent ON during boot
+    runtimeState.booting = true; document.body.classList.add('accent-on'); setStatus("Boot signature…");
+    if(!Tone.Transport.state || Tone.Transport.state!=="started") Tone.Transport.start();
+    await new Promise(r=>setTimeout(r, (dur*1000)+120));
+    runtimeState.booting = false; if(!runtimeState.recording) document.body.classList.remove('accent-on');
+    setStatus("Idle");
+    startIdlePad();
+  }
+
+  // Hook UI now that Tone is ready
+  el.play.addEventListener('click', ()=>{
+    if(Tone.Transport.state !== "started"){ Tone.Transport.start(); el.play.classList.add('on'); setStatus("Playing"); }
+    else { Tone.Transport.pause(); el.play.classList.remove('on'); setStatus("Paused"); }
+  });
+  el.stop.addEventListener('click', ()=>{
+    Tone.Transport.stop(); runtimeState.currentStep=0; el.play.classList.remove('on'); setStatus("Stopped");
+  });
+  el.loop.addEventListener('click', ()=>{
+    runtimeState.loop = !runtimeState.loop; el.loop.classList.toggle('on', runtimeState.loop);
+    // (Transport loop length implicitly from steps; no separate Tone loop used here.)
+  });
+  el.bpm.addEventListener('input', ()=>{
+    const v = Math.min(300, Math.max(20, parseFloat(el.bpm.value)||120));
+    Tone.Transport.bpm.rampTo(v, 0.05);
+  });
+  el.steps.addEventListener('input', ()=>{
+    const n = Math.min(64, Math.max(8, parseInt(el.steps.value,10)||16));
+    runtimeState.stepCount = n;
+  });
+  el.rec.addEventListener('click', ()=>{
+    runtimeState.recording = !runtimeState.recording;
+    el.rec.classList.toggle('on', runtimeState.recording);
+    document.body.classList.toggle('accent-on', runtimeState.recording || runtimeState.booting);
+    setStatus(runtimeState.recording ? "Recording…" : (el.play.classList.contains('on') ? "Playing" : "Idle"));
+  });
+  el.save.addEventListener('click', ()=>{
+    const data = {
+      seed, bpm: Tone.Transport.bpm.value, steps: runtimeState.stepCount,
+      seq: runtimeState.seq.slice(0, runtimeState.stepCount),
+      algoMap: runtimeState.algoMap, noteLib
+    };
+    const blob = new Blob([JSON.stringify(data,null,2)], {type:"application/json"});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `osc-seq-${seed}.json`;
+    a.click(); URL.revokeObjectURL(a.href);
+  });
+  el.loadBtn.addEventListener('click', ()=> el.load.click());
+  el.load.addEventListener('change', async (e)=>{
+    const f = e.target.files[0]; if(!f) return;
+    try{
+      const txt = await f.text(); const obj = JSON.parse(txt);
+      if(obj.seed !== seed){ alert("Warning: JSON seed differs; loading steps only for determinism."); }
+      runtimeState.stepCount = Math.min(64, Math.max(8, obj.steps|0 || 16));
+      el.steps.value = runtimeState.stepCount;
+      runtimeState.seq = Array.from({length:64},(_,i)=> obj.seq?.[i] ? obj.seq[i].slice(0,9) : []);
+      Tone.Transport.bpm.value = obj.bpm || 120; el.bpm.value = Math.round(Tone.Transport.bpm.value);
+      setStatus("Sequence loaded");
+    }catch(err){ console.error(err); alert("Failed to load JSON"); }
+    el.load.value = "";
+  });
+
+  // Key handling 0–9 => trigger mapped voice + its algorithm
+  addEventListener('keydown', (ev)=>{
+    if(ev.repeat) return;
+    const k = ev.key;
+    if(k>='0' && k<='9'){
+      runtimeState.pressed.add(k);
+      const i = parseInt(k,10);
+      const v = voices[i];
+      const midi = noteLib[i];
+      v.noteOn(midiToFreq(midi), 0.9);
+      // Set current algorithm mapping focus (visuals read mapping per-vertex; no explicit state needed)
+    }
+  });
+  addEventListener('keyup', (ev)=>{
+    const k = ev.key;
+    if(k>='0' && k<='9'){
+      runtimeState.pressed.delete(k);
+      const i = parseInt(k,10);
+      voices[i].noteOff();
+    }
+  });
+
+  // Start boot signature once audio is unlocked
+  setStatus("Booting…");
+  bootSignature();
+}
+
+/* ---------------- Power button triggers Tone load (user gesture) ---------------- */
+el.power.addEventListener('click', async ()=>{
+  if(runtimeState.armed) return;
+  runtimeState.armed = true;
+  el.power.disabled = true;
+  document.documentElement.classList.add('armed');
+  setStatus("Initializing…");
+
+  // Unlock AudioContext immediately for Safari/Chrome policies
+  try{ await (new (window.AudioContext||window.webkitAudioContext)()).resume(); } catch{}
+  loadToneJSAndBoot({ setLoaderStatus:(t)=>setStatus(t), runtimeState, boot });
+});
+
+/* ---------------- Rendering / Oscilloscope & Algorithms ---------------- */
+function resizeCanvas(){
+  const c = runtimeState.scope;
+  const dpr = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+  const w = c.clientWidth|0, h = c.clientHeight|0;
+  if(w===0||h===0) return;
+  c.width = Math.floor(w*dpr);
+  c.height = Math.floor(h*dpr);
+  const ctx = runtimeState.ctx;
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+addEventListener('resize', resizeCanvas, {passive:true});
+resizeCanvas();
+
+function draw(){
+  const ctx = runtimeState.ctx;
+  const c = runtimeState.scope;
+  const w = c.clientWidth, h = c.clientHeight;
+  const t = (performance.now()/1000) - runtimeState.t0;
+
+  // Clear
+  ctx.clearRect(0,0,w,h);
+
+  // Level meter from analyser (if ready)
+  const Tone = runtimeState.Tone;
+  if(runtimeState.analyser && Tone){
+    const wf = runtimeState.analyser.getValue();
+    // quick RMS
+    let sum=0; for(let i=0;i<wf.length;i++){ const v=wf[i]/255; sum += v*v; }
+    const rms = Math.sqrt(sum/wf.length);
+    el.lvl.style.width = Math.min(100, (rms*220)) + "%";
+  }
+
+  // Draw 10 algorithms simultaneously, each attached to its seeded mapping
+  for(let vi=0; vi<10; vi++){
+    const algo = runtimeState.algoMap[vi];
+    drawAlgorithm(algo, vi, t, w, h);
+  }
+
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+// Color: monochrome unless accent-on class is present (boot or recording)
+function pen(ctx){
+  const accentOn = document.body.classList.contains('accent-on');
+  ctx.strokeStyle = accentOn ? getComputedStyle(document.documentElement).getPropertyValue('--accent') : '#e5e5e5';
+  ctx.fillStyle = accentOn ? getComputedStyle(document.documentElement).getPropertyValue('--accent') : '#e5e5e5';
+  ctx.globalAlpha = 0.9;
+}
+
+function drawAlgorithm(kind, vi, t, w, h){
+  const ctx = runtimeState.ctx;
+  pen(ctx);
+  ctx.lineWidth = 1;
+  ctx.globalCompositeOperation = "lighter";
+  const cx=w/2, cy=h/2;
+  const seedOff = (vi+1)*0.37;
+  const pr = mulberry32((seeder() ^ (vi*0x9e3779b9))>>>0);
+
+  // shape scale
+  const S = Math.min(w,h)*0.38;
+
+  ctx.beginPath();
+  if(kind===0){ // Lissajous Core
+    const a = 2+ (vi%5), b = 3+ ((vi*2)%5);
+    for(let i=0;i<700;i++){
+      const p = i/699 * Math.PI*2;
+      const x = cx + S*Math.sin(a*p + 0.5*t);
+      const y = cy + S*Math.cos(b*p + 0.3*t);
+      i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+    }
+  } else if(kind===1){ // Spiral–Precess
+    for(let i=0;i<800;i++){
+      const p = i/799 * 8*Math.PI;
+      const r = (i/800)*S;
+      const x = cx + (r*Math.cos(p + 0.6*Math.sin(t+seedOff)));
+      const y = cy + (r*Math.sin(p + 0.4*Math.cos(t*0.7+seedOff)));
+      i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+    }
+  } else if(kind===2){ // Polar Rose Sweep
+    const k = 3 + (vi%4);
+    for(let i=0;i<900;i++){
+      const p = i/899 * 2*Math.PI;
+      const r = S*0.75*Math.cos(k*p + 0.25*t);
+      const x = cx + r*Math.cos(p), y = cy + r*Math.sin(p);
+      i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+    }
+  } else if(kind===3){ // Phyllotaxis Orbit
+    const ang = Math.PI*(3 - Math.sqrt(5));
+    for(let i=0;i<850;i++){
+      const r = Math.sqrt(i/850)*S*0.95;
+      const a = i*ang + 0.3*t;
+      const x = cx + r*Math.cos(a), y = cy + r*Math.sin(a);
+      i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+    }
+  } else if(kind===4){ // Figure-8 Morph
+    for(let i=0;i<720;i++){
+      const p = i/719 * 2*Math.PI;
+      const m = 0.5 + 0.5*Math.sin(t*0.7 + seedOff);
+      const x = cx + S*Math.sin(p);
+      const y = cy + S*(m*Math.sin(2*p));
+      i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+    }
+  } else if(kind===5){ // Epicycle Chain
+    const n=3+(vi%3);
+    let x=cx, y=cy;
+    for(let i=0;i<1000;i++){
+      const p = i/999 * 2*Math.PI;
+      let X=0,Y=0;
+      for(let k=1;k<=n;k++){
+        const r = S*(0.5/k);
+        X += r*Math.cos(k*p + 0.3*k*t + seedOff);
+        Y += r*Math.sin(k*p + 0.2*k*t + seedOff);
+      }
+      x = cx + X; y = cy + Y;
+      i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+    }
+  } else if(kind===6){ // VectorScope XY (waveform-true) — use analyser (fallback synth if not ready)
+    const an = runtimeState.analyser;
+    if(an){
+      const wf = an.getValue();
+      for(let i=0;i<wf.length;i++){
+        const a = wf[i]/128-1; // normalised-ish
+        const b = wf[(i+Math.floor(wf.length/4))%wf.length]/128-1;
+        const x = cx + a*S, y = cy + b*S;
+        i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+      }
+    } else {
+      for(let i=0;i<600;i++){
+        const p = i/599 * 2*Math.PI;
+        const x = cx + S*Math.cos(p), y = cy + S*Math.sin(p*2);
+        i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+      }
+    }
+  } else if(kind===7){ // Torus-Knot Projection
+    const p=2+(vi%3), q=3+((vi+1)%4);
+    for(let i=0;i<1000;i++){
+      const u = i/999 * 2*Math.PI;
+      const x = cx + S*(Math.cos(q*u + 0.2*t) * (1 + 0.3*Math.cos(p*u)));
+      const y = cy + S*(Math.sin(q*u + 0.2*t) * (1 + 0.3*Math.sin(p*u)));
+      i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+    }
+  } else if(kind===8){ // Audio Flowfield (hybrid particle)
+    const an = runtimeState.analyser, N=450;
+    const wf = an? an.getValue(): null;
+    ctx.moveTo(cx,cy);
+    for(let i=0;i<N;i++){
+      const a = i/N * 2*Math.PI;
+      const n = wf? (wf[i%wf.length]/128-1) : 0;
+      const r = S*0.1 + (S*0.8)*(0.5+0.5*Math.sin(3*a + 4*n + 0.8*t + seedOff));
+      const x = cx + r*Math.cos(a), y = cy + r*Math.sin(a);
+      ctx.lineTo(x,y);
+    }
+  } else if(kind===9){ // Harmonic Bloom (hybrid particle)
+    const petals = 5 + (vi%4);
+    for(let i=0;i<900;i++){
+      const p = i/899 * 2*Math.PI;
+      const r = S*(0.35 + 0.25*Math.sin(petals*p + 0.6*t) + 0.2*Math.sin(2*petals*p + 0.3*t+seedOff));
+      const x = cx + r*Math.cos(p), y = cy + r*Math.sin(p);
+      i? ctx.lineTo(x,y): ctx.moveTo(x,y);
+    }
+  }
+  ctx.stroke();
+}
+
+/* ---------------- Minimal meter animation even before audio ---------------- */
+let prePulse=0; (function pulse(){
+  prePulse = (prePulse+1)%100;
+  if(!runtimeState.analyser){ el.lvl.style.width = ((Math.sin(performance.now()/350)+1)*50).toFixed(1)+"%"; }
+  requestAnimationFrame(pulse);
+})();
+
+/* ---------------- Monochrome accent gating ---------------- */
+const toggleAccent = (on)=> document.body.classList.toggle('accent-on', !!on);
+
+/* ---------------- End of script ---------------- */
+</script>
+</body>
+</html>

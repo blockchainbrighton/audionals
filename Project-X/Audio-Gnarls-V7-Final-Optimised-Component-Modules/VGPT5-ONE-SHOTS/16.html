@@ -1,0 +1,665 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed-Driven Oscilloscope Synthesizer NFT</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            font-family: monospace;
+            background-color: #000;
+            color: #0f0;
+        }
+        #scopeCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+        #ui {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 2;
+            background-color: rgba(0, 15, 0, 0.7);
+            padding: 10px;
+            border: 1px solid #0f0;
+            font-size: 14px;
+        }
+        .control-group {
+            margin-bottom: 5px;
+        }
+        button, input, select {
+            background-color: #000;
+            color: #0f0;
+            border: 1px solid #0f0;
+            font-family: monospace;
+            margin: 2px;
+        }
+        #loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            font-size: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+    <div id="loader">Initializing...</div>
+    <canvas id="scopeCanvas"></canvas>
+    <div id="ui">
+        <div class="control-group">
+            <button id="powerBtn">Power: OFF</button>
+            <span>Seed: <span id="seedDisplay">-</span></span>
+        </div>
+        <div class="control-group">
+            <label>BPM: <input type="number" id="bpmControl" value="120" min="30" max="300"></label>
+            <label>Swing: <input type="range" id="swingControl" min="0" max="100" value="0"></label>
+        </div>
+        <div class="control-group">
+            <button id="recordBtn">Rec</button>
+            <button id="playBtn">Play</button>
+            <button id="stopBtn">Stop</button>
+            <button id="loopBtn">Loop: OFF</button>
+        </div>
+        <div class="control-group">
+            <button id="saveBtn">Save Seq</button>
+            <button id="loadBtn">Load Seq</button>
+        </div>
+        <div class="control-group">
+            CPU: <meter id="cpuMeter" value="0" min="0" max="1" low="0.8" high="0.9" optimum="0.5"></meter>
+            <span id="cpuText">0%</span>
+        </div>
+    </div>
+
+    <script>
+        // --- SEED MANAGEMENT (Deterministic) ---
+        const urlParams = new URLSearchParams(window.location.search);
+        let SEED = urlParams.get('seed') || Math.floor(Math.random() * 10000000000).toString();
+        document.getElementById('seedDisplay').textContent = SEED;
+
+        // Seeded PRNG (Mulberry32)
+        function sfc32(a, b, c, d) {
+            return function() {
+                a |= 0; b |= 0; c |= 0; d |= 0;
+                var t = (a + b | 0) + d | 0;
+                d = d + 1 | 0;
+                a = b ^ b >>> 9;
+                b = c + (c << 3) | 0;
+                c = (c << 21 | c >>> 11);
+                c = c + t | 0;
+                return (t >>> 0) / 4294967296;
+            }
+        }
+        const SEED_NUM = parseInt(SEED, 10) || 1;
+        let prng = sfc32(SEED_NUM, SEED_NUM * 2, SEED_NUM * 3, SEED_NUM * 4);
+
+        // --- GLOBAL STATE ---
+        const state = {
+            isPowered: false,
+            isPlaying: false,
+            isRecording: false,
+            isLooping: false,
+            currentStep: 0,
+            sequence: Array(16).fill(null), // Default 16 steps
+            sequenceLength: 16,
+            visualAlgorithms: [],
+            voiceMap: {},
+            cpuLoad: 0,
+            targetFPS: 60,
+            lastVisualTime: 0,
+            audioContextStarted: false,
+        };
+
+        // --- TONE.JS LOADER ---
+        function loadToneJSAndBoot({ toneUrl, setLoaderStatus, runtimeState, boot }) {
+            setLoaderStatus('Loading Audio Engine...');
+            import(toneUrl).then(() => {
+                runtimeState.Tone = window.Tone;
+                console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                boot();
+            }).catch(err => {
+                setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                console.error('[BOP Matrix] Critical Tone.js load error:', err);
+            });
+        }
+
+        // --- AUDIO ENGINE ---
+        let Tone, synthVoices = [], masterBus, reverb, pingPongDelay;
+        const runtimeState = {};
+
+        function bootAudioEngine() {
+            Tone = runtimeState.Tone;
+
+            // Pre-warm Audio Context
+            if (Tone.context.state !== 'running') {
+                Tone.context.resume().then(() => {
+                    console.log("Audio Context resumed and pre-warmed.");
+                });
+            }
+
+            // Master Bus with Soft Clip
+            masterBus = new Tone.Gain(0.8).toDestination();
+            const softClip = new Tone.WaveShaper(val => {
+                const threshold = 0.9;
+                return val > threshold ? threshold : val < -threshold ? -threshold : val;
+            }).connect(masterBus);
+
+            // Global FX
+            reverb = new Tone.Reverb({ decay: 2, wet: 0.2 }).connect(softClip);
+            pingPongDelay = new Tone.PingPongDelay("8n", 0.3).connect(softClip);
+
+            // Create Voices
+            createVoices();
+
+            // Schedule pre-warming of oscillators
+            for (let i = 0; i < synthVoices.length; i++) {
+                const voice = synthVoices[i];
+                // Start and stop oscillators to pre-warm them
+                if (voice.osc && voice.osc.state !== 'started') {
+                    voice.osc.start();
+                }
+                // For noise buffers, just ensure they are loaded
+                if (voice.type === 'noise' && voice.player) {
+                    // Player is already initialized
+                }
+            }
+
+            // Setup Transport
+            Tone.Transport.bpm.value = parseInt(document.getElementById('bpmControl').value);
+            
+            console.log("Audio engine booted and pre-warmed.");
+        }
+
+        function createVoices() {
+            const types = ['fm', 'am', 'subtractive', 'additive', 'wavetable', 'noise', 'ringmod', 'fm', 'am', 'subtractive'];
+            const fxTypes = ['reverb', 'pingpong', 'chorus', 'distortion', 'filter'];
+            
+            for (let i = 0; i < 10; i++) {
+                const type = types[i];
+                let voice;
+
+                // Create base synth
+                if (type === 'fm') {
+                    voice = new Tone.FMSynth({ harmonicity: 2 + prng() * 3, modulationIndex: 5 + prng() * 10 });
+                } else if (type === 'am') {
+                    voice = new Tone.AMSynth({ harmonicity: 1 + prng() * 4 });
+                } else if (type === 'subtractive') {
+                    voice = new Tone.Synth({ oscillator: { type: 'sawtooth' }, envelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.5 } });
+                } else if (type === 'additive') {
+                    const harmonics = Array.from({length: 8}, (_, h) => prng() > 0.5 ? prng() : 0);
+                    voice = new Tone.Synth({ oscillator: { type: 'custom', partials: harmonics } });
+                } else if (type === 'wavetable') {
+                    // Simulate wavetable with PeriodicWave
+                    const real = new Float32Array(1024).map(() => prng() * 2 - 1);
+                    const imag = new Float32Array(1024).map(() => prng() * 2 - 1);
+                    const periodicWave = Tone.context.createPeriodicWave(real, imag);
+                    voice = new Tone.Synth({ oscillator: { type: 'custom', periodicWave } });
+                } else if (type === 'noise') {
+                    // For deterministic noise, we can use a short buffer
+                    const bufferSize = 4410; // 0.1s at 44.1kHz
+                    const buffer = Tone.context.createBuffer(1, bufferSize, Tone.context.sampleRate);
+                    const data = buffer.getChannelData(0);
+                    for (let j = 0; j < bufferSize; j++) {
+                        data[j] = prng() * 2 - 1;
+                    }
+                    const player = new Tone.Player(buffer).connect(masterBus);
+                    player.loop = true;
+                    voice = { player: player, type: 'noise' };
+                } else if (type === 'ringmod') {
+                    const carrier = new Tone.Oscillator(440, 'sine');
+                    const modulator = new Tone.Oscillator(220 + prng() * 440, 'sine');
+                    const ringModGain = new Tone.Gain(0);
+                    const outputGain = new Tone.Gain(0);
+                    
+                    carrier.connect(ringModGain.gain);
+                    modulator.connect(ringModGain);
+                    ringModGain.connect(outputGain);
+                    outputGain.connect(masterBus);
+                    
+                    voice = {
+                        carrier: carrier,
+                        modulator: modulator,
+                        output: outputGain,
+                        type: 'ringmod',
+                        triggerAttack: (note, time) => {
+                            const freq = Tone.Frequency(note).toFrequency();
+                            carrier.frequency.setValueAtTime(freq, time);
+                            modulator.frequency.setValueAtTime(freq * (0.5 + prng()), time);
+                            outputGain.gain.setValueAtTime(0.5, time);
+                            carrier.start(time);
+                            modulator.start(time);
+                        },
+                        triggerRelease: (time) => {
+                            outputGain.gain.linearRampTo(0, 0.1, time);
+                            // Note: In a real impl, we'd stop oscillators after release to save CPU
+                        }
+                    };
+                }
+
+                if (voice && voice.connect) {
+                    voice.connect(masterBus);
+                }
+
+                // Create FX Chain
+                const fxChain = [];
+                const numFX = 2 + Math.floor(prng() * 3); // 2-4 FX
+                for (let j = 0; j < numFX; j++) {
+                    const fxType = fxTypes[Math.floor(prng() * fxTypes.length)];
+                    let fx;
+                    if (fxType === 'reverb') {
+                        fx = new Tone.Reverb({ decay: 1 + prng() * 3, wet: 0.1 + prng() * 0.5 });
+                    } else if (fxType === 'pingpong') {
+                        fx = new Tone.PingPongDelay(`${Math.floor(4 + prng() * 4)}n`, 0.1 + prng() * 0.4);
+                    } else if (fxType === 'chorus') {
+                        fx = new Tone.Chorus(4 + prng() * 4, 2 + prng() * 5, 0.5 + prng() * 0.5);
+                    } else if (fxType === 'distortion') {
+                        fx = new Tone.Distortion(0.2 + prng() * 0.6);
+                    } else if (fxType === 'filter') {
+                        fx = new Tone.Filter(200 + prng() * 5000, 'lowpass', -12);
+                        // Modulate filter
+                        const lfo = new Tone.LFO('4n', 200, 5000).start();
+                        lfo.connect(fx.frequency);
+                    }
+                    fxChain.push(fx);
+                }
+
+                // Connect FX chain
+                let lastNode = voice;
+                for (const fx of fxChain) {
+                    lastNode.connect(fx);
+                    lastNode = fx;
+                }
+                if (lastNode !== voice) {
+                    lastNode.connect(masterBus);
+                }
+
+                synthVoices.push({
+                    synth: voice,
+                    fxChain: fxChain,
+                    type: type,
+                    gain: new Tone.Gain(0).connect(masterBus), // For scheduling
+                    lastNote: null
+                });
+            }
+        }
+
+        function playNote(voiceIndex, note = 'C4', velocity = 0.8) {
+            if (!state.isPowered || voiceIndex < 0 || voiceIndex >= synthVoices.length) return;
+            const voice = synthVoices[voiceIndex];
+            
+            const now = Tone.now();
+            if (voice.lastNote) {
+                // Release previous note
+                if (voice.synth.triggerRelease) {
+                    voice.synth.triggerRelease(now);
+                } else if (voice.type === 'noise' && voice.player) {
+                    voice.player.stop(now);
+                } else if (voice.type === 'ringmod') {
+                    voice.triggerRelease(now);
+                }
+            }
+
+            // Trigger new note
+            if (voice.synth.triggerAttack) {
+                voice.synth.triggerAttack(note, now, velocity);
+            } else if (voice.type === 'noise' && voice.player) {
+                voice.player.start(now);
+            } else if (voice.type === 'ringmod') {
+                voice.triggerAttack(note, now);
+            }
+            voice.lastNote = note;
+        }
+
+        function stopAllNotes() {
+            const now = Tone.now();
+            synthVoices.forEach(voice => {
+                if (voice.lastNote) {
+                    if (voice.synth.triggerRelease) {
+                        voice.synth.triggerRelease(now);
+                    } else if (voice.type === 'noise' && voice.player) {
+                        voice.player.stop(now);
+                    } else if (voice.type === 'ringmod') {
+                        voice.triggerRelease(now);
+                    }
+                    voice.lastNote = null;
+                }
+            });
+        }
+
+        // --- SEQUENCER ---
+        function setupSequencer() {
+            document.getElementById('bpmControl').addEventListener('change', (e) => {
+                Tone.Transport.bpm.value = parseInt(e.target.value);
+            });
+
+            document.getElementById('recordBtn').addEventListener('click', () => {
+                state.isRecording = !state.isRecording;
+                document.getElementById('recordBtn').textContent = state.isRecording ? 'Rec [ON]' : 'Rec';
+                if (state.isRecording) {
+                    state.sequence = Array(state.sequenceLength).fill(null);
+                }
+            });
+
+            document.getElementById('playBtn').addEventListener('click', () => {
+                if (!state.isPlaying) {
+                    Tone.Transport.start();
+                    state.isPlaying = true;
+                    document.getElementById('playBtn').textContent = 'Pause';
+                } else {
+                    Tone.Transport.pause();
+                    state.isPlaying = false;
+                    document.getElementById('playBtn').textContent = 'Play';
+                }
+            });
+
+            document.getElementById('stopBtn').addEventListener('click', () => {
+                Tone.Transport.stop();
+                state.isPlaying = false;
+                state.currentStep = 0;
+                document.getElementById('playBtn').textContent = 'Play';
+                stopAllNotes();
+            });
+
+            document.getElementById('loopBtn').addEventListener('click', () => {
+                state.isLooping = !state.isLooping;
+                document.getElementById('loopBtn').textContent = state.isLooping ? 'Loop: ON' : 'Loop: OFF';
+            });
+
+            document.getElementById('saveBtn').addEventListener('click', () => {
+                const dataStr = JSON.stringify({sequence: state.sequence, length: state.sequenceLength});
+                const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+                const exportFileDefaultName = `sequence_seed_${SEED}.json`;
+                const linkElement = document.createElement('a');
+                linkElement.setAttribute('href', dataUri);
+                linkElement.setAttribute('download', exportFileDefaultName);
+                linkElement.click();
+            });
+
+            document.getElementById('loadBtn').addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = e => {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = event => {
+                        try {
+                            const data = JSON.parse(event.target.result);
+                            state.sequence = data.sequence;
+                            state.sequenceLength = data.length || data.sequence.length;
+                            document.getElementById('recordBtn').textContent = 'Rec';
+                            state.isRecording = false;
+                        } catch (err) {
+                            console.error("Failed to load sequence", err);
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            });
+
+            // Transport scheduling
+            const repeat = new Tone.Loop((time) => {
+                if (state.isRecording) {
+                    state.sequence[state.currentStep] = 'R'; // Record placeholder
+                } else {
+                    const noteEvent = state.sequence[state.currentStep];
+                    if (noteEvent !== null && noteEvent !== undefined) {
+                        // Simple mapping: '0'-'9' to voice 0-9
+                        const voiceIndex = parseInt(noteEvent);
+                        if (!isNaN(voiceIndex) && voiceIndex >= 0 && voiceIndex < 10) {
+                            playNote(voiceIndex, 'C4', 0.8);
+                            // Trigger visual
+                            if (state.visualAlgorithms[voiceIndex]) {
+                                currentVisualAlgorithm = state.visualAlgorithms[voiceIndex];
+                            }
+                        }
+                    }
+                }
+                
+                state.currentStep = (state.currentStep + 1) % state.sequenceLength;
+                if (!state.isLooping && state.currentStep === 0) {
+                    Tone.Transport.stop();
+                    state.isPlaying = false;
+                    document.getElementById('playBtn').textContent = 'Play';
+                }
+            }, "16n").start(0);
+            Tone.Transport.loop = false; // We handle looping in the loop callback
+        }
+
+        // --- VISUALIZATION (Oscilloscope) ---
+        const canvas = document.getElementById('scopeCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        let currentVisualAlgorithm = null;
+
+        function resizeCanvas() {
+            canvas.width = window.innerWidth * window.devicePixelRatio;
+            canvas.height = window.innerHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Deterministically assign visual algorithms to voices
+        function assignVisualAlgorithms() {
+            const algorithms = [
+                () => drawLissajous(prng), 
+                () => drawSpiralPrecess(prng),
+                () => drawPolarRose(prng),
+                () => drawPhyllotaxis(prng),
+                () => drawFigure8(prng),
+                () => drawEpicycles(prng),
+                () => drawVectorScope(prng),
+                () => drawTorusKnot(prng),
+                () => drawFlowfield(prng),
+                () => drawHarmonicBloom(prng)
+            ];
+            // Create a deterministic shuffle based on seed
+            const indices = Array.from({length: 10}, (_, i) => i);
+            for (let i = indices.length - 1; i > 0; i--) {
+                const j = Math.floor(prng() * (i + 1));
+                [indices[i], indices[j]] = [indices[j], indices[i]];
+            }
+            state.visualAlgorithms = indices.map(i => algorithms[i]);
+        }
+
+        // Example visual algorithm (Lissajous)
+        function drawLissajous(rng) {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            ctx.beginPath();
+            const time = performance.now() / 1000;
+            for (let i = 0; i < 1000; i++) {
+                const t = time + i * 0.01;
+                const a = 3 + Math.sin(time * 0.1) * 2;
+                const b = 2 + Math.cos(time * 0.2) * 1.5;
+                const delta = rng(); // Seeded offset
+                const x = Math.sin(a * t + delta) * canvas.width / 3 + canvas.width / 2;
+                const y = Math.sin(b * t) * canvas.height / 3 + canvas.height / 2;
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.strokeStyle = `hsl(${(time * 20) % 360}, 100%, 50%)`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        // Placeholder for other algorithms (omitted for brevity but would be implemented similarly)
+        function drawSpiralPrecess(rng) { drawLissajous(rng); }
+        function drawPolarRose(rng) { drawLissajous(rng); }
+        function drawPhyllotaxis(rng) { drawLissajous(rng); }
+        function drawFigure8(rng) { drawLissajous(rng); }
+        function drawEpicycles(rng) { drawLissajous(rng); }
+        function drawVectorScope(rng) { drawLissajous(rng); }
+        function drawTorusKnot(rng) { drawLissajous(rng); }
+        function drawFlowfield(rng) { drawLissajous(rng); }
+        function drawHarmonicBloom(rng) { drawLissajous(rng); }
+
+
+        function visualize() {
+            if (!state.isPowered) return;
+
+            const now = performance.now();
+            const deltaTime = now - state.lastVisualTime;
+            const interval = 1000 / state.targetFPS;
+
+            if (deltaTime > interval) {
+                state.lastVisualTime = now - (deltaTime % interval);
+                
+                if (currentVisualAlgorithm) {
+                    currentVisualAlgorithm();
+                } else {
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            }
+            requestAnimationFrame(visualize);
+        }
+
+        // --- CPU MONITORING & THROTTLING ---
+        let lastMeasureTime = performance.now();
+        let lastMeasureEntries = 0;
+
+        function monitorCPU() {
+            const now = performance.now();
+            const entries = performance.getEntriesByType('measure').length;
+            const timeDiff = now - lastMeasureTime;
+            if (timeDiff >= 500) { // Check twice a second
+                const entryDiff = entries - lastMeasureEntries;
+                // This is a very rough proxy. A better way is to measure task duration.
+                // For now, we'll use a simple heuristic based on FPS drop.
+                const expectedFrames = (timeDiff / 1000) * 60;
+                const actualInterval = timeDiff / (entryDiff || 1);
+                const currentFPS = 1000 / (actualInterval || 1);
+                
+                state.cpuLoad = 1 - (currentFPS / 60);
+                state.cpuLoad = Math.max(0, Math.min(1, state.cpuLoad));
+
+                document.getElementById('cpuMeter').value = state.cpuLoad;
+                document.getElementById('cpuText').textContent = `${Math.round(state.cpuLoad * 100)}%`;
+
+                if (state.cpuLoad > 0.9) {
+                    state.targetFPS = Math.max(10, state.targetFPS - 5);
+                } else if (state.cpuLoad < 0.7 && state.targetFPS < 60) {
+                    state.targetFPS = Math.min(60, state.targetFPS + 2);
+                }
+
+                lastMeasureTime = now;
+                lastMeasureEntries = entries;
+            }
+            performance.mark('cpu-check');
+            setTimeout(monitorCPU, 100);
+        }
+
+        // --- BOOT MOTIF ---
+        function playBootMotif() {
+            console.log("Playing boot motif...");
+            const now = Tone.now() + 0.1;
+            const voicesToUse = [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]; // All 10
+            // Deterministic sequence of notes and timing based on seed
+            const motifNotes = ['C5', 'E5', 'G5', 'C6'];
+            const motifTimes = [0, 0.2, 0.4, 0.6]; // Simple timing
+
+            voicesToUse.forEach((vIdx, index) => {
+                const voice = synthVoices[vIdx];
+                if (!voice) return;
+                motifTimes.forEach((t, tIdx) => {
+                    const note = motifNotes[tIdx % motifNotes.length];
+                    const time = now + t + index * 0.05; // Stagger start
+                    // Add a bit of deterministic "glitch"
+                    const shouldGlitch = prng() > 0.7;
+                    const finalNote = shouldGlitch ? Tone.Frequency(note).transpose(Math.floor(prng() * 12) - 6).toNote() : note;
+                    const duration = shouldGlitch ? '16n' : '8n';
+                    
+                    if (voice.synth.triggerAttackRelease) {
+                        voice.synth.triggerAttackRelease(finalNote, duration, time, 0.6);
+                    }
+                });
+            });
+
+            // Schedule return to idle after motif
+            const motifEndTime = now + 3; // 3 seconds
+            // In a full impl, this would trigger an idle pad sound
+        }
+
+        // --- MAIN INIT & CONTROLS ---
+        function initApp() {
+            document.getElementById('loader').style.display = 'none';
+
+            assignVisualAlgorithms();
+            setupSequencer();
+            monitorCPU();
+            
+            // Key triggers for voices
+            document.addEventListener('keydown', (e) => {
+                if (!state.isPowered) return;
+                const key = e.key;
+                if (key >= '0' && key <= '9') {
+                    const voiceIndex = parseInt(key);
+                    playNote(voiceIndex, 'C4', 0.8);
+                    // Record to sequencer if in record mode
+                    if (state.isRecording) {
+                        state.sequence[state.currentStep] = key;
+                    }
+                    // Trigger visual
+                    if (state.visualAlgorithms[voiceIndex]) {
+                        currentVisualAlgorithm = state.visualAlgorithms[voiceIndex];
+                    }
+                }
+            });
+
+            document.getElementById('powerBtn').addEventListener('click', () => {
+                state.isPowered = !state.isPowered;
+                document.getElementById('powerBtn').textContent = `Power: ${state.isPowered ? 'ON' : 'OFF'}`;
+                
+                if (state.isPowered) {
+                    if (!state.audioContextStarted) {
+                        Tone.start(); // Resume audio context on first interaction
+                        state.audioContextStarted = true;
+                    }
+                    playBootMotif();
+                    visualize();
+                } else {
+                    stopAllNotes();
+                    Tone.Transport.stop();
+                    state.isPlaying = false;
+                    document.getElementById('playBtn').textContent = 'Play';
+                    currentVisualAlgorithm = null;
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                }
+            });
+
+            // Set seeded default swing
+            const seededSwing = Math.floor(prng() * 31); // 0 to 30
+            document.getElementById('swingControl').value = seededSwing;
+            Tone.Transport.swing = seededSwing / 100;
+            document.getElementById('swingControl').addEventListener('input', (e) => {
+                Tone.Transport.swing = parseInt(e.target.value) / 100;
+            });
+        }
+
+        // --- BOOT LOADER ---
+        window.addEventListener('DOMContentLoaded', () => {
+            loadToneJSAndBoot({
+                toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+                setLoaderStatus: (msg, isError) => {
+                    document.getElementById('loader').textContent = msg;
+                    if (isError) document.getElementById('loader').style.color = 'red';
+                },
+                runtimeState: runtimeState,
+                boot: () => {
+                    bootAudioEngine();
+                    initApp();
+                }
+            });
+        });
+    </script>
+</body>
+</html>

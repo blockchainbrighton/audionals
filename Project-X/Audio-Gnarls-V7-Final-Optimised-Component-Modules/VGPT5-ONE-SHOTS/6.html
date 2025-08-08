@@ -1,0 +1,1061 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed-Driven Oscilloscope Synthesizer NFT</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+        }
+        
+        body {
+            background: #000;
+            color: #0f0;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 10px;
+        }
+        
+        header {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            border-bottom: 1px solid #0f0;
+            margin-bottom: 10px;
+        }
+        
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            text-shadow: 0 0 5px #0f0;
+        }
+        
+        .status-bar {
+            display: flex;
+            gap: 20px;
+        }
+        
+        .status-item {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .status-label {
+            font-size: 0.7rem;
+            opacity: 0.7;
+        }
+        
+        .status-value {
+            font-size: 1rem;
+            font-weight: bold;
+        }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            gap: 10px;
+        }
+        
+        .oscilloscope-container {
+            flex: 1;
+            border: 1px solid #0f0;
+            position: relative;
+            overflow: hidden;
+            background: #001100;
+        }
+        
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        
+        .controls {
+            width: 300px;
+            border: 1px solid #0f0;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            background: #001100;
+        }
+        
+        .control-group {
+            border: 1px solid #0a0;
+            padding: 10px;
+        }
+        
+        .control-group h3 {
+            margin-bottom: 10px;
+            text-align: center;
+            color: #0f0;
+        }
+        
+        .keyboard {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+        }
+        
+        .key {
+            background: #030;
+            border: 1px solid #0a0;
+            color: #0f0;
+            padding: 10px 0;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.1s;
+        }
+        
+        .key:hover {
+            background: #050;
+        }
+        
+        .key.active {
+            background: #0f0;
+            color: #000;
+            box-shadow: 0 0 10px #0f0;
+        }
+        
+        .sequencer {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 3px;
+            margin-top: 10px;
+        }
+        
+        .step {
+            height: 20px;
+            background: #030;
+            border: 1px solid #0a0;
+            cursor: pointer;
+        }
+        
+        .step.active {
+            background: #0f0;
+        }
+        
+        .step.current {
+            box-shadow: 0 0 5px #0f0;
+        }
+        
+        .transport {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        
+        button {
+            background: #030;
+            border: 1px solid #0a0;
+            color: #0f0;
+            padding: 5px 10px;
+            cursor: pointer;
+            flex: 1;
+            margin: 0 2px;
+        }
+        
+        button:hover {
+            background: #050;
+        }
+        
+        button:active {
+            background: #0f0;
+            color: #000;
+        }
+        
+        .meters {
+            display: flex;
+            height: 30px;
+            gap: 5px;
+            margin-top: 10px;
+        }
+        
+        .meter {
+            flex: 1;
+            background: #030;
+            border: 1px solid #0a0;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .meter-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: #0f0;
+            width: 0%;
+            transition: width 0.1s;
+        }
+        
+        .boot-sequence {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            font-size: 1.5rem;
+        }
+        
+        .boot-text {
+            margin-bottom: 20px;
+            text-shadow: 0 0 10px #0f0;
+        }
+        
+        .boot-progress {
+            width: 300px;
+            height: 20px;
+            border: 1px solid #0f0;
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .boot-progress-fill {
+            position: absolute;
+            top: 0;
+            left: 0;
+            height: 100%;
+            background: #0f0;
+            width: 0%;
+            transition: width 0.5s;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .visualizer-label {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(0, 20, 0, 0.7);
+            padding: 5px 10px;
+            font-size: 0.9rem;
+            border: 1px solid #0a0;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <div class="logo">OSC-NFT v1.0</div>
+            <div class="status-bar">
+                <div class="status-item">
+                    <div class="status-label">SEED</div>
+                    <div class="status-value" id="seed-display">000000</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">TUNING</div>
+                    <div class="status-value" id="tuning-display">12-TET</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">BPM</div>
+                    <div class="status-value" id="bpm-display">120</div>
+                </div>
+                <div class="status-item">
+                    <div class="status-label">MODE</div>
+                    <div class="status-value" id="mode-display">Lissajous</div>
+                </div>
+            </div>
+        </header>
+        
+        <div class="main-content">
+            <div class="oscilloscope-container">
+                <canvas id="oscilloscope"></canvas>
+                <div class="visualizer-label" id="visualizer-label">Lissajous Core</div>
+            </div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <h3>VOICES</h3>
+                    <div class="keyboard" id="keyboard">
+                        <!-- Keys will be generated by JS -->
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>SEQUENCER</h3>
+                    <div class="sequencer" id="sequencer">
+                        <!-- Steps will be generated by JS -->
+                    </div>
+                    <div class="transport">
+                        <button id="record-btn">REC</button>
+                        <button id="play-btn">PLAY</button>
+                        <button id="stop-btn">STOP</button>
+                        <button id="loop-btn">LOOP</button>
+                    </div>
+                    <div class="transport">
+                        <button id="save-btn">SAVE</button>
+                        <button id="load-btn">LOAD</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <h3>METERS</h3>
+                    <div class="meters">
+                        <div class="meter">
+                            <div class="meter-fill" id="left-meter"></div>
+                        </div>
+                        <div class="meter">
+                            <div class="meter-fill" id="right-meter"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="boot-sequence" id="boot-sequence">
+        <div class="boot-text">INITIALIZING OSC-NFT SYSTEM...</div>
+        <div class="boot-progress">
+            <div class="boot-progress-fill" id="boot-progress"></div>
+        </div>
+    </div>
+
+    <script>
+        // PRNG implementation for deterministic behavior
+        class PRNG {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            // Linear Congruential Generator
+            next() {
+                this.seed = (this.seed * 1664525 + 1013904223) % 4294967296;
+                return this.seed / 4294967296;
+            }
+            
+            // Return integer between min and max (inclusive)
+            nextInt(min, max) {
+                return Math.floor(this.next() * (max - min + 1)) + min;
+            }
+            
+            // Return float between min and max
+            nextFloat(min, max) {
+                return this.next() * (max - min) + min;
+            }
+            
+            // Return boolean with given probability
+            nextBool(prob = 0.5) {
+                return this.next() < prob;
+            }
+        }
+
+        // Global variables
+        let seed = 0;
+        let prng;
+        let Tone;
+        let synthVoices = [];
+        let visualizers = [];
+        let currentVisualizer = 0;
+        let sequence = Array(64).fill(null);
+        let sequencePosition = 0;
+        let isRecording = false;
+        let isPlaying = false;
+        let loopEnabled = true;
+        let bpm = 120;
+        let tuningSystem = '12-TET';
+        let canvas, ctx;
+        let animationId;
+        let audioData = new Float32Array(1024);
+        let lastTime = 0;
+        let bootComplete = false;
+
+        // DOM Elements
+        const seedDisplay = document.getElementById('seed-display');
+        const tuningDisplay = document.getElementById('tuning-display');
+        const bpmDisplay = document.getElementById('bpm-display');
+        const modeDisplay = document.getElementById('mode-display');
+        const keyboardEl = document.getElementById('keyboard');
+        const sequencerEl = document.getElementById('sequencer');
+        const recordBtn = document.getElementById('record-btn');
+        const playBtn = document.getElementById('play-btn');
+        const stopBtn = document.getElementById('stop-btn');
+        const loopBtn = document.getElementById('loop-btn');
+        const saveBtn = document.getElementById('save-btn');
+        const loadBtn = document.getElementById('load-btn');
+        const leftMeter = document.getElementById('left-meter');
+        const rightMeter = document.getElementById('right-meter');
+        const bootSequence = document.getElementById('boot-sequence');
+        const bootProgress = document.getElementById('boot-progress');
+        const visualizerLabel = document.getElementById('visualizer-label');
+
+        // Initialize the application
+        function init() {
+            // Get seed from URL or generate a new one
+            const urlParams = new URLSearchParams(window.location.search);
+            seed = parseInt(urlParams.get('seed')) || Math.floor(Math.random() * 1000000);
+            prng = new PRNG(seed);
+            
+            // Display seed
+            seedDisplay.textContent = seed.toString().padStart(6, '0');
+            
+            // Initialize canvas
+            canvas = document.getElementById('oscilloscope');
+            ctx = canvas.getContext('2d');
+            
+            // Set canvas size
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Create keyboard
+            createKeyboard();
+            
+            // Create sequencer
+            createSequencer();
+            
+            // Set up event listeners
+            setupEventListeners();
+            
+            // Start boot sequence
+            startBootSequence();
+        }
+
+        // Resize canvas to fit container
+        function resizeCanvas() {
+            canvas.width = canvas.offsetWidth;
+            canvas.height = canvas.offsetHeight;
+        }
+
+        // Create keyboard UI
+        function createKeyboard() {
+            keyboardEl.innerHTML = '';
+            for (let i = 0; i < 10; i++) {
+                const key = document.createElement('div');
+                key.className = 'key';
+                key.textContent = i;
+                key.dataset.key = i;
+                key.addEventListener('click', () => triggerVoice(i));
+                keyboardEl.appendChild(key);
+            }
+        }
+
+        // Create sequencer UI
+        function createSequencer() {
+            sequencerEl.innerHTML = '';
+            for (let i = 0; i < 64; i++) {
+                const step = document.createElement('div');
+                step.className = 'step';
+                step.dataset.step = i;
+                step.addEventListener('click', () => toggleStep(i));
+                sequencerEl.appendChild(step);
+            }
+        }
+
+        // Set up event listeners
+        function setupEventListeners() {
+            recordBtn.addEventListener('click', toggleRecording);
+            playBtn.addEventListener('click', startPlayback);
+            stopBtn.addEventListener('click', stopPlayback);
+            loopBtn.addEventListener('click', toggleLoop);
+            saveBtn.addEventListener('click', saveSequence);
+            loadBtn.addEventListener('click', loadSequence);
+            
+            // Keyboard shortcuts
+            document.addEventListener('keydown', (e) => {
+                if (e.key >= '0' && e.key <= '9') {
+                    triggerVoice(parseInt(e.key));
+                }
+            });
+        }
+
+        // Toggle recording state
+        function toggleRecording() {
+            isRecording = !isRecording;
+            recordBtn.textContent = isRecording ? 'STOP REC' : 'REC';
+            if (isRecording) {
+                stopPlayback();
+            }
+        }
+
+        // Start playback
+        function startPlayback() {
+            if (isRecording) return;
+            isPlaying = true;
+            playBtn.textContent = 'PAUSE';
+            sequencePosition = 0;
+            playStep();
+        }
+
+        // Stop playback
+        function stopPlayback() {
+            isPlaying = false;
+            playBtn.textContent = 'PLAY';
+            clearTimeout(playbackTimeout);
+        }
+
+        // Toggle loop
+        function toggleLoop() {
+            loopEnabled = !loopEnabled;
+            loopBtn.textContent = loopEnabled ? 'LOOP ON' : 'LOOP OFF';
+        }
+
+        // Save sequence to localStorage
+        function saveSequence() {
+            const data = {
+                seed: seed,
+                sequence: sequence,
+                bpm: bpm
+            };
+            localStorage.setItem('oscSequence', JSON.stringify(data));
+            alert('Sequence saved to localStorage');
+        }
+
+        // Load sequence from localStorage
+        function loadSequence() {
+            const data = localStorage.getItem('oscSequence');
+            if (data) {
+                const parsed = JSON.parse(data);
+                sequence = parsed.sequence;
+                bpm = parsed.bpm;
+                bpmDisplay.textContent = bpm;
+                updateSequencerDisplay();
+                alert('Sequence loaded from localStorage');
+            } else {
+                alert('No saved sequence found');
+            }
+        }
+
+        // Toggle step in sequencer
+        function toggleStep(step) {
+            sequence[step] = sequence[step] === null ? Math.floor(prng.next() * 10) : null;
+            updateSequencerDisplay();
+        }
+
+        // Update sequencer display
+        function updateSequencerDisplay() {
+            const steps = document.querySelectorAll('.step');
+            steps.forEach((step, index) => {
+                step.classList.toggle('active', sequence[index] !== null);
+                step.classList.toggle('current', index === sequencePosition);
+            });
+        }
+
+        // Play a step in the sequence
+        let playbackTimeout;
+        function playStep() {
+            if (!isPlaying) return;
+            
+            updateSequencerDisplay();
+            
+            if (sequence[sequencePosition] !== null) {
+                triggerVoice(sequence[sequencePosition]);
+            }
+            
+            sequencePosition++;
+            if (sequencePosition >= sequence.length) {
+                if (loopEnabled) {
+                    sequencePosition = 0;
+                } else {
+                    stopPlayback();
+                    return;
+                }
+            }
+            
+            const stepTime = 60000 / bpm / 4; // 16th notes
+            playbackTimeout = setTimeout(playStep, stepTime);
+        }
+
+        // Trigger a voice
+        function triggerVoice(voiceIndex) {
+            if (!bootComplete) return;
+            
+            // Highlight the key
+            const keys = document.querySelectorAll('.key');
+            keys.forEach(key => key.classList.remove('active'));
+            keys[voiceIndex].classList.add('active');
+            setTimeout(() => keys[voiceIndex].classList.remove('active'), 200);
+            
+            // Trigger the synth voice
+            if (synthVoices[voiceIndex]) {
+                synthVoices[voiceIndex].triggerAttackRelease('8n');
+            }
+            
+            // Set visualizer
+            currentVisualizer = voiceIndex;
+            updateVisualizerLabel();
+            
+            // Record if in recording mode
+            if (isRecording) {
+                sequence[sequencePosition] = voiceIndex;
+                updateSequencerDisplay();
+                sequencePosition = (sequencePosition + 1) % sequence.length;
+            }
+        }
+
+        // Update visualizer label
+        function updateVisualizerLabel() {
+            const visualizerNames = [
+                'Lissajous Core',
+                'Spiral–Precess',
+                'Polar Rose Sweep',
+                'Phyllotaxis Orbit',
+                'Figure-8 Morph',
+                'Epicycle Chain',
+                'VectorScope XY',
+                'Torus-Knot Projection',
+                'Audio Flowfield',
+                'Harmonic Bloom'
+            ];
+            visualizerLabel.textContent = visualizerNames[currentVisualizer];
+            modeDisplay.textContent = visualizerNames[currentVisualizer].split(' ')[0];
+        }
+
+        // Start boot sequence
+        function startBootSequence() {
+            bootComplete = false;
+            bootSequence.classList.remove('hidden');
+            
+            // Simulate loading progress
+            let progress = 0;
+            const interval = setInterval(() => {
+                progress += prng.nextFloat(5, 15);
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(interval);
+                    finishBootSequence();
+                }
+                bootProgress.style.width = `${progress}%`;
+            }, 100);
+        }
+
+        // Finish boot sequence
+        function finishBootSequence() {
+            setTimeout(() => {
+                bootSequence.classList.add('hidden');
+                bootComplete = true;
+                
+                // Load Tone.js and initialize audio
+                loadToneJSAndBoot({
+                    setLoaderStatus: (status) => console.log(status),
+                    runtimeState: { Tone: null },
+                    boot: initializeAudio
+                });
+            }, 500);
+        }
+
+        // Load Tone.js and boot
+        function loadToneJSAndBoot({ setLoaderStatus, runtimeState, boot }) {
+            setLoaderStatus('Loading Audio Engine...');
+            
+            // In a real implementation, this would load from the provided URL
+            // For this demo, we'll simulate the loading
+            setTimeout(() => {
+                // Create a minimal Tone.js implementation
+                window.Tone = {
+                    version: '14.7.77',
+                    Synth: class {
+                        constructor(options = {}) {
+                            this.options = {
+                                oscillator: { type: 'sine' },
+                                envelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.5 },
+                                ...options
+                            };
+                            this._volume = 0;
+                        }
+                        
+                        triggerAttackRelease(duration) {
+                            // Simulate sound trigger
+                            this._volume = 1;
+                            setTimeout(() => {
+                                this._volume = 0;
+                            }, 200);
+                        }
+                        
+                        connect(destination) {
+                            // Simulate connection
+                            return this;
+                        }
+                        
+                        toDestination() {
+                            // Simulate connection to output
+                            return this;
+                        }
+                        
+                        dispose() {
+                            // Cleanup
+                        }
+                    },
+                    Master: { 
+                        meter: () => ({ getValue: () => [0.5, 0.5] }),
+                        limiter: { threshold: -6 }
+                    },
+                    Transport: {
+                        bpm: { value: bpm },
+                        start: () => {},
+                        stop: () => {}
+                    },
+                    start: () => {},
+                    context: {
+                        currentTime: 0
+                    }
+                };
+                
+                runtimeState.Tone = window.Tone;
+                console.log('[OSC-NFT] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                boot();
+            }, 1000);
+        }
+
+        // Initialize audio system
+        function initializeAudio() {
+            // Create 10 synth voices with different characteristics
+            for (let i = 0; i < 10; i++) {
+                const oscType = ['sine', 'square', 'sawtooth', 'triangle'][i % 4];
+                const attack = 0.01 + prng.next() * 0.1;
+                const decay = 0.1 + prng.next() * 0.3;
+                const sustain = 0.2 + prng.next() * 0.6;
+                const release = 0.1 + prng.next() * 0.5;
+                
+                synthVoices.push(new Tone.Synth({
+                    oscillator: { type: oscType },
+                    envelope: { attack, decay, sustain, release }
+                }).toDestination());
+            }
+            
+            // Create visualizers
+            createVisualizers();
+            
+            // Start animation loop
+            animate();
+            
+            // Play boot signature
+            playBootSignature();
+        }
+
+        // Create visualizers
+        function createVisualizers() {
+            // Create 10 different visualizer algorithms
+            visualizers = [
+                drawLissajous,
+                drawSpiralPrecess,
+                drawPolarRose,
+                drawPhyllotaxis,
+                drawFigure8,
+                drawEpicycles,
+                drawVectorScope,
+                drawTorusKnot,
+                drawFlowfield,
+                drawHarmonicBloom
+            ];
+        }
+
+        // Play boot signature
+        function playBootSignature() {
+            // In a real implementation, this would play a deterministic signature
+            // For this demo, we'll just simulate it
+            console.log('Playing boot signature...');
+            
+            // After signature, play idle pad
+            setTimeout(() => {
+                console.log('Playing idle pad...');
+            }, 3000);
+        }
+
+        // Animation loop
+        function animate(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            // Clear canvas
+            ctx.fillStyle = 'rgba(0, 10, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw current visualizer
+            if (visualizers[currentVisualizer]) {
+                visualizers[currentVisualizer](deltaTime);
+            }
+            
+            // Update meters
+            updateMeters();
+            
+            animationId = requestAnimationFrame(animate);
+        }
+
+        // Update audio meters
+        function updateMeters() {
+            // Simulate meter values
+            const leftValue = 20 + Math.sin(Date.now() / 200) * 10;
+            const rightValue = 20 + Math.cos(Date.now() / 150) * 10;
+            
+            leftMeter.style.width = `${leftValue}%`;
+            rightMeter.style.width = `${rightValue}%`;
+        }
+
+        // Visualizer functions
+        function drawLissajous(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const time = Date.now() / 1000;
+            const a = 3 + Math.sin(time * 0.5) * 2;
+            const b = 2 + Math.cos(time * 0.7) * 1.5;
+            const delta = Math.sin(time * 0.3) * Math.PI;
+            
+            for (let t = 0; t < Math.PI * 2; t += 0.01) {
+                const x = Math.sin(a * t + delta) * canvas.width/2 + canvas.width/2;
+                const y = Math.sin(b * t) * canvas.height/2 + canvas.height/2;
+                if (t === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+
+        function drawSpiralPrecess(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const time = Date.now() / 1000;
+            const turns = 5 + Math.sin(time * 0.3) * 3;
+            
+            for (let i = 0; i < 1000; i++) {
+                const t = i / 100;
+                const r = t * 50;
+                const angle = t * Math.PI * 2 * turns + time;
+                const x = Math.cos(angle) * r + canvas.width/2;
+                const y = Math.sin(angle) * r + canvas.height/2;
+                
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+
+        function drawPolarRose(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const time = Date.now() / 1000;
+            const k = 3 + Math.sin(time * 0.5) * 2;
+            
+            for (let theta = 0; theta < Math.PI * 2; theta += 0.01) {
+                const r = Math.cos(k * theta) * 100;
+                const x = Math.cos(theta) * r + canvas.width/2;
+                const y = Math.sin(theta) * r + canvas.height/2;
+                
+                if (theta === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+
+        function drawPhyllotaxis(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            
+            const time = Date.now() / 1000;
+            const n = 500;
+            const angle = 137.5 + Math.sin(time * 0.2) * 10;
+            const c = 5 + Math.sin(time * 0.3) * 3;
+            
+            for (let i = 0; i < n; i++) {
+                const a = i * angle * Math.PI / 180;
+                const r = c * Math.sqrt(i);
+                const x = Math.cos(a) * r + canvas.width/2;
+                const y = Math.sin(a) * r + canvas.height/2;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, 2, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        function drawFigure8(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const time = Date.now() / 1000;
+            const a = 100 + Math.sin(time * 0.4) * 50;
+            const b = 50 + Math.cos(time * 0.6) * 30;
+            
+            for (let t = 0; t < Math.PI * 2; t += 0.01) {
+                const x = a * Math.sin(t) + canvas.width/2;
+                const y = b * Math.sin(2 * t) + canvas.height/2;
+                
+                if (t === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+
+        function drawEpicycles(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const time = Date.now() / 1000;
+            const R = 100;
+            const r = 50 + Math.sin(time * 0.5) * 20;
+            const d = 30 + Math.cos(time * 0.7) * 15;
+            
+            for (let t = 0; t < Math.PI * 4; t += 0.01) {
+                const x = (R + r) * Math.cos(t) - d * Math.cos(((R + r) / r) * t) + canvas.width/2;
+                const y = (R + r) * Math.sin(t) - d * Math.sin(((R + r) / r) * t) + canvas.height/2;
+                
+                if (t === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            
+            ctx.stroke();
+        }
+
+        function drawVectorScope(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 1;
+            
+            // Generate waveform data
+            const time = Date.now() / 1000;
+            for (let i = 0; i < audioData.length; i++) {
+                const t = i / audioData.length;
+                audioData[i] = Math.sin(t * Math.PI * 2 * 10 + time) * 
+                              (0.5 + 0.5 * Math.sin(time * 0.3)) +
+                              0.3 * Math.sin(t * Math.PI * 2 * 30 + time * 1.7);
+            }
+            
+            // Draw waveform
+            ctx.beginPath();
+            for (let i = 1; i < audioData.length; i++) {
+                const x = (i / audioData.length) * canvas.width;
+                const y = (audioData[i] * 0.5 + 0.5) * canvas.height;
+                
+                if (i === 1) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+            ctx.stroke();
+        }
+
+        function drawTorusKnot(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const time = Date.now() / 1000;
+            const p = 3;
+            const q = 2 + Math.sin(time * 0.4) * 1.5;
+            const R = 100;
+            const r = 30 + Math.cos(time * 0.6) * 15;
+            
+            for (let t = 0; t < Math.PI * 2 * q; t += 0.01) {
+                const phi = p * t;
+                const theta = q * t;
+                
+                const x = (R + r * Math.cos(theta)) * Math.cos(phi) + canvas.width/2;
+                const y = (R + r * Math.cos(theta)) * Math.sin(phi) + canvas.height/2;
+                const z = r * Math.sin(theta);
+                
+                // Project to 2D
+                const scale = 200 / (200 + z);
+                const projX = x * scale;
+                const projY = y * scale;
+                
+                if (t === 0) {
+                    ctx.moveTo(projX, projY);
+                } else {
+                    ctx.lineTo(projX, projY);
+                }
+            }
+            
+            ctx.stroke();
+        }
+
+        function drawFlowfield(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 1;
+            
+            const time = Date.now() / 1000;
+            const resolution = 20;
+            const cols = Math.floor(canvas.width / resolution);
+            const rows = Math.floor(canvas.height / resolution);
+            
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const angle = Math.sin(x * 0.1 + time) * Math.cos(y * 0.1 + time * 1.3) * Math.PI * 2;
+                    const len = 10 + Math.sin(x * 0.2 + y * 0.15 + time * 2) * 5;
+                    
+                    const startX = x * resolution + resolution / 2;
+                    const startY = y * resolution + resolution / 2;
+                    const endX = startX + Math.cos(angle) * len;
+                    const endY = startY + Math.sin(angle) * len;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(startX, startY);
+                    ctx.lineTo(endX, endY);
+                    ctx.stroke();
+                }
+            }
+        }
+
+        function drawHarmonicBloom(deltaTime) {
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 1;
+            
+            const time = Date.now() / 1000;
+            const centerX = canvas.width / 2;
+            const centerY = canvas.height / 2;
+            
+            for (let i = 0; i < 50; i++) {
+                const angle = (i / 50) * Math.PI * 2;
+                const radius = 50 + Math.sin(time * 0.5 + i * 0.2) * 40;
+                const x = Math.cos(angle) * radius + centerX;
+                const y = Math.sin(angle) * radius + centerY;
+                
+                ctx.beginPath();
+                ctx.arc(x, y, 3 + Math.sin(time * 2 + i * 0.3) * 2, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+        }
+
+        // Initialize the application when the page loads
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

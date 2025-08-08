@@ -1,0 +1,794 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Seeded Oscilloscope Synth — Signature First</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root{
+    --fg:#d9ffe1; --dim:#7fa88b; --hot:#5cff9a; --warn:#ff6a66; --bg:#000; --chrome:#111519;
+    --grid:#0a0f12; --led-off:#13241a; --led-on:#6bff9f;
+  }
+  html,body{margin:0;height:100%;background:var(--bg);color:var(--fg);font:12px ui-monospace,Menlo,Consolas,monospace;overflow:hidden}
+  #app{display:flex;flex-direction:column;height:100vh}
+  /* Tech plate frame */
+  #plate{position:relative;flex:1;display:flex;align-items:center;justify-content:center;
+    background:radial-gradient(120% 120% at 50% 30%, #0a0e12 0%, #050708 60%, #000 100%);
+    border:1px solid #1b232a; box-shadow:inset 0 0 0 1px #0c1013, 0 10px 40px rgba(0,0,0,.8)}
+  #plate::before{content:"";position:absolute;inset:12px;border-radius:10px;
+    background:linear-gradient(180deg,#0e1419 0%,#0a0f13 100%);box-shadow:inset 0 0 0 1px #10161b}
+  /* Scope */
+  #scopeWrap{position:relative; width:min(92vw,1200px); aspect-ratio:16/9; z-index:1}
+  #scope{width:100%;height:100%;display:block;background:#000; border-radius:8px;
+    box-shadow:0 0 0 1px #0b1318, inset 0 0 40px #010203}
+  .grid{position:absolute;inset:0;pointer-events:none}
+  /* LEDs */
+  #leds{position:absolute;top:10px;left:10px;display:flex;gap:8px;z-index:3}
+  .led{width:8px;height:8px;border-radius:50%;background:var(--led-off);box-shadow:0 0 0 1px #07140b}
+  .led.on{background:var(--led-on);box-shadow:0 0 8px var(--led-on)}
+  /* Boot Log */
+  #bootLog{position:absolute;right:10px;top:10px;z-index:3; background:rgba(0,0,0,.65);
+    border:1px solid #0b1a10;border-radius:6px;max-width:min(46vw,520px);overflow:hidden}
+  #bootHead{display:flex;align-items:center;gap:8px;padding:6px 10px;color:var(--hot);cursor:pointer}
+  #bootBody{max-height:0;overflow:auto;transition:max-height .25s ease}
+  #bootLog.open #bootBody{max-height:40vh}
+  #bootBody pre{margin:0;padding:8px 10px;color:#c6f7d6;white-space:pre-wrap}
+  /* Controls */
+  #controls{display:grid;grid-template-columns:repeat(12, minmax(0,1fr));gap:8px;padding:12px; background:var(--chrome);
+    border-top:1px solid #0f151a;box-shadow:0 -1px 0 #0a1014}
+  .group{grid-column:span 12;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+  @media (min-width:900px){ .group{grid-column:span 6} }
+  button,input,select{background:#0b1217;color:var(--fg);border:1px solid #16222a;border-radius:6px;padding:6px 8px}
+  button:hover{border-color:#2a3b46}
+  button.primary{background:#0f1b21;border-color:#27414b}
+  #seed{text-transform:none;width:270px}
+  #meter{width:120px;height:10px;background:#0b1316;border:1px solid #0e191f;border-radius:20px;overflow:hidden}
+  #meter>span{display:block;height:100%;width:0%;background:linear-gradient(90deg,#1eff99,#b7ffdf)}
+  #status{color:var(--dim)}
+  .kbd{padding:2px 6px;border:1px solid #1a262e;border-radius:4px;background:#0c1216;color:#9bd4ae}
+  /* Tiny text */
+  .mono{font-variant-ligatures:none}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="plate">
+    <div id="scopeWrap">
+      <canvas id="scope"></canvas>
+      <svg class="grid" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+        <defs>
+          <pattern id="g" width="10" height="10" patternUnits="userSpaceOnUse">
+            <path d="M10 0H0V10" stroke="#071015" stroke-width="0.5"/>
+          </pattern>
+        </defs>
+        <rect x="0" y="0" width="100" height="100" fill="url(#g)"/>
+        <line x1="50" x2="50" y1="0" y2="100" stroke="#0c1f26" stroke-width="0.6"/>
+        <line y1="50" y2="50" x1="0" x2="100" stroke="#0c1f26" stroke-width="0.6"/>
+      </svg>
+      <div id="leds">
+        <div id="led-audio" class="led" title="Audio"></div>
+        <div id="led-cpu" class="led" title="CPU"></div>
+      </div>
+      <div id="bootLog">
+        <div id="bootHead">⏻ Boot Log</div>
+        <div id="bootBody"><pre id="bootText" class="mono"></pre></div>
+      </div>
+    </div>
+  </div>
+  <div id="controls">
+    <div class="group">
+      <button id="power" class="primary">Power</button>
+      <span id="status" class="mono">Idle</span>
+      <span style="flex:1"></span>
+      <label>Seed</label><input id="seed" class="mono" />
+      <button id="reseed">Apply</button>
+    </div>
+    <div class="group">
+      <label>BPM</label><input id="bpm" type="number" min="40" max="220" step="1" value="110" />
+      <button id="rec">Rec</button>
+      <button id="play">Play</button>
+      <button id="stop">Stop</button>
+      <label><input id="loop" type="checkbox" checked/> Loop</label>
+      <label>Steps</label><input id="steps" type="number" min="8" max="64" step="1" value="16" />
+      <div id="meter"><span></span></div>
+      <span class="mono">Keys: <span class="kbd">0–9</span></span>
+      <button id="save">Save</button>
+      <label for="loadFile" class="button" style="cursor:pointer"><span class="kbd">Load JSON</span></label>
+      <input id="loadFile" type="file" accept="application/json" style="display:none" />
+    </div>
+  </div>
+</div>
+
+<script>
+/* -----------------------------------------------------------
+   Exact on-chain Tone.js loader (do not modify)
+------------------------------------------------------------*/
+function loadToneJSAndBoot({
+  toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+  setLoaderStatus, runtimeState, boot
+}) {
+  setLoaderStatus('Loading Audio Engine...');
+  import(toneUrl).then(() => {
+    runtimeState.Tone = window.Tone;
+    console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+    boot();
+  }).catch(err => {
+    setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+    console.error('[BOP Matrix] Critical Tone.js load error:', err);
+  });
+}
+
+/* -----------------------------------------------------------
+   Deterministic PRNG + helpers (single source of truth)
+------------------------------------------------------------*/
+function xmur3(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19;} return ()=>{h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); return (h^h>>>16)>>>0;};}
+function sfc32(a,b,c,d){return function(){a|=0;b|=0;c|=0;d|=0;var t=(a+b|0)+d|0;d=d+1|0;a=b^b>>>9;b=c+(c<<3)|0;c=(c<<21|c>>>11);c=c+t|0;return (t>>>0)/4294967296;}}
+function makePRNG(seedStr){
+  const seed = (seedStr||'').trim()||Math.random().toString(36).slice(2);
+  const h=xmur3(seed); return { seed,
+    rng:sfc32(h(),h(),h(),h()),
+    int(n){return Math.floor(this.rng()*n)},
+    float(min=0,max=1){return min+(max-min)*this.rng()},
+    choice(arr){return arr[this.int(arr.length)]},
+    bool(p=0.5){return this.rng()<p},
+    shuffle(arr){ for(let i=arr.length-1;i>0;i--){const j=Math.floor(this.rng()*(i+1)); [arr[i],arr[j]]=[arr[j],arr[i]];} return arr; }
+  };
+}
+
+/* -----------------------------------------------------------
+   Runtime State
+------------------------------------------------------------*/
+const R = {
+  Tone:null,
+  prng:null,
+  seed:"",
+  voices:[],
+  voiceVisualOrder:[],
+  bootScheduled:false,
+  signatureOver:false,
+  idlePad:null,
+  seq:{ steps:16, bpm:110, loop:true, recording:false, grid:[], pos:0 },
+  ui:{ meter:document.querySelector('#meter>span'), status:document.getElementById('status'),
+       ledA:document.getElementById('led-audio'), ledC:document.getElementById('led-cpu'),
+       seed:document.getElementById('seed'), bpm:document.getElementById('bpm') },
+  vis:{ algoForVoice:[], algoParams:[], analyser:null, canvas:document.getElementById('scope'), ctx:null, lastT:0, brightUntil:0 }
+};
+
+/* -----------------------------------------------------------
+   Boot Log helper
+------------------------------------------------------------*/
+const bootText = document.getElementById('bootText');
+function logBoot(line){ bootText.textContent += line + '\n'; }
+
+/* -----------------------------------------------------------
+   Visuals: 10 deterministic algorithms
+------------------------------------------------------------*/
+const AlgoNames = [
+  'Lissajous Core','Spiral–Precess','Polar Rose Sweep','Phyllotaxis Orbit','Figure-8 Morph',
+  'Epicycle Chain','VectorScope XY','Torus-Knot Projection','Audio Flowfield','Harmonic Bloom'
+];
+function setupScope(){
+  const c=R.vis.canvas, dpr=window.devicePixelRatio||1;
+  c.width = Math.floor(c.clientWidth*dpr); c.height=Math.floor(c.clientHeight*dpr);
+  R.vis.ctx = c.getContext('2d');
+}
+window.addEventListener('resize',setupScope);
+
+function drawScope(time){
+  const {ctx,canvas} = R.vis; if(!ctx) return;
+  const dpr=window.devicePixelRatio||1, t=time*0.001;
+  const w=canvas.width, h=canvas.height;
+  const now = R.Tone ? R.Tone.now() : 0;
+  ctx.clearRect(0,0,w,h);
+
+  // Faint grid glow during signature
+  const boost = now < R.vis.brightUntil ? 1.0 : 0.25;
+
+  // Choose active voice index based on last triggered or sequencer pos (simple pulse)
+  const activeIdx = activeVoiceIndex();
+
+  // Render algorithm tied to active voice
+  const algo = R.vis.algoForVoice[activeIdx] ?? 0;
+  const params = R.vis.algoParams[activeIdx] ?? { a:2, b:3 };
+
+  ctx.save();
+  ctx.translate(w/2,h/2);
+  ctx.scale(1,-1);
+
+  // Draw glow trail
+  ctx.globalCompositeOperation='lighter';
+  ctx.lineWidth = Math.max(1, w/1200);
+  ctx.strokeStyle = `rgba(113,255,180,${0.7*boost})`;
+
+  switch(algo){
+    case 0: lissajous(ctx, params, w, h, t); break;
+    case 1: spiralPrecess(ctx, params, w, h, t); break;
+    case 2: polarRose(ctx, params, w, h, t); break;
+    case 3: phyllotaxis(ctx, params, w, h, t); break;
+    case 4: fig8(ctx, params, w, h, t); break;
+    case 5: epicycle(ctx, params, w, h, t); break;
+    case 6: vectorscope(ctx, w, h); break;
+    case 7: torusKnot(ctx, params, w, h, t); break;
+    case 8: flowfield(ctx, params, w, h, t); break;
+    case 9: harmonicBloom(ctx, params, w, h, t); break;
+  }
+  ctx.restore();
+
+  // LEDs & meter tick
+  if(R.Tone && R.vis.analyser){
+    const buf = new Float32Array(256);
+    R.vis.analyser.getFloatTimeDomainData(buf);
+    let rms = 0; for(let i=0;i<buf.length;i++) rms+=buf[i]*buf[i];
+    rms = Math.sqrt(rms/buf.length);
+    R.ui.meter.style.width = Math.min(100, Math.max(3, rms*180))+'%';
+    R.ui.ledA.classList.toggle('on', rms>0.01);
+  }
+  R.ui.ledC.classList.toggle('on', (performance.now()%600)<60);
+
+  requestAnimationFrame(drawScope);
+}
+function activeVoiceIndex(){ return R._lastVoice ?? 0; }
+
+// --- Algorithms ---
+function lissajous(ctx,p,w,h,t){
+  const A = 0.42 + 0.38*Math.sin(t*0.31 + p.off);
+  const B = 0.42 + 0.38*Math.cos(t*0.27 + p.off2);
+  ctx.beginPath();
+  for(let i=0;i<1200;i++){
+    const u=i/1200;
+    const x = Math.sin((p.a)*2*Math.PI*u + t*1.2)*A;
+    const y = Math.sin((p.b)*2*Math.PI*u + t*1.1 + p.delta)*B;
+    ctx.lineTo(x*w*0.42, y*h*0.42);
+  }
+  ctx.stroke();
+}
+function spiralPrecess(ctx,p,w,h,t){
+  ctx.beginPath();
+  for(let i=0;i<1400;i++){
+    const u=i/1400, r=(u**0.8)*0.45;
+    const a = u* (p.twist*2*Math.PI) + Math.sin(t*0.6+p.pm)*0.3;
+    const x = r*Math.cos(a)*(1+0.15*Math.sin(t*0.9));
+    const y = r*Math.sin(a)*(1+0.15*Math.cos(t*0.7));
+    ctx.lineTo(x*w*0.9*0.5,y*h*0.9*0.5);
+  }
+  ctx.stroke();
+}
+function polarRose(ctx,p,w,h,t){
+  ctx.beginPath();
+  for(let i=0;i<1500;i++){
+    const a=i/1500*Math.PI*2;
+    const k=p.k|0, r=Math.cos(k*a+t*0.3)*0.45;
+    ctx.lineTo(r*Math.cos(a)*w*0.45,r*Math.sin(a)*h*0.45);
+  } ctx.stroke();
+}
+function phyllotaxis(ctx,p,w,h,t){
+  ctx.beginPath();
+  for(let i=0;i<900;i++){
+    const a=i*(p.golden); const r=Math.sqrt(i/900)*0.48;
+    ctx.lineTo(Math.cos(a+t*0.2)*r*w*0.9*0.5, Math.sin(a+t*0.2)*r*h*0.9*0.5);
+  } ctx.stroke();
+}
+function fig8(ctx,p,w,h,t){
+  ctx.beginPath();
+  for(let i=0;i<1100;i++){
+    const u=i/1100, a=u*2*Math.PI;
+    const x=Math.sin(a); const y=Math.sin(2*a+p.ph)+0.3*Math.sin(a*3+t*0.6);
+    ctx.lineTo(x*w*0.42, y*h*0.35);
+  } ctx.stroke();
+}
+function epicycle(ctx,p,w,h,t){
+  ctx.beginPath();
+  for(let i=0;i<1300;i++){
+    const u=i/1300, a=u*2*Math.PI;
+    const x = Math.cos(a)+0.33*Math.cos(p.n*a+t*0.4);
+    const y = Math.sin(a)+0.33*Math.sin((p.n+1)*a-t*0.5);
+    ctx.lineTo(x*w*0.28, y*h*0.28);
+  } ctx.stroke();
+}
+function vectorscope(ctx,w,h){
+  if(!R.vis.analyser) return;
+  const N=512; const L=new Float32Array(N);
+  R.vis.analyser.getFloatTimeDomainData(L);
+  ctx.beginPath();
+  for(let i=0;i<N;i++){
+    const u=i/N; const x=(u-0.5)*w*0.8*0.5;
+    const y=L[i]*h*0.4;
+    ctx.lineTo(x,y);
+  } ctx.stroke();
+}
+function torusKnot(ctx,p,w,h,t){
+  ctx.beginPath();
+  for(let i=0;i<1300;i++){
+    const u=i/1300*2*Math.PI;
+    const x = (2+Math.cos(p.q*u))*Math.cos(p.p*u+t*0.1);
+    const y = (2+Math.cos(p.q*u))*Math.sin(p.p*u+t*0.1);
+    const z = Math.sin(p.q*u);
+    ctx.lineTo(x*w*0.08, (y+z*0.5)*h*0.08);
+  } ctx.stroke();
+}
+function flowfield(ctx,p,w,h,t){
+  const n=280; ctx.beginPath();
+  for(let i=0;i<n;i++){
+    const a = i*(Math.PI*2/n);
+    const r = 0.44*Math.sin(a*3+p.ff+t*0.3);
+    ctx.lineTo(Math.cos(a)*r*w*0.9*0.5, Math.sin(a)*r*h*0.9*0.5);
+  } ctx.stroke();
+}
+function harmonicBloom(ctx,p,w,h,t){
+  ctx.beginPath();
+  for(let i=0;i<1200;i++){
+    const u=i/1200, a=u*2*Math.PI;
+    const r = 0.38+0.08*Math.sin(p.h1*a+t*0.4)+0.06*Math.sin(p.h2*a-t*0.5);
+    ctx.lineTo(Math.cos(a)*r*w*0.9*0.5, Math.sin(a)*r*h*0.9*0.5);
+  } ctx.stroke();
+}
+
+/* -----------------------------------------------------------
+   Audio: 10 seeded voices with FX chains, limiter, etc.
+------------------------------------------------------------*/
+class Voice {
+  constructor(T, rnd, noteHz, index){
+    this.T=T; this.rnd=rnd; this.index=index;
+    // Gain staging
+    this.env = new T.Gain(0).toDestination();
+    this.gain = new T.Gain(0.2);
+    this.env.connect(this.gain);
+
+    // Category selection
+    const cat = rnd.choice(['FM','AM','Subtractive','Additive','Wavetable','Noise','RingMod']);
+    this.category = cat;
+
+    // Osc sources (prebuilt; we route one as needed)
+    this.mainOsc = new T.Oscillator({ type:rnd.choice(['sine','triangle','sawtooth','square']), frequency:noteHz }).start();
+    this.modOsc  = new T.Oscillator({ type:rnd.choice(['sine','triangle','sine','sine']), frequency:noteHz * (1 + rnd.float(-0.5,0.5)) }).start();
+    this.noise   = new T.Noise(rnd.choice(['white','pink','brown'])).start();
+
+    // Ring mod
+    this.ring = new T.Multiply();
+
+    // Filters / dynamics
+    this.pre = new T.Gain(1);
+    this.post = new T.Gain(1);
+    this.filter = new T.Filter({ type: rnd.choice(['lowpass','bandpass','highpass']), frequency: 800 + rnd.float(0,4800), Q: rnd.float(0.2, 1.4) });
+
+    // FX chain seeded
+    this.fx = [];
+    if(rnd.bool(0.9)) this.fx.push(new T.Reverb({ decay:rnd.float(0.8,3.2), wet:rnd.float(0.1,0.35) }));
+    if(rnd.bool(0.8)) this.fx.push(new T.PingPongDelay({ delayTime:rnd.float(0.08,0.32), feedback:rnd.float(0.2,0.6), wet:rnd.float(0.05,0.25) }));
+    if(rnd.bool(0.7)) this.fx.push(new T.Chorus({ frequency:rnd.float(0.4,1.8), depth:rnd.float(0.2,0.7), wet:rnd.float(0.05,0.3) }));
+    if(rnd.bool(0.6)) this.fx.push(new T.BitCrusher({ bits: Math.floor(rnd.float(3,7)) }));
+    if(rnd.bool(0.6)) this.fx.push(new T.AutoFilter({ frequency:rnd.float(0.02,0.2), octaves:rnd.float(1,3), baseFrequency:rnd.float(200,1200), filter:{type:'lowpass'} }).start());
+
+    // Chain
+    let head = this.pre;
+    if(cat==='RingMod'){
+      this.mainOsc.connect(this.ring, 0, 0);
+      this.modOsc.connect(this.ring, 0, 1);
+      head = this.ring;
+    } else if(cat==='Noise'){
+      this.noise.connect(this.filter);
+      head = this.filter;
+    } else if(cat==='AM'){
+      this.modGain = new T.Gain(rnd.float(0.2,0.8));
+      this.modOsc.connect(this.modGain.gain);
+      this.mainOsc.connect(this.modGain);
+      head = this.modGain;
+    } else if(cat==='FM'){
+      this.modAmount = new T.Gain(rnd.float(20,240));
+      this.modOsc.connect(this.modAmount); this.modAmount.connect(this.mainOsc.frequency);
+      head = this.mainOsc;
+    } else if(cat==='Additive'){
+      const partials = Array.from({length: rnd.int(5)+3}, (_,i)=>1/(i+1));
+      const pw = new T.PartialOscillator({ partials }).start();
+      pw.frequency.value = noteHz;
+      this.addOsc = pw; head = pw;
+    } else if(cat==='Wavetable'){
+      const n=32, re=new Float32Array(n), im=new Float32Array(n);
+      for(let i=0;i<n;i++){ re[i]= (i? 1/(i+1)**(1.2+rnd.float(-0.2,0.2)) : 0); im[i]=0; }
+      const wave = T.getContext().createPeriodicWave(re,im,{disableNormalization:false});
+      const os = new T.Oscillator({frequency:noteHz}).set({partials:[], type:'custom'}).start();
+      os._oscillator.setPeriodicWave(wave); head = os; this.wt = os;
+    } else { // Subtractive default
+      head = this.mainOsc;
+    }
+
+    // Connect chain: head -> filter -> (fx...) -> post -> env -> gain -> master
+    head.connect(this.filter);
+    let node = this.filter;
+    this.fx.forEach(fx => { node.connect(fx); node = fx; });
+    node.connect(this.post);
+    this.post.connect(this.env);
+    this.gain.connect(T.Destination);
+  }
+  trigger(on=true, vel=0.8){
+    const now=this.T.now();
+    const g=this.env.gain;
+    if(on){
+      g.cancelAndHoldAtTime(now);
+      g.linearRampToValueAtTime(vel, now+0.01);
+    } else {
+      g.cancelAndHoldAtTime(now);
+      g.linearRampToValueAtTime(0.0, now+0.05);
+    }
+  }
+  setIdlePad(open=0.12, freq=800){
+    // slow filter motion for idle pad timbre variance
+    this.filter.frequency.rampTo(freq, 0.25);
+    this.post.gain.rampTo(open, 0.2);
+  }
+}
+
+/* -----------------------------------------------------------
+   Note library: deterministic 10-note set per seed
+------------------------------------------------------------*/
+function buildNoteLib(rng){
+  // Choose a tonic and mode deterministically; micro-variance allowed
+  const tonics=[48,50,52,53,55,57,59]; // C–B (MIDI)
+  const modes=[[0,2,4,7,9,11],[0,3,5,7,10],[0,2,5,7,9,10],[0,2,3,7,9,10],[0,2,4,5,7,9]];
+  const root = rng.choice(tonics);
+  const mode = rng.choice(modes);
+  const pool = [];
+  for(let i=0;i<20;i++){
+    const deg = mode[rng.int(mode.length)];
+    const oct = rng.int(4)+1; // octaves 1..4 above base
+    const midi = root + deg + 12*oct;
+    pool.push(midi);
+  }
+  const uniq=[];
+  while(uniq.length<10){ uniq.push(pool.splice(rng.int(pool.length),1)[0]); }
+  return uniq.map(m=>440*Math.pow(2,(m-69)/12));
+}
+
+/* -----------------------------------------------------------
+   Boot Signature Composer (3.5–4.0s)
+   - uses all 10 voices at least once
+   - deterministic microtimings/accents/voicing
+------------------------------------------------------------*/
+function scheduleBootSignature(T, rng, noteHzList){
+  const start=T.now()+0.05;
+  const dur= rng.float(3.5,3.9);
+  const end = start + dur;
+  const events=[];
+  // 4 segments: chirps, trills, gliss, stacked chord hit+tail
+  const seg = [
+    {len: dur*0.22, type:'chirp'},
+    {len: dur*0.28, type:'trill'},
+    {len: dur*0.28, type:'gliss'},
+    {len: dur*0.22, type:'stack'}
+  ];
+  let t=start;
+  const used = new Set();
+
+  seg.forEach(s=>{
+    const localNotes = R.prng.shuffle([...noteHzList]).slice(0, rng.int(4)+3);
+    if(s.type==='chirp'){
+      const step=s.len/localNotes.length;
+      localNotes.forEach((hz,i)=>{
+        const v=i%R.voices.length; used.add(v);
+        events.push({t:t+i*step, v, act:true, vel:0.6+rng.float(0,0.35), hz});
+        events.push({t:t+i*step+step*0.8, v, act:false});
+      });
+      t+=s.len;
+    }else if(s.type==='trill'){
+      const v = rng.int(10); used.add(v);
+      const a = rng.choice(localNotes), b = rng.choice(localNotes);
+      const reps = Math.max(8, Math.floor(s.len/0.06));
+      const stp = s.len/reps;
+      for(let i=0;i<reps;i++){
+        events.push({t:t+i*stp, v, act:true, vel:0.5+0.2*Math.sin(i*0.7+rng.float(0,6)), hz:(i%2? a:b)});
+        events.push({t:t+i*stp+stp*0.7, v, act:false});
+      }
+      t+=s.len;
+    }else if(s.type==='gliss'){
+      const v = rng.int(10); used.add(v);
+      const from=rng.choice(localNotes), to=rng.choice(localNotes);
+      // simulate gliss via rapid steps
+      const reps = Math.max(14, Math.floor(s.len/0.035));
+      const stp = s.len/reps;
+      for(let i=0;i<reps;i++){
+        const hz = from + (to-from)*(i/(reps-1));
+        events.push({t:t+i*stp, v, act:true, vel:0.55+0.15*Math.sin(i*0.5), hz});
+        events.push({t:t+i*stp+stp*0.8, v, act:false});
+      }
+      t+=s.len;
+    }else{ // stack chord
+      const hits = R.prng.shuffle([...noteHzList]).slice(0,5+rng.int(3));
+      const when = t + s.len*0.18;
+      hits.forEach((hz,i)=>{
+        const v=(i+rng.int(10))%10; used.add(v);
+        events.push({t:when + i*0.015, v, act:true, vel:0.6+0.25*(i/hits.length), hz});
+      });
+      // release near end
+      const rel = t + s.len*0.9;
+      for(let i=0;i<hits.length;i++){
+        const v=(i)%10; events.push({t:rel + i*0.01, v, act:false});
+      }
+      t+=s.len;
+    }
+  });
+
+  // Ensure all 10 voices used at least once
+  const allIdx=[...Array(10).keys()];
+  allIdx.forEach(i=>{
+    if(!used.has(i)){
+      const at = start + R.prng.float(0.05, dur-0.3);
+      events.push({t:at, v:i, act:true, vel:0.55, hz:R.prng.choice(noteHzList)});
+      events.push({t:at+0.18, v:i, act:false});
+    }
+  });
+
+  // Schedule & log
+  events.sort((a,b)=>a.t-b.t);
+  events.forEach(ev=>{
+    T.Transport.schedule(t=>{
+      const voice=R.voices[ev.v];
+      if(ev.hz) { // gentle retune per event for variety, seeded
+        if(voice.mainOsc) voice.mainOsc.frequency.rampTo(ev.hz, 0.01);
+        if(voice.addOsc) voice.addOsc.frequency.rampTo(ev.hz, 0.01);
+        if(voice.wt) voice.wt.frequency.rampTo(ev.hz, 0.01);
+        if(voice.modOsc) voice.modOsc.frequency.rampTo(ev.hz*(1+R.prng.float(-0.02,0.02)), 0.02);
+      }
+      voice.trigger(ev.act, ev.vel);
+      R._lastVoice = ev.v;
+    }, ev.t);
+  });
+
+  // Brighten scope during signature
+  R.vis.brightUntil = end + 0.2;
+
+  // When done -> idle pad
+  T.Transport.schedule(()=>{
+    R.signatureOver=true;
+    startIdlePad(noteHzList);
+    setStatus('Idle pad');
+  }, end);
+
+  logBoot('Signature length: ~' + (dur.toFixed(2)) + 's; events: ' + events.length);
+}
+
+/* -----------------------------------------------------------
+   Idle Pad (seed-specific, gentle)
+------------------------------------------------------------*/
+function startIdlePad(noteHzList){
+  const T=R.Tone;
+  if(R.idlePad) R.idlePad.dispose?.();
+  const base = R.prng.choice(noteHzList);
+  R.voices.forEach((v,i)=>{
+    v.setIdlePad(0.08+0.02*i, 300 + 80*i);
+    // fade them to a low sustained state
+    v.trigger(true, 0.08+0.02*(i%3));
+  });
+  // subtle breathing using Transport
+  const ev = T.Transport.scheduleRepeat( (time)=>{
+    const v = R.voices[R.prng.int(R.voices.length)];
+    v.post.gain.rampTo(0.12+R.prng.float(0,0.06), 0.25);
+    R._lastVoice = v.index;
+  }, 0.8+R.prng.float(0,0.6), T.now()+0.2);
+  R.idlePad={ ev };
+}
+
+/* -----------------------------------------------------------
+   Sequencer (record/play/save/load)
+------------------------------------------------------------*/
+function initSequencer(){
+  R.seq.grid = Array.from({length:64}, ()=>[]);
+  R.seq.steps = clamp(parseInt(document.getElementById('steps').value)||16,8,64);
+  R.seq.bpm = clamp(parseInt(document.getElementById('bpm').value)||110,40,220);
+  R.seq.loop = document.getElementById('loop').checked;
+  R.Tone.Transport.bpm.value = R.seq.bpm;
+  R.seq.pos = 0;
+
+  if(R.seq.loopEv) R.Tone.Transport.clear(R.seq.loopEv);
+  R.seq.loopEv = R.Tone.Transport.scheduleRepeat( (time)=>{
+    const step = R.seq.pos % R.seq.steps;
+    const hits = R.seq.grid[step];
+    hits.forEach(d=>{
+      const idx = d.voice;
+      const vel = d.vel ?? 0.7;
+      const hz  = d.hz ?? d.libHz;
+      const v = R.voices[idx];
+      if(hz){
+        v.mainOsc?.frequency.rampTo(hz, 0.005);
+        v.addOsc?.frequency.rampTo(hz, 0.005);
+        v.wt?.frequency.rampTo(hz, 0.005);
+      }
+      v.trigger(true, vel);
+      R.Tone.Transport.scheduleOnce(()=>v.trigger(false, vel), "+0.12");
+      R._lastVoice = idx;
+    });
+    R.seq.pos++;
+  }, "16n", R.Tone.now()+0.1);
+}
+
+function recordHit(idx){
+  if(!R.seq.recording) return;
+  const step = R.seq.pos % R.seq.steps;
+  const libHz = R._lib[idx % R._lib.length];
+  const vel = 0.6 + R.prng.float(0,0.35);
+  R.seq.grid[step].push({ voice:idx, vel, libHz });
+}
+
+function saveJSON(){
+  const data = {
+    seed:R.seed, steps:R.seq.steps, bpm:R.seq.bpm, loop:R.seq.loop, grid:R.seq.grid
+  };
+  const blob = new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob); a.download=`seed-${R.seed}-pattern.json`; a.click();
+}
+function loadJSON(obj){
+  if(obj.seed && obj.seed!==R.seed){ setSeed(obj.seed); }
+  R.seq.steps = clamp(obj.steps||16,8,64);
+  R.seq.bpm = clamp(obj.bpm||110,40,220);
+  R.seq.loop = !!obj.loop;
+  R.seq.grid = (obj.grid||Array.from({length:64},()=>[])).slice(0,64);
+  document.getElementById('steps').value = R.seq.steps;
+  document.getElementById('bpm').value = R.seq.bpm;
+  document.getElementById('loop').checked = R.seq.loop;
+  R.Tone.Transport.bpm.rampTo(R.seq.bpm, 0.1);
+}
+
+/* -----------------------------------------------------------
+   App Boot / Seed / Build voices & visuals
+------------------------------------------------------------*/
+function setStatus(s, warn=false){ R.ui.status.textContent=s; R.ui.status.style.color = warn ? 'var(--warn)' : 'var(--dim)'; }
+function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
+
+function setSeed(seedStr){
+  R.prng = makePRNG(seedStr);
+  R.seed = R.prng.seed;
+  R.ui.seed.value = R.seed;
+  const noteLib = buildNoteLib(R.prng);
+  R._lib = noteLib;
+  logBoot(`Seed: ${R.seed}`);
+  logBoot(`Note library (Hz): ${noteLib.map(n=>n.toFixed(2)).join(', ')}`);
+
+  // Build visual mapping
+  const perm = R.prng.shuffle([...Array(10).keys()]);
+  R.vis.algoForVoice = perm.map(i=>i%10);
+  R.vis.algoParams = perm.map(()=>({
+    a: 2+R.prng.int(5), b:2+R.prng.int(5), off:R.prng.float(0,6), off2:R.prng.float(0,6),
+    delta:R.prng.float(0,Math.PI), twist:3+R.prng.int(6), pm:R.prng.float(0,6),
+    k:3+R.prng.int(5), golden: (Math.PI*(3-Math.sqrt(5))) + R.prng.float(-0.02,0.02),
+    ph:R.prng.float(0,6), n:3+R.prng.int(4), p:2+R.prng.int(3), q:3+R.prng.int(4),
+    ff:R.prng.float(0,6), h1:2+R.prng.int(5), h2:3+R.prng.int(6)
+  }));
+  logBoot('Visual mapping (voice → algo): ' + perm.map((v,i)=>`${i}:${AlgoNames[v%10]}`).join(', '));
+
+  // Rebuild voices if Tone present
+  if(R.Tone){
+    // clear existing
+    R.voices.forEach(v=>{
+      try{ v.trigger(false); }catch(_){}
+    });
+    R.voices.length=0;
+    noteLib.forEach((hz,i)=> R.voices.push(new Voice(R.Tone, R.prng, hz, i)));
+    setStatus('Voices ready');
+  }
+}
+
+function boot(){
+  const T = R.Tone;
+
+  // Master bus: limiter + gentle comp
+  const comp = new T.Compressor({ threshold:-18, ratio:3, attack:0.01, release:0.2 });
+  const limit= new T.Limiter(-1);
+  T.Destination.chain(comp, limit);
+
+  // Visual analyser
+  R.vis.analyser = new T.Analyser('waveform', 512);
+  const tap = new T.Gain(0.9);
+  tap.connect(R.vis.analyser);
+  // Tap post-voicing (each voice already goes to Destination; mirror a low-level tap)
+  const splitter = new T.Gain(0.0001).toDestination(); // inaudible tap
+  tap.connect(splitter);
+
+  // Initial seed & voices
+  setSeed(R.seed);
+
+  // Sequencer
+  initSequencer();
+
+  // Boot signature
+  if(!R.bootScheduled){
+    scheduleBootSignature(T, R.prng, R._lib);
+    R.bootScheduled=true;
+    setStatus('Playing signature…');
+  }
+
+  // Transport
+  if(T.Transport.state!=='started') T.Transport.start('+0.01');
+
+  // Visual loop
+  setupScope();
+  requestAnimationFrame(drawScope);
+}
+
+/* -----------------------------------------------------------
+   UI wire-up
+------------------------------------------------------------*/
+document.getElementById('bootHead').addEventListener('click', ()=> document.getElementById('bootLog').classList.toggle('open'));
+document.getElementById('power').addEventListener('click', async ()=>{
+  if(!R.Tone){
+    try{
+      await (window.AudioContext||window.webkitAudioContext);
+      await window?.Tone?.start?.();
+    }catch(_){}
+    loadToneJSAndBoot({ setLoaderStatus:(s,err)=>setStatus(s,!!err), runtimeState:R, boot:()=>{
+      // After Tone module, must call Tone.start from user gesture
+      R.Tone.start().then(()=>{
+        setStatus('Audio engine ready');
+        boot();
+      });
+    }});
+  }else{
+    // toggle transport
+    if(R.Tone.Transport.state==='started'){ R.Tone.Transport.pause(); setStatus('Paused'); }
+    else { R.Tone.Transport.start(); setStatus(R.signatureOver?'Idle pad':'Playing signature…'); }
+  }
+});
+document.getElementById('reseed').addEventListener('click', ()=>{
+  const val = document.getElementById('seed').value.trim();
+  setSeed(val || Math.random().toString(36).slice(2));
+  if(R.Tone) { initSequencer(); setStatus('Seed applied'); }
+});
+document.getElementById('bpm').addEventListener('input', e=>{
+  const v = clamp(parseInt(e.target.value)||110,40,220);
+  R.seq.bpm=v; if(R.Tone) R.Tone.Transport.bpm.rampTo(v,0.05);
+});
+document.getElementById('steps').addEventListener('input', e=>{
+  R.seq.steps = clamp(parseInt(e.target.value)||16,8,64);
+});
+document.getElementById('loop').addEventListener('change', e=>{
+  R.seq.loop = !!e.target.checked;
+});
+document.getElementById('rec').addEventListener('click', ()=>{
+  R.seq.recording = !R.seq.recording; document.getElementById('rec').classList.toggle('primary', R.seq.recording);
+});
+document.getElementById('play').addEventListener('click', ()=>{
+  if(R.Tone) { R.Tone.Transport.start(); setStatus('Playing'); }
+});
+document.getElementById('stop').addEventListener('click', ()=>{
+  if(R.Tone){
+    R.Tone.Transport.stop();
+    R.seq.pos=0;
+    setStatus('Stopped');
+  }
+});
+document.getElementById('save').addEventListener('click', saveJSON);
+document.getElementById('loadFile').addEventListener('change', async (e)=>{
+  const f=e.target.files[0]; if(!f) return;
+  const txt = await f.text();
+  try{ const obj=JSON.parse(txt); loadJSON(obj); setStatus('Pattern loaded'); }
+  catch(err){ setStatus('Load error', true); console.error(err); }
+});
+
+// Keyboard mapping 0–9
+window.addEventListener('keydown', e=>{
+  if(!R.Tone) return;
+  const d = e.key;
+  const map = { '0':0,'1':1,'2':2,'3':3,'4':4,'5':5,'6':6,'7':7,'8':8,'9':9 };
+  if(d in map){
+    const idx = map[d];
+    const v = R.voices[idx];
+    if(!v) return;
+    v.trigger(true, 0.7);
+    R.Tone.Transport.scheduleOnce(()=>v.trigger(false,0.7), "+0.15");
+    R._lastVoice = idx;
+    recordHit(idx);
+  }
+});
+
+/* -----------------------------------------------------------
+   Initialize seed from URL or generate
+------------------------------------------------------------*/
+(function init(){
+  const url = new URL(location.href);
+  const urlSeed = url.searchParams.get('seed');
+  R.seed = (urlSeed && urlSeed.trim()) || Math.random().toString(36).slice(2);
+  R.ui.seed.value = R.seed;
+  setStatus('Click Power to begin');
+})();
+
+</script>
+</body>
+</html>

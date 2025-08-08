@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed-Driven Oscilloscope Synthesizer</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+        }
+        #powerButton {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            z-index: 10;
+            background-color: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+        #powerButton.on {
+            background-color: #0a0;
+            color: #000;
+        }
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            z-index: 10;
+            background-color: rgba(0, 15, 0, 0.7);
+            padding: 10px;
+            font-size: 12px;
+            border: 1px solid #0f0;
+        }
+        #xy-display {
+            flex: 1;
+            background-color: #000;
+            display: block;
+        }
+        #controls {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px;
+            background-color: #111;
+            border-top: 1px solid #0f0;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        button, input, select {
+            background-color: #333;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 5px;
+            font-family: 'Courier New', monospace;
+        }
+        canvas {
+            image-rendering: crisp-edges;
+            image-rendering: pixelated;
+        }
+    </style>
+</head>
+<body>
+    <button id="powerButton">POWER</button>
+    <canvas id="xy-display"></canvas>
+    <div id="ui-overlay">
+        <div>Seed: <span id="seed-display">-</span></div>
+        <div>BPM: <span id="bpm-display">120</span></div>
+        <div id="meters">Meters: -- --</div>
+    </div>
+    <div id="controls">
+        <div class="control-group">
+            <button id="recordBtn">REC</button>
+            <button id="playBtn">PLAY</button>
+            <button id="stopBtn">STOP</button>
+        </div>
+        <div class="control-group">
+            <label for="bpmInput">BPM:</label>
+            <input type="number" id="bpmInput" value="120" min="30" max="300" style="width: 60px;">
+        </div>
+        <div class="control-group">
+            <button id="saveBtn">SAVE</button>
+            <button id="loadBtn">LOAD</button>
+            <input type="file" id="fileInput" accept=".json" style="display: none;">
+        </div>
+    </div>
+
+    <script>
+        // --- Utility Functions ---
+        function getQueryParam(param) {
+            const urlParams = new URLSearchParams(window.location.search);
+            return urlParams.get(param);
+        }
+
+        function generateRandomSeed() {
+            return Math.floor(Math.random() * 1000000000).toString();
+        }
+
+        // --- Seeded PRNG (Mulberry32) ---
+        function mulberry32(seed) {
+            return function() {
+                let t = seed += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+
+        // --- State ---
+        const state = {
+            isPoweredOn: false,
+            seed: null,
+            rng: null,
+            Tone: null,
+            voices: [],
+            xyAlgorithms: [],
+            sequence: Array(16).fill(null),
+            isRecording: false,
+            isPlaying: false,
+            currentStep: 0,
+            sequenceStartTime: 0,
+            bpm: 120,
+            loop: true,
+            // UI Elements - Will be set after DOM loads
+            powerButton: null,
+            seedDisplay: null,
+            bpmDisplay: null,
+            bpmInput: null,
+            recordBtn: null,
+            playBtn: null,
+            stopBtn: null,
+            saveBtn: null,
+            loadBtn: null,
+            fileInput: null,
+            meters: null,
+            canvas: null,
+            ctx: null,
+            // Animation
+            animationId: null,
+            lastX: 0,
+            lastY: 0,
+        };
+
+        // --- Tone.js Loader ---
+        function loadToneJSAndBoot({ toneUrl, setLoaderStatus, runtimeState, boot }) {
+            setLoaderStatus('Loading Audio Engine...');
+            import(toneUrl).then(() => {
+                runtimeState.Tone = window.Tone;
+                console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                boot();
+            }).catch(err => {
+                setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                console.error('[BOP Matrix] Critical Tone.js load error:', err);
+            });
+        }
+
+        // --- Core Boot Functions ---
+        function setLoaderStatus(message, isError = false) {
+            console.log(message);
+            if (isError) {
+                alert(message); // Simple error display
+            }
+        }
+
+        function finalizeBoot() {
+            if (!state.Tone) {
+                console.error("Tone.js not properly set in state!");
+                return;
+            }
+            console.log("Finalizing boot and setting up audio/visuals...");
+            try {
+                initializeCanvas();
+                initializePRNG();
+                initializeXYAlgorithms();
+                initializeVoices();
+                setupTransport();
+                
+                // Update UI to reflect powered on state
+                state.powerButton.textContent = "ON";
+                state.powerButton.classList.add("on");
+                state.seedDisplay.textContent = state.seed;
+                state.bpmDisplay.textContent = state.bpm;
+                
+                // Play boot signature after a short delay to ensure setup
+                setTimeout(playBootSignature, 500);
+
+            } catch (e) {
+                console.error("Error during final boot steps:", e);
+            }
+        }
+
+        function boot() {
+            console.log("Boot function called.");
+            // The actual setup dependent on Tone and DOM will happen in finalizeBoot
+            // after AudioContext resume.
+        }
+
+
+        // --- Initialization ---
+        function initializePRNG() {
+            state.rng = mulberry32(parseInt(state.seed, 10));
+        }
+
+        function initializeCanvas() {
+            state.ctx = state.canvas.getContext('2d');
+            function resizeCanvas() {
+                state.canvas.width = window.innerWidth;
+                state.canvas.height = window.innerHeight - document.getElementById('controls').offsetHeight;
+                state.ctx.fillStyle = '#000';
+                state.ctx.fillRect(0, 0, state.canvas.width, state.canvas.height);
+                state.ctx.strokeStyle = '#0f0';
+                state.ctx.lineWidth = 1;
+            }
+            window.addEventListener('resize', resizeCanvas);
+            resizeCanvas();
+        }
+
+        function initializeXYAlgorithms() {
+            const algorithms = [
+                (t, params) => {
+                    const a = params.a || 3;
+                    const b = params.b || 2;
+                    const delta = params.delta || 0;
+                    const x = Math.sin(a * t + delta);
+                    const y = Math.sin(b * t);
+                    return { x, y };
+                },
+                (t, params) => {
+                    const turns = params.turns || 5;
+                    const precession = params.precession || 0.1;
+                    const r = t / (2 * Math.PI);
+                    const angle = t * turns + precession * t * t;
+                    const x = r * Math.cos(angle);
+                    const y = r * Math.sin(angle);
+                    return { x, y };
+                },
+                (t, params) => {
+                    const k = params.k || 3;
+                    const amp = params.amp || 0.8;
+                    const r = amp * Math.cos(k * t);
+                    const x = r * Math.cos(t);
+                    const y = r * Math.sin(t);
+                    return { x, y };
+                },
+                (t, params) => {
+                    const c = params.c || 2;
+                    const angle = t * 137.508 * Math.PI / 180;
+                    const r = c * Math.sqrt(t / (2 * Math.PI));
+                    const x = r * Math.cos(angle);
+                    const y = r * Math.sin(angle);
+                    return { x, y };
+                },
+                (t, params) => {
+                    const morph = params.morph || 0.5;
+                    const x = Math.sin(t);
+                    const y = Math.sin(2 * t) * (1 - morph) + Math.sin(t) * Math.cos(t) * morph;
+                    return { x, y };
+                },
+                (t, params) => {
+                    let x = 0, y = 0;
+                    const numCycles = params.numCycles || 3;
+                    for (let i = 1; i <= numCycles; i++) {
+                        const freq = i;
+                        const amp = 1 / (i * i);
+                        x += amp * Math.cos(freq * t);
+                        y += amp * Math.sin(freq * t);
+                    }
+                    return { x, y };
+                },
+                (t, params) => {
+                    const freqX = params.freqX || 1;
+                    const freqY = params.freqY || 1.5;
+                    const phaseY = params.phaseY || Math.PI / 2;
+                    const x = Math.sin(freqX * t);
+                    const y = Math.sin(freqY * t + phaseY);
+                    return { x, y };
+                },
+                (t, params) => {
+                    const p = params.p || 3;
+                    const q = params.q || 2;
+                    const r = 2 + Math.cos(q * t / p);
+                    const x = r * Math.cos(t);
+                    const y = r * Math.sin(t);
+                    const z = Math.sin(q * t / p);
+                    const z_influence = 0.3;
+                    return { x: x * (1 - z_influence * Math.abs(z)), y: y * (1 - z_influence * Math.abs(z)) };
+                },
+                (t, params) => {
+                    const scale = params.scale || 0.5;
+                    const speed = params.speed || 1;
+                    const x_t = t * speed;
+                    const noise = (x) => Math.sin(x) * 0.5 + Math.sin(x * 0.37) * 0.25 + Math.sin(x * 2.17) * 0.125;
+                    const x = noise(x_t) * scale;
+                    const y = noise(x_t + 100) * scale;
+                    return { x, y };
+                },
+                (t, params) => {
+                    let x = 0, y = 0;
+                    const harmonics = params.harmonics || [1, 2, 3];
+                    const bloom = params.bloom || 0.1;
+                    harmonics.forEach(h => {
+                        const amp = 1 / h;
+                        const angle = t * h;
+                        x += amp * Math.cos(angle);
+                        y += amp * Math.sin(angle);
+                    });
+                    const r = Math.sqrt(x*x + y*y);
+                    const bloom_factor = 1 + bloom * Math.sin(r * 10);
+                    return { x: x * bloom_factor, y: y * bloom_factor };
+                }
+            ];
+
+            const shuffledIndices = Array.from({length: algorithms.length}, (_, i) => i);
+            for (let i = shuffledIndices.length - 1; i > 0; i--) {
+                const j = Math.floor(state.rng() * (i + 1));
+                [shuffledIndices[i], shuffledIndices[j]] = [shuffledIndices[j], shuffledIndices[i]];
+            }
+            state.xyAlgorithms = shuffledIndices.map(i => algorithms[i]);
+        }
+
+        function initializeVoices() {
+            if (!state.Tone) {
+                console.error("Tone.js not available for voice initialization!");
+                return;
+            }
+            state.voices = [];
+            const voiceTypes = ['fm', 'am', 'subtractive', 'additive', 'wavetable', 'noise', 'ringmod', 'duo', 'pluck', 'metal'];
+            const shuffledVoiceTypes = [...voiceTypes];
+            for (let i = shuffledVoiceTypes.length - 1; i > 0; i--) {
+                const j = Math.floor(state.rng() * (i + 1));
+                [shuffledVoiceTypes[i], shuffledVoiceTypes[j]] = [shuffledVoiceTypes[j], shuffledVoiceTypes[i]];
+            }
+
+            for (let i = 0; i < 10; i++) {
+                const type = shuffledVoiceTypes[i];
+                let synth, effectChain, xyParams = {};
+
+                try {
+                    switch (type) {
+                        case 'fm':
+                            synth = new state.Tone.FMSynth({
+                                harmonicity: 3 * state.rng() + 1,
+                                modulationIndex: 10 * state.rng() + 5,
+                                oscillator: { type: "sine" },
+                                envelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.5 },
+                                modulation: { type: "square" },
+                                modulationEnvelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.5 }
+                            }).toDestination();
+                            break;
+                        case 'am':
+                            synth = new state.Tone.AMSynth({
+                                harmonicity: 2 * state.rng() + 1,
+                                oscillator: { type: "sine" },
+                                envelope: { attack: 0.01, decay: 0.1, sustain: 0.3, release: 0.5 },
+                                modulation: { type: "square" },
+                                modulationEnvelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.5 }
+                            }).toDestination();
+                            break;
+                        case 'subtractive':
+                            synth = new state.Tone.Synth({
+                                oscillator: { type: "sawtooth" },
+                                envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.5 }
+                            });
+                            const filter = new state.Tone.Filter(500 + 3000 * state.rng(), "lowpass").toDestination();
+                            synth.connect(filter);
+                            synth = filter;
+                            break;
+                        case 'additive':
+                            const gain = new state.Tone.Gain().toDestination();
+                            const osc1 = new state.Tone.Oscillator(220, "sine").connect(gain);
+                            const osc2 = new state.Tone.Oscillator(440, "sine").connect(gain);
+                            const osc3 = new state.Tone.Oscillator(660, "sine").connect(gain);
+                            synth = {
+                                triggerAttackRelease: (note, dur) => {
+                                    osc1.triggerAttackRelease(note, dur);
+                                    osc2.triggerAttackRelease(state.Tone.Frequency(note).transpose(12), dur);
+                                    osc3.triggerAttackRelease(state.Tone.Frequency(note).transpose(19), dur);
+                                },
+                                dispose: () => { osc1.dispose(); osc2.dispose(); osc3.dispose(); gain.dispose(); }
+                            };
+                            break;
+                        case 'wavetable':
+                            const real = new Float32Array(1024);
+                            const imag = new Float32Array(1024);
+                            for (let i = 0; i < 1024; i++) {
+                                real[i] = state.rng() * 2 - 1;
+                                imag[i] = state.rng() * 2 - 1;
+                            }
+                            const periodicWave = state.Tone.getContext().createPeriodicWave(real, imag);
+                            synth = new state.Tone.Synth({
+                                oscillator: { type: "custom", periodicWave: periodicWave },
+                                envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.5 }
+                            }).toDestination();
+                            break;
+                        case 'noise':
+                            synth = new state.Tone.NoiseSynth({
+                                noise: { type: "white" },
+                                envelope: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.2 }
+                            }).toDestination();
+                            break;
+                        case 'ringmod':
+                            const ringOsc = new state.Tone.Oscillator(440, "sine");
+                            const ringMod = new state.Tone.Multiply().toDestination();
+                            ringOsc.connect(ringMod, 0, 1);
+                            synth = {
+                                triggerAttackRelease: (note, dur) => {
+                                    ringOsc.frequency.value = state.Tone.Frequency(note).toFrequency();
+                                    ringOsc.start();
+                                    ringOsc.stop(`+${dur}`);
+                                },
+                                dispose: () => { ringOsc.dispose(); ringMod.dispose(); }
+                            };
+                            break;
+                        case 'duo':
+                            synth = new state.Tone.DuoSynth({
+                                vibratoAmount: 0.5 * state.rng(),
+                                vibratoRate: 5 * state.rng(),
+                                harmonicity: 1.5 * state.rng() + 1,
+                                voice0: { volume: -10, portamento: 0 },
+                                voice1: { volume: -10, portamento: 0 }
+                            }).toDestination();
+                            break;
+                        case 'pluck':
+                            synth = new state.Tone.MetalSynth({
+                                frequency: 200,
+                                envelope: { attack: 0.001, decay: 0.4, release: 0.2 },
+                                harmonicity: 5.1,
+                                modulationIndex: 32,
+                                resonance: 4000,
+                                octaves: 1.5
+                            }).toDestination();
+                            break;
+                        case 'metal':
+                            synth = new state.Tone.MembraneSynth({
+                                pitchDecay: 0.05,
+                                octaves: 8,
+                                envelope: { attack: 0.001, decay: 0.4, sustain: 0.01, release: 1.4 },
+                                oscillator: { type: "sine" }
+                            }).toDestination();
+                            break;
+                        default:
+                            synth = new state.Tone.Synth().toDestination();
+                    }
+
+                    const reverb = new state.Tone.Reverb(1.5 * state.rng() + 0.5).toDestination();
+                    synth.connect(reverb);
+                    effectChain = reverb;
+
+                    xyParams = {
+                        a: Math.floor(state.rng() * 5) + 1,
+                        b: Math.floor(state.rng() * 5) + 1,
+                        delta: state.rng() * Math.PI,
+                        turns: state.rng() * 10 + 1,
+                        precession: state.rng() * 0.5,
+                        k: state.rng() * 5 + 1,
+                        amp: state.rng() * 0.5 + 0.5,
+                        c: state.rng() * 5 + 1,
+                        morph: state.rng(),
+                        numCycles: Math.floor(state.rng() * 4) + 1,
+                        freqX: state.rng() * 3 + 0.5,
+                        freqY: state.rng() * 3 + 0.5,
+                        phaseY: state.rng() * Math.PI,
+                        p: Math.floor(state.rng() * 5) + 2,
+                        q: Math.floor(state.rng() * 5) + 1,
+                        scale: state.rng() * 2,
+                        speed: state.rng() * 2,
+                        harmonics: [1, Math.floor(state.rng() * 4) + 2, Math.floor(state.rng() * 4) + 3],
+                        bloom: state.rng() * 0.5
+                    };
+
+                    state.voices.push({ synth, effectChain, type, xyParams });
+                } catch (e) {
+                    console.error(`Failed to create voice ${i} (${type}):`, e);
+                    // Add a dummy voice to keep index alignment
+                    state.voices.push({ synth: null, effectChain: null, type: 'error', xyParams: {} });
+                }
+            }
+        }
+
+        function setupEventListeners() {
+            if (!state.powerButton) {
+                console.error("DOM not ready for event listener setup!");
+                return;
+            }
+            state.powerButton.addEventListener('click', handlePowerToggle);
+            state.bpmInput.addEventListener('change', handleBpmChange);
+            state.recordBtn.addEventListener('click', handleRecordToggle);
+            state.playBtn.addEventListener('click', handlePlay);
+            state.stopBtn.addEventListener('click', handleStop);
+            state.saveBtn.addEventListener('click', handleSave);
+            state.loadBtn.addEventListener('click', () => state.fileInput.click());
+            state.fileInput.addEventListener('change', handleLoad);
+            document.addEventListener('keydown', handleKeyDown);
+            console.log("Event listeners attached.");
+        }
+
+        function setupTransport() {
+            if (state.Tone) {
+                state.Tone.Transport.bpm.value = state.bpm;
+            }
+        }
+
+        // --- Event Handlers ---
+        function handlePowerToggle() {
+            console.log("Power button clicked. Current state:", state.isPoweredOn);
+            if (state.isPoweredOn) {
+                handleStop(); // Stop everything
+                state.isPoweredOn = false;
+                state.powerButton.textContent = "POWER";
+                state.powerButton.classList.remove("on");
+                if (state.animationId) {
+                    cancelAnimationFrame(state.animationId);
+                    state.animationId = null;
+                }
+                state.ctx.fillStyle = '#000';
+                state.ctx.fillRect(0, 0, state.canvas.width, state.canvas.height);
+                state.seedDisplay.textContent = '-';
+                state.bpmDisplay.textContent = '-';
+                console.log("Powered down.");
+            } else {
+                const urlSeed = getQueryParam('seed');
+                state.seed = urlSeed || generateRandomSeed();
+                console.log("Powering up with seed:", state.seed);
+
+                state.isPoweredOn = true;
+                // Update button immediately to give feedback
+                state.powerButton.textContent = "ON";
+                state.powerButton.classList.add("on");
+
+                loadToneJSAndBoot({
+                    toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+                    setLoaderStatus: setLoaderStatus,
+                    runtimeState: state,
+                    boot: () => {
+                        console.log("Tone.js loaded, calling boot.");
+                        boot();
+                        state.Tone.context.resume().then(() => {
+                            console.log("AudioContext resumed, finalizing boot.");
+                            finalizeBoot();
+                        }).catch(err => {
+                            console.error("Failed to resume AudioContext:", err);
+                        });
+                    }
+                });
+            }
+        }
+
+        function handleBpmChange() {
+            const newBpm = parseInt(state.bpmInput.value);
+            if (!isNaN(newBpm) && newBpm >= 30 && newBpm <= 300) {
+                state.bpm = newBpm;
+                state.bpmDisplay.textContent = state.bpm;
+                if (state.Tone) {
+                    state.Tone.Transport.bpm.value = state.bpm;
+                }
+            }
+        }
+
+        function handleRecordToggle() {
+            state.isRecording = !state.isRecording;
+            state.recordBtn.textContent = state.isRecording ? 'STOP REC' : 'REC';
+            if (state.isRecording) {
+                state.sequence = Array(state.sequence.length).fill(null);
+                state.currentStep = 0;
+            }
+        }
+
+        function handlePlay() {
+            if (!state.Tone || state.sequence.every(step => step === null)) return;
+            handleStop(); // Clear any previous playback
+            state.isPlaying = true;
+            state.currentStep = 0;
+            state.sequenceStartTime = state.Tone.now();
+            state.Tone.Transport.stop();
+            state.Tone.Transport.start(state.sequenceStartTime);
+            scheduleSequence();
+        }
+
+        function handleStop() {
+            state.isPlaying = false;
+            state.isRecording = false;
+            state.recordBtn.textContent = 'REC';
+            if (state.Tone) {
+                state.Tone.Transport.stop();
+                state.Tone.Transport.cancel();
+            }
+        }
+
+        function handleSave() {
+            const dataStr = JSON.stringify({
+                seed: state.seed,
+                sequence: state.sequence,
+                bpm: state.bpm
+            });
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            const exportFileDefaultName = `sequence_${state.seed}.json`;
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+
+        function handleLoad(event) {
+            const file = event.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = function(e) {
+                try {
+                    const data = JSON.parse(e.target.result);
+                    if (data.seed && data.sequence && data.bpm) {
+                        if (state.isPoweredOn) {
+                            state.sequence = data.sequence;
+                            state.bpmInput.value = data.bpm;
+                            handleBpmChange();
+                            console.log("Sequence loaded.");
+                        } else {
+                            alert("Please power on the device first, or reload the page with ?seed=" + data.seed);
+                        }
+                    } else {
+                        throw new Error("Invalid file format.");
+                    }
+                } catch (err) {
+                    console.error("Error loading file:", err);
+                    alert("Failed to load sequence file.");
+                }
+            };
+            reader.readAsText(file);
+            state.fileInput.value = '';
+        }
+
+        function handleKeyDown(event) {
+            if (!state.isPoweredOn) return;
+            const key = event.key;
+            if (key >= '0' && key <= '9') {
+                const index = parseInt(key);
+                triggerVoice(index);
+                if (state.isRecording) {
+                    state.sequence[state.currentStep] = index;
+                    state.currentStep = (state.currentStep + 1) % state.sequence.length;
+                }
+            }
+        }
+
+        // --- Audio Logic ---
+        function triggerVoice(index) {
+            if (index < 0 || index >= state.voices.length || !state.voices[index].synth) return;
+            const voice = state.voices[index];
+            const note = state.Tone.Frequency(200 + index * 50).toNote();
+            const duration = "8n";
+
+            if (voice.synth.triggerAttackRelease) {
+                voice.synth.triggerAttackRelease(note, duration);
+            } else if (voice.synth.triggerAttack) {
+                voice.synth.triggerAttack(note);
+            }
+
+            scheduleXYDrawing(index, duration);
+        }
+
+        function scheduleXYDrawing(index, duration) {
+            if (!state.Tone || !state.xyAlgorithms[index]) return;
+
+            const algorithm = state.xyAlgorithms[index];
+            const params = state.voices[index].xyParams;
+            const startTime = state.Tone.now();
+            const durTime = state.Tone.Time(duration).toSeconds();
+
+            const drawStep = (time) => {
+                if (time > startTime + durTime) return;
+
+                const elapsed = time - startTime;
+                const t = elapsed * 10;
+
+                try {
+                    const point = algorithm(t, params);
+                    drawPoint(point.x, point.y);
+                } catch (e) {
+                    console.error("XY Algorithm error:", e);
+                }
+
+                state.animationId = requestAnimationFrame(drawStep);
+            };
+            cancelAnimationFrame(state.animationId);
+            drawStep(startTime);
+        }
+
+        function drawPoint(x, y) {
+            if (!state.ctx) return;
+            const width = state.canvas.width;
+            const height = state.canvas.height;
+
+            const canvasX = (x * 0.5 + 0.5) * width;
+            const canvasY = (y * 0.5 + 0.5) * height;
+
+            state.ctx.beginPath();
+            state.ctx.moveTo(state.lastX, state.lastY);
+            state.ctx.lineTo(canvasX, canvasY);
+            state.ctx.stroke();
+
+            state.lastX = canvasX;
+            state.lastY = canvasY;
+        }
+
+        function playBootSignature() {
+            if (!state.Tone || state.voices.length < 10) return;
+            console.log("Playing boot signature...");
+
+            const signatureVoices = [0, 2, 4, 6, 8, 1, 3, 5, 7, 9];
+            const timeBetweenNotes = 0.3;
+            const baseNote = 300;
+
+            signatureVoices.forEach((voiceIndex, i) => {
+                // Use Tone's scheduling for precise timing
+                state.Tone.Transport.scheduleOnce((time) => {
+                     if (state.voices[voiceIndex] && state.voices[voiceIndex].synth) {
+                        const note = state.Tone.Frequency(baseNote + i * 25).toNote();
+                        state.voices[voiceIndex].synth.triggerAttackRelease(note, "8n", time);
+                        
+                        // Schedule XY drawing to align with audio event
+                        const drawStartTime = time;
+                        const drawDurTime = state.Tone.Time("8n").toSeconds();
+                        const drawStep = (currentTime) => {
+                             if (currentTime > drawStartTime + drawDurTime) return;
+                             const elapsed = currentTime - drawStartTime;
+                             const t = elapsed * 10;
+                             try {
+                                 const point = state.xyAlgorithms[voiceIndex](t, state.voices[voiceIndex].xyParams);
+                                 drawPoint(point.x, point.y);
+                             } catch (e) { console.error("XY Algorithm error in boot sig:", e); }
+                             requestAnimationFrame(drawStep); // No need to store ID for short bursts
+                        };
+                        drawStep(drawStartTime);
+                     }
+                }, `+${i * timeBetweenNotes}`);
+            });
+
+            state.Tone.Transport.start(); // Start transport to execute scheduled events
+            // Schedule a stop after the signature finishes
+            state.Tone.Transport.scheduleOnce(() => {
+                 state.Tone.Transport.stop();
+                 state.Tone.Transport.cancel(); // Clear schedule
+                 console.log("Boot signature finished.");
+            }, `+${(signatureVoices.length + 1) * timeBetweenNotes}`);
+
+        }
+
+        function scheduleSequence() {
+            if (!state.isPlaying || !state.Tone) return;
+
+            const stepDuration = (60 / state.bpm) / 2; // 8th notes
+            state.sequence.forEach((noteIndex, i) => {
+                if (noteIndex !== null) {
+                    state.Tone.Transport.scheduleOnce(() => {
+                        triggerVoice(noteIndex);
+                    }, `+${i * stepDuration}`);
+                }
+            });
+
+            state.Tone.Transport.scheduleOnce(() => {
+                if (state.loop) {
+                    state.currentStep = 0;
+                    scheduleSequence(); // Reschedule loop
+                }
+            }, `+${state.sequence.length * stepDuration}`);
+        }
+
+        // --- Initialize DOM Elements and Listeners after load ---
+        document.addEventListener('DOMContentLoaded', (event) => {
+            console.log("DOM fully loaded and parsed.");
+            // Assign DOM elements to state
+            state.powerButton = document.getElementById('powerButton');
+            state.seedDisplay = document.getElementById('seed-display');
+            state.bpmDisplay = document.getElementById('bpm-display');
+            state.bpmInput = document.getElementById('bpmInput');
+            state.recordBtn = document.getElementById('recordBtn');
+            state.playBtn = document.getElementById('playBtn');
+            state.stopBtn = document.getElementById('stopBtn');
+            state.saveBtn = document.getElementById('saveBtn');
+            state.loadBtn = document.getElementById('loadBtn');
+            state.fileInput = document.getElementById('fileInput');
+            state.meters = document.getElementById('meters');
+            state.canvas = document.getElementById('xy-display');
+
+            // Setup event listeners now that DOM is ready
+            setupEventListeners();
+        });
+
+    </script>
+</body>
+</html>

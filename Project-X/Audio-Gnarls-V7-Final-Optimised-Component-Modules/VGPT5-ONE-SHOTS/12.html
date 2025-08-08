@@ -1,0 +1,619 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed-Driven Oscilloscope Synthesizer NFT</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            color: #0f0;
+            font-family: 'Courier New', monospace;
+        }
+        #canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 1;
+        }
+        #ui {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            z-index: 2;
+            background-color: rgba(0, 15, 0, 0.5);
+            padding: 5px;
+            font-size: 12px;
+        }
+        #ui button, #ui input, #ui select {
+            background-color: #111;
+            color: #0f0;
+            border: 1px solid #0f0;
+            font-family: 'Courier New', monospace;
+            margin: 2px;
+        }
+        #loader {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            z-index: 10;
+            font-size: 24px;
+            color: #0f0;
+        }
+    </style>
+</head>
+<body>
+    <div id="loader">Initializing...</div>
+    <canvas id="canvas"></canvas>
+    <div id="ui">
+        <button id="power">Power</button>
+        <span>Seed: <span id="seedDisplay">-</span></span>
+        <input type="number" id="bpm" value="120" min="30" max="300" />
+        <button id="record">Rec</button>
+        <button id="play">Play</button>
+        <button id="stop">Stop</button>
+        <button id="loop">Loop</button>
+        <button id="save">Save</button>
+        <button id="load">Load</button>
+        <input type="file" id="fileInput" accept=".json" style="display:none;">
+    </div>
+
+    <script>
+        // --- SEED HANDLING ---
+        const urlParams = new URLSearchParams(window.location.search);
+        let SEED = urlParams.get('seed') || Math.floor(Math.random() * 10000000000).toString();
+        document.getElementById('seedDisplay').textContent = SEED;
+
+        // --- PRNG ---
+        function mulberry32(a) {
+            return function() {
+                var t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+        const rng = mulberry32(parseInt(SEED, 10));
+
+        // --- TONE.JS LOADER ---
+        function loadToneJSAndBoot({ toneUrl, setLoaderStatus, runtimeState, boot }) {
+            setLoaderStatus('Loading Audio Engine...');
+            import(toneUrl).then(() => {
+                runtimeState.Tone = window.Tone;
+                console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                boot();
+            }).catch(err => {
+                setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                console.error('[BOP Matrix] Critical Tone.js load error:', err);
+            });
+        }
+
+        // --- RUNTIME STATE ---
+        const runtimeState = {
+            Tone: null,
+            isPoweredOn: false,
+            isPlaying: false,
+            isRecording: false,
+            isLooping: true,
+            sequence: [],
+            currentStep: 0,
+            voices: [],
+            algorithms: [],
+            algorithmMap: [],
+            visualizer: null,
+            transportCallbackId: null,
+        };
+
+        // --- BOOT FUNCTION ---
+        function boot() {
+            document.getElementById('loader').textContent = 'Initializing System...';
+            setTimeout(() => {
+                initAudio();
+                initVisuals();
+                document.getElementById('loader').style.display = 'none';
+                document.getElementById('power').disabled = false;
+            }, 1000);
+        }
+
+        // --- AUDIO INIT ---
+        function initAudio() {
+            const Tone = runtimeState.Tone;
+
+            // --- VOICE GENERATION ---
+            const voiceTypes = ['fm', 'am', 'subtractive', 'additive', 'wavetable', 'noise', 'ringmod', 'fm', 'am', 'subtractive'];
+            const fxTypes = ['reverb', 'delay', 'chorus', 'distortion', 'filter'];
+
+            for (let i = 0; i < 10; i++) {
+                const voice = {};
+                const type = voiceTypes[i];
+                const fxChoice = fxTypes[Math.floor(rng() * fxTypes.length)];
+                
+                // --- SOURCE ---
+                if (type === 'fm') {
+                    voice.source = new Tone.FMSynth({
+                        harmonicity: 1 + rng() * 4,
+                        modulationIndex: 1 + rng() * 10,
+                        oscillator: { type: ['sine', 'square', 'sawtooth'][Math.floor(rng() * 3)] },
+                        envelope: { attack: 0.01 + rng() * 0.1, decay: 0.1 + rng() * 0.5, sustain: 0.3 + rng() * 0.5, release: 0.1 + rng() * 1 },
+                        modulation: { type: ['sine', 'square', 'triangle'][Math.floor(rng() * 3)] },
+                        modulationEnvelope: { attack: 0.01 + rng() * 0.2, decay: 0.1 + rng() * 0.5, sustain: 0.2 + rng() * 0.6, release: 0.1 + rng() * 1 }
+                    }).toDestination();
+                } else if (type === 'am') {
+                    voice.source = new Tone.AMSynth({
+                        harmonicity: 1 + rng() * 3,
+                        carrier: { type: ['sine', 'sawtooth'][Math.floor(rng() * 2)] },
+                        envelope: { attack: 0.01 + rng() * 0.1, decay: 0.1 + rng() * 0.5, sustain: 0.3 + rng() * 0.5, release: 0.1 + rng() * 1 },
+                        modulation: { type: ['square', 'triangle'][Math.floor(rng() * 2)] },
+                        modulationEnvelope: { attack: 0.01 + rng() * 0.2, decay: 0.1 + rng() * 0.5, sustain: 0.2 + rng() * 0.6, release: 0.1 + rng() * 1 }
+                    }).toDestination();
+                } else if (type === 'subtractive') {
+                    voice.source = new Tone.Synth({
+                        oscillator: { type: 'sawtooth' },
+                        envelope: { attack: 0.01 + rng() * 0.1, decay: 0.1 + rng() * 0.5, sustain: 0.3 + rng() * 0.5, release: 0.1 + rng() * 1 }
+                    }).toDestination();
+                    voice.filter = new Tone.Filter(200 + rng() * 5000, ['lowpass', 'highpass'][Math.floor(rng() * 2)]).toDestination();
+                    voice.source.connect(voice.filter);
+                } else if (type === 'additive') {
+                    const real = new Float32Array(10);
+                    const imag = new Float32Array(10);
+                    for (let j = 0; j < 10; j++) {
+                        real[j] = rng() * 0.5;
+                        imag[j] = rng() * 0.5;
+                    }
+                    const periodicWave = new Tone.PeriodicWave(real, imag);
+                    voice.source = new Tone.Oscillator({ type: 'custom', frequency: 220 }).set({ periodicWave }).toDestination();
+                } else if (type === 'wavetable') {
+                    const real = new Float32Array(32);
+                    const imag = new Float32Array(32);
+                    for (let j = 0; j < 32; j++) {
+                        real[j] = Math.sin(j * 0.5) * rng();
+                        imag[j] = Math.cos(j * 0.5) * rng();
+                    }
+                    const periodicWave = new Tone.PeriodicWave(real, imag);
+                    voice.source = new Tone.Oscillator({ type: 'custom', frequency: 220 }).set({ periodicWave }).toDestination();
+                } else if (type === 'noise') {
+                    voice.source = new Tone.Noise(['white', 'pink', 'brown'][Math.floor(rng() * 3)]).toDestination();
+                    voice.source.volume.value = -10;
+                } else if (type === 'ringmod') {
+                    voice.carrier = new Tone.Oscillator(440 + rng() * 880, ['sine', 'square'][Math.floor(rng() * 2)]).start();
+                    voice.modulator = new Tone.Oscillator(110 + rng() * 220, ['sine', 'triangle'][Math.floor(rng() * 2)]).start();
+                    voice.ringMod = new Tone.Multiply();
+                    voice.carrier.connect(voice.ringMod, 0, 0);
+                    voice.modulator.connect(voice.ringMod, 0, 1);
+                    voice.output = new Tone.Gain();
+                    voice.ringMod.connect(voice.output);
+                    voice.source = voice.output.toDestination();
+                }
+
+                // --- FX ---
+                voice.fx = [];
+                if (fxChoice === 'reverb') {
+                    voice.reverb = new Tone.Reverb(0.5 + rng() * 2).toDestination();
+                    voice.source.connect(voice.reverb);
+                    voice.fx.push(voice.reverb);
+                } else if (fxChoice === 'delay') {
+                    voice.delay = new Tone.FeedbackDelay(0.1 + rng() * 0.5, 0.2 + rng() * 0.6).toDestination();
+                    voice.source.connect(voice.delay);
+                    voice.fx.push(voice.delay);
+                } else if (fxChoice === 'chorus') {
+                    voice.chorus = new Tone.Chorus(2 + rng() * 2, 2 + rng() * 5, 0.3 + rng() * 0.4).toDestination();
+                    voice.source.connect(voice.chorus);
+                    voice.fx.push(voice.chorus);
+                } else if (fxChoice === 'distortion') {
+                    voice.distortion = new Tone.Distortion(0.2 + rng() * 0.6).toDestination();
+                    voice.source.connect(voice.distortion);
+                    voice.fx.push(voice.distortion);
+                } else if (fxChoice === 'filter') {
+                    voice.autoFilter = new Tone.AutoFilter(2 + rng() * 6, 200 + rng() * 5000).toDestination();
+                    voice.autoFilter.start();
+                    voice.source.connect(voice.autoFilter);
+                    voice.fx.push(voice.autoFilter);
+                }
+
+                voice.trigger = (time) => {
+                    if (type === 'noise') {
+                        voice.source.start(time);
+                        voice.source.stop(time + 0.1);
+                    } else {
+                        const note = ['C4', 'D4', 'E4', 'G4', 'A4', 'C5', 'D5', 'E5', 'G5', 'A5'][i];
+                        voice.source.triggerAttackRelease(note, '8n', time);
+                    }
+                };
+                runtimeState.voices.push(voice);
+            }
+
+            // --- MASTER LIMITER ---
+            const limiter = new Tone.Limiter(-1).toDestination();
+            Tone.Destination.connect(limiter);
+
+            // --- BOOT MOTIF ---
+            const bootMotif = () => {
+                console.log("Playing boot motif...");
+                const time = Tone.now();
+                for (let i = 0; i < 10; i++) {
+                    runtimeState.voices[i].trigger(time + i * 0.15);
+                }
+                // Play a simple chord for the remaining voices to ensure all are used
+                runtimeState.voices[0].source.triggerAttackRelease('C4', '4n', time + 1.5);
+                runtimeState.voices[1].source.triggerAttackRelease('E4', '4n', time + 1.5);
+                runtimeState.voices[2].source.triggerAttackRelease('G4', '4n', time + 1.5);
+                runtimeState.voices[3].source.triggerAttackRelease('B4', '4n', time + 1.5);
+                
+                // Return to idle pad after motif
+                setTimeout(() => {
+                    if (runtimeState.isPoweredOn) {
+                        runtimeState.voices[0].source.triggerAttack('C3', time + 3);
+                    }
+                }, 4000);
+            };
+
+            // --- TRANSPORT SCHEDULING ---
+            runtimeState.transportCallbackId = Tone.Transport.scheduleRepeat((time) => {
+                if (runtimeState.isPlaying && runtimeState.sequence.length > 0) {
+                    const event = runtimeState.sequence[runtimeState.currentStep];
+                    if (event) {
+                        runtimeState.voices[event.voice].trigger(time);
+                        runtimeState.visualizer.setAlgorithm(runtimeState.algorithmMap[event.voice]);
+                    }
+                    runtimeState.currentStep = (runtimeState.currentStep + 1) % runtimeState.sequence.length;
+                    if (!runtimeState.isLooping && runtimeState.currentStep === 0) {
+                        stopPlayback();
+                    }
+                }
+            }, "16n");
+
+            // --- EVENT LISTENERS ---
+            document.getElementById('power').onclick = () => {
+                if (!runtimeState.isPoweredOn) {
+                    runtimeState.isPoweredOn = true;
+                    Tone.start();
+                    bootMotif();
+                    document.getElementById('power').textContent = 'Power Off';
+                } else {
+                    runtimeState.isPoweredOn = false;
+                    Tone.Transport.stop();
+                    runtimeState.isPlaying = false;
+                    runtimeState.voices.forEach(v => { if (v.source) v.source.release(Tone.now()); });
+                    document.getElementById('power').textContent = 'Power On';
+                    document.getElementById('play').disabled = true;
+                    document.getElementById('stop').disabled = true;
+                }
+            };
+
+            document.getElementById('bpm').onchange = (e) => {
+                Tone.Transport.bpm.value = parseInt(e.target.value);
+            };
+
+            document.getElementById('record').onclick = () => {
+                if (runtimeState.isPoweredOn) {
+                    runtimeState.isRecording = !runtimeState.isRecording;
+                    document.getElementById('record').textContent = runtimeState.isRecording ? 'Stop Rec' : 'Rec';
+                }
+            };
+
+            document.getElementById('play').onclick = () => {
+                if (runtimeState.isPoweredOn && runtimeState.sequence.length > 0) {
+                    runtimeState.currentStep = 0;
+                    runtimeState.isPlaying = true;
+                    Tone.Transport.start();
+                    document.getElementById('play').disabled = true;
+                    document.getElementById('stop').disabled = false;
+                }
+            };
+
+            document.getElementById('stop').onclick = () => {
+                stopPlayback();
+            };
+
+            document.getElementById('loop').onclick = () => {
+                runtimeState.isLooping = !runtimeState.isLooping;
+                document.getElementById('loop').textContent = runtimeState.isLooping ? 'Loop' : 'No Loop';
+            };
+
+            document.getElementById('save').onclick = () => {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(runtimeState.sequence));
+                const downloadAnchorNode = document.createElement('a');
+                downloadAnchorNode.setAttribute("href", dataStr);
+                downloadAnchorNode.setAttribute("download", `sequence_${SEED}.json`);
+                document.body.appendChild(downloadAnchorNode);
+                downloadAnchorNode.click();
+                downloadAnchorNode.remove();
+            };
+
+            document.getElementById('load').onclick = () => {
+                document.getElementById('fileInput').click();
+            };
+
+            document.getElementById('fileInput').onchange = (event) => {
+                const file = event.target.files[0];
+                if (file) {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        try {
+                            runtimeState.sequence = JSON.parse(e.target.result);
+                            console.log("Sequence loaded:", runtimeState.sequence);
+                        } catch (err) {
+                            console.error("Failed to parse sequence file:", err);
+                        }
+                    };
+                    reader.readAsText(file);
+                }
+            };
+
+            for (let i = 0; i < 10; i++) {
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === i.toString() && runtimeState.isPoweredOn) {
+                        if (runtimeState.isRecording) {
+                            runtimeState.sequence.push({ step: runtimeState.sequence.length, voice: i });
+                        }
+                        runtimeState.voices[i].trigger(Tone.now());
+                        runtimeState.visualizer.setAlgorithm(runtimeState.algorithmMap[i]);
+                    }
+                });
+            }
+
+            // --- ALGORITHM MAPPING ---
+            const algorithmList = [
+                'Lissajous Core', 'Spiral–Precess', 'Polar Rose Sweep', 'Phyllotaxis Orbit',
+                'Figure-8 Morph', 'Epicycle Chain', 'VectorScope XY', 'Torus-Knot Projection',
+                'Audio Flowfield', 'Harmonic Bloom'
+            ];
+            const shuffledAlgorithms = [...algorithmList].sort(() => rng() - 0.5);
+            runtimeState.algorithmMap = shuffledAlgorithms.reduce((map, alg, idx) => {
+                map[idx] = alg;
+                return map;
+            }, {});
+        }
+
+        // --- VISUALS INIT ---
+        function initVisuals() {
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            
+            canvas.width = window.innerWidth * window.devicePixelRatio;
+            canvas.height = window.innerHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+
+            runtimeState.visualizer = new OscilloscopeVisualizer(ctx, canvas, rng);
+        }
+
+        function stopPlayback() {
+            runtimeState.isPlaying = false;
+            runtimeState.Tone.Transport.stop();
+            document.getElementById('play').disabled = false;
+            document.getElementById('stop').disabled = true;
+        }
+
+        // --- VISUALIZER CLASS ---
+        class OscilloscopeVisualizer {
+            constructor(ctx, canvas, rng) {
+                this.ctx = ctx;
+                this.canvas = canvas;
+                this.algorithm = 'Lissajous Core';
+                this.time = 0;
+                this.particleSystems = {
+                    'Audio Flowfield': new ParticleSystem(rng, 500, true),
+                    'Harmonic Bloom': new ParticleSystem(rng, 300, false)
+                };
+                this.analyzer = new runtimeState.Tone.Analyser('fft', 32);
+                runtimeState.Tone.Destination.connect(this.analyzer);
+                this.animate();
+            }
+
+            setAlgorithm(alg) {
+                this.algorithm = alg;
+                if (alg === 'Audio Flowfield') this.particleSystems['Audio Flowfield'].reset();
+                if (alg === 'Harmonic Bloom') this.particleSystems['Harmonic Bloom'].reset();
+            }
+
+            draw() {
+                const w = this.canvas.width / window.devicePixelRatio;
+                const h = this.canvas.height / window.devicePixelRatio;
+                this.ctx.fillStyle = 'rgba(0, 10, 0, 0.15)';
+                this.ctx.fillRect(0, 0, w, h);
+
+                this.ctx.lineWidth = 1;
+                this.ctx.strokeStyle = '#0f0';
+                this.ctx.beginPath();
+
+                const vals = this.analyzer.getValue();
+                const rms = Math.sqrt(vals.reduce((sum, v) => sum + v * v, 0) / vals.length);
+
+                if (this.algorithm === 'Lissajous Core') this.drawLissajous(w, h);
+                else if (this.algorithm === 'Spiral–Precess') this.drawSpiralPrecess(w, h);
+                else if (this.algorithm === 'Polar Rose Sweep') this.drawPolarRose(w, h);
+                else if (this.algorithm === 'Phyllotaxis Orbit') this.drawPhyllotaxis(w, h);
+                else if (this.algorithm === 'Figure-8 Morph') this.drawFigure8(w, h);
+                else if (this.algorithm === 'Epicycle Chain') this.drawEpicycles(w, h);
+                else if (this.algorithm === 'VectorScope XY') this.drawVectorScope(vals, w, h);
+                else if (this.algorithm === 'Torus-Knot Projection') this.drawTorusKnot(w, h);
+                else if (this.algorithm === 'Audio Flowfield') this.particleSystems['Audio Flowfield'].updateAndDraw(this.ctx, rms, w, h);
+                else if (this.algorithm === 'Harmonic Bloom') this.particleSystems['Harmonic Bloom'].updateAndDraw(this.ctx, rms, w, h);
+
+                if (!['Audio Flowfield', 'Harmonic Bloom'].includes(this.algorithm)) {
+                    this.ctx.stroke();
+                }
+            }
+
+            drawLissajous(w, h) {
+                const a = 3 + Math.sin(this.time * 0.01) * 2;
+                const b = 2 + Math.cos(this.time * 0.007) * 1.5;
+                const d = 0.03;
+                for (let t = 0; t < Math.PI * 200; t += 0.05) {
+                    const x = Math.sin(a * t + d);
+                    const y = Math.sin(b * t);
+                    this.ctx.lineTo(w/2 + x * w/3, h/2 + y * h/3);
+                }
+            }
+
+            drawSpiralPrecess(w, h) {
+                for (let i = 0; i < 1000; i++) {
+                    const t = i * 0.05;
+                    const r = 0.3 * t;
+                    const xp = Math.sin(t * 3 + this.time * 0.01);
+                    const yp = Math.cos(t * 2 + this.time * 0.008);
+                    const x = r * (Math.sin(t) + 0.2 * xp);
+                    const y = r * (Math.cos(t) + 0.2 * yp);
+                    if (i === 0) this.ctx.moveTo(w/2 + x * w/3, h/2 + y * h/3);
+                    else this.ctx.lineTo(w/2 + x * w/3, h/2 + y * h/3);
+                }
+            }
+
+            drawPolarRose(w, h) {
+                const k = 1.5 + Math.sin(this.time * 0.002);
+                for (let a = 0; a < Math.PI * 2; a += 0.01) {
+                    const r = Math.cos(k * a);
+                    const x = r * Math.cos(a);
+                    const y = r * Math.sin(a);
+                    if (a === 0) this.ctx.moveTo(w/2 + x * w/3, h/2 + y * h/3);
+                    else this.ctx.lineTo(w/2 + x * w/3, h/2 + y * h/3);
+                }
+            }
+
+            drawPhyllotaxis(w, h) {
+                const n = 200;
+                const angle = Math.PI * (3 - Math.sqrt(5));
+                for (let i = 0; i < n; i++) {
+                    const r = Math.sqrt(i) * 0.05;
+                    const a = i * angle + this.time * 0.005;
+                    const x = r * Math.cos(a);
+                    const y = r * Math.sin(a);
+                    if (i === 0) this.ctx.moveTo(w/2 + x * w/2, h/2 + y * h/2);
+                    else this.ctx.lineTo(w/2 + x * w/2, h/2 + y * h/2);
+                }
+            }
+
+            drawFigure8(w, h) {
+                const morph = Math.sin(this.time * 0.003) * 0.5 + 0.5;
+                for (let t = 0; t < Math.PI * 2; t += 0.02) {
+                    const x = Math.sin(t);
+                    const y = Math.sin(2 * t) * (1 - morph) + Math.sin(t) * morph;
+                    if (t === 0) this.ctx.moveTo(w/2 + x * w/3, h/2 + y * h/3);
+                    else this.ctx.lineTo(w/2 + x * w/3, h/2 + y * h/3);
+                }
+            }
+
+            drawEpicycles(w, h) {
+                const t = this.time * 0.01;
+                let x = 0, y = 0;
+                for (let i = 0; i < 5; i++) {
+                    const R = 0.2 / (i + 1);
+                    const r = 0.1 / (i + 2);
+                    const omega = (i + 1) * 0.5;
+                    x += (R + r) * Math.cos(omega * t);
+                    y += (R + r) * Math.sin(omega * t);
+                    if (i === 0) this.ctx.moveTo(w/2 + x * w/2, h/2 + y * h/2);
+                    else this.ctx.lineTo(w/2 + x * w/2, h/2 + y * h/2);
+                }
+            }
+
+            drawVectorScope(vals, w, h) {
+                if (vals.length < 2) return;
+                for (let i = 0; i < vals.length - 1; i++) {
+                    const x = vals[i];
+                    const y = vals[i + 1];
+                    if (i === 0) this.ctx.moveTo(w/2 + x * w/3, h/2 + y * h/3);
+                    else this.ctx.lineTo(w/2 + x * w/3, h/2 + y * h/3);
+                }
+            }
+
+            drawTorusKnot(w, h) {
+                const p = 3;
+                const q = 2;
+                const phi = this.time * 0.002;
+                for (let t = 0; t < Math.PI * 2; t += 0.02) {
+                    const rt = Math.cos(q * t + phi) + 2;
+                    const x = rt * Math.cos(p * t);
+                    const y = rt * Math.sin(p * t);
+                    if (t === 0) this.ctx.moveTo(w/2 + x * w/6, h/2 + y * h/6);
+                    else this.ctx.lineTo(w/2 + x * w/6, h/2 + y * h/6);
+                }
+            }
+
+            animate = () => {
+                this.time++;
+                this.draw();
+                requestAnimationFrame(this.animate);
+            }
+        }
+
+        class ParticleSystem {
+            constructor(rng, count, isFlowfield) {
+                this.particles = [];
+                this.rng = rng;
+                this.isFlowfield = isFlowfield;
+                this.reset(count);
+            }
+
+            reset(count = this.particles.length) {
+                this.particles = [];
+                for (let i = 0; i < count; i++) {
+                    this.particles.push({
+                        x: this.rng(),
+                        y: this.rng(),
+                        vx: 0, vy: 0,
+                        history: []
+                    });
+                }
+            }
+
+            updateAndDraw(ctx, rms, w, h) {
+                const densityFactor = Math.min(1, rms * 5);
+                const maxHistory = Math.floor(10 + densityFactor * 50);
+
+                ctx.strokeStyle = '#0f0';
+                ctx.lineWidth = 0.5;
+
+                this.particles.forEach(p => {
+                    if (this.isFlowfield) {
+                        const angle = (p.x * 5 + p.y * 3 + Date.now() * 0.001) % (Math.PI * 2);
+                        p.vx += Math.cos(angle) * 0.1;
+                        p.vy += Math.sin(angle) * 0.1;
+                    } else {
+                        const angle = Math.atan2(h/2 - p.y * h, w/2 - p.x * w) + Math.sin(Date.now() * 0.001 + p.x * 10) * 0.5;
+                        p.vx += Math.cos(angle) * 0.1;
+                        p.vy += Math.sin(angle) * 0.1;
+                    }
+
+                    p.vx *= 0.95; p.vy *= 0.95;
+                    p.x += p.vx * 0.5;
+                    p.y += p.vy * 0.5;
+
+                    if (p.x > 1 || p.x < 0 || p.y > 1 || p.y < 0) {
+                        p.x = this.rng();
+                        p.y = this.rng();
+                        p.history = [];
+                    }
+
+                    p.history.push({ x: p.x * w, y: p.y * h });
+                    if (p.history.length > maxHistory) p.history.shift();
+
+                    ctx.beginPath();
+                    for (let i = 1; i < p.history.length; i++) {
+                        const alpha = i / p.history.length;
+                        ctx.globalAlpha = alpha * 0.5;
+                        ctx.moveTo(p.history[i - 1].x, p.history[i - 1].y);
+                        ctx.lineTo(p.history[i].x, p.history[i].y);
+                    }
+                    ctx.stroke();
+                });
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        // --- START LOADING ---
+        document.getElementById('power').disabled = true;
+        loadToneJSAndBoot({
+            toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+            setLoaderStatus: (msg) => { document.getElementById('loader').textContent = msg; },
+            runtimeState,
+            boot
+        });
+    </script>
+</body>
+</html>

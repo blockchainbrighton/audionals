@@ -1,0 +1,1120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Seed-Driven Oscilloscope Synthesizer</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: #0a0a12;
+            color: #e0e0ff;
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        
+        .container {
+            max-width: 1000px;
+            width: 100%;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+        
+        header {
+            text-align: center;
+            padding: 15px 0;
+            border-bottom: 1px solid #2a2a4a;
+        }
+        
+        h1 {
+            font-size: 2.2rem;
+            background: linear-gradient(90deg, #8a2be2, #00bfff);
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            margin-bottom: 8px;
+            letter-spacing: 1px;
+        }
+        
+        .subtitle {
+            color: #a0a0c0;
+            font-size: 1rem;
+        }
+        
+        .scope-container {
+            position: relative;
+            width: 100%;
+            height: 500px;
+            background: #000;
+            border-radius: 8px;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(100, 80, 255, 0.2);
+            border: 1px solid #2a2a4a;
+        }
+        
+        canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        .signature-overlay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: #00ffaa;
+            border: 1px solid #00ffaa;
+            z-index: 10;
+        }
+        
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            background: #121220;
+            padding: 20px;
+            border-radius: 10px;
+            border: 1px solid #2a2a4a;
+        }
+        
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+        }
+        
+        .group-title {
+            font-size: 1.1rem;
+            color: #8a9bff;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .group-title i {
+            font-size: 1.2rem;
+        }
+        
+        .control-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        label {
+            min-width: 80px;
+            font-size: 0.9rem;
+            color: #a0a0c0;
+        }
+        
+        input[type="text"], input[type="number"] {
+            flex: 1;
+            padding: 8px 12px;
+            background: #1a1a2e;
+            border: 1px solid #3a3a5a;
+            border-radius: 4px;
+            color: #e0e0ff;
+            font-size: 0.9rem;
+        }
+        
+        input[type="range"] {
+            flex: 1;
+            height: 6px;
+            background: #1a1a2e;
+            border-radius: 3px;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 18px;
+            height: 18px;
+            background: #6a5acd;
+            border-radius: 50%;
+            cursor: pointer;
+        }
+        
+        button {
+            padding: 10px 15px;
+            background: linear-gradient(135deg, #6a5acd, #4b0082);
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 8px;
+        }
+        
+        button:hover {
+            background: linear-gradient(135deg, #7a6add, #5b1092);
+            transform: translateY(-2px);
+            box-shadow: 0 4px 10px rgba(106, 90, 205, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(0);
+        }
+        
+        button.active {
+            background: linear-gradient(135deg, #00ffaa, #00cc88);
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.4);
+        }
+        
+        .keypad {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            margin-top: 10px;
+        }
+        
+        .key {
+            padding: 15px 5px;
+            background: #1a1a2e;
+            border: 1px solid #3a3a5a;
+            border-radius: 6px;
+            text-align: center;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.1s;
+            user-select: none;
+        }
+        
+        .key:hover {
+            background: #2a2a4a;
+            transform: translateY(-3px);
+        }
+        
+        .key:active {
+            transform: translateY(1px);
+        }
+        
+        .key.active {
+            background: linear-gradient(135deg, #00ffaa, #00cc88);
+            color: #000;
+            box-shadow: 0 0 15px rgba(0, 255, 170, 0.4);
+            border-color: #00ffaa;
+        }
+        
+        .meter {
+            height: 20px;
+            background: #1a1a2e;
+            border-radius: 10px;
+            overflow: hidden;
+            position: relative;
+            border: 1px solid #3a3a5a;
+        }
+        
+        .meter-fill {
+            height: 100%;
+            background: linear-gradient(90deg, #00cc88, #00ffaa);
+            width: 0%;
+            transition: width 0.1s;
+        }
+        
+        .status-bar {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            font-size: 0.9rem;
+            color: #a0a0c0;
+        }
+        
+        .status-indicator {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        
+        .indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #ff4d4d;
+        }
+        
+        .indicator.on {
+            background: #00ffaa;
+            box-shadow: 0 0 8px #00ffaa;
+        }
+        
+        .loader {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 18, 0.95);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(106, 90, 205, 0.3);
+            border-top: 5px solid #6a5acd;
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .loader-text {
+            font-size: 1.2rem;
+            color: #a0a0c0;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        .visual-mode {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+            color: #00ffaa;
+            border: 1px solid #00ffaa;
+        }
+        
+        @media (max-width: 768px) {
+            .controls {
+                grid-template-columns: 1fr;
+            }
+            
+            .scope-container {
+                height: 400px;
+            }
+            
+            .keypad {
+                grid-template-columns: repeat(5, 1fr);
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SEED-DRIVEN OSCILLOSCOPE SYNTHESIZER</h1>
+            <div class="subtitle">Deterministic Audio-Visual NFT Experience</div>
+        </header>
+        
+        <div class="scope-container">
+            <canvas id="oscilloscope"></canvas>
+            <div class="signature-overlay" id="signatureOverlay">BOOT SIGNATURE: ACTIVE</div>
+            <div class="visual-mode" id="visualMode">MODE: Lissajous Core</div>
+        </div>
+        
+        <div class="controls">
+            <div class="control-group">
+                <div class="group-title">SYSTEM</div>
+                <div class="control-row">
+                    <label for="seedInput">Seed:</label>
+                    <input type="text" id="seedInput" value="BOP-MATRIX-2023">
+                    <button id="generateSeed">Generate</button>
+                </div>
+                <div class="control-row">
+                    <button id="powerButton">
+                        <span>POWER ON</span>
+                    </button>
+                </div>
+                <div class="control-row">
+                    <div class="status-bar">
+                        <div class="status-indicator">
+                            <div class="indicator" id="powerIndicator"></div>
+                            <span>Power Status</span>
+                        </div>
+                        <div id="version">Tone.js v14.7.77</div>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="group-title">SEQUENCER</div>
+                <div class="control-row">
+                    <label for="bpmInput">BPM:</label>
+                    <input type="number" id="bpmInput" min="60" max="240" value="120">
+                    <button id="loopButton">LOOP</button>
+                </div>
+                <div class="control-row">
+                    <button id="recordButton">RECORD</button>
+                    <button id="playButton">PLAY</button>
+                    <button id="stopButton">STOP</button>
+                </div>
+                <div class="control-row">
+                    <button id="saveButton">SAVE</button>
+                    <button id="loadButton">LOAD</button>
+                </div>
+            </div>
+            
+            <div class="control-group">
+                <div class="group-title">AUDIO LEVEL</div>
+                <div class="meter">
+                    <div class="meter-fill" id="meterFill"></div>
+                </div>
+                <div class="control-row">
+                    <label for="gainControl">Gain:</label>
+                    <input type="range" id="gainControl" min="0" max="100" value="70">
+                </div>
+            </div>
+        </div>
+        
+        <div class="keypad" id="keypad">
+            <!-- Keys will be generated by JavaScript -->
+        </div>
+    </div>
+    
+    <div class="loader" id="loader">
+        <div class="spinner"></div>
+        <div class="loader-text" id="loaderText">Initializing System...</div>
+    </div>
+    
+    <script>
+        // PRNG implementation for deterministic randomness
+        class PRNG {
+            constructor(seed) {
+                this.seed = seed;
+                this.x = 0;
+                this.y = 0;
+                this.z = 0;
+                this.w = 0;
+                this.reset();
+            }
+            
+            reset() {
+                // Simple hash function to create initial state from seed
+                let h = 1779033703 ^ this.seed.length;
+                for (let i = 0; i < this.seed.length; i++) {
+                    h = Math.imul(h ^ this.seed.charCodeAt(i), 3432918353);
+                    h = h << 13 | h >>> 19;
+                }
+                
+                this.x = h;
+                this.y = 3141592653 ^ h;
+                this.z = 2718281829 ^ h;
+                this.w = 1618033988 ^ h;
+            }
+            
+            // Xorshift128 algorithm
+            next() {
+                let t = this.x ^ (this.x << 11);
+                this.x = this.y;
+                this.y = this.z;
+                this.z = this.w;
+                this.w = (this.w ^ (this.w >>> 19)) ^ (t ^ (t >>> 8));
+                return (this.w >>> 0) / 4294967296;
+            }
+            
+            // Return integer in range [min, max)
+            nextInt(min, max) {
+                return Math.floor(this.next() * (max - min)) + min;
+            }
+            
+            // Return float in range [min, max)
+            nextFloat(min, max) {
+                return this.next() * (max - min) + min;
+            }
+            
+            // Shuffle array in place
+            shuffle(array) {
+                for (let i = array.length - 1; i > 0; i--) {
+                    const j = this.nextInt(0, i + 1);
+                    [array[i], array[j]] = [array[j], array[i]];
+                }
+                return array;
+            }
+        }
+
+        // Global state
+        const state = {
+            isPowered: false,
+            isRecording: false,
+            isPlaying: false,
+            isLooping: true,
+            currentSeed: 'BOP-MATRIX-2023',
+            rng: null,
+            voices: [],
+            visualModes: [],
+            currentVisualMode: 0,
+            sequence: [],
+            currentStep: 0,
+            bpm: 120,
+            gain: 0.7,
+            audioContext: null,
+            masterGain: null,
+            limiter: null,
+            analyser: null,
+            canvas: null,
+            ctx: null,
+            animationId: null,
+            signatureActive: false,
+            signatureStartTime: 0,
+            signatureDuration: 4000, // 4 seconds
+            signatureNotes: [],
+            signatureTimings: [],
+            signatureVoices: [],
+            signaturePlaying: false,
+            idlePad: null,
+            idlePadPlaying: false
+        };
+
+        // Initialize the application
+        function init() {
+            // Get DOM elements
+            state.canvas = document.getElementById('oscilloscope');
+            state.ctx = state.canvas.getContext('2d');
+            
+            // Set up event listeners
+            document.getElementById('powerButton').addEventListener('click', togglePower);
+            document.getElementById('generateSeed').addEventListener('click', generateSeed);
+            document.getElementById('seedInput').addEventListener('change', updateSeed);
+            document.getElementById('bpmInput').addEventListener('change', updateBPM);
+            document.getElementById('gainControl').addEventListener('input', updateGain);
+            document.getElementById('recordButton').addEventListener('click', toggleRecording);
+            document.getElementById('playButton').addEventListener('click', playSequence);
+            document.getElementById('stopButton').addEventListener('click', stopSequence);
+            document.getElementById('loopButton').addEventListener('click', toggleLoop);
+            document.getElementById('saveButton').addEventListener('click', saveSequence);
+            document.getElementById('loadButton').addEventListener('click', loadSequence);
+            
+            // Create keypad
+            createKeypad();
+            
+            // Set canvas size
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // Load Tone.js
+            loadToneJSAndBoot({
+                toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+                setLoaderStatus: updateLoaderStatus,
+                runtimeState: {Tone: null},
+                boot: bootApplication
+            });
+        }
+
+        // Update loader status
+        function updateLoaderStatus(message, isError = false) {
+            const loaderText = document.getElementById('loaderText');
+            loaderText.textContent = message;
+            loaderText.style.color = isError ? '#ff4d4d' : '#a0a0c0';
+        }
+
+        // Load Tone.js and boot the application
+        function loadToneJSAndBoot({toneUrl, setLoaderStatus, runtimeState, boot}) {
+            setLoaderStatus('Loading Audio Engine...');
+            
+            // Simulate loading for demo purposes
+            setTimeout(() => {
+                // In a real implementation, this would load Tone.js
+                runtimeState.Tone = window.Tone || {
+                    version: '14.7.77',
+                    Transport: {
+                        bpm: { value: 120 },
+                        start: () => {},
+                        stop: () => {},
+                        cancel: () => {}
+                    },
+                    Master: { volume: { value: 0 } },
+                    getContext: () => ({ state: 'running' }),
+                    start: () => Promise.resolve()
+                };
+                
+                console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                boot();
+            }, 1500);
+        }
+
+        // Boot the application after Tone.js is loaded
+        function bootApplication() {
+            // Hide loader
+            document.getElementById('loader').classList.add('hidden');
+            
+            // Initialize PRNG with current seed
+            state.rng = new PRNG(state.currentSeed);
+            
+            // Initialize visual modes
+            initVisualModes();
+            
+            // Initialize voices
+            initVoices();
+            
+            // Create boot signature
+            createBootSignature();
+            
+            // Start visualization
+            startVisualization();
+        }
+
+        // Create keypad buttons
+        function createKeypad() {
+            const keypad = document.getElementById('keypad');
+            keypad.innerHTML = '';
+            
+            for (let i = 0; i < 10; i++) {
+                const key = document.createElement('div');
+                key.className = 'key';
+                key.textContent = i;
+                key.dataset.key = i;
+                key.addEventListener('click', () => triggerVoice(i));
+                keypad.appendChild(key);
+            }
+        }
+
+        // Resize canvas to fit container
+        function resizeCanvas() {
+            const container = state.canvas.parentElement;
+            state.canvas.width = container.clientWidth;
+            state.canvas.height = container.clientHeight;
+        }
+
+        // Update seed from input
+        function updateSeed() {
+            state.currentSeed = document.getElementById('seedInput').value || 'BOP-MATRIX-2023';
+            state.rng = new PRNG(state.currentSeed);
+            
+            // Reinitialize voices and signature with new seed
+            if (state.isPowered) {
+                initVoices();
+                createBootSignature();
+            }
+        }
+
+        // Generate a new random seed
+        function generateSeed() {
+            const adjectives = ['Quantum', 'Neural', 'Cosmic', 'Digital', 'Analog', 'Fractal', 'Chaotic', 'Harmonic'];
+            const nouns = ['Resonance', 'Oscillation', 'Frequency', 'Amplitude', 'Phase', 'Spectrum', 'Waveform', 'Synthesis'];
+            const numbers = Math.floor(Math.random() * 10000);
+            
+            const seed = `${adjectives[Math.floor(Math.random() * adjectives.length)]}${nouns[Math.floor(Math.random() * nouns.length)]}${numbers}`;
+            document.getElementById('seedInput').value = seed;
+            updateSeed();
+        }
+
+        // Toggle power state
+        function togglePower() {
+            state.isPowered = !state.isPowered;
+            const button = document.getElementById('powerButton');
+            const indicator = document.getElementById('powerIndicator');
+            
+            if (state.isPowered) {
+                button.innerHTML = '<span>POWER OFF</span>';
+                button.classList.add('active');
+                indicator.classList.add('on');
+                
+                // Start audio context if not already started
+                if (!state.audioContext || state.audioContext.state === 'suspended') {
+                    // In a real implementation, this would resume the audio context
+                    console.log('Audio context started');
+                }
+                
+                // Play boot signature
+                playBootSignature();
+            } else {
+                button.innerHTML = '<span>POWER ON</span>';
+                button.classList.remove('active');
+                indicator.classList.remove('on');
+                
+                // Stop all audio
+                stopAllVoices();
+                stopSequence();
+                
+                // Clear visualization
+                clearVisualization();
+            }
+        }
+
+        // Update BPM from input
+        function updateBPM() {
+            state.bpm = parseInt(document.getElementById('bpmInput').value) || 120;
+            // In a real implementation, this would update Tone.Transport.bpm.value
+        }
+
+        // Update gain from slider
+        function updateGain() {
+            state.gain = document.getElementById('gainControl').value / 100;
+            document.getElementById('meterFill').style.width = `${state.gain * 100}%`;
+            // In a real implementation, this would update the master gain
+        }
+
+        // Initialize visual modes
+        function initVisualModes() {
+            const modes = [
+                'Lissajous Core',
+                'Spiral–Precess',
+                'Polar Rose Sweep',
+                'Phyllotaxis Orbit',
+                'Figure-8 Morph',
+                'Epicycle Chain',
+                'VectorScope XY',
+                'Torus-Knot Projection',
+                'Audio Flowfield',
+                'Harmonic Bloom'
+            ];
+            
+            // Create a deterministic permutation of visual modes
+            const indices = Array.from({length: 10}, (_, i) => i);
+            state.rng.shuffle(indices);
+            
+            state.visualModes = indices.map(i => modes[i]);
+        }
+
+        // Initialize voices
+        function initVoices() {
+            state.voices = [];
+            
+            // Create 10 voices with different synthesis methods
+            for (let i = 0; i < 10; i++) {
+                // Determine synthesis type based on seed
+                const synthTypes = ['fm', 'am', 'subtractive', 'additive', 'wavetable', 'noise', 'ringmod'];
+                const type = synthTypes[state.rng.nextInt(0, synthTypes.length)];
+                
+                // Create voice object
+                const voice = {
+                    id: i,
+                    type: type,
+                    isActive: false,
+                    gain: state.rng.nextFloat(0.3, 0.8),
+                    pan: state.rng.nextFloat(-0.8, 0.8),
+                    // In a real implementation, this would contain Tone.js synth objects
+                    synth: null,
+                    fxChain: []
+                };
+                
+                // Create FX chain based on seed
+                const fxTypes = ['reverb', 'delay', 'chorus', 'phaser', 'bitcrusher', 'filter'];
+                const fxCount = state.rng.nextInt(1, 4);
+                
+                for (let j = 0; j < fxCount; j++) {
+                    const fxType = fxTypes[state.rng.nextInt(0, fxTypes.length)];
+                    voice.fxChain.push({
+                        type: fxType,
+                        params: {
+                            wet: state.rng.nextFloat(0.2, 0.9),
+                            // Additional parameters would be set based on type
+                        }
+                    });
+                }
+                
+                state.voices.push(voice);
+            }
+        }
+
+        // Create boot signature
+        function createBootSignature() {
+            state.signatureNotes = [];
+            state.signatureTimings = [];
+            state.signatureVoices = [];
+            
+            // Generate deterministic signature based on seed
+            const noteCount = state.rng.nextInt(15, 25);
+            let time = 0;
+            
+            for (let i = 0; i < noteCount; i++) {
+                // Select voice (ensure all 10 are used at least once)
+                const voiceId = i < 10 ? i : state.rng.nextInt(0, 10);
+                
+                // Select note from seed-derived library
+                const note = 40 + state.rng.nextInt(0, 30); // MIDI note numbers
+                
+                // Duration and timing
+                const duration = state.rng.nextFloat(0.1, 0.5);
+                const gap = state.rng.nextFloat(0.05, 0.2);
+                
+                state.signatureNotes.push(note);
+                state.signatureTimings.push(time);
+                state.signatureVoices.push(voiceId);
+                
+                time += duration + gap;
+            }
+            
+            // Adjust total duration to be within 3.5-4 seconds
+            const totalTime = time;
+            const scaleFactor = state.signatureDuration / (totalTime * 1000);
+            
+            state.signatureTimings = state.signatureTimings.map(t => t * scaleFactor);
+        }
+
+        // Play boot signature
+        function playBootSignature() {
+            if (!state.isPowered) return;
+            
+            state.signatureActive = true;
+            state.signaturePlaying = true;
+            state.signatureStartTime = Date.now();
+            document.getElementById('signatureOverlay').textContent = 'BOOT SIGNATURE: ACTIVE';
+            
+            // In a real implementation, this would trigger the actual audio playback
+            console.log('Playing boot signature');
+            
+            // Schedule end of signature
+            setTimeout(() => {
+                state.signatureActive = false;
+                state.signaturePlaying = false;
+                document.getElementById('signatureOverlay').textContent = 'BOOT SIGNATURE: COMPLETE';
+                
+                // Start idle pad
+                startIdlePad();
+            }, state.signatureDuration);
+        }
+
+        // Start idle pad after signature
+        function startIdlePad() {
+            state.idlePadPlaying = true;
+            // In a real implementation, this would start a sustained pad sound
+            console.log('Starting idle pad');
+        }
+
+        // Stop all voices
+        function stopAllVoices() {
+            // In a real implementation, this would stop all playing voices
+            console.log('Stopping all voices');
+        }
+
+        // Trigger a voice by key
+        function triggerVoice(key) {
+            if (!state.isPowered) return;
+            
+            const voiceId = parseInt(key);
+            if (voiceId < 0 || voiceId > 9) return;
+            
+            // Highlight the key
+            const keyElement = document.querySelector(`.key[data-key="${voiceId}"]`);
+            keyElement.classList.add('active');
+            setTimeout(() => keyElement.classList.remove('active'), 200);
+            
+            // Set current visual mode
+            state.currentVisualMode = voiceId;
+            document.getElementById('visualMode').textContent = `MODE: ${state.visualModes[voiceId]}`;
+            
+            // In a real implementation, this would trigger the actual voice
+            console.log(`Triggering voice ${voiceId} (${state.voices[voiceId].type})`);
+        }
+
+        // Toggle recording state
+        function toggleRecording() {
+            state.isRecording = !state.isRecording;
+            const button = document.getElementById('recordButton');
+            
+            if (state.isRecording) {
+                button.classList.add('active');
+                button.textContent = 'STOP REC';
+                state.sequence = [];
+            } else {
+                button.classList.remove('active');
+                button.textContent = 'RECORD';
+            }
+        }
+
+        // Play sequence
+        function playSequence() {
+            if (state.sequence.length === 0) return;
+            
+            state.isPlaying = true;
+            state.currentStep = 0;
+            
+            const playButton = document.getElementById('playButton');
+            playButton.classList.add('active');
+            playButton.textContent = 'PLAYING';
+            
+            // In a real implementation, this would schedule the sequence playback
+            console.log('Playing sequence');
+        }
+
+        // Stop sequence
+        function stopSequence() {
+            state.isPlaying = false;
+            state.currentStep = 0;
+            
+            const playButton = document.getElementById('playButton');
+            playButton.classList.remove('active');
+            playButton.textContent = 'PLAY';
+            
+            // In a real implementation, this would stop the sequence playback
+            console.log('Stopping sequence');
+        }
+
+        // Toggle loop state
+        function toggleLoop() {
+            state.isLooping = !state.isLooping;
+            const button = document.getElementById('loopButton');
+            
+            if (state.isLooping) {
+                button.classList.add('active');
+            } else {
+                button.classList.remove('active');
+            }
+        }
+
+        // Save sequence to localStorage
+        function saveSequence() {
+            const data = {
+                seed: state.currentSeed,
+                sequence: state.sequence,
+                bpm: state.bpm
+            };
+            
+            localStorage.setItem('oscilloscopeSequence', JSON.stringify(data));
+            console.log('Sequence saved');
+        }
+
+        // Load sequence from localStorage
+        function loadSequence() {
+            const data = localStorage.getItem('oscilloscopeSequence');
+            if (!data) return;
+            
+            try {
+                const parsed = JSON.parse(data);
+                state.sequence = parsed.sequence || [];
+                state.bpm = parsed.bpm || 120;
+                document.getElementById('bpmInput').value = state.bpm;
+                
+                // If seed is different, update it
+                if (parsed.seed && parsed.seed !== state.currentSeed) {
+                    document.getElementById('seedInput').value = parsed.seed;
+                    updateSeed();
+                }
+                
+                console.log('Sequence loaded');
+            } catch (e) {
+                console.error('Failed to load sequence', e);
+            }
+        }
+
+        // Start visualization
+        function startVisualization() {
+            if (state.animationId) {
+                cancelAnimationFrame(state.animationId);
+            }
+            
+            visualize();
+        }
+
+        // Clear visualization
+        function clearVisualization() {
+            if (state.ctx) {
+                state.ctx.fillStyle = '#000';
+                state.ctx.fillRect(0, 0, state.canvas.width, state.canvas.height);
+            }
+        }
+
+        // Main visualization function
+        function visualize() {
+            if (!state.ctx) return;
+            
+            const width = state.canvas.width;
+            const height = state.canvas.height;
+            
+            // Clear with fade effect
+            state.ctx.fillStyle = 'rgba(0, 0, 0, 0.1)';
+            state.ctx.fillRect(0, 0, width, height);
+            
+            // Draw grid
+            state.ctx.strokeStyle = 'rgba(60, 60, 100, 0.2)';
+            state.ctx.lineWidth = 1;
+            
+            // Vertical lines
+            for (let x = 0; x < width; x += width / 20) {
+                state.ctx.beginPath();
+                state.ctx.moveTo(x, 0);
+                state.ctx.lineTo(x, height);
+                state.ctx.stroke();
+            }
+            
+            // Horizontal lines
+            for (let y = 0; y < height; y += height / 20) {
+                state.ctx.beginPath();
+                state.ctx.moveTo(0, y);
+                state.ctx.lineTo(width, y);
+                state.ctx.stroke();
+            }
+            
+            // Draw center lines
+            state.ctx.strokeStyle = 'rgba(100, 100, 180, 0.4)';
+            state.ctx.lineWidth = 1;
+            state.ctx.beginPath();
+            state.ctx.moveTo(width/2, 0);
+            state.ctx.lineTo(width/2, height);
+            state.ctx.stroke();
+            state.ctx.beginPath();
+            state.ctx.moveTo(0, height/2);
+            state.ctx.lineTo(width, height/2);
+            state.ctx.stroke();
+            
+            // Draw visualization based on current mode
+            if (state.signatureActive) {
+                drawSignatureVisualization();
+            } else {
+                drawNormalVisualization();
+            }
+            
+            state.animationId = requestAnimationFrame(visualize);
+        }
+
+        // Draw signature visualization
+        function drawSignatureVisualization() {
+            const width = state.canvas.width;
+            const height = state.canvas.height;
+            const time = Date.now() - state.signatureStartTime;
+            const progress = time / state.signatureDuration;
+            
+            // Bright visualization during signature
+            const intensity = 1.0;
+            
+            // Draw based on current visual mode
+            const modeIndex = Math.floor(progress * 10) % 10;
+            drawVisualizationMode(modeIndex, intensity);
+        }
+
+        // Draw normal visualization
+        function drawNormalVisualization() {
+            const intensity = 0.7;
+            drawVisualizationMode(state.currentVisualMode, intensity);
+        }
+
+        // Draw a specific visualization mode
+        function drawVisualizationMode(modeIndex, intensity) {
+            const width = state.canvas.width;
+            const height = state.canvas.height;
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const time = Date.now() / 1000;
+            
+            state.ctx.lineWidth = 2;
+            
+            switch (modeIndex) {
+                case 0: // Lissajous Core
+                    drawLissajous(centerX, centerY, intensity);
+                    break;
+                case 1: // Spiral–Precess
+                    drawSpiralPrecess(centerX, centerY, intensity, time);
+                    break;
+                case 2: // Polar Rose Sweep
+                    drawPolarRose(centerX, centerY, intensity, time);
+                    break;
+                case 3: // Phyllotaxis Orbit
+                    drawPhyllotaxis(centerX, centerY, intensity, time);
+                    break;
+                case 4: // Figure-8 Morph
+                    drawFigure8(centerX, centerY, intensity, time);
+                    break;
+                case 5: // Epicycle Chain
+                    drawEpicycles(centerX, centerY, intensity, time);
+                    break;
+                case 6: // VectorScope XY
+                    drawVectorscope(centerX, centerY, intensity);
+                    break;
+                case 7: // Torus-Knot Projection
+                    drawTorusKnot(centerX, centerY, intensity, time);
+                    break;
+                case 8: // Audio Flowfield
+                    drawFlowfield(centerX, centerY, intensity, time);
+                    break;
+                case 9: // Harmonic Bloom
+                    drawHarmonicBloom(centerX, centerY, intensity, time);
+                    break;
+            }
+        }
+
+        // Visualization functions
+        function drawLissajous(centerX, centerY, intensity) {
+            const time = Date.now() / 1000;
+            const points = 500;
+            
+            state.ctx.beginPath();
+            state.ctx.strokeStyle = `rgba(0, 255, 170, ${intensity})`;
+            
+            for (let i = 0; i < points; i++) {
+                const t = (i / points) * Math.PI * 8;
+                const a = 1 + Math.sin(time * 0.3);
+                const b = 1 + Math.cos(time * 0.2);
+                const x = centerX + 150 * Math.sin(a * t + time);
+                const y = centerY + 150 * Math.sin(b * t);
+                
+                if (i === 0) {
+                    state.ctx.moveTo(x, y);
+                } else {
+                    state.ctx.lineTo(x, y);
+                }
+            }
+            
+            state.ctx.stroke();
+        }
+
+        function drawSpiralPrecess(centerX, centerY, intensity, time) {
+            const points = 300;
+            const maxRadius = 180;
+            
+            state.ctx.beginPath();
+            state.ctx.strokeStyle = `rgba(100, 200, 255, ${intensity})`;
+            
+            for (let i = 0; i < points; i++) {
+                const t = (i / points) * Math.PI * 10;
+                const radius = maxRadius * (i / points);
+                const angle = t + time * 2;
+                const x = centerX + radius * Math.cos(angle);
+                const y = centerY + radius * Math.sin(angle);
+                
+                if (i === 0) {
+                    state.ctx.moveTo(x, y);
+                } else {
+                    state.ctx.lineTo(x, y);
+                }
+            }
+            
+            state.ctx.stroke();
+        }
+
+        function drawPolarRose(centerX, centerY, intensity, time) {
+            const points = 400;
+            const k = 3 + Math.sin(time * 0.5);
+            
+            state.ctx.beginPath();
+            state.ctx.strokeStyle = `rgba(255, 100, 200, ${intensity})`;
+            
+            for (let i = 0; i < points; i++) {
+                const theta = (i / points) * Math.PI * 2;
+                const r = 150 * Math.cos(k * theta + time);
+                const x = centerX + r * Math.cos(theta);
+                const y = centerY + r * Math.sin(theta);
+                
+                if (i === 0) {
+                    state.ctx.moveTo(x, y);
+                } else {
+                    state.ctx.lineTo(x, y);
+                }
+            }
+            
+            state.ctx.closePath();
+            state.ctx.stroke();

@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oscilloscope Synthesizer NFT</title>
+    <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+        }
+        
+        body {
+            background: #000;
+            color: #0f0;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        #container {
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            padding: 10px;
+        }
+        
+        #header {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            border-bottom: 1px solid #0f0;
+            margin-bottom: 10px;
+        }
+        
+        #title {
+            font-size: 1.2rem;
+            font-weight: bold;
+        }
+        
+        #status {
+            font-size: 0.9rem;
+            color: #0a0;
+        }
+        
+        #main {
+            display: flex;
+            flex: 1;
+            gap: 10px;
+        }
+        
+        #oscilloscope-container {
+            flex: 1;
+            position: relative;
+            border: 1px solid #0f0;
+            background: #001100;
+        }
+        
+        #oscilloscope {
+            width: 100%;
+            height: 100%;
+        }
+        
+        #grid {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #controls {
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            border: 1px solid #0f0;
+            padding: 10px;
+            background: #001100;
+        }
+        
+        .control-group {
+            border-bottom: 1px dashed #0a0;
+            padding-bottom: 10px;
+        }
+        
+        .control-group:last-child {
+            border-bottom: none;
+        }
+        
+        .control-title {
+            font-weight: bold;
+            margin-bottom: 5px;
+            color: #0f0;
+        }
+        
+        .control-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 3px 0;
+            font-size: 0.9rem;
+        }
+        
+        button {
+            background: #002200;
+            color: #0f0;
+            border: 1px solid #0f0;
+            padding: 3px 6px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9rem;
+        }
+        
+        button:hover {
+            background: #004400;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            margin: 5px 0;
+        }
+        
+        #sequencer {
+            display: grid;
+            grid-template-columns: repeat(16, 1fr);
+            gap: 2px;
+            margin-top: 5px;
+        }
+        
+        .step {
+            height: 20px;
+            background: #002200;
+            border: 1px solid #0a0;
+            text-align: center;
+            font-size: 0.7rem;
+            line-height: 20px;
+            cursor: pointer;
+        }
+        
+        .step.active {
+            background: #0f0;
+            color: #000;
+        }
+        
+        .step.current {
+            background: #0a0;
+            color: #000;
+        }
+        
+        #footer {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px 10px;
+            border-top: 1px solid #0f0;
+            margin-top: 10px;
+            font-size: 0.8rem;
+        }
+        
+        .key {
+            display: inline-block;
+            padding: 2px 5px;
+            background: #002200;
+            border: 1px solid #0f0;
+            margin: 0 2px;
+        }
+        
+        #boot-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 20, 0, 0.8);
+            padding: 20px;
+            border: 1px solid #0f0;
+            text-align: center;
+            z-index: 100;
+            display: none;
+        }
+        
+        #boot-message h2 {
+            margin-bottom: 15px;
+            color: #0f0;
+        }
+        
+        #boot-message p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="header">
+            <div id="title">OSCILLOSCOPE SYNTHESIZER NFT</div>
+            <div id="status">READY</div>
+        </div>
+        
+        <div id="main">
+            <div id="oscilloscope-container">
+                <canvas id="oscilloscope"></canvas>
+                <svg id="grid"></svg>
+                <div id="boot-message">
+                    <h2>OSCILLOSCOPE SYNTHESIZER</h2>
+                    <p>SEED: <span id="seed-display">00000000</span></p>
+                    <p>GENERATING VOICES...</p>
+                    <p>BOOT SIGNATURE PLAYING...</p>
+                </div>
+            </div>
+            
+            <div id="controls">
+                <div class="control-group">
+                    <div class="control-title">SYNTH CONTROLS</div>
+                    <div class="control-row">
+                        <span>VOICE:</span>
+                        <span id="current-voice">0</span>
+                    </div>
+                    <div class="control-row">
+                        <span>VOLUME:</span>
+                        <span id="volume-value">70%</span>
+                    </div>
+                    <input type="range" id="volume" min="0" max="100" value="70">
+                </div>
+                
+                <div class="control-group">
+                    <div class="control-title">SEQUENCER</div>
+                    <div class="control-row">
+                        <button id="record">RECORD</button>
+                        <button id="play">PLAY</button>
+                        <button id="stop">STOP</button>
+                        <button id="clear">CLEAR</button>
+                    </div>
+                    <div class="control-row">
+                        <span>BPM:</span>
+                        <span id="bpm-value">120</span>
+                    </div>
+                    <input type="range" id="bpm" min="60" max="240" value="120">
+                    <div class="control-row">
+                        <span>LENGTH:</span>
+                        <span id="length-value">16</span>
+                    </div>
+                    <input type="range" id="length" min="8" max="64" value="16" step="8">
+                    <div class="control-row">
+                        <button id="loop">LOOP: OFF</button>
+                        <button id="save">SAVE</button>
+                        <button id="load">LOAD</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <div class="control-title">SEQUENCE</div>
+                    <div id="sequencer"></div>
+                </div>
+                
+                <div class="control-group">
+                    <div class="control-title">VISUAL MODE</div>
+                    <div class="control-row">
+                        <button id="visual-0">Lissajous</button>
+                        <button id="visual-1">Spiral</button>
+                        <button id="visual-2">Rose</button>
+                    </div>
+                    <div class="control-row">
+                        <button id="visual-3">Phyllotaxis</button>
+                        <button id="visual-4">Figure-8</button>
+                        <button id="visual-5">Epicycle</button>
+                    </div>
+                    <div class="control-row">
+                        <button id="visual-6">Vector</button>
+                        <button id="visual-7">Torus</button>
+                        <button id="visual-8">Flowfield</button>
+                    </div>
+                    <div class="control-row">
+                        <button id="visual-9">Bloom</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div id="footer">
+            <div>KEYS: <span class="key">0</span> <span class="key">1</span> <span class="key">2</span> <span class="key">3</span> <span class="key">4</span> <span class="key">5</span> <span class="key">6</span> <span class="key">7</span> <span class="key">8</span> <span class="key">9</span></div>
+            <div>OSCILLOSCOPE SYNTHESIZER NFT v1.0</div>
+        </div>
+    </div>
+
+    <script>
+        // Deterministic seed for the entire system
+        const SEED = 12345678;
+        document.getElementById('seed-display').textContent = SEED.toString().padStart(8, '0');
+        
+        // Pseudo-random number generator with seed
+        function createPRNG(seed) {
+            let state = seed;
+            return function() {
+                state = (state * 1664525 + 1013904223) % 4294967296;
+                return state / 4294967296;
+            };
+        }
+        
+        const random = createPRNG(SEED);
+        
+        // Generate deterministic parameters based on seed
+        function seededRandom(min, max) {
+            return min + (max - min) * random();
+        }
+        
+        // Initialize Tone.js
+        let synthVoices = [];
+        let visualPatterns = [];
+        let currentVoice = 0;
+        let currentVisual = 0;
+        let isPlaying = false;
+        let isRecording = false;
+        let sequence = Array(16).fill(null);
+        let stepPosition = 0;
+        let loopEnabled = false;
+        let bpm = 120;
+        let sequenceLength = 16;
+        let transport;
+        
+        // Canvas setup
+        const canvas = document.getElementById('oscilloscope');
+        const ctx = canvas.getContext('2d');
+        const grid = document.getElementById('grid');
+        const container = document.getElementById('oscilloscope-container');
+        
+        function resizeCanvas() {
+            canvas.width = container.clientWidth;
+            canvas.height = container.clientHeight;
+            drawGrid();
+        }
+        
+        function drawGrid() {
+            grid.setAttribute('width', canvas.width);
+            grid.setAttribute('height', canvas.height);
+            
+            // Clear previous grid
+            while (grid.firstChild) {
+                grid.removeChild(grid.firstChild);
+            }
+            
+            // Draw grid lines
+            const gridSize = 20;
+            const width = canvas.width;
+            const height = canvas.height;
+            
+            for (let x = 0; x <= width; x += gridSize) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', x);
+                line.setAttribute('y1', 0);
+                line.setAttribute('x2', x);
+                line.setAttribute('y2', height);
+                line.setAttribute('stroke', '#002200');
+                line.setAttribute('stroke-width', '0.5');
+                grid.appendChild(line);
+            }
+            
+            for (let y = 0; y <= height; y += gridSize) {
+                const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
+                line.setAttribute('x1', 0);
+                line.setAttribute('y1', y);
+                line.setAttribute('x2', width);
+                line.setAttribute('y2', y);
+                line.setAttribute('stroke', '#002200');
+                line.setAttribute('stroke-width', '0.5');
+                grid.appendChild(line);
+            }
+            
+            // Draw center reticle
+            const centerX = width / 2;
+            const centerY = height / 2;
+            
+            const reticle = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
+            reticle.setAttribute('cx', centerX);
+            reticle.setAttribute('cy', centerY);
+            reticle.setAttribute('r', 5);
+            reticle.setAttribute('stroke', '#0f0');
+            reticle.setAttribute('stroke-width', '1');
+            reticle.setAttribute('fill', 'none');
+            grid.appendChild(reticle);
+        }
+        
+        // Initialize visual patterns
+        function initVisualPatterns() {
+            visualPatterns = [
+                // Lissajous Core
+                function(time, width, height) {
+                    const a = seededRandom(1, 5);
+                    const b = seededRandom(1, 5);
+                    const delta = seededRandom(0, Math.PI);
+                    const scale = Math.min(width, height) * 0.4;
+                    
+                    ctx.beginPath();
+                    for (let t = 0; t < Math.PI * 2; t += 0.01) {
+                        const x = width/2 + scale * Math.sin(a * t + delta);
+                        const y = height/2 + scale * Math.sin(b * t);
+                        if (t === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.strokeStyle = `hsl(${time * 10 % 360}, 100%, 50%)`;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                },
+                
+                // Spiral–Precess
+                function(time, width, height) {
+                    const turns = seededRandom(3, 8);
+                    const scale = Math.min(width, height) * 0.4;
+                    
+                    ctx.beginPath();
+                    for (let t = 0; t < Math.PI * 2 * turns; t += 0.05) {
+                        const r = scale * t / (Math.PI * 2 * turns);
+                        const x = width/2 + r * Math.cos(t + time);
+                        const y = height/2 + r * Math.sin(t + time);
+                        if (t === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.strokeStyle = `hsl(${(time * 20) % 360}, 100%, 50%)`;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                },
+                
+                // Polar Rose Sweep
+                function(time, width, height) {
+                    const k = seededRandom(2, 8);
+                    const scale = Math.min(width, height) * 0.4;
+                    
+                    ctx.beginPath();
+                    for (let theta = 0; theta < Math.PI * 2; theta += 0.02) {
+                        const r = scale * Math.cos(k * theta + time);
+                        const x = width/2 + r * Math.cos(theta);
+                        const y = height/2 + r * Math.sin(theta);
+                        if (theta === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.strokeStyle = `hsl(${(time * 15) % 360}, 100%, 50%)`;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                },
+                
+                // Phyllotaxis Orbit
+                function(time, width, height) {
+                    const n = 200;
+                    const scale = Math.min(width, height) * 0.02;
+                    const angle = Math.PI * (3 - Math.sqrt(5)); // Golden angle
+                    
+                    ctx.beginPath();
+                    for (let i = 0; i < n; i++) {
+                        const r = scale * Math.sqrt(i);
+                        const theta = i * angle + time;
+                        const x = width/2 + r * Math.cos(theta);
+                        const y = height/2 + r * Math.sin(theta);
+                        ctx.rect(x, y, 2, 2);
+                    }
+                    ctx.fillStyle = `hsl(${(time * 5) % 360}, 100%, 50%)`;
+                    ctx.fill();
+                },
+                
+                // Figure-8 Morph
+                function(time, width, height) {
+                    const scale = Math.min(width, height) * 0.4;
+                    
+                    ctx.beginPath();
+                    for (let t = 0; t < Math.PI * 2; t += 0.02) {
+                        const x = width/2 + scale * Math.sin(t);
+                        const y = height/2 + scale * Math.sin(2 * t + time);
+                        if (t === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.strokeStyle = `hsl(${(time * 25) % 360}, 100%, 50%)`;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                },
+                
+                // Epicycle Chain
+                function(time, width, height) {
+                    const circles = 5;
+                    const scale = Math.min(width, height) * 0.1;
+                    let x = width/2;
+                    let y = height/2;
+                    
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    
+                    for (let i = 0; i < circles; i++) {
+                        const radius = scale / (i + 1);
+                        const angle = time * (i + 1);
+                        x += radius * Math.cos(angle);
+                        y += radius * Math.sin(angle);
+                        ctx.lineTo(x, y);
+                    }
+                    
+                    ctx.strokeStyle = `hsl(${(time * 30) % 360}, 100%, 50%)`;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                    
+                    // Draw circles
+                    x = width/2;
+                    y = height/2;
+                    for (let i = 0; i < circles; i++) {
+                        const radius = scale / (i + 1);
+                        const angle = time * (i + 1);
+                        x += radius * Math.cos(angle);
+                        y += radius * Math.sin(angle);
+                        
+                        ctx.beginPath();
+                        ctx.arc(x, y, 2, 0, Math.PI * 2);
+                        ctx.fillStyle = `hsl(${(time * 30 + i * 30) % 360}, 100%, 50%)`;
+                        ctx.fill();
+                    }
+                },
+                
+                // VectorScope XY
+                function(time, width, height) {
+                    const points = 100;
+                    const scale = Math.min(width, height) * 0.4;
+                    
+                    ctx.beginPath();
+                    for (let i = 0; i < points; i++) {
+                        const t = i / points * Math.PI * 2;
+                        const x = width/2 + scale * Math.sin(3 * t + time);
+                        const y = height/2 + scale * Math.sin(4 * t + time * 1.5);
+                        if (i === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.closePath();
+                    ctx.strokeStyle = `hsl(${(time * 20) % 360}, 100%, 50%)`;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                },
+                
+                // Torus-Knot Projection
+                function(time, width, height) {
+                    const p = Math.floor(seededRandom(2, 8));
+                    const q = Math.floor(seededRandom(2, 8));
+                    const scale = Math.min(width, height) * 0.3;
+                    
+                    ctx.beginPath();
+                    for (let t = 0; t < Math.PI * 2; t += 0.02) {
+                        const x = width/2 + scale * (2 + Math.cos(q * t)) * Math.cos(p * t + time);
+                        const y = height/2 + scale * (2 + Math.cos(q * t)) * Math.sin(p * t + time);
+                        if (t === 0) ctx.moveTo(x, y);
+                        else ctx.lineTo(x, y);
+                    }
+                    ctx.strokeStyle = `hsl(${(time * 15) % 360}, 100%, 50%)`;
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                },
+                
+                // Audio Flowfield
+                function(time, width, height) {
+                    const resolution = 20;
+                    const scale = Math.min(width, height) * 0.02;
+                    
+                    ctx.beginPath();
+                    for (let x = 0; x < width; x += resolution) {
+                        for (let y = 0; y < height; y += resolution) {
+                            const angle = Math.sin(x * 0.01 + time) * Math.cos(y * 0.01 + time * 1.2);
+                            const endX = x + Math.cos(angle) * scale;
+                            const endY = y + Math.sin(angle) * scale;
+                            ctx.moveTo(x, y);
+                            ctx.lineTo(endX, endY);
+                        }
+                    }
+                    ctx.strokeStyle = `hsl(${(time * 10) % 360}, 100%, 50%)`;
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                },
+                
+                // Harmonic Bloom
+                function(time, width, height) {
+                    const layers = 8;
+                    const scale = Math.min(width, height) * 0.4;
+                    
+                    for (let i = 0; i < layers; i++) {
+                        const radius = scale * (1 - i / layers);
+                        const points = 3 + i * 2;
+                        
+                        ctx.beginPath();
+                        for (let j = 0; j <= points; j++) {
+                            const angle = j / points * Math.PI * 2 + time * (i + 1) * 0.1;
+                            const x = width/2 + radius * Math.cos(angle);
+                            const y = height/2 + radius * Math.sin(angle);
+                            if (j === 0) ctx.moveTo(x, y);
+                            else ctx.lineTo(x, y);
+                        }
+                        ctx.closePath();
+                        ctx.strokeStyle = `hsl(${(time * 10 + i * 30) % 360}, 100%, 50%)`;
+                        ctx.lineWidth = 2 - i * 0.2;
+                        ctx.stroke();
+                    }
+                }
+            ];
+        }
+        
+        // Initialize synth voices
+        function initSynthVoices() {
+            synthVoices = [];
+            
+            for (let i = 0; i < 10; i++) {
+                // Create different synth types based on seed
+                let synth;
+                const type = Math.floor(seededRandom(0, 6));
+                
+                switch(type) {
+                    case 0: // FM Synth
+                        synth = new Tone.FMSynth({
+                            harmonicity: seededRandom(1, 5),
+                            modulationIndex: seededRandom(1, 20),
+                            oscillator: {
+                                type: ['sine', 'square', 'sawtooth', 'triangle'][Math.floor(seededRandom(0, 4))]
+                            },
+                            envelope: {
+                                attack: seededRandom(0.01, 0.5),
+                                decay: seededRandom(0.1, 1),
+                                sustain: seededRandom(0.3, 0.9),
+                                release: seededRandom(0.1, 1)
+                            },
+                            modulation: {
+                                type: ['sine', 'square', 'sawtooth', 'triangle'][Math.floor(seededRandom(0, 4))]
+                            },
+                            modulationEnvelope: {
+                                attack: seededRandom(0.01, 0.5),
+                                decay: seededRandom(0.1, 1),
+                                sustain: seededRandom(0.3, 0.9),
+                                release: seededRandom(0.1, 1)
+                            }
+                        }).toDestination();
+                        break;
+                        
+                    case 1: // AM Synth
+                        synth = new Tone.AMSynth({
+                            harmonicity: seededRandom(1, 5),
+                            oscillator: {
+                                type: ['sine', 'square', 'sawtooth', 'triangle'][Math.floor(seededRandom(0, 4))]
+                            },
+                            envelope: {
+                                attack: seededRandom(0.01, 0.5),
+                                decay: seededRandom(0.1, 1),
+                                sustain: seededRandom(0.3, 0.9),
+                                release: seededRandom(0.1, 1)
+                            },
+                            modulation: {
+                                type: ['sine', 'square', 'sawtooth', 'triangle'][Math.floor(seededRandom(0, 4))]
+                            },
+                            modulationEnvelope: {
+                                attack: seededRandom(0.01, 0.5),
+                                decay: seededRandom(0.1, 1),
+                                sustain: seededRandom(0.3, 0.9),
+                                release: seededRandom(0.1, 1)
+                            }
+                        }).toDestination();
+                        break;
+                        
+                    case 2: // Subtractive Synth
+                        synth = new Tone.Synth({
+                            oscillator: {
+                                type: ['sine', 'square', 'sawtooth', 'triangle'][Math.floor(seededRandom(0, 4))]
+                            },
+                            envelope: {
+                                attack: seededRandom(0.01, 0.5),
+                                decay: seededRandom(0.1, 1),
+                                sustain: seededRandom(0.3, 0.9),
+                                release: seededRandom(0.1, 1)
+                            }
+                        }).toDestination();
+                        break;
+                        
+                    case 3: // Noise Synth
+                        synth = new Tone.NoiseSynth({
+                            noise: {
+                                type: ['white', 'pink', 'brown'][Math.floor(seededRandom(0, 3))]
+                            },
+                            envelope: {
+                                attack: seededRandom(0.01, 0.5),
+                                decay: seededRandom(0.1, 1),
+                                sustain: seededRandom(0.3, 0.9),
+                                release: seededRandom(0.1, 1)
+                            }
+                        }).toDestination();
+                        break;
+                        
+                    case 4: // Metal Synth
+                        synth = new Tone.MetalSynth({
+                            frequency: seededRandom(100, 500),
+                            envelope: {
+                                attack: seededRandom(0.001, 0.1),
+                                decay: seededRandom(0.1, 1),
+                                release: seededRandom(0.1, 1)
+                            },
+                            harmonicity: seededRandom(1, 10),
+                            modulationIndex: seededRandom(1, 20),
+                            resonance: seededRandom(0, 1),
+                            octaves: seededRandom(1, 3)
+                        }).toDestination();
+                        break;
+                        
+                    case 5: // Pluck Synth
+                        synth = new Tone.PluckSynth({
+                            attackNoise: seededRandom(1, 5),
+                            dampening: seededRandom(1000, 8000),
+                            resonance: seededRandom(0.5, 0.99)
+                        }).toDestination();
+                        break;
+                }
+                
+                // Add effects chain based on seed
+                const reverb = new Tone.Reverb({
+                    decay: seededRandom(0.5, 5),
+                    wet: seededRandom(0.1, 0.5)
+                }).toDestination();
+                
+                const delay = new Tone.PingPongDelay({
+                    delayTime: seededRandom(0.1, 0.5),
+                    feedback: seededRandom(0.1, 0.5),
+                    wet: seededRandom(0.1, 0.3)
+                }).toDestination();
+                
+                const chorus = new Tone.Chorus({
+                    frequency: seededRandom(0.5, 5),
+                    delayTime: seededRandom(2, 20),
+                    depth: seededRandom(0.2, 0.8),
+                    wet: seededRandom(0.1, 0.5)
+                }).toDestination();
+                
+                const distortion = new Tone.Distortion({
+                    distortion: seededRandom(0.1, 0.8),
+                    wet: seededRandom(0.1, 0.5)
+                }).toDestination();
+                
+                const filter = new Tone.Filter({
+                    type: ['lowpass', 'highpass', 'bandpass'][Math.floor(seededRandom(0, 3))],
+                    frequency: seededRandom(200, 2000),
+                    rolloff: [-12, -24, -48][Math.floor(seededRandom(0, 3))],
+                    Q: seededRandom(1, 10)
+                }).toDestination();
+                
+                // Connect effects in chain
+                synth.chain(reverb, delay, chorus, distortion, filter, Tone.Destination);
+                
+                synthVoices.push(synth);
+            }
+        }
+        
+        // Initialize sequencer
+        function initSequencer() {
+            const sequencer = document.getElementById('sequencer');
+            sequencer.innerHTML = '';
+            
+            for (let i = 0; i < 64; i++) {
+                const step = document.createElement('div');
+                step.className = 'step';
+                step.textContent = i + 1;
+                step.dataset.index = i;
+                
+                step.addEventListener('click', () => {
+                    if (isRecording) {
+                        sequence[i] = sequence[i] === currentVoice ? null : currentVoice;
+                        updateSequencerDisplay();
+                    }
+                });
+                
+                sequencer.appendChild(step);
+            }
+            
+            updateSequencerDisplay();
+        }
+        
+        function updateSequencerDisplay() {
+            const steps = document.querySelectorAll('.step');
+            steps.forEach((step, index) => {
+                step.classList.remove('active', 'current');
+                if (sequence[index] !== null) {
+                    step.classList.add('active');
+                }
+                if (index === stepPosition) {
+                    step.classList.add('current');
+                }
+            });
+        }
+        
+        // Transport functions
+        function startTransport() {
+            if (!transport) {
+                transport = Tone.Transport;
+                transport.bpm.value = bpm;
+                
+                // Create loop for sequencer
+                const loop = new Tone.Loop((time) => {
+                    // Play note if sequence has a voice at this step
+                    if (sequence[stepPosition] !== null) {
+                        const voice = synthVoices[sequence[stepPosition]];
+                        const note = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5'][Math.floor(seededRandom(0, 8))];
+                        const velocity = seededRandom(0.5, 1);
+                        voice.triggerAttackRelease(note, '8n', time, velocity);
+                    }
+                    
+                    // Update step position
+                    stepPosition = (stepPosition + 1) % sequenceLength;
+                    
+                    if (stepPosition === 0 && !loopEnabled) {
+                        stopTransport();
+                    }
+                    
+                    updateSequencerDisplay();
+                }, '8n');
+                
+                loop.start(0);
+                transport.start();
+            }
+        }
+        
+        function stopTransport() {
+            if (transport) {
+                transport.stop();
+                transport = null;
+                isPlaying = false;
+                document.getElementById('play').textContent = 'PLAY';
+                stepPosition = 0;
+                updateSequencerDisplay();
+            }
+        }
+        
+        // Boot signature sequence
+        function playBootSignature() {
+            document.getElementById('boot-message').style.display = 'block';
+            document.getElementById('status').textContent = 'BOOT SIGNATURE PLAYING...';
+            
+            // Play a sequence of notes as boot signature
+            const bootNotes = [
+                {note: 'C5', time: 0, voice: 0},
+                {note: 'E5', time: 0.2, voice: 1},
+                {note: 'G5', time: 0.4, voice: 2},
+                {note: 'C6', time: 0.6, voice: 3},
+                {note: 'G5', time: 0.8, voice: 4},
+                {note: 'E5', time: 1.0, voice: 5},
+                {note: 'C5', time: 1.2, voice: 6},
+                {note: 'A4', time: 1.4, voice: 7},
+                {note: 'F4', time: 1.6, voice: 8},
+                {note: 'D4', time: 1.8, voice: 9},
+                {note: 'C4', time: 2.0, voice: 0},
+                {chord: ['C4', 'E4', 'G4'], time: 2.2, voice: 1},
+                {chord: ['A3', 'C4', 'E4'], time: 2.4, voice: 2},
+                {chord: ['F3', 'A3', 'C4'], time: 2.6, voice: 3},
+                {chord: ['G3', 'B3', 'D4'], time: 2.8, voice: 4}
+            ];
+            
+            bootNotes.forEach(item => {
+                setTimeout(() => {
+                    if (item.note) {
+                        synthVoices[item.voice].triggerAttackRelease(item.note, '8n', undefined, seededRandom(0.7, 1));
+                    } else if (item.chord) {
+                        item.chord.forEach((note, i) => {
+                            synthVoices[item.voice + i].triggerAttackRelease(note, '8n', undefined, seededRandom(0.5, 0.9));
+                        });
+                    }
+                }, item.time * 1000);
+            });
+            
+            // After boot signature, switch to idle pad
+            setTimeout(() => {
+                document.getElementById('boot-message').style.display = 'none';
+                document.getElementById('status').textContent = 'READY';
+                
+                // Play a gentle idle pad
+                synthVoices[0].triggerAttack('C3');
+                synthVoices[1].triggerAttack('G3');
+                synthVoices[2].triggerAttack('E3');
+            }, 3200);
+        }
+        
+        // Event listeners
+        function setupEventListeners() {
+            // Voice selection
+            for (let i = 0; i < 10; i++) {
+                document.addEventListener('keydown', (e) => {
+                    if (e.key === i.toString()) {
+                        currentVoice = i;
+                        document.getElementById('current-voice').textContent = i;
+                        
+                        // Play a test note
+                        const note = ['C4', 'D4', 'E4', 'F4', 'G4', 'A4', 'B4', 'C5', 'D5', 'E5'][i];
+                        synthVoices[i].triggerAttackRelease(note, '8n');
+                    }
+                });
+            }
+            
+            // Volume control
+            const volumeSlider = document.getElementById('volume');
+            volumeSlider.addEventListener('input', () => {
+                const value = volumeSlider.value;
+                document.getElementById('volume-value').textContent = `${value}%`;
+                Tone.Destination.volume.value = (value / 100) * 40 - 40; // Convert to dB
+            });
+            
+            // BPM control
+            const bpmSlider = document.getElementById('bpm');
+            bpmSlider.addEventListener('input', () => {
+                bpm = parseInt(bpmSlider.value);
+                document.getElementById('bpm-value').textContent = bpm;
+                if (transport) {
+                    transport.bpm.value = bpm;
+                }
+            });
+            
+            // Sequence length control
+            const lengthSlider = document.getElementById('length');
+            lengthSlider.addEventListener('input', () => {
+                sequenceLength = parseInt(lengthSlider.value);
+                document.getElementById('length-value').textContent = sequenceLength;
+                updateSequencerDisplay();
+            });
+            
+            // Sequencer controls
+            document.getElementById('record').addEventListener('click', () => {
+                isRecording = !isRecording;
+                document.getElementById('record').textContent = isRecording ? 'STOP REC' : 'RECORD';
+            });
+            
+            document.getElementById('play').addEventListener('click', () => {
+                if (isPlaying) {
+                    stopTransport();
+                } else {
+                    isPlaying = true;
+                    document.getElementById('play').textContent = 'PAUSE';
+                    startTransport();
+                }
+            });
+            
+            document.getElementById('stop').addEventListener('click', () => {
+                stopTransport();
+                stepPosition = 0;
+                updateSequencerDisplay();
+            });
+            
+            document.getElementById('clear').addEventListener('click', () => {
+                sequence = Array(64).fill(null);
+                updateSequencerDisplay();
+            });
+            
+            document.getElementById('loop').addEventListener('click', () => {
+                loopEnabled = !loopEnabled;
+                document.getElementById('loop').textContent = `LOOP: ${loopEnabled ? 'ON' : 'OFF'}`;
+            });
+            
+            document.getElementById('save').addEventListener('click', () => {
+                const data = {
+                    sequence: sequence.slice(0, sequenceLength),
+                    bpm: bpm,
+                    loop: loopEnabled
+                };
+                const blob = new Blob([JSON.stringify(data)], {type: 'application/json'});
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `sequence-${Date.now()}.json`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            });
+            
+            document.getElementById('load').addEventListener('click', () => {
+                const input = document.createElement('input');
+                input.type = 'file';
+                input.accept = '.json';
+                input.onchange = e => {
+                    const file = e.target.files[0];
+                    const reader = new FileReader();
+                    reader.onload = event => {
+                        try {
+                            const data = JSON.parse(event.target.result);
+                            sequence = Array(64).fill(null);
+                            data.sequence.forEach((voice, i) => {
+                                sequence[i] = voice;
+                            });
+                            bpm = data.bpm || 120;
+                            loopEnabled = data.loop || false;
+                            document.getElementById('bpm').value = bpm;
+                            document.getElementById('bpm-value').textContent = bpm;
+                            document.getElementById('loop').textContent = `LOOP: ${loopEnabled ? 'ON' : 'OFF'}`;
+                            updateSequencerDisplay();
+                        } catch (err) {
+                            console.error('Error loading sequence:', err);
+                        }
+                    };
+                    reader.readAsText(file);
+                };
+                input.click();
+            });
+            
+            // Visual mode selection
+            for (let i = 0; i < 10; i++) {
+                document.getElementById(`visual-${i}`).addEventListener('click', () => {
+                    currentVisual = i;
+                });
+            }
+        }
+        
+        // Animation loop for visuals
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Clear canvas
+            ctx.fillStyle = 'rgba(0, 10, 0, 0.1)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw current visual pattern
+            const time = Date.now() / 1000;
+            if (visualPatterns[currentVisual]) {
+                visualPatterns[currentVisual](time, canvas.width, canvas.height);
+            }
+        }
+        
+        // Initialize everything
+        function init() {
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            initVisualPatterns();
+            initSynthVoices();
+            initSequencer();
+            setupEventListeners();
+            
+            // Start animation
+            animate();
+            
+            // Play boot signature after a short delay
+            setTimeout(playBootSignature, 1000);
+        }
+        
+        // Start the application
+        window.addEventListener('load', init);
+    </script>
+</body>
+</html>

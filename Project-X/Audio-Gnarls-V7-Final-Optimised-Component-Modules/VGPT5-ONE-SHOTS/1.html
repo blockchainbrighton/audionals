@@ -1,0 +1,756 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Seeded XY Oscilloscope Synth (Web3 Tone loader)</title>
+<style>
+  :root {
+    --bg:#0b0b0c; --fg:#d9ffe2; --acc:#5af2a5; --mut:#2a2d31; --err:#ff6b6b;
+  }
+  * { box-sizing:border-box; }
+  html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; }
+  #app { display:grid; grid-template-rows:auto 1fr; height:100vh; }
+  header { display:flex; gap:.75rem; align-items:center; padding:.6rem .8rem; border-bottom:1px solid var(--mut); }
+  header .spacer { flex:1 }
+  button, input, select { background:#101214; color:var(--fg); border:1px solid var(--mut); padding:.35rem .55rem; border-radius:6px; }
+  button.primary { border-color:var(--acc); color:#031d10; background:linear-gradient(#86f7c0,#42d890); font-weight:700; }
+  button.tiny { padding:.2rem .4rem; font-size:12px; }
+  button[aria-pressed="true"] { outline:2px solid var(--acc); }
+  .led { width:8px; height:8px; border-radius:50%; background:#1a1d20; box-shadow:0 0 0 1px #202428 inset; display:inline-block; }
+  .led.on { background:#59ffa0; box-shadow:0 0 10px #59ffa0; }
+  #scopeWrap { position:relative; }
+  #scope { width:100%; height:100%; display:block; background:radial-gradient(120% 120% at 50% 50%, #0d1012 0%, #050607 60%, #040506 100%); }
+  #hud { position:absolute; inset:auto 0 0 auto; display:flex; gap:.5rem; padding:.45rem .6rem; opacity:.9; }
+  #seed { min-width:220px; text-align:center; }
+  .meters { display:flex; gap:6px; align-items:flex-end; }
+  .meter { width:8px; height:24px; background:#15181b; border:1px solid #22262b; border-radius:2px; overflow:hidden; }
+  .bar { width:100%; height:0%; background:linear-gradient(#90ffd0,#33d18b); transition:height .06s linear; }
+  #status { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; background:#000000dd; color:#d1ffe4; font-weight:600; letter-spacing:0.3px; }
+  #status.error { background:#1a0000cc; color:#ffd1d1; }
+  #tip { position:absolute; top:.6rem; right:.8rem; font-size:12px; opacity:.7 }
+  .right { text-align:right }
+  .row { display:flex; gap:.5rem; align-items:center; }
+  .mono { font-family:ui-monospace,monospace; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <button id="power" class="primary">Power</button>
+    <span>Seed:</span>
+    <input id="seed" class="mono" readonly />
+    <div class="row">
+      <label for="bpm">BPM</label>
+      <input id="bpm" type="number" min="30" max="240" value="110" style="width:80px" />
+    </div>
+    <div class="row">
+      <button id="rec">Rec</button>
+      <button id="play">Play</button>
+      <label for="steps">Steps</label>
+      <select id="steps">
+        <option>8</option><option>16</option><option selected>32</option><option>48</option><option>64</option>
+      </select>
+      <button id="save" class="tiny">Save</button>
+      <button id="load" class="tiny">Load</button>
+    </div>
+    <div class="spacer"></div>
+    <div class="row">
+      <span>Master</span>
+      <div class="meters"><div class="meter"><div id="mbar" class="bar"></div></div></div>
+    </div>
+  </header>
+
+  <div id="scopeWrap">
+    <canvas id="scope"></canvas>
+    <div id="hud">
+      <span>Keys <b>0–9</b> = voices · <b>R</b>=Rec, <b>Space</b>=Play/Stop</span>
+    </div>
+    <div id="tip">XY Algorithm locks to last triggered voice</div>
+    <div id="status"><span id="statusText">Click <b>Power</b> to load Tone &amp; start</span></div>
+  </div>
+</div>
+
+<script>
+/** ====== REQUIRED WEB3 TONE LOADER (UNCHANGED) ====== */
+function loadToneJSAndBoot({
+  toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+  setLoaderStatus, runtimeState, boot
+}) {
+  setLoaderStatus('Loading Audio Engine...');
+  import(toneUrl).then(() => {
+    runtimeState.Tone = window.Tone;
+    console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+    boot();
+  }).catch(err => {
+    setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+    console.error('[BOP Matrix] Critical Tone.js load error:', err);
+  });
+}
+
+/** ====== DETERMINISTIC CORE ====== */
+const runtime = { Tone:null, started:false, seedStr:'', rng:null };
+const ui = {
+  power: document.getElementById('power'),
+  seed: document.getElementById('seed'),
+  bpm: document.getElementById('bpm'),
+  rec: document.getElementById('rec'),
+  play: document.getElementById('play'),
+  steps: document.getElementById('steps'),
+  save: document.getElementById('save'),
+  load: document.getElementById('load'),
+  status: document.getElementById('status'),
+  statusText: document.getElementById('statusText'),
+  scope: document.getElementById('scope'),
+  mbar: document.getElementById('mbar')
+};
+const scope = { ctx:null, w:0, h:0, lastVoiceIndex:0, algoIndex:0, t:0, meterVal:0 };
+
+// Seed & PRNG (sfc32 for good quality)
+function xmur3(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19;} return function(){ h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); return (h^h>>>16)>>>0; } }
+function sfc32(a,b,c,d){ return function(){ a>>>0;b>>>0;c>>>0;d>>>0; let t=(a+b|0)+d|0; d=d+1|0; a=b^b>>>9; b=c+(c<<3)|0; c=(c<<21|c>>>11); c=c+t|0; return (t>>>0)/4294967296; } }
+function makeRNG(seedStr){
+  const seedHash = xmur3(seedStr);
+  return sfc32(seedHash(),seedHash(),seedHash(),seedHash());
+}
+// SAFE random: uses seeded PRNG when available, else Math.random()
+// (Only used pre-boot for seed generation/readout UI.)
+function rand(){ return (runtime && typeof runtime.rng === 'function') ? runtime.rng() : Math.random(); }
+function rint(min,max){ return Math.floor(rand()*(max-min+1))+min; }
+function rpick(arr){ return arr[Math.floor(rand()*arr.length)] }
+function rnorm(min,max){ return min + (max-min)*rand(); }
+
+
+// Deterministic shuffle (Fisher-Yates using rng)
+function dShuffle(arr){
+  const a = arr.slice();
+  for(let i=a.length-1;i>0;i--){
+    const j = Math.floor(rand()*(i+1));
+    [a[i],a[j]]=[a[j],a[i]];
+  }
+  return a;
+}
+
+// Seed selection
+// Seed selection (no dependency on seeded RNG until after we actually set it)
+function initSeed(){
+  const url = new URL(location.href);
+  let seed = url.searchParams.get('seed');
+
+  if(!seed){
+    // Generate a readable random seed WITHOUT using runtime.rng
+    const alphabet = '23456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz';
+    const pick = () => {
+      // cryptographically strong uniform pick
+      const u32 = new Uint32Array(1);
+      (window.crypto || window.msCrypto).getRandomValues(u32);
+      return alphabet[Math.floor((u32[0] / 4294967296) * alphabet.length)];
+    };
+    let s = 'S';
+    for(let i=0;i<11;i++) s += pick();
+    seed = s;
+    history.replaceState(null,'',`?seed=${seed}`);
+  }
+
+  runtime.seedStr = seed;
+  runtime.rng = makeRNG(seed);   // <-- seeded PRNG is now ready
+  ui.seed.value = seed;
+}
+
+/** ====== MUSICAL HELPERS (fully deterministic) ====== */
+// Build a 10-note library from seed (mix of diatonic + chromatic ornaments)
+const ScaleSets = [
+  {name:'E major',   root:64, intervals:[0,2,4,5,7,9,11]},
+  {name:'C minor',   root:60, intervals:[0,2,3,5,7,8,10]},
+  {name:'A Dorian',  root:57, intervals:[0,2,3,5,7,9,10]},
+  {name:'G Mix',     root:55, intervals:[0,2,4,5,7,9,10]},
+  {name:'D Phryg',   root:62, intervals:[0,1,3,5,7,8,10]},
+  {name:'F Lyd',     root:65, intervals:[0,2,4,6,7,9,11]},
+];
+function buildNoteLibrary(){
+  const sc = rpick(ScaleSets);
+  const notes = new Set();
+  // choose 8 from scale degrees across 3 octaves
+  while(notes.size < 8){
+    const deg = rpick(sc.intervals);
+    const oct = rint(-1,1);
+    notes.add(sc.root + deg + 12*oct);
+  }
+  // add 2 chromatic neighbors near the median
+  const arr = [...notes];
+  const med = arr[Math.floor(arr.length/2)];
+  notes.add(med+1); notes.add(med-1);
+  const lib = dShuffle([...notes]).slice(0,10);
+  return lib; // 10 MIDI notes
+}
+function midiToFreq(m){ return 440 * Math.pow(2,(m-69)/12); }
+
+/** ====== SYNTH ENGINE ====== */
+const Engine = {
+  master:null, meter:null, voices:[], noteLib:[], algoOrder:[], idlePad:null, rec:false, seqPlaying:false,
+  gridSteps:32, gridBPM:110, sequence:[], // sequence is array of arrays: for step i => [voiceIndices]
+};
+
+// create FX chain per voice
+function makeFx(T){
+  const fx = {};
+  fx.pre = new T.Gain(1).toDestination(); // placeholder, will connect chain ending to master bus
+  // gentle variations
+  const del = new T.PingPongDelay(rnorm(0.05,0.25), rnorm(0.2,0.45));
+  const hp = new T.Filter(rnorm(60,180), 'highpass', -12);
+  const lp = new T.Filter(rnorm(4000,9000), 'lowpass', -12);
+  const wid = new T.StereoWidener(rnorm(0.2,0.8));
+  const rev = new T.Reverb({ decay:rnorm(0.8,2.2), wet:rnorm(0.12,0.35) });
+  fx.chain = [hp, lp, del, wid, rev];
+  // connect in series
+  fx.pre.chain(...fx.chain, T.getDestination());
+  return fx;
+}
+
+function clicklessGain(T, val, at=undefined, time=0.01, node){
+  const g = node ?? new T.Gain(0);
+  const now = at ?? T.now();
+  g.gain.cancelAndHoldAtTime(now);
+  g.gain.linearRampToValueAtTime(val, now + Math.max(0.005,time));
+  return g;
+}
+
+function createPeriodicWave(T){
+  // Wavetable-like: few random partials, deterministic & audible
+  const size = 32;
+  const real = new Float32Array(size);
+  const imag = new Float32Array(size);
+  for(let i=1;i<size;i++){
+    const amp = Math.pow(rand(), 1.5) * (i<8 ? 1 : 0.2); // more energy in low harmonics
+    const phase = rand()*Math.PI*2;
+    real[i] = amp*Math.cos(phase);
+    imag[i] = amp*Math.sin(phase);
+  }
+  return T.Context.getContext().createPeriodicWave(real, imag, {disableNormalization:false});
+}
+
+function makeVoice(T, kind, freqBase){
+  const fx = makeFx(T);
+  const out = new T.Gain(0); // voice vca
+  out.connect(fx.pre);
+
+  const env = new T.Envelope({ attack:0.01, decay:0.15, sustain:0.7, release:0.35 });
+  const amp = new T.Gain(0); amp.connect(out);
+  // connect env
+  env.connect(amp.gain);
+
+  const voice = { kind, out, env, amp, fx, lastTrig:0, algo:0, meter:new T.Meter({ channels:2, smoothing:0.5 }) };
+  out.connect(voice.meter);
+
+  // voice graph per kind
+  const baseHz = rnorm(0.85,1.15)*freqBase;
+
+  if(kind==='FM'){
+    const carrier = new T.Oscillator({ type:'sine', frequency:baseHz }).start();
+    const mod = new T.Oscillator({ type:rpick(['sine','triangle']), frequency:baseHz * rnorm(1.5,3.0) }).start();
+    const modDepth = new T.Gain(rnorm(50,220));
+    mod.connect(modDepth);
+    modDepth.connect(carrier.frequency);
+    const sh = new T.Filter(rnorm(120,280),'highpass');
+    carrier.connect(sh).connect(amp);
+    voice.nodes = { carrier, mod, modDepth, sh };
+  }
+  else if(kind==='AM'){
+    const car = new T.Oscillator({ type:rpick(['sine','triangle','sawtooth']), frequency:baseHz }).start();
+    const mod = new T.Oscillator({ type:'square', frequency:baseHz * rnorm(0.5,2) }).start();
+    const ring = new T.Multiply();
+    car.connect(ring, 0, 0);
+    mod.connect(ring, 0, 1);
+    ring.connect(amp);
+    voice.nodes = { car, mod, ring };
+  }
+  else if(kind==='Subtractive'){
+    const src = new T.Oscillator({ type:rpick(['sawtooth','square']), frequency:baseHz }).start();
+    const svf = new T.Filter(rnorm(600,2200), rpick(['lowpass','bandpass']), rnorm(0.1,0.7));
+    const drive = new T.Saturator({ wet:rnorm(0.05,0.2) });
+    src.connect(drive).connect(svf).connect(amp);
+    // slight env to cutoff
+    const cenv = new T.Envelope({ attack:0.005, decay:0.2, sustain:0.0, release:0.2 });
+    const depth = new T.Gain(rnorm(800,2000));
+    cenv.connect(depth); depth.connect(svf.frequency);
+    voice.nodes = { src, svf, drive, cenv, depth };
+    voice.cenv = cenv;
+  }
+  else if(kind==='Additive'){
+    const partials = rint(4,7);
+    const sum = new T.Gain(1/partials);
+    for(let i=0;i<partials;i++){
+      const o = new T.Oscillator({ type:'sine', frequency:baseHz*(i+1) + rnorm(-2,2) }).start();
+      const g = new T.Gain(rnorm(0.2,0.9)/(i+1));
+      o.connect(g).connect(sum);
+    }
+    sum.connect(amp);
+    voice.nodes = { sum };
+  }
+  else if(kind==='Wavetable'){
+    const wave = createPeriodicWave(T);
+    const o = new T.Oscillator({ frequency:baseHz }); o._oscillator.setPeriodicWave(wave); o.start();
+    const lp = new T.Filter(rnorm(1200,5000),'lowpass',rnorm(0.05,0.4));
+    o.connect(lp).connect(amp);
+    voice.nodes = { o, lp, wave };
+  }
+  else if(kind==='Noise'){
+    const n = new T.Noise('pink').start();
+    const bp = new T.Filter(rnorm(800,4000),'bandpass',rnorm(0.2,0.8));
+    const gate = new T.AutoFilter({ frequency:rnorm(3,12), baseFrequency:rnorm(200,600), octaves:rnorm(1,2), depth:rnorm(0.2,0.6) }).start();
+    n.connect(bp).connect(gate).connect(amp);
+    voice.nodes = { n, bp, gate };
+  }
+  else if(kind==='RingMod'){
+    const a = new T.Oscillator({ type:'sine', frequency:baseHz }).start();
+    const b = new T.Oscillator({ type:'triangle', frequency:baseHz*rnorm(1.2,2.8) }).start();
+    const mul = new T.Multiply();
+    a.connect(mul,0,0); b.connect(mul,0,1);
+    mul.connect(amp);
+    voice.nodes = { a, b, mul };
+  }
+  else if(kind==='DualSub'){
+    const a = new T.Oscillator({ type:'sawtooth', frequency:baseHz }).start();
+    const b = new T.Oscillator({ type:'square', frequency:baseHz*0.5 }).start();
+    const mix = new T.Gain(0.5);
+    a.connect(mix); b.connect(mix);
+    const svf = new T.Filter(rnorm(500,1600),'lowpass',rnorm(0.3,0.8));
+    mix.connect(svf).connect(amp);
+    voice.nodes = { a,b,mix,svf };
+  }
+  else if(kind==='SuperSine'){
+    const det = [0.997,1,1.003];
+    const m = new T.Gain(1/det.length);
+    det.forEach(d=>{
+      const o=new T.Oscillator({type:'sine',frequency:baseHz*d}).start();
+      o.connect(m);
+    });
+    const ph = new T.Phaser({frequency:rnorm(0.05,0.4), octaves:2, baseFrequency:400, Q:2, wet:rnorm(0.05,0.2)});
+    m.connect(ph).connect(amp);
+    voice.nodes = { m, ph };
+  }
+  else { // 'Chiff'
+    const o = new T.Oscillator({ type:'triangle', frequency:baseHz }).start();
+    const envf = new T.Envelope({ attack:0.002, decay:0.08, sustain:0, release:0.05 });
+    const svf = new T.Filter(800, 'bandpass', 0.6);
+    envf.connect(svf.frequency);
+    o.connect(svf).connect(amp);
+    voice.nodes = { o, envf, svf }; voice.envf = envf;
+  }
+
+  voice.trigger = (time, dur=0.4, vel=0.9) => {
+    const now = time ?? T.now();
+    // gate shaping (clickless)
+    voice.env.triggerAttack(now);
+    voice.env.triggerRelease(now + Math.max(0.08, dur));
+    // auxiliary envelopes
+    if(voice.cenv) voice.cenv.triggerAttackRelease(Math.min(0.2,dur+0.05), now);
+    if(voice.envf) voice.envf.triggerAttackRelease(Math.min(0.12,dur+0.02), now);
+    // gain staging
+    const base = 0.18*vel;
+    clicklessGain(T, base, now, 0.005, voice.amp);
+    clicklessGain(T, 0.0001, now+dur+0.18, 0.04, voice.amp); // soft tail to avoid clicks
+    voice.lastTrig = now;
+  };
+
+  voice.sustain = (on=true) => {
+    const now = T.now();
+    if(on){
+      voice.env.attack = 0.08; voice.env.decay = 0.6; voice.env.sustain = 0.75; voice.env.release = 0.8;
+      voice.env.triggerAttack(now);
+      clicklessGain(T, 0.15, now, 0.02, voice.amp);
+    } else {
+      voice.env.release = 0.6;
+      voice.env.triggerRelease(now);
+      clicklessGain(T, 0.0001, now, 0.2, voice.amp);
+    }
+  };
+
+  return voice;
+}
+
+function buildEngine(){
+  const T = runtime.Tone;
+  Engine.gridBPM = Number(ui.bpm.value) || 110;
+  T.Transport.bpm.value = Engine.gridBPM;
+  Engine.master = new T.Gain(0.9).toDestination();
+  Engine.meter = new T.Meter({ channels:2, smoothing:0.5 });
+  Engine.master.connect(Engine.meter);
+
+  Engine.noteLib = buildNoteLibrary(); // 10 notes
+  const kinds = ['FM','AM','Subtractive','Additive','Wavetable','Noise','RingMod','DualSub','SuperSine','Chiff'];
+  const algoIdx = [0,1,2,3,4,5,6,7,8,9];
+  Engine.algoOrder = dShuffle(algoIdx); // map 10 voices -> 10 algos deterministically
+
+  Engine.voices = [];
+  for(let i=0;i<10;i++){
+    const kind = kinds[i];
+    const freq = midiToFreq(Engine.noteLib[i]);
+    const v = makeVoice(T, kind, freq);
+    // mix: voice out through its fx already goes to destination, but also tap into master bus for metering/limiter staging
+    const tap = new T.Gain(0.9);
+    v.out.connect(tap).connect(Engine.master);
+    v.algo = Engine.algoOrder[i];
+    Engine.voices.push(v);
+  }
+
+  // Idle sustaining pad (gentle)
+  Engine.idlePad = new T.Synth({
+    oscillator:{type:'sine'},
+    envelope:{attack:1.2,decay:1.5,sustain:0.65,release:2.2}
+  });
+  const idleFx = new T.Reverb({decay:3,wet:0.25});
+  Engine.idlePad.chain(idleFx, Engine.master);
+}
+
+function startIdlePad(){
+  const T = runtime.Tone;
+  const rootHz = midiToFreq(Engine.noteLib[0]);
+  const dy = [0,7,12]; // simple chord
+  const now = T.now()+0.02;
+  Engine.idlePad.triggerAttackRelease(rootHz, 6, now, 0.18);
+  Engine.idlePad.triggerAttackRelease(rootHz* Math.pow(2,7/12), 6, now+0.03, 0.14);
+  Engine.idlePad.triggerAttackRelease(rootHz* Math.pow(2,12/12), 6, now+0.06, 0.12);
+}
+
+function stopIdlePad(){ if(Engine.idlePad) Engine.idlePad.triggerRelease(); }
+
+/** ====== BOOT SIGNATURE (3–4s, deterministic, polyphonic, R2D2-like) ====== */
+function bootSignature(done){
+  const T = runtime.Tone;
+  const duration = rnorm(3.0,3.8);
+  const start = T.now()+0.1;
+  const steps = 18;
+  for(let i=0;i<steps;i++){
+    const t = start + i*(duration/steps);
+    // choose 2–4 short bleeps each slice
+    const bl = rint(2,4);
+    for(let b=0;b<bl;b++){
+      const vIdx = rint(0,9);
+      const v = Engine.voices[vIdx];
+      const vel = rnorm(0.6,1);
+      const d = rnorm(0.05,0.16);
+      v.trigger(t + b*0.01, d, vel);
+    }
+  }
+  T.Transport.scheduleOnce(()=>{
+    done && done();
+  }, start + duration + 0.05 - T.now());
+}
+
+/** ====== XY ALGORITHMS ====== */
+// All map (t, k, energy) -> {x,y} normalized [-1,1]
+// k is the voice index; energy ~ meter level for subtle animation
+const XY = {
+  0: (t,k,e)=>{ // Lissajous Core
+    const a=2+k%5, b=3+(k%7);
+    return { x: Math.sin(a*t*1.3), y: Math.sin(b*t*1.1 + Math.PI*(k%2)) };
+  },
+  1: (t,k,e)=>{ // Spiral–Precess
+    const r = 0.1 + 0.85*(0.5+0.5*Math.sin(t*0.4 + k));
+    return { x: r*Math.cos(t*1.7), y: r*Math.sin(t*1.2 + 0.6) };
+  },
+  2: (t,k,e)=>{ // Polar Rose
+    const n = 3 + (k%4);
+    const r = Math.sin(n*(t*0.7))+0.2;
+    return { x:r*Math.cos(t), y:r*Math.sin(t) };
+  },
+  3: (t,k,e)=>{ // Phyllotaxis Orbit
+    const phi = (Math.PI*(3-Math.sqrt(5)));
+    const idx = (k+1);
+    const a = t*0.7 + idx*phi;
+    const r = Math.sqrt(idx)/3;
+    return { x:r*Math.cos(a), y:r*Math.sin(a) };
+  },
+  4: (t,k,e)=>{ // Figure-8 Morph
+    const w = 1.2+0.2*Math.sin(t*0.3);
+    return { x: Math.sin(t*w), y: Math.sin(2*t) * Math.cos(t*0.7) };
+  },
+  5: (t,k,e)=>{ // Epicycle Chain
+    let x=0,y=0; const N=3+(k%3);
+    for(let i=1;i<=N;i++){
+      const r=0.35/i; const w=(i+k%2?1.1:0.9)*i;
+      x += r*Math.cos(w*t + i*.6); y += r*Math.sin(w*t + i*.6);
+    }
+    return {x,y};
+  },
+  6: (t,k,e)=>{ // VectorScope XY (audio-ish)
+    const a=1.5+0.2*k, b=0.7+0.1*k;
+    return { x: Math.sin(t*a) + 0.2*Math.sin(3*t), y: Math.sin(t*b+1.2)+0.2*Math.sin(2.2*t) };
+  },
+  7: (t,k,e)=>{ // Torus-Knot Projection
+    const p=2+(k%3), q=3+(k%4);
+    const u=t*0.9;
+    const x=(2+Math.cos(q*u))*Math.cos(p*u);
+    const y=(2+Math.cos(q*u))*Math.sin(p*u);
+    return { x:x/3, y:y/3 };
+  },
+  8: (t,k,e)=>{ // Audio Flowfield (hybrid)
+    const ang = Math.sin(t*0.5 + k)*2.2 + e*3.0;
+    const r = 0.7*Math.sin(t*0.9)+0.3;
+    return { x:r*Math.cos(ang), y:r*Math.sin(ang) };
+  },
+  9: (t,k,e)=>{ // Harmonic Bloom (hybrid)
+    const r = 0.3+0.7*(0.5+0.5*Math.sin(t*0.6));
+    return { x:r*Math.sin(2*t)+0.2*Math.sin(7*t), y:r*Math.cos(3*t)+0.2*Math.cos(5*t) };
+  }
+};
+
+/** ====== DRAW LOOP ====== */
+function resizeScope(){
+  const dpr = Math.min(2, window.devicePixelRatio||1);
+  scope.w = ui.scope.clientWidth;
+  scope.h = ui.scope.clientHeight;
+  ui.scope.width = Math.floor(scope.w*dpr);
+  ui.scope.height = Math.floor(scope.h*dpr);
+  scope.ctx = ui.scope.getContext('2d');
+  scope.ctx.setTransform(dpr,0,0,dpr,0,0);
+}
+window.addEventListener('resize', resizeScope);
+
+function drawLoop(ts){
+  if(!scope.ctx){ requestAnimationFrame(drawLoop); return; }
+  const ctx = scope.ctx;
+  ctx.clearRect(0,0,scope.w,scope.h);
+
+  // grid/background glow
+  ctx.save();
+  ctx.strokeStyle = '#132018';
+  ctx.lineWidth = 1;
+  ctx.globalAlpha = .5;
+  ctx.beginPath();
+  for(let x=0;x<scope.w;x+=Math.round(scope.w/16)) { ctx.moveTo(x,0); ctx.lineTo(x,scope.h); }
+  for(let y=0;y<scope.h;y+=Math.round(scope.h/12)) { ctx.moveTo(0,y); ctx.lineTo(scope.w,y); }
+  ctx.stroke();
+  ctx.restore();
+
+  // determine algo for current voice
+  const vIdx = scope.lastVoiceIndex;
+  const algo = Engine.voices.length ? Engine.voices[vIdx].algo : 0;
+  scope.algoIndex = algo;
+
+  const T = runtime.Tone;
+  const t = T ? T.now() : ts*0.001;
+  const k = vIdx;
+  // meter animation: combine master and voice meter
+  if(Engine.voices.length){
+    const vMet = Math.min(1, Math.max(0, Math.abs(Engine.voices[vIdx].meter.getValue(0))*0.02));
+    const mMet = Math.min(1, Math.max(0, Math.abs(Engine.meter.getValue(0))*0.02));
+    scope.meterVal = 0.6*vMet + 0.4*mMet;
+    ui.mbar.style.height = `${Math.min(100, (scope.meterVal*100) | 0)}%`;
+  }
+
+  // draw XY path
+  const fn = XY[algo] || XY[0];
+  const pts = 1200;
+  ctx.save();
+  const cx = scope.w/2, cy = scope.h/2;
+  ctx.translate(cx, cy);
+  ctx.scale(Math.min(scope.w,scope.h)*0.42, Math.min(scope.w,scope.h)*0.42);
+  ctx.strokeStyle = '#7cf9bf';
+  ctx.shadowColor = '#73ffbf';
+  ctx.shadowBlur = 12 + scope.meterVal*30;
+  ctx.globalAlpha = .95;
+  ctx.lineWidth = 0.012;
+  ctx.beginPath();
+  for(let i=0;i<pts;i++){
+    const tt = t*1.8 + i*0.006;
+    const {x,y} = fn(tt, k, scope.meterVal);
+    if(i===0) ctx.moveTo(x,y);
+    else ctx.lineTo(x,y);
+  }
+  ctx.stroke();
+  ctx.restore();
+
+  requestAnimationFrame(drawLoop);
+}
+
+/** ====== INPUT & PLAYBACK ====== */
+function keyToIndex(e){
+  if(e.key>='0' && e.key<='9'){
+    return (e.key==='0') ? 9 : (parseInt(e.key)-1);
+  }
+  return -1;
+}
+
+function triggerVoice(idx, velocity=1){
+  const T = runtime.Tone;
+  if(idx<0 || idx>9) return;
+  scope.lastVoiceIndex = idx;
+  const v = Engine.voices[idx];
+  v.trigger(T.now(), rnorm(0.18,0.45), velocity);
+}
+
+function bindKeys(){
+  window.addEventListener('keydown', (e)=>{
+    if(e.repeat) return;
+    if(e.key===' '){ e.preventDefault(); togglePlay(); return; }
+    if(e.key==='r' || e.key==='R'){ toggleRec(); return; }
+    const idx = keyToIndex(e);
+    if(idx>=0){
+      e.preventDefault();
+      triggerVoice(idx, 1);
+      maybeRecord(idx);
+    }
+  });
+}
+
+/** ====== MINI SEQUENCER (8–64 steps) ====== */
+function initSequencer(){
+  Engine.gridSteps = Number(ui.steps.value)|0;
+  Engine.sequence = Array.from({length:Engine.gridSteps}, ()=>[]);
+}
+
+function setBPM(){
+  const b = Number(ui.bpm.value)||110;
+  Engine.gridBPM = b;
+  runtime.Tone.Transport.bpm.rampTo(b, 0.05);
+}
+
+function maybeRecord(vIdx){
+  if(!Engine.rec) return;
+  const T = runtime.Tone;
+  const PPQ = 4; // quarter-note grid
+  const beat = T.Transport.seconds + 0; // not directly accessible; we quantize using position
+  const pos = T.Transport.position.split(':').map(Number);
+  const bar = pos[0], q = pos[1], six = pos[2];
+  const stepDurQN = 4/Engine.gridSteps; // steps per bar: map to quarter note fractions
+  // Convert position to step index in a simple 0..steps-1 map within the current bar
+  const qnInBar = q + six/16;
+  const step = Math.round(qnInBar / stepDurQN) % Engine.gridSteps;
+  if(!Engine.sequence[step]) Engine.sequence[step] = [];
+  Engine.sequence[step].push(vIdx);
+  flashRecLed();
+}
+
+let playLoopId = null;
+function schedulePlay(){
+  const T = runtime.Tone;
+  cancelPlay();
+  const stepDur = (60/Engine.gridBPM) * (4/Engine.gridSteps) * 4; // one bar mapped evenly across steps
+  let step = 0;
+  playLoopId = T.Transport.scheduleRepeat((time)=>{
+    const voices = Engine.sequence[step] || [];
+    voices.forEach(vIdx=>{
+      Engine.voices[vIdx] && Engine.voices[vIdx].trigger(time, rnorm(0.18,0.42), 0.95);
+    });
+    step = (step+1) % Engine.gridSteps;
+  }, stepDur);
+}
+
+function cancelPlay(){
+  if(playLoopId!==null){
+    runtime.Tone.Transport.clear(playLoopId);
+    playLoopId=null;
+  }
+}
+
+function togglePlay(){
+  Engine.seqPlaying = !Engine.seqPlaying;
+  if(Engine.seqPlaying){
+    schedulePlay(); ui.play.setAttribute('aria-pressed','true'); ui.play.textContent='Stop';
+  } else {
+    cancelPlay(); ui.play.removeAttribute('aria-pressed'); ui.play.textContent='Play';
+  }
+}
+
+function toggleRec(){
+  Engine.rec = !Engine.rec;
+  if(Engine.rec){ ui.rec.setAttribute('aria-pressed','true'); } else { ui.rec.removeAttribute('aria-pressed'); }
+}
+
+function flashRecLed(){
+  ui.rec.style.outline = '2px solid var(--acc)';
+  setTimeout(()=> ui.rec.style.outline = '', 120);
+}
+
+ui.steps.addEventListener('change', ()=>{
+  initSequencer();
+});
+
+/** ====== SAVE/LOAD JSON (local disk) ====== */
+ui.save.addEventListener('click', ()=>{
+  const data = {
+    seed: runtime.seedStr,
+    bpm: Engine.gridBPM,
+    steps: Engine.gridSteps,
+    sequence: Engine.sequence
+  };
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `xy-seq-${runtime.seedStr}.json`; a.click();
+  URL.revokeObjectURL(url);
+});
+
+ui.load.addEventListener('click', ()=>{
+  const inp = document.createElement('input');
+  inp.type='file'; inp.accept='application/json';
+  inp.onchange = ()=>{
+    const f = inp.files[0]; if(!f) return;
+    const r = new FileReader();
+    r.onload = ()=>{
+      try{
+        const obj = JSON.parse(r.result);
+        if(obj.seed && obj.seed!==runtime.seedStr){
+          alert(`Loaded file seed ${obj.seed} differs from current ${runtime.seedStr}. Keeping current seed for determinism, but loading sequence/BPM/steps.`);
+        }
+        if(obj.bpm){ ui.bpm.value = obj.bpm; setBPM(); }
+        if(obj.steps){ ui.steps.value = String(obj.steps); Engine.gridSteps = obj.steps; }
+        if(Array.isArray(obj.sequence)){ Engine.sequence = obj.sequence.slice(0, Engine.gridSteps).map(a=>Array.isArray(a)?a:[]); }
+      } catch(e){ console.error(e); alert('Invalid JSON'); }
+    };
+    r.readAsText(f);
+  };
+  inp.click();
+});
+
+/** ====== POWER / BOOT ====== */
+function setStatus(msg, isError=false){
+  ui.statusText.innerHTML = msg;
+  ui.status.classList.toggle('error', !!isError);
+}
+
+async function boot(){
+  const T = runtime.Tone;
+  try{
+    await T.start(); // resume audio context
+    setStatus('Starting transport…');
+    buildEngine();
+    bindKeys();
+    initSequencer();
+    setBPM();
+    T.Transport.start();
+    stopIdlePad(); // ensure silence pre-boot
+    bootSignature(()=>{
+      startIdlePad(); // return to idle pad after boot signature
+      setTimeout(()=> ui.status.style.display='none', 200);
+    });
+  } catch(err){
+    console.error(err);
+    setStatus('Audio init failed', true);
+  }
+}
+
+ui.power.addEventListener('click', ()=>{
+  if(runtime.started) return;
+  runtime.started = true;
+  loadToneJSAndBoot({
+    setLoaderStatus:(msg,isErr=false)=>setStatus(msg,isErr),
+    runtimeState:runtime,
+    boot
+  });
+});
+
+/** ====== WIRE UI EVENTS ====== */
+ui.bpm.addEventListener('change', setBPM);
+ui.rec.addEventListener('click', toggleRec);
+ui.play.addEventListener('click', togglePlay);
+
+/** ====== INIT ====== */
+initSeed();
+resizeScope();
+requestAnimationFrame(drawLoop);
+</script>
+</body>
+</html>

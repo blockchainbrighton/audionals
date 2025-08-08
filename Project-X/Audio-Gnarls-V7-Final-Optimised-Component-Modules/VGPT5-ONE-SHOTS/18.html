@@ -1,0 +1,784 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oscilloscope Synthesizer NFT</title>
+    <style>
+        :root {
+            --bg-color: #0a0a12;
+            --scope-bg: #000;
+            --grid-color: rgba(0, 100, 200, 0.2);
+            --text-color: #0ff;
+            --accent-color: #f0f;
+            --control-bg: rgba(20, 20, 40, 0.7);
+            --control-border: #333;
+            --button-bg: #111;
+            --button-hover: #222;
+            --highlight: #ff0;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Courier New', monospace;
+        }
+        
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            height: 100vh;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            padding: 10px;
+            gap: 10px;
+        }
+        
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 5px 10px;
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
+            border-radius: 4px;
+        }
+        
+        .logo {
+            font-weight: bold;
+            color: var(--accent-color);
+            font-size: 1.2rem;
+        }
+        
+        .seed-display {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-family: monospace;
+        }
+        
+        .main-content {
+            display: flex;
+            flex: 1;
+            gap: 10px;
+        }
+        
+        .scope-container {
+            flex: 1;
+            position: relative;
+            background: var(--scope-bg);
+            border: 1px solid var(--control-border);
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        
+        #oscilloscope {
+            width: 100%;
+            height: 100%;
+        }
+        
+        .controls {
+            width: 250px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+        }
+        
+        .control-group {
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
+            border-radius: 4px;
+            padding: 10px;
+        }
+        
+        .group-title {
+            font-size: 0.9rem;
+            margin-bottom: 8px;
+            color: var(--accent-color);
+        }
+        
+        .buttons {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .btn {
+            background: var(--button-bg);
+            color: var(--text-color);
+            border: 1px solid var(--control-border);
+            border-radius: 3px;
+            padding: 8px 0;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        
+        .btn:hover {
+            background: var(--button-hover);
+        }
+        
+        .btn.active {
+            background: var(--accent-color);
+            color: #000;
+            font-weight: bold;
+        }
+        
+        .transport-controls {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        
+        .transport-btn {
+            flex: 1;
+            padding: 8px;
+            text-align: center;
+            background: var(--button-bg);
+            border: 1px solid var(--control-border);
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        
+        .transport-btn:hover {
+            background: var(--button-hover);
+        }
+        
+        .slider-container {
+            margin: 8px 0;
+        }
+        
+        .slider-label {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 3px;
+            font-size: 0.85rem;
+        }
+        
+        .slider {
+            width: 100%;
+            height: 20px;
+            -webkit-appearance: none;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 10px;
+            outline: none;
+        }
+        
+        .slider::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 16px;
+            height: 16px;
+            border-radius: 50%;
+            background: var(--accent-color);
+            cursor: pointer;
+        }
+        
+        .tuning-hud {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+            font-size: 0.9rem;
+        }
+        
+        .meter {
+            height: 5px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 2px;
+            margin-top: 3px;
+            overflow: hidden;
+        }
+        
+        .meter-fill {
+            height: 100%;
+            background: var(--accent-color);
+            width: 0%;
+            transition: width 0.1s;
+        }
+        
+        .status-bar {
+            padding: 5px 10px;
+            background: var(--control-bg);
+            border: 1px solid var(--control-border);
+            border-radius: 4px;
+            font-size: 0.85rem;
+            text-align: center;
+        }
+        
+        .loader {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(10, 10, 18, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .spinner {
+            width: 50px;
+            height: 50px;
+            border: 5px solid rgba(0, 255, 255, 0.3);
+            border-radius: 50%;
+            border-top-color: var(--accent-color);
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        
+        .hidden {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <div class="logo">OSCILLOSCOPE SYNTHESIZER NFT</div>
+            <div class="seed-display">SEED: <span id="seed-value">LOADING...</span></div>
+        </div>
+        
+        <div class="main-content">
+            <div class="scope-container">
+                <canvas id="oscilloscope"></canvas>
+                <div id="loader" class="loader">
+                    <div class="spinner"></div>
+                    <div id="loader-status">Initializing...</div>
+                </div>
+            </div>
+            
+            <div class="controls">
+                <div class="control-group">
+                    <div class="group-title">VOICES</div>
+                    <div class="buttons">
+                        <button class="btn" data-voice="0">0</button>
+                        <button class="btn" data-voice="1">1</button>
+                        <button class="btn" data-voice="2">2</button>
+                        <button class="btn" data-voice="3">3</button>
+                        <button class="btn" data-voice="4">4</button>
+                        <button class="btn" data-voice="5">5</button>
+                        <button class="btn" data-voice="6">6</button>
+                        <button class="btn" data-voice="7">7</button>
+                        <button class="btn" data-voice="8">8</button>
+                        <button class="btn" data-voice="9">9</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <div class="group-title">SEQUENCER</div>
+                    <div class="transport-controls">
+                        <div class="transport-btn" id="record-btn">REC</div>
+                        <div class="transport-btn" id="play-btn">PLAY</div>
+                        <div class="transport-btn" id="stop-btn">STOP</div>
+                        <div class="transport-btn" id="loop-btn">LOOP</div>
+                    </div>
+                    
+                    <div class="slider-container">
+                        <div class="slider-label">
+                            <span>BPM</span>
+                            <span id="bpm-value">120</span>
+                        </div>
+                        <input type="range" min="40" max="240" value="120" class="slider" id="bpm-slider">
+                    </div>
+                    
+                    <div style="display: flex; gap: 5px; margin-top: 10px;">
+                        <button class="btn" id="save-btn">SAVE</button>
+                        <button class="btn" id="load-btn">LOAD</button>
+                    </div>
+                </div>
+                
+                <div class="control-group">
+                    <div class="group-title">TUNING</div>
+                    <div class="tuning-hud">
+                        <div>TEMPERAMENT: <span id="temperament">12-TET</span></div>
+                        <div>ROOT: <span id="root-note">C4</span></div>
+                    </div>
+                    <button class="btn" id="toggle-temperament" style="margin-top: 10px;">TOGGLE TEMPERAMENT</button>
+                </div>
+                
+                <div class="control-group">
+                    <div class="group-title">LEVELS</div>
+                    <div>METER</div>
+                    <div class="meter">
+                        <div class="meter-fill" id="meter-fill"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="status-bar" id="status-bar">READY</div>
+    </div>
+
+    <script>
+        // PRNG implementation for deterministic behavior
+        class PRNG {
+            constructor(seed) {
+                this.seed = seed;
+            }
+            
+            next() {
+                this.seed = (this.seed * 9301 + 49297) % 233280;
+                return this.seed / 233280;
+            }
+            
+            nextInt(min, max) {
+                return Math.floor(this.next() * (max - min + 1)) + min;
+            }
+            
+            nextFloat(min, max) {
+                return this.next() * (max - min) + min;
+            }
+            
+            nextBool() {
+                return this.next() > 0.5;
+            }
+            
+            choice(array) {
+                return array[this.nextInt(0, array.length - 1)];
+            }
+            
+            shuffle(array) {
+                const result = [...array];
+                for (let i = result.length - 1; i > 0; i--) {
+                    const j = this.nextInt(0, i);
+                    [result[i], result[j]] = [result[j], result[i]];
+                }
+                return result;
+            }
+        }
+
+        // Main application class
+        class OscilloscopeSynth {
+            constructor(seed) {
+                this.seed = seed;
+                this.prng = new PRNG(seed);
+                this.tone = null;
+                this.temperament = this.prng.nextBool() ? 12 : 19; // 12-TET or 19-TET
+                this.rootNote = this.prng.choice(['C', 'D', 'E', 'F', 'G', 'A', 'B']) + 
+                               this.prng.nextInt(3, 5); // Random root note
+                
+                this.voices = [];
+                this.scopeAlgorithms = [];
+                this.sequence = [];
+                this.recording = false;
+                this.playing = false;
+                this.looping = true;
+                this.bpm = 120;
+                this.step = 0;
+                
+                this.canvas = document.getElementById('oscilloscope');
+                this.ctx = this.canvas.getContext('2d');
+                this.animationId = null;
+                
+                this.initUI();
+                this.resizeCanvas();
+                window.addEventListener('resize', () => this.resizeCanvas());
+            }
+            
+            initUI() {
+                document.getElementById('seed-value').textContent = this.seed;
+                document.getElementById('temperament').textContent = `${this.temperament}-TET`;
+                document.getElementById('root-note').textContent = this.rootNote;
+                document.getElementById('bpm-value').textContent = this.bpm;
+                
+                // Voice buttons
+                document.querySelectorAll('.btn[data-voice]').forEach(btn => {
+                    btn.addEventListener('click', () => {
+                        const voiceIndex = parseInt(btn.dataset.voice);
+                        this.triggerVoice(voiceIndex);
+                        btn.classList.add('active');
+                        setTimeout(() => btn.classList.remove('active'), 200);
+                    });
+                });
+                
+                // Transport controls
+                document.getElementById('record-btn').addEventListener('click', () => {
+                    this.recording = !this.recording;
+                    this.updateTransportUI();
+                });
+                
+                document.getElementById('play-btn').addEventListener('click', () => {
+                    this.playSequence();
+                });
+                
+                document.getElementById('stop-btn').addEventListener('click', () => {
+                    this.stopSequence();
+                });
+                
+                document.getElementById('loop-btn').addEventListener('click', () => {
+                    this.looping = !this.looping;
+                    this.updateTransportUI();
+                });
+                
+                // BPM slider
+                document.getElementById('bpm-slider').addEventListener('input', (e) => {
+                    this.bpm = parseInt(e.target.value);
+                    document.getElementById('bpm-value').textContent = this.bpm;
+                    if (this.tone) {
+                        this.tone.Transport.bpm.value = this.bpm;
+                    }
+                });
+                
+                // Temperament toggle
+                document.getElementById('toggle-temperament').addEventListener('click', () => {
+                    this.temperament = this.temperament === 12 ? 19 : 12;
+                    document.getElementById('temperament').textContent = `${this.temperament}-TET`;
+                });
+                
+                // Save/Load
+                document.getElementById('save-btn').addEventListener('click', () => {
+                    this.saveSequence();
+                });
+                
+                document.getElementById('load-btn').addEventListener('click', () => {
+                    this.loadSequence();
+                });
+                
+                this.updateTransportUI();
+            }
+            
+            updateTransportUI() {
+                document.getElementById('record-btn').textContent = this.recording ? '● REC' : 'REC';
+                document.getElementById('loop-btn').textContent = this.looping ? 'LOOP' : 'NO LOOP';
+            }
+            
+            resizeCanvas() {
+                this.canvas.width = this.canvas.clientWidth;
+                this.canvas.height = this.canvas.clientHeight;
+            }
+            
+            // Generate voices based on seed
+            generateVoices() {
+                // Create 10 voices with different synthesis techniques
+                for (let i = 0; i < 10; i++) {
+                    const voiceType = this.prng.nextInt(0, 5);
+                    let voice;
+                    
+                    switch (voiceType) {
+                        case 0: // FM Synth
+                            voice = new this.tone.FMSynth({
+                                harmonicity: this.prng.nextFloat(1, 10),
+                                modulationIndex: this.prng.nextFloat(1, 20),
+                                detune: this.prng.nextFloat(-20, 20)
+                            }).toDestination();
+                            break;
+                        case 1: // AM Synth
+                            voice = new this.tone.AMSynth({
+                                harmonicity: this.prng.nextFloat(0.5, 5),
+                                modulationIndex: this.prng.nextFloat(0.5, 5)
+                            }).toDestination();
+                            break;
+                        case 2: // Subtractive Synth
+                            voice = new this.tone.Synth({
+                                oscillator: { type: this.prng.choice(['sine', 'square', 'sawtooth', 'triangle']) },
+                                envelope: {
+                                    attack: this.prng.nextFloat(0.01, 0.5),
+                                    decay: this.prng.nextFloat(0.1, 1),
+                                    sustain: this.prng.nextFloat(0.3, 1),
+                                    release: this.prng.nextFloat(0.1, 2)
+                                }
+                            }).toDestination();
+                            break;
+                        case 3: // Noise
+                            voice = new this.tone.NoiseSynth({
+                                noise: { type: this.prng.choice(['white', 'pink', 'brown']) },
+                                envelope: {
+                                    attack: this.prng.nextFloat(0.01, 0.1),
+                                    decay: this.prng.nextFloat(0.1, 0.5),
+                                    sustain: this.prng.nextFloat(0.1, 0.5),
+                                    release: this.prng.nextFloat(0.1, 1)
+                                }
+                            }).toDestination();
+                            break;
+                        case 4: // Duo Synth
+                            voice = new this.tone.DuoSynth({
+                                vibratoAmount: this.prng.nextFloat(0.1, 1),
+                                vibratoRate: this.prng.nextFloat(1, 10),
+                                harmonicity: this.prng.nextFloat(0.5, 2),
+                                voice0: {
+                                    volume: -10,
+                                    oscillator: { type: this.prng.choice(['sine', 'square', 'sawtooth']) },
+                                    filter: { Q: this.prng.nextFloat(1, 10) },
+                                    envelope: {
+                                        attack: this.prng.nextFloat(0.01, 0.5),
+                                        decay: this.prng.nextFloat(0.1, 1),
+                                        sustain: this.prng.nextFloat(0.3, 1),
+                                        release: this.prng.nextFloat(0.1, 2)
+                                    }
+                                },
+                                voice1: {
+                                    volume: -10,
+                                    oscillator: { type: this.prng.choice(['sine', 'square', 'sawtooth']) },
+                                    filter: { Q: this.prng.nextFloat(1, 10) },
+                                    envelope: {
+                                        attack: this.prng.nextFloat(0.01, 0.5),
+                                        decay: this.prng.nextFloat(0.1, 1),
+                                        sustain: this.prng.nextFloat(0.3, 1),
+                                        release: this.prng.nextFloat(0.1, 2)
+                                    }
+                                }
+                            }).toDestination();
+                            break;
+                        case 5: // Metal Synth
+                            voice = new this.tone.MetalSynth({
+                                frequency: this.prng.nextFloat(100, 2000),
+                                envelope: {
+                                    attack: this.prng.nextFloat(0.001, 0.1),
+                                    decay: this.prng.nextFloat(0.1, 2),
+                                    release: this.prng.nextFloat(0.1, 1)
+                                },
+                                harmonicity: this.prng.nextFloat(1, 10),
+                                modulationIndex: this.prng.nextFloat(1, 10),
+                                resonance: this.prng.nextFloat(0, 1),
+                                octaves: this.prng.nextInt(1, 3)
+                            }).toDestination();
+                            break;
+                    }
+                    
+                    // Add FX chain
+                    const reverb = new this.tone.Reverb({
+                        decay: this.prng.nextFloat(0.5, 5),
+                        wet: this.prng.nextFloat(0.1, 0.8)
+                    }).toDestination();
+                    
+                    const delay = new this.tone.PingPongDelay({
+                        delayTime: this.prng.nextFloat(0.1, 0.5),
+                        feedback: this.prng.nextFloat(0.1, 0.7),
+                        wet: this.prng.nextFloat(0.1, 0.5)
+                    }).toDestination();
+                    
+                    const filter = new this.tone.Filter({
+                        type: this.prng.choice(['lowpass', 'highpass', 'bandpass']),
+                        frequency: this.prng.nextFloat(200, 5000),
+                        rolloff: this.prng.choice([-12, -24, -48]),
+                        Q: this.prng.nextFloat(0.5, 10)
+                    });
+                    
+                    const chorus = new this.tone.Chorus({
+                        frequency: this.prng.nextFloat(0.5, 10),
+                        delayTime: this.prng.nextFloat(2, 20),
+                        depth: this.prng.nextFloat(0.2, 0.8),
+                        wet: this.prng.nextFloat(0.1, 0.7)
+                    });
+                    
+                    // Connect FX chain
+                    voice.chain(filter, chorus, delay, reverb);
+                    
+                    this.voices.push(voice);
+                }
+                
+                // Assign scope algorithms to voices
+                const algorithms = [
+                    'Lissajous Core', 'Spiral–Precess', 'Polar Rose Sweep',
+                    'Phyllotaxis Orbit', 'Figure-8 Morph', 'Epicycle Chain',
+                    'VectorScope XY', 'Torus-Knot Projection', 'Audio Flowfield',
+                    'Harmonic Bloom'
+                ];
+                
+                this.scopeAlgorithms = this.prng.shuffle(algorithms);
+            }
+            
+            // Calculate frequency based on temperament
+            calculateFrequency(noteIndex) {
+                const rootFreq = this.noteToFrequency(this.rootNote);
+                const steps = this.temperament === 12 ? 
+                    [0, 2, 4, 5, 7, 9, 11, 12, 14, 16] : 
+                    [0, 3, 6, 8, 11, 14, 17, 19, 22, 25]; // Approximate 19-TET intervals
+                
+                const step = steps[noteIndex % steps.length];
+                const octave = Math.floor(noteIndex / steps.length);
+                
+                if (this.temperament === 12) {
+                    return rootFreq * Math.pow(2, (step + octave * 12) / 12);
+                } else {
+                    return rootFreq * Math.pow(2, (step + octave * 19) / 19);
+                }
+            }
+            
+            // Convert note name to frequency
+            noteToFrequency(note) {
+                const notes = { 'C': 0, 'D': 2, 'E': 4, 'F': 5, 'G': 7, 'A': 9, 'B': 11 };
+                const octave = parseInt(note.slice(-1));
+                const noteName = note.slice(0, -1);
+                const semitones = notes[noteName];
+                return 440 * Math.pow(2, (semitones - 9 + (octave - 4) * 12) / 12);
+            }
+            
+            // Trigger a voice with a specific note
+            triggerVoice(voiceIndex) {
+                if (!this.tone || !this.voices[voiceIndex]) return;
+                
+                const frequency = this.calculateFrequency(voiceIndex);
+                const now = this.tone.now();
+                
+                // Trigger the voice
+                this.voices[voiceIndex].triggerAttackRelease(frequency, '8n', now);
+                
+                // Record if in recording mode
+                if (this.recording) {
+                    this.sequence.push({
+                        step: this.step,
+                        voice: voiceIndex,
+                        time: now
+                    });
+                    this.step++;
+                }
+                
+                // Visualize the scope algorithm
+                this.visualizeScope(voiceIndex);
+            }
+            
+            // Play the sequence
+            playSequence() {
+                if (!this.tone || this.sequence.length === 0) return;
+                
+                this.playing = true;
+                this.step = 0;
+                
+                // Schedule events
+                this.sequence.forEach(event => {
+                    this.tone.Transport.scheduleOnce(() => {
+                        this.triggerVoice(event.voice);
+                    }, event.step * 0.5); // 0.5 seconds per step
+                });
+                
+                this.tone.Transport.start();
+            }
+            
+            // Stop the sequence
+            stopSequence() {
+                if (!this.tone) return;
+                
+                this.playing = false;
+                this.tone.Transport.stop();
+                this.tone.Transport.cancel();
+            }
+            
+            // Save sequence to localStorage
+            saveSequence() {
+                const data = {
+                    sequence: this.sequence,
+                    bpm: this.bpm,
+                    temperament: this.temperament,
+                    rootNote: this.rootNote
+                };
+                localStorage.setItem(`sequence_${this.seed}`, JSON.stringify(data));
+                document.getElementById('status-bar').textContent = 'Sequence saved';
+                setTimeout(() => {
+                    document.getElementById('status-bar').textContent = 'READY';
+                }, 2000);
+            }
+            
+            // Load sequence from localStorage
+            loadSequence() {
+                const data = localStorage.getItem(`sequence_${this.seed}`);
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    this.sequence = parsed.sequence;
+                    this.bpm = parsed.bpm;
+                    this.temperament = parsed.temperament;
+                    this.rootNote = parsed.rootNote;
+                    
+                    document.getElementById('bpm-slider').value = this.bpm;
+                    document.getElementById('bpm-value').textContent = this.bpm;
+                    document.getElementById('temperament').textContent = `${this.temperament}-TET`;
+                    document.getElementById('root-note').textContent = this.rootNote;
+                    
+                    document.getElementById('status-bar').textContent = 'Sequence loaded';
+                    setTimeout(() => {
+                        document.getElementById('status-bar').textContent = 'READY';
+                    }, 2000);
+                } else {
+                    document.getElementById('status-bar').textContent = 'No saved sequence found';
+                    setTimeout(() => {
+                        document.getElementById('status-bar').textContent = 'READY';
+                    }, 2000);
+                }
+            }
+            
+            // Visualize oscilloscope for a voice
+            visualizeScope(voiceIndex) {
+                const algorithm = this.scopeAlgorithms[voiceIndex];
+                // In a real implementation, this would render the specific algorithm
+                // For this demo, we'll just show the algorithm name
+                document.getElementById('status-bar').textContent = `Rendering: ${algorithm}`;
+            }
+            
+            // Boot signature sequence
+            playBootSignature() {
+                if (!this.tone) return;
+                
+                // Play a 3-4 second signature using all 10 voices
+                const signature = [
+                    { voice: 0, time: 0 },
+                    { voice: 1, time: 0.2 },
+                    { voice: 2, time: 0.4 },
+                    { voice: 3, time: 0.6 },
+                    { voice: 4, time: 0.8 },
+                    { voice: 5, time: 1.0 },
+                    { voice: 6, time: 1.2 },
+                    { voice: 7, time: 1.4 },
+                    { voice: 8, time: 1.6 },
+                    { voice: 9, time: 1.8 }
+                ];
+                
+                signature.forEach(note => {
+                    setTimeout(() => {
+                        this.triggerVoice(note.voice);
+                    }, note.time * 1000);
+                });
+                
+                // Transition to idle pad after signature
+                setTimeout(() => {
+                    this.playIdlePad();
+                }, 4000);
+            }
+            
+            // Play idle pad
+            playIdlePad() {
+                // Play a simple pad using multiple voices
+                setInterval(() => {
+                    const voice = this.prng.nextInt(0, 9);
+                    this.triggerVoice(voice);
+                }, 2000);
+            }
+            
+            // Start the application
+            start() {
+                // Hide loader
+                document.getElementById('loader').classList.add('hidden');
+                
+                // Generate voices
+                this.generateVoices();
+                
+                // Set up transport
+                this.tone.Transport.bpm.value = this.bpm;
+                
+                // Play boot signature
+                setTimeout(() => {
+                    this.playBootSignature();
+                }, 1000);
+                
+                // Start visualization
+                this.animate();
+            }
+            
+            // Animation loop for oscilloscope
+            anim

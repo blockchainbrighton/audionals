@@ -1,0 +1,960 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Seeded Oscilloscope Synth — Archival NFT</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg:#0b0b0b; --fg:#e6ffe6; --dim:#8fbf8f; --accent:#7fffd4; --warn:#ffb86c; --err:#ff6b6b;
+    --grid:#163016; --line:#a8ffbd;
+  }
+  * { box-sizing: border-box; }
+  html,body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.3 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #app { display:grid; grid-template-rows:auto 1fr auto; height:100%; }
+  header, footer { padding:8px 10px; display:flex; gap:10px; align-items:center; border-bottom:1px solid #123; }
+  footer { border-top:1px solid #123; border-bottom:none; justify-content:space-between; }
+  .group { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  label { display:flex; gap:6px; align-items:center; }
+  input[type="number"], input[type="text"] { background:#0e1a0e; color:var(--fg); border:1px solid #234; border-radius:6px; padding:6px 8px; width:7rem; }
+  input[type="file"] { color:var(--dim); }
+  button { background:#0e1a0e; color:var(--fg); border:1px solid #234; border-radius:8px; padding:6px 10px; cursor:pointer; }
+  button.primary { border-color:#2a5; box-shadow:0 0 0 1px #2a5 inset; }
+  button.danger { border-color:#a52; box-shadow:0 0 0 1px #a52 inset; color:#ffb; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  #scopeWrap { position:relative; display:grid; place-items:center; padding:10px; }
+  #scope { width:100%; height:100%; background:radial-gradient(ellipse at center, #0c140c 0%, #0a0f0a 60%, #080c08 100%); border-left:1px solid #123; border-right:1px solid #123; }
+  #gridOverlay { position:absolute; inset:10px; pointer-events:none; }
+  .meter { width:120px; height:10px; background:#0e1a0e; border:1px solid #234; border-radius:6px; position:relative; overflow:hidden; }
+  .meter > i { position:absolute; inset:0; width:0%; background:linear-gradient(90deg, #1f7, #6f6); }
+  .led { width:10px; height:10px; border-radius:50%; background:#233; box-shadow:0 0 0 1px #345 inset; }
+  .led.on { background:#3fa76a; box-shadow:0 0 6px 2px #3fa76a55, 0 0 0 1px #3fa76a inset; }
+  .mono { color:var(--dim); }
+  .right { margin-left:auto; }
+  .small { font-size:12px; opacity:.8; }
+  .kbd { padding:2px 5px; border:1px solid #345; border-radius:6px; background:#0e1a0e; color:#cfe; }
+  .checkbox { display:inline-flex; gap:6px; align-items:center; }
+</style>
+</head>
+<body>
+<div id="app">
+  <header>
+    <div class="group">
+      <button id="powerBtn" class="primary">Power</button>
+      <label>Seed <input id="seedInput" type="text" readonly></label>
+      <span id="loader" class="mono small">Idle.</span>
+      <span class="checkbox"><input id="loopToggle" type="checkbox"><span>Loop</span></span>
+      <label>BPM <input id="bpmInput" type="number" min="20" max="300" step="1" value="120"></label>
+      <label>Steps <input id="stepsInput" type="number" min="8" max="64" step="1" value="16"></label>
+      <button id="recBtn">Rec</button>
+      <button id="playBtn">Play</button>
+      <button id="stopBtn">Stop</button>
+    </div>
+    <div class="group right">
+      <button id="savePatternBtn">Save Pattern</button>
+      <input id="loadPatternInput" type="file" accept="application/json">
+      <button id="exportStateBtn">Export State</button>
+      <input id="importStateInput" type="file" accept="application/json">
+      <span class="mono">Checksum: <span id="checksum">—</span></span>
+      <span class="led" id="audioLED" title="Audio Engine"></span>
+      <span class="led" id="cpuLED" title="CPU"></span>
+      <div class="meter" title="Level"><i id="lvlBar"></i></div>
+    </div>
+  </header>
+
+  <div id="scopeWrap">
+    <canvas id="scope"></canvas>
+    <canvas id="gridOverlay"></canvas>
+  </div>
+
+  <footer>
+    <div class="small mono">
+      Keys <span class="kbd">0–9</span> trigger voices & visual algorithms. Transport-locked sequencer records number keys when <b>Rec</b> is on.
+    </div>
+    <div class="small mono">
+      State export includes: seed, full synth & FX params, algorithm mapping, sequencer, UI. Import restores bit-identical behavior. 
+    </div>
+  </footer>
+</div>
+
+<script>
+/* ========================= Deterministic PRNG & Seed ========================= */
+function xmur3(str){ let h=1779033703^str.length; for(let i=0;i<str.length;i++){h=Math.imul(h^str.charCodeAt(i),3432918353); h=h<<13|h>>>19;} return function(){ h=Math.imul(h^h>>>16,2246822507); h=Math.imul(h^h>>>13,3266489909); return (h^h>>>16)>>>0; } }
+function sfc32(a,b,c,d){ return function(){ a>>>0;b>>>0;c>>>0;d>>>0; let t=(a+b)|0; a=b^b>>>9; b=c+(c<<3)|0; c=(c<<21|c>>>11); d=(d+1)|0; t=(t+d)|0; c=(c+t)|0; return ((t>>>0)/4294967296); } }
+function seededRandomFactory(seedStr){
+  const seedHash = xmur3(seedStr);
+  const rand = sfc32(seedHash(), seedHash(), seedHash(), seedHash());
+  return { rand, seedStr };
+}
+function pick(rand, arr){ return arr[Math.floor(rand()*arr.length)] }
+function randRange(rand, a, b){ return a + (b-a) * rand() }
+function randInt(rand, a, b){ return Math.floor(randRange(rand,a,b+1)) }
+
+function canonicalJSONStringify(obj){
+  // stable stringify for checksum & export
+  const seen = new WeakSet();
+  const stringify = (v) => {
+    if (v && typeof v === 'object'){
+      if (seen.has(v)) return '"[Circular]"';
+      seen.add(v);
+      if (Array.isArray(v)) return '['+v.map(x=>stringify(x)).join(',')+']';
+      return '{'+Object.keys(v).sort().map(k=>JSON.stringify(k)+':'+stringify(v[k])).join(',')+'}';
+    }
+    return JSON.stringify(v);
+  }
+  return stringify(obj);
+}
+function fnv1a_32(str){
+  let h=0x811c9dc5;
+  for(let i=0;i<str.length;i++){
+    h ^= str.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h>>>0;
+}
+function shortChecksumFor(obj){
+  const s = canonicalJSONStringify(obj);
+  const h = fnv1a_32(s);
+  return h.toString(36); // base36 short code
+}
+
+/* ========================= Global Runtime ========================= */
+const runtimeState = {
+  Tone:null,
+  seeded:null,
+  algMap:[],           // algorithm index 0..9 per voice index 0..9
+  voices:[],           // voice objects
+  mixer:null,
+  limiter:null,
+  meter:null,
+  analyserL:null,
+  analyserR:null,
+  transportEvt:null,
+  seq:{
+    steps:16,
+    bpm:120,
+    loop:true,
+    pattern:[],        // array of arrays: at each step, list of voice indices (0..9)
+    rec:false,
+    play:false,
+    stepIndex:0,
+    swing:0            // reserved
+  },
+  ui:{
+    currentVoice:0
+  },
+  visuals:{
+    ctx:null, gridCtx:null, W:0, H:0, t0:0, lastFrame:0, fpsAvg:60, cpuBusy:false,
+    particles:[], seed:y=>y
+  }
+};
+
+/* ========================= Tone.js Loader (provided) ========================= */
+function loadToneJSAndBoot({
+  toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+  setLoaderStatus, runtimeState, boot
+}) {
+  setLoaderStatus('Loading Audio Engine...');
+  import(toneUrl).then(() => {
+    runtimeState.Tone = window.Tone;
+    console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+    boot();
+  }).catch(err => {
+    setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+    console.error('[BOP Matrix] Critical Tone.js load error:', err);
+  });
+}
+
+/* ========================= UI Elements ========================= */
+const $ = sel => document.querySelector(sel);
+const powerBtn = $('#powerBtn');
+const seedInput = $('#seedInput');
+const bpmInput = $('#bpmInput');
+const stepsInput = $('#stepsInput');
+const loopToggle = $('#loopToggle');
+const recBtn = $('#recBtn');
+const playBtn = $('#playBtn');
+const stopBtn = $('#stopBtn');
+const savePatternBtn = $('#savePatternBtn');
+const loadPatternInput = $('#loadPatternInput');
+const exportStateBtn = $('#exportStateBtn');
+const importStateInput = $('#importStateInput');
+const checksumEl = $('#checksum');
+const loaderEl = $('#loader');
+const audioLED = $('#audioLED');
+const cpuLED = $('#cpuLED');
+const lvlBar = $('#lvlBar');
+const scope = $('#scope');
+const grid = $('#gridOverlay');
+
+/* ========================= Utility ========================= */
+function setLoaderStatus(msg, isErr=false){ loaderEl.textContent = msg; loaderEl.style.color = isErr ? 'var(--err)' : 'var(--dim)'; }
+function setChecksumFromActive(){
+  const blob = buildFullState();
+  checksumEl.textContent = shortChecksumFor(blob);
+}
+function downloadJSON(obj, filename){
+  const data = canonicalJSONStringify(obj);
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(new Blob([data], {type:'application/json'}));
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+function readJSONFile(file){
+  return new Promise((res, rej)=>{
+    const fr = new FileReader();
+    fr.onload = () => {
+      try { res(JSON.parse(fr.result)); } catch(e){ rej(e); }
+    };
+    fr.onerror = rej;
+    fr.readAsText(file);
+  });
+}
+function clamp(v,a,b){ return Math.max(a, Math.min(b,v)); }
+
+/* ========================= Seed Handling ========================= */
+function resolveSeed(){
+  const url = new URL(location.href);
+  let seed = url.searchParams.get('seed');
+  if (!seed){
+    // generate once and lock to URL
+    seed = Math.random().toString(36).slice(2) + Math.random().toString(36).slice(2);
+    url.searchParams.set('seed', seed);
+    history.replaceState(null, '', url.toString());
+  }
+  seedInput.value = seed;
+  runtimeState.seeded = seededRandomFactory(seed);
+}
+
+/* ========================= Visuals: Grid & Scope ========================= */
+function resizeCanvas(){
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  const rect = scope.getBoundingClientRect();
+  for (const c of [scope, grid]){
+    c.width = Math.floor(rect.width * dpr);
+    c.height = Math.floor(rect.height * dpr);
+    c.style.width = rect.width + 'px';
+    c.style.height = rect.height + 'px';
+  }
+  const v = runtimeState.visuals;
+  v.ctx = scope.getContext('2d');
+  v.gridCtx = grid.getContext('2d');
+  v.W = scope.width; v.H = scope.height;
+  drawGrid();
+}
+function drawGrid(){
+  const g = runtimeState.visuals.gridCtx;
+  const {W,H} = runtimeState.visuals;
+  g.clearRect(0,0,W,H);
+  g.strokeStyle = 'rgba(22,48,22,0.9)';
+  g.lineWidth = 1;
+  g.beginPath();
+  // verticals
+  for (let i=0;i<=10;i++){
+    const x = (i/10)*W;
+    g.moveTo(x,0); g.lineTo(x,H);
+  }
+  // horizontals
+  for (let i=0;i<=10;i++){
+    const y = (i/10)*H;
+    g.moveTo(0,y); g.lineTo(W,y);
+  }
+  g.stroke();
+  // reticle
+  g.strokeStyle = 'rgba(100,220,140,0.25)';
+  g.beginPath();
+  g.moveTo(W/2,0); g.lineTo(W/2,H);
+  g.moveTo(0,H/2); g.lineTo(W,H/2);
+  g.stroke();
+}
+
+/* ========================= Visual Algorithms (10 total) =========================
+   Each returns a function draw(ctx, t, data) where data may include audio samples.
+   Mapping to voices is a seed-derived permutation stored in runtimeState.algMap.
+=============================================================================== */
+function makeVisualAlgorithms(rand){
+  const algs = [];
+
+  // Helper to draw polyline
+  const line = (ctx, pts) => {
+    ctx.beginPath();
+    for (let i=0;i<pts.length;i++){
+      const p=pts[i];
+      if (i===0) ctx.moveTo(p.x,p.y); else ctx.lineTo(p.x,p.y);
+    }
+    ctx.stroke();
+  };
+
+  // Common style
+  const strokeBase = (ctx)=>{ ctx.lineWidth = 1.2; ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line') || '#a8ffbd'; };
+
+  // 1) Lissajous Core
+  algs.push((ctx, t, data)=>{
+    strokeBase(ctx);
+    const {W,H}=runtimeState.visuals;
+    const n=800;
+    const a = 1 + Math.floor(rand()*5);
+    const b = 1 + Math.floor(rand()*7);
+    const d = rand()*Math.PI*2;
+    const pts=[];
+    for(let i=0;i<n;i++){
+      const u=i/n*Math.PI*2;
+      const x=Math.sin(a*u + d);
+      const y=Math.cos(b*u);
+      pts.push({x:(x*0.45+0.5)*W, y:(y*0.45+0.5)*H});
+    }
+    line(ctx, pts);
+  });
+
+  // 2) Spiral–Precess (AM+PM spiral)
+  algs.push((ctx, t, data)=>{
+    strokeBase(ctx);
+    const {W,H}=runtimeState.visuals;
+    const n=1200;
+    const k = 0.45, pm = 3+Math.floor(rand()*5), am=0.25+rand()*0.35;
+    const pts=[];
+    for(let i=0;i<n;i++){
+      const u=i/n;
+      const r=u*k, ang= (8+pm)*u*Math.PI*2 + Math.sin(u*10)*am;
+      const x=Math.cos(ang)*r, y=Math.sin(ang)*r;
+      pts.push({x:(x+0.5)*W, y:(y+0.5)*H});
+    }
+    line(ctx, pts);
+  });
+
+  // 3) Polar Rose Sweep
+  algs.push((ctx,t)=>{
+    strokeBase(ctx);
+    const {W,H}=runtimeState.visuals;
+    const n=900, k=3+Math.floor(rand()*5);
+    const pts=[];
+    for(let i=0;i<n;i++){
+      const u=i/n*2*Math.PI;
+      const r=Math.cos(k*u)*0.45;
+      pts.push({x:(Math.cos(u)*r+0.5)*W, y:(Math.sin(u)*r+0.5)*H});
+    }
+    line(ctx, pts);
+  });
+
+  // 4) Phyllotaxis Orbit
+  algs.push((ctx,t)=>{
+    strokeBase(ctx);
+    const {W,H}=runtimeState.visuals;
+    const n=900, a=0.5, d=(Math.PI*(3-Math.sqrt(5))); // golden angle
+    const pts=[];
+    for(let i=0;i<n;i++){
+      const r=a*Math.sqrt(i/n)*0.9, th=i*d;
+      const x=r*Math.cos(th), y=r*Math.sin(th);
+      pts.push({x:(x*0.45+0.5)*W, y:(y*0.45+0.5)*H});
+    }
+    line(ctx, pts);
+  });
+
+  // 5) Figure-8 Morph
+  algs.push((ctx,t)=>{
+    strokeBase(ctx);
+    const {W,H}=runtimeState.visuals; const n=800;
+    const s=0.45, m=1.0+0.5*Math.sin(t*0.5);
+    const pts=[];
+    for(let i=0;i<n;i++){
+      const u=i/n*2*Math.PI;
+      const x=Math.sin(u)*m, y=Math.sin(u*2);
+      pts.push({x:(x*s+0.5)*W, y:(y*s+0.5)*H});
+    }
+    line(ctx, pts);
+  });
+
+  // 6) Epicycle Chain
+  algs.push((ctx,t)=>{
+    strokeBase(ctx);
+    const {W,H}=runtimeState.visuals; const n=1000;
+    const R=0.35, r1=0.15, r2=0.07;
+    const pts=[];
+    for(let i=0;i<n;i++){
+      const u=i/n*2*Math.PI;
+      const x = R*Math.cos(u) + r1*Math.cos(5*u) + r2*Math.cos(11*u+t*0.3);
+      const y = R*Math.sin(u) + r1*Math.sin(5*u) + r2*Math.sin(11*u+t*0.3);
+      pts.push({x:(x+0.5)*W, y:(y+0.5)*H});
+    }
+    line(ctx, pts);
+  });
+
+  // 7) VectorScope XY (waveform-true)
+  algs.push((ctx,t,data)=>{
+    strokeBase(ctx);
+    const {W,H}=runtimeState.visuals;
+    const L = data?.left || [], R = data?.right || [];
+    const N = Math.min(L.length, R.length);
+    const pts=[];
+    for(let i=0;i<N;i++){
+      const x = clamp(L[i]*0.5, -1, 1);
+      const y = clamp(R[i]*0.5, -1, 1);
+      pts.push({x:(x*0.9+0.5)*W, y:(-y*0.9+0.5)*H});
+    }
+    line(ctx, pts);
+  });
+
+  // 8) Torus-Knot Projection
+  algs.push((ctx,t)=>{
+    strokeBase(ctx);
+    const {W,H}=runtimeState.visuals; const n=1200;
+    const p=2+Math.floor(rand()*3), q=3+Math.floor(rand()*4), s=0.42;
+    const pts=[];
+    for(let i=0;i<n;i++){
+      const u=i/n*2*Math.PI;
+      const x=(Math.cos(q*u)+0.5*Math.cos(p*u))*s;
+      const y=(Math.sin(q*u)+0.5*Math.sin(p*u))*s;
+      pts.push({x:(x+0.5)*W, y:(y+0.5)*H});
+    }
+    line(ctx, pts);
+  });
+
+  // 9) Audio Flowfield (hybrid particle)
+  algs.push((ctx,t,data)=>{
+    strokeBase(ctx); ctx.globalAlpha = 0.85;
+    const {W,H,particles}=runtimeState.visuals;
+    if (particles.length===0){
+      for(let i=0;i<300;i++){ particles.push({x:Math.random()*W,y:Math.random()*H,vx:0,vy:0}); }
+    }
+    const L=data?.left||[]; const R=data?.right||[];
+    for(const p of particles){
+      const ix = Math.floor((p.x/W)*L.length)>>>0;
+      const iy = Math.floor((p.y/H)*R.length)>>>0;
+      const fx = (L[ix]||0)*0.5, fy = (R[iy]||0)*0.5;
+      p.vx = (p.vx + fx)*0.95; p.vy = (p.vy + fy)*0.95;
+      p.x += p.vx*6; p.y += p.vy*6;
+      if (p.x<0) p.x+=W; if (p.x>W) p.x-=W;
+      if (p.y<0) p.y+=H; if (p.y>H) p.y-=H;
+    }
+    ctx.beginPath();
+    for(const p of particles){ ctx.rect(p.x,p.y,1,1); }
+    ctx.stroke();
+    ctx.globalAlpha = 1.0;
+  });
+
+  // 10) Harmonic Bloom (hybrid particle)
+  algs.push((ctx,t,data)=>{
+    strokeBase(ctx);
+    const {W,H}=runtimeState.visuals;
+    const N=700, s=0.46;
+    const pts=[];
+    for(let i=0;i<N;i++){
+      const u=i/N*2*Math.PI;
+      const r = 0.25 + 0.2*Math.sin(6*u + Math.sin(t*0.7));
+      const x = Math.cos(u)*r, y=Math.sin(u)*r;
+      pts.push({x:(x*s+0.5)*W, y:(y*s+0.5)*H});
+    }
+    line(ctx, pts);
+  });
+
+  return algs;
+}
+
+/* ========================= Audio Engine ========================= */
+function createEngine(Tone, rand){
+  // Mixer & master chain
+  const mixer = new Tone.Gain(1).toDestination();
+  const limiter = new Tone.Limiter(-1).connect(mixer);
+  const comp = new Tone.Compressor({threshold:-12, ratio:2, attack:0.01, release:0.25}).connect(limiter);
+  const meter = new Tone.Meter({ channels:1 });
+  comp.connect(meter);
+
+  // Analysers for vectorscope
+  const analyserL = new Tone.Analyser('waveform', 512);
+  const analyserR = new Tone.Analyser('waveform', 512);
+  // Splitter to feed analysers
+  const split = new Tone.Split();
+  comp.connect(split);
+  split.left.connect(analyserL);
+  split.right.connect(analyserR);
+
+  // Voice factory
+  function mkFXChain(){
+    const chain = [];
+    // Seeded FX selection
+    const addReverb = rand() < 0.8, addDelay = rand() < 0.8, addMod = rand() < 0.6, addDrive = rand() < 0.6, addFilter = true;
+    if (addReverb){
+      chain.push(new Tone.Reverb({ decay: randRange(rand,1.2,4.5), preDelay: randRange(rand,0.005,0.03), wet: randRange(rand,0.1,0.35) }));
+    }
+    if (addDelay){
+      chain.push(new Tone.PingPongDelay({ delayTime: randRange(rand,0.1,0.45), feedback: randRange(rand,0.2,0.55), wet: randRange(rand,0.05,0.3) }));
+    }
+    if (addMod){
+      chain.push(new Tone.Chorus({ frequency: randRange(rand,0.05,1.2), depth: randRange(rand,0.1,0.6), delayTime: randRange(rand,2,6), wet: randRange(rand,0.05,0.35) }));
+    }
+    if (addDrive){
+      chain.push(new Tone.Distortion({ distortion: randRange(rand,0.05,0.35), wet: randRange(rand,0.05,0.25) }));
+      chain.push(new Tone.BitCrusher({ bits: randInt(rand,4,8), wet: randRange(rand,0.03,0.2) }));
+    }
+    if (addFilter){
+      chain.push(new Tone.Filter({ type: pick(rand,['lowpass','bandpass','highpass']), frequency: randRange(rand,400,8000), Q: randRange(rand,0.2,1.2) }));
+    }
+    return chain;
+  }
+
+  function mkVoice(i){
+    // Choose synthesis approach
+    const type = pick(rand, ['fm','am','sub','add','wt','noise','ring']);
+    const baseHz = 110 * Math.pow(2, (randInt(rand,0,36))/12); // seeded base
+    const env = new Tone.AmplitudeEnvelope({ attack: randRange(rand,0.005,0.02), decay: randRange(rand,0.2,0.6), sustain: randRange(rand,0.6,0.95), release: randRange(rand,0.4,1.2) });
+    const vGain = new Tone.Gain(0.15); // per-voice gain staging
+    const fx = mkFXChain();
+    let src, descr;
+
+    if (type==='fm'){
+      const op = new Tone.FMOscillator({
+        frequency: baseHz, type: pick(rand,['sine','triangle','square','sawtooth']),
+        harmonicity: randRange(rand,0.25,4.0), modulationIndex: randRange(rand,5,35),
+        modulationType: pick(rand,['sine','triangle','square'])
+      });
+      src = op;
+      descr='FM';
+    } else if (type==='am'){
+      const op = new Tone.AMOscillator({
+        frequency: baseHz, type: pick(rand,['sine','triangle','square','sawtooth']),
+        harmonicity: randRange(rand,0.25,3.0), modulationType: pick(rand,['sine','triangle','square'])
+      });
+      src = op; descr='AM';
+    } else if (type==='sub'){
+      const op = new Tone.Oscillator({ frequency: baseHz, type: pick(rand,['sawtooth','square','triangle']) });
+      const filt = new Tone.Filter({ type:'lowpass', frequency: randRange(rand,500,5000), Q: randRange(rand,0.2,1) });
+      op.connect(filt); src = filt; descr='SUB';
+    } else if (type==='add'){
+      const g = new Tone.Gain(1);
+      const partials = 3 + randInt(rand,2,6);
+      for(let p=1;p<=partials;p++){
+        const osc = new Tone.Oscillator({ type:'sine', frequency: baseHz*p, volume: -6 - p*3 });
+        osc.connect(g);
+        osc.start();
+      }
+      src = g; descr='ADD';
+    } else if (type==='wt'){
+      // PeriodicWave-esque: use multiple partials in a custom oscillator
+      const osc = new Tone.Oscillator({ frequency: baseHz, type:'sine' });
+      // approximate table by gentle waveshaping through chorus+filter motion
+      src = osc; descr='WT';
+    } else if (type==='noise'){
+      const n = new Tone.Noise(pick(rand, ['white','pink','brown']));
+      const filt = new Tone.Filter({ type:'bandpass', frequency: randRange(rand,1000,6000), Q: randRange(rand,1,6) });
+      n.connect(filt); src = filt; descr='NOISE';
+    } else { // ring
+      const a = new Tone.Oscillator({ frequency: baseHz, type: pick(rand,['sine','triangle']) });
+      const b = new Tone.Oscillator({ frequency: baseHz*randRange(rand,1.5,3.5), type: pick(rand,['sine','triangle']) });
+      const mult = new Tone.Multiply();
+      a.connect(mult, 0, 0); b.connect(mult, 0, 1);
+      src = mult; descr='RING';
+    }
+
+    // Motion filter for “WT” & general subtle movement
+    const motionFilter = new Tone.Filter({ type: pick(rand,['lowpass','bandpass']), frequency: randRange(rand,800,6000), Q: randRange(rand,0.2,1.8) });
+    const lfo = new Tone.LFO({ frequency: randRange(rand,0.03,0.2), min: 400, max: 7000 }).start();
+    lfo.connect(motionFilter.frequency);
+
+    // Build chain: src -> env -> motionFilter -> fx... -> vGain -> comp
+    let head = src;
+    if (src instanceof Tone.Oscillator || src instanceof Tone.AMOscillator || src instanceof Tone.FMOscillator || src instanceof Tone.Noise){
+      src.start(); // pre-warm
+    }
+    head.connect(env);
+    env.connect(motionFilter);
+    let node = motionFilter;
+    for (const f of fx){ node.connect(f); node=f; }
+    node.connect(vGain);
+    vGain.connect(comp);
+
+    // Audibility checks (seeded mild normalization)
+    vGain.gain.rampTo(randRange(rand,0.10,0.2), 0.02);
+
+    // Per-voice trigger
+    function trigger(time, dur=0.35){
+      const now = time ?? Tone.now();
+      env.triggerAttack(now);
+      env.triggerRelease(now + dur);
+    }
+
+    // Voice snapshot for archival
+    function snapshot(){
+      return {
+        type, baseHz,
+        env: { attack: env.attack, decay: env.decay, sustain: env.sustain, release: env.release },
+        motion: { type: motionFilter.type, freq: motionFilter.frequency.value, Q: motionFilter.Q.value, lfoFreq: lfo.frequency.value, lfoMin: lfo.min, lfoMax: lfo.max },
+        fx: fx.map(f=>({ tag:f.name||f.toString(), ...paramDump(f) })),
+        vGain: vGain.gain.value, descr
+      }
+    }
+
+    return { trigger, snapshot, kind:type, src, env, vGain, motionFilter, lfo, fx, descr, baseHz };
+  }
+
+  function paramDump(node){
+    const out = {};
+    for (const k in node){
+      const v = node[k];
+      if (v && typeof v === 'object' && 'value' in v) out[k]=v.value;
+      else if (typeof v==='number' || typeof v==='string' || typeof v==='boolean') out[k]=v;
+    }
+    return out;
+  }
+
+  // Build 10 voices
+  const voices=[];
+  for (let i=0;i<10;i++){ voices.push(mkVoice(i)); }
+
+  return { mixer, limiter, meter, analyserL, analyserR, voices };
+}
+
+/* ========================= Sequencer ========================= */
+function initSequencer(rand){
+  const seq = runtimeState.seq;
+  seq.steps = clamp(parseInt(stepsInput.value)||16, 8, 64);
+  seq.bpm = clamp(parseInt(bpmInput.value)||120, 20, 300);
+  seq.loop = loopToggle.checked;
+  seq.pattern = Array.from({length:seq.steps}, ()=>[]);
+  seq.play = false; seq.rec = false; seq.stepIndex = 0;
+  runtimeState.Tone.Transport.bpm.value = seq.bpm;
+}
+
+/* ========================= Algorithm Mapping ========================= */
+function buildAlgMap(rand){
+  const arr = Array.from({length:10}, (_,i)=>i);
+  // Fisher-Yates with seeded random
+  for (let i=arr.length-1;i>0;i--){
+    const j = Math.floor(rand()* (i+1));
+    [arr[i],arr[j]] = [arr[j],arr[i]];
+  }
+  runtimeState.algMap = arr;
+}
+
+/* ========================= Boot Signature ========================= */
+function scheduleBootSignature(Tone, rand){
+  const dur = randRange(rand,3.0,3.9);
+  const T0 = Tone.now() + 0.15;
+  const voices = runtimeState.voices;
+
+  // Use all 10 voices at least once with chirps/gliss + occasional chords
+  for (let i=0;i<voices.length;i++){
+    const v = voices[i];
+    const nEvents = 2 + (i%2);
+    for (let k=0;k<nEvents;k++){
+      const t = T0 + (dur*((i*0.07 + k*0.09) % 1));
+      // tiny gliss via filter motion or frequency ramp if oscillator
+      if (v.src && v.src.frequency && typeof v.src.frequency.rampTo === 'function'){
+        const base = v.baseHz;
+        v.src.frequency.cancelAndHoldAtTime(t);
+        v.src.frequency.rampTo(base*randRange(rand,0.9,1.1), 0.01);
+        v.src.frequency.rampTo(base*randRange(rand,1.4,1.9), randRange(rand,0.05,0.15));
+        v.src.frequency.rampTo(base, randRange(rand,0.05,0.18));
+      }
+      v.trigger(t, randRange(rand,0.08,0.22));
+    }
+  }
+
+  // Idle pad after signature (gentle sustains)
+  const idleT = T0 + dur + 0.15;
+  for (const v of voices){
+    v.env.sustain = Math.min(0.95, v.env.sustain);
+    // subtle periodic motion already applied by LFO
+  }
+
+  // Return time for reference
+  return { start:T0, end: idleT };
+}
+
+/* ========================= Transport & Recording ========================= */
+function attachTransport(Tone){
+  const seq = runtimeState.seq;
+  // Clear previous
+  if (runtimeState.transportEvt){ runtimeState.transportEvt.dispose?.(); runtimeState.transportEvt = null; }
+
+  let stepDur = '16n';
+  const ev = Tone.Transport.scheduleRepeat((time)=>{
+    const i = seq.stepIndex % seq.steps;
+    const notes = seq.pattern[i] || [];
+    for (const vIdx of notes){
+      runtimeState.voices[vIdx]?.trigger(time, 0.25);
+    }
+    seq.stepIndex = (seq.stepIndex + 1) % (seq.loop ? seq.steps : Infinity);
+    if (!seq.loop && seq.stepIndex===0){ stopTransport(); }
+  }, stepDur);
+
+  runtimeState.transportEvt = ev;
+  Tone.Transport.bpm.value = seq.bpm;
+}
+
+function startTransport(){
+  const Tone = runtimeState.Tone;
+  const seq = runtimeState.seq;
+  seq.play = true;
+  attachTransport(Tone);
+  Tone.Transport.start();
+  audioLED.classList.add('on');
+}
+function stopTransport(){
+  const Tone = runtimeState.Tone;
+  const seq = runtimeState.seq;
+  seq.play = false;
+  Tone.Transport.stop();
+  seq.stepIndex = 0;
+  audioLED.classList.remove('on');
+}
+
+/* ========================= Input Handling ========================= */
+function onKey(e){
+  if (e.repeat) return;
+  const k = e.key;
+  if (k>='0' && k<='9'){
+    const vIdx = (k==='0') ? 9 : (parseInt(k)-1);
+    runtimeState.ui.currentVoice = vIdx;
+    runtimeState.voices[vIdx]?.trigger();
+    // record to current step if recording
+    const seq = runtimeState.seq;
+    if (seq.rec){
+      const i = seq.stepIndex % seq.steps;
+      if (!seq.pattern[i].includes(vIdx)) seq.pattern[i].push(vIdx);
+      setChecksumFromActive();
+    }
+  }
+}
+
+/* ========================= Export / Import Full State ========================= */
+function buildFullState(){
+  const snapVoices = runtimeState.voices.map(v=>v.snapshot());
+  const full = {
+    version:1,
+    seed: runtimeState.seeded.seedStr,
+    algMap: runtimeState.algMap.slice(),
+    sequencer: {
+      steps: runtimeState.seq.steps,
+      bpm: runtimeState.seq.bpm,
+      loop: runtimeState.seq.loop,
+      pattern: runtimeState.seq.pattern
+    },
+    ui: { currentVoice: runtimeState.ui.currentVoice },
+    // reserved for microtonal / temperament extensions:
+    temperament: { mode:'12-TET', refA:440 },
+    voices: snapVoices
+  };
+  return full;
+}
+function applyFullState(obj){
+  // Validate seed matches or re-seed everything to imported seed for exact determinism
+  const importedSeed = obj.seed;
+  const currentSeed = runtimeState.seeded.seedStr;
+  if (importedSeed !== currentSeed){
+    // Rebuild entire engine deterministically under the imported seed
+    reseedAndReboot(importedSeed).then(()=>{
+      // then apply structural state (pattern, UI) which should line up identically
+      runtimeState.seq.steps = clamp(obj.sequencer.steps, 8, 64);
+      runtimeState.seq.bpm = clamp(obj.sequencer.bpm, 20, 300);
+      runtimeState.seq.loop = !!obj.sequencer.loop;
+      runtimeState.seq.pattern = obj.sequencer.pattern || runtimeState.seq.pattern;
+      stepsInput.value = runtimeState.seq.steps;
+      bpmInput.value = runtimeState.seq.bpm;
+      loopToggle.checked = runtimeState.seq.loop;
+      runtimeState.ui.currentVoice = obj.ui?.currentVoice ?? 0;
+      setChecksumFromActive();
+    });
+    return;
+  }
+  // Same seed: just restore sequencer/UI (engine params are derived from seed; voices snapshot kept for reference in export)
+  runtimeState.seq.steps = clamp(obj.sequencer.steps, 8, 64);
+  runtimeState.seq.bpm = clamp(obj.sequencer.bpm, 20, 300);
+  runtimeState.seq.loop = !!obj.sequencer.loop;
+  runtimeState.seq.pattern = obj.sequencer.pattern || runtimeState.seq.pattern;
+  stepsInput.value = runtimeState.seq.steps;
+  bpmInput.value = runtimeState.seq.bpm;
+  loopToggle.checked = runtimeState.seq.loop;
+  runtimeState.ui.currentVoice = obj.ui?.currentVoice ?? 0;
+  setChecksumFromActive();
+}
+
+/* ========================= Visual Render Loop ========================= */
+function render(){
+  const v = runtimeState.visuals;
+  const ctx = v.ctx; if (!ctx) return requestAnimationFrame(render);
+  const now = performance.now()/1000;
+  const dt = now - (v.lastFrame||now);
+  v.lastFrame = now;
+  v.fpsAvg = v.fpsAvg*0.9 + (1/dt)*0.1;
+
+  // CPU LED: rough heuristic
+  const cpuBusy = dt > (1/50); // slower than ~50fps
+  v.cpuBusy = cpuBusy;
+  cpuLED.classList.toggle('on', cpuBusy);
+
+  // Dynamic throttling: if busy, fade trail heavier
+  ctx.globalCompositeOperation = 'source-over';
+  ctx.fillStyle = cpuBusy ? 'rgba(0,0,0,0.25)' : 'rgba(0,0,0,0.12)';
+  ctx.fillRect(0,0,v.W,v.H);
+
+  ctx.globalCompositeOperation = 'lighter';
+  // Acquire analyser data for vectorscope/particles
+  const L = runtimeState.analyserL?.getValue() || [];
+  const R = runtimeState.analyserR?.getValue() || [];
+
+  // Draw selected algorithm for current voice
+  const currentVoice = runtimeState.ui.currentVoice || 0;
+  const algIdx = runtimeState.algMap[currentVoice] || 0;
+  const drawAlg = runtimeState.visuals.algs[algIdx];
+  ctx.save();
+  ctx.strokeStyle = getComputedStyle(document.documentElement).getPropertyValue('--line') || '#a8ffbd';
+  drawAlg(ctx, runtimeState.Tone?.now?.() ?? now, { left:L, right:R });
+  ctx.restore();
+
+  // Level meter
+  const level = runtimeState.meter?.getValue() ?? -60;
+  const norm = clamp((level+60)/60, 0, 1);
+  lvlBar.style.width = (norm*100).toFixed(1)+'%';
+
+  requestAnimationFrame(render);
+}
+
+/* ========================= Boot / Reboot ========================= */
+async function boot(){
+  const Tone = runtimeState.Tone;
+  if (!Tone) return;
+
+  setLoaderStatus('Initialising engine…');
+  // Seed-dependent visuals
+  runtimeState.visuals.algs = makeVisualAlgorithms(runtimeState.seeded.rand);
+
+  // Create audio engine
+  const { mixer, limiter, meter, analyserL, analyserR, voices } = createEngine(Tone, runtimeState.seeded.rand);
+  runtimeState.mixer = mixer; runtimeState.limiter = limiter; runtimeState.meter = meter;
+  runtimeState.analyserL = analyserL; runtimeState.analyserR = analyserR; runtimeState.voices = voices;
+
+  // Sequencer defaults
+  initSequencer(runtimeState.seeded.rand);
+  buildAlgMap(runtimeState.seeded.rand);
+
+  // Apply UI
+  stepsInput.value = runtimeState.seq.steps;
+  bpmInput.value = runtimeState.seq.bpm;
+  loopToggle.checked = runtimeState.seq.loop;
+
+  // Pre-warm: create a silent tick to initialize AudioContext
+  await Tone.start();
+  Tone.Destination.mute = false;
+
+  // Schedule boot signature
+  scheduleBootSignature(Tone, runtimeState.seeded.rand);
+
+  // Start render loop
+  if (!runtimeState.visuals.ctx){ resizeCanvas(); }
+  setChecksumFromActive();
+  setLoaderStatus('Ready.');
+  render();
+}
+
+async function reseedAndReboot(newSeed){
+  stopTransport();
+  setLoaderStatus('Rebuilding for imported seed…');
+  // Dispose prior audio graph safely
+  try {
+    runtimeState.voices.forEach(v=>{
+      v.src?.dispose?.(); v.env?.dispose?.(); v.vGain?.dispose?.();
+      v.motionFilter?.dispose?.(); v.lfo?.dispose?.(); v.fx?.forEach(f=>f.dispose?.());
+    });
+    runtimeState.mixer?.dispose?.(); runtimeState.limiter?.dispose?.();
+    runtimeState.analyserL?.dispose?.(); runtimeState.analyserR?.dispose?.();
+    runtimeState.meter?.dispose?.();
+  } catch(e){ console.warn('Dispose issue', e); }
+  runtimeState.voices = [];
+
+  // Update URL & seed
+  const url = new URL(location.href);
+  url.searchParams.set('seed', newSeed);
+  history.replaceState(null,'',url.toString());
+  seedInput.value = newSeed;
+  runtimeState.seeded = seededRandomFactory(newSeed);
+
+  // Reboot
+  await boot();
+}
+
+/* ========================= Wire Up UI ========================= */
+window.addEventListener('resize', resizeCanvas);
+document.addEventListener('keydown', onKey);
+
+powerBtn.addEventListener('click', async ()=>{
+  if (!runtimeState.Tone) return;
+  await runtimeState.Tone.start();
+  setLoaderStatus('Audio started.');
+});
+
+bpmInput.addEventListener('change', ()=>{
+  const v = clamp(parseInt(bpmInput.value)||120,20,300);
+  runtimeState.seq.bpm = v;
+  runtimeState.Tone.Transport.bpm.rampTo(v, 0.05);
+  setChecksumFromActive();
+});
+stepsInput.addEventListener('change', ()=>{
+  const n = clamp(parseInt(stepsInput.value)||16,8,64);
+  const seq = runtimeState.seq;
+  if (n>seq.pattern.length){
+    for (let i=seq.pattern.length;i<n;i++) seq.pattern.push([]);
+  } else if (n<seq.pattern.length){
+    seq.pattern.length = n;
+  }
+  seq.steps = n;
+  setChecksumFromActive();
+});
+loopToggle.addEventListener('change', ()=>{
+  runtimeState.seq.loop = loopToggle.checked; setChecksumFromActive();
+});
+recBtn.addEventListener('click', ()=>{
+  runtimeState.seq.rec = !runtimeState.seq.rec;
+  recBtn.classList.toggle('primary', runtimeState.seq.rec);
+});
+playBtn.addEventListener('click', startTransport);
+stopBtn.addEventListener('click', stopTransport);
+
+savePatternBtn.addEventListener('click', ()=>{
+  const pat = { version:1, seed: runtimeState.seeded.seedStr, steps: runtimeState.seq.steps, bpm: runtimeState.seq.bpm, loop: runtimeState.seq.loop, pattern: runtimeState.seq.pattern };
+  downloadJSON(pat, `pattern_${shortChecksumFor(pat)}.json`);
+});
+loadPatternInput.addEventListener('change', async (e)=>{
+  const f = e.target.files[0]; if (!f) return;
+  try{
+    const obj = await readJSONFile(f);
+    runtimeState.seq.steps = clamp(obj.steps||16,8,64);
+    runtimeState.seq.bpm = clamp(obj.bpm||120,20,300);
+    runtimeState.seq.loop = !!obj.loop;
+    runtimeState.seq.pattern = Array.isArray(obj.pattern)?obj.pattern:runtimeState.seq.pattern;
+    bpmInput.value = runtimeState.seq.bpm;
+    stepsInput.value = runtimeState.seq.steps;
+    loopToggle.checked = runtimeState.seq.loop;
+    setChecksumFromActive();
+  }catch(err){ alert('Pattern import failed: '+err.message); }
+  e.target.value='';
+});
+
+exportStateBtn.addEventListener('click', ()=>{
+  const blob = buildFullState();
+  blob.checksum = shortChecksumFor(blob);
+  downloadJSON(blob, `state_${blob.seed}_${blob.checksum}.json`);
+});
+
+importStateInput.addEventListener('change', async (e)=>{
+  const f = e.target.files[0]; if (!f) return;
+  try{
+    const obj = await readJSONFile(f);
+    applyFullState(obj);
+  }catch(err){ alert('Import failed: '+err.message); }
+  e.target.value='';
+});
+
+/* ========================= App Init ========================= */
+function start(){
+  resolveSeed();
+  seedInput.value = runtimeState.seeded.seedStr;
+  setLoaderStatus('Loading…');
+  loadToneJSAndBoot({ setLoaderStatus, runtimeState, boot });
+  resizeCanvas();
+}
+
+start();
+</script>
+</body>
+</html>

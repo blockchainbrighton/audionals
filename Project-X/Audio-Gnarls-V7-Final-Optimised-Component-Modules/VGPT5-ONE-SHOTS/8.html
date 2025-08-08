@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOP Matrix</title>
+    <style>
+        :root {
+            --tech-bg: #1a1a1a;
+            --tech-frame: linear-gradient(135deg, #4a4a4a, #2a2a2a, #4a4a4a);
+            --led-red: #ff3b30;
+            --led-green: #34c759;
+            --led-off: #333;
+            --text-color: #e0e0e0;
+            --accent-color: #0a84ff;
+            --panel-bg: rgba(30, 30, 30, 0.95);
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            background-color: var(--tech-bg);
+            color: var(--text-color);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        #ui-container {
+            background: var(--tech-frame);
+            border: 1px solid #555;
+            padding: 8px;
+            z-index: 10;
+        }
+        .control-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; flex-wrap: wrap; }
+        .control-group { display: flex; align-items: center; gap: 5px; }
+        button, input, select {
+            background: #333;
+            color: var(--text-color);
+            border: 1px solid #555;
+            padding: 3px 6px;
+            font-family: inherit;
+            font-size: 12px;
+        }
+        button:hover { background: #444; }
+        button:active { background: #555; }
+        #seed-display { min-width: 100px; text-align: center; }
+        .led {
+            width: 10px; height: 10px; border-radius: 50%;
+            background-color: var(--led-off);
+        }
+        .led.on.audio { background-color: var(--led-green); box-shadow: 0 0 5px var(--led-green); }
+        .led.on.cpu { background-color: var(--led-red); box-shadow: 0 0 5px var(--led-red); }
+
+        #boot-log-panel {
+            background: var(--panel-bg);
+            border-top: 1px solid #555;
+            padding: 8px;
+            font-size: 10px;
+            max-height: 150px;
+            overflow-y: auto;
+            white-space: pre-wrap;
+        }
+        #scope-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background: black;
+            border: 1px solid #444;
+            margin: 0 8px 8px;
+        }
+        #scope-canvas {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+        }
+        #loader-status {
+            position: absolute;
+            top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            font-size: 18px;
+            color: var(--accent-color);
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+    <div id="loader-status">Initializing...</div>
+
+    <div id="ui-container">
+        <div class="control-row">
+            <div class="control-group">
+                <button id="power-btn">Power</button>
+                <span>Seed:</span>
+                <span id="seed-display">-</span>
+            </div>
+            <div class="control-group">
+                <label>BPM:</label>
+                <input type="number" id="bpm-input" value="120" min="20" max="300" style="width: 60px;">
+            </div>
+            <div class="control-group">
+                <button id="rec-btn">Rec</button>
+                <button id="play-btn">Play</button>
+                <button id="stop-btn">Stop</button>
+                <button id="loop-btn">Loop</button>
+            </div>
+            <div class="control-group">
+                <button id="save-btn">Save</button>
+                <button id="load-btn">Load</button>
+            </div>
+            <div class="control-group">
+                <label>Quality:</label>
+                <select id="quality-select">
+                    <option value="x1">x1</option>
+                    <option value="x2" selected>x2</option>
+                </select>
+            </div>
+            <div class="control-group">
+                <div class="led" id="audio-led"></div>
+                <div class="led" id="cpu-led"></div>
+            </div>
+            <div class="control-group">
+                <button id="boot-log-toggle">Log</button>
+            </div>
+        </div>
+        <div class="control-row">
+            <div>Voices: 
+                <button class="voice-btn" data-voice="0">0</button>
+                <button class="voice-btn" data-voice="1">1</button>
+                <button class="voice-btn" data-voice="2">2</button>
+                <button class="voice-btn" data-voice="3">3</button>
+                <button class="voice-btn" data-voice="4">4</button>
+                <button class="voice-btn" data-voice="5">5</button>
+                <button class="voice-btn" data-voice="6">6</button>
+                <button class="voice-btn" data-voice="7">7</button>
+                <button class="voice-btn" data-voice="8">8</button>
+                <button class="voice-btn" data-voice="9">9</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="scope-container">
+        <canvas id="scope-canvas"></canvas>
+    </div>
+
+    <div id="boot-log-panel" style="display:none;"></div>
+
+    <script>
+        // --- SEED & PRNG (Place at top for Ordinals) ---
+        const urlParams = new URLSearchParams(window.location.search);
+        let GLOBAL_SEED = urlParams.get('seed') || Math.floor(Math.random() * 10000000000).toString();
+        document.getElementById('seed-display').textContent = GLOBAL_SEED;
+
+        function xmur3(str) {
+            let h = 1779033703 ^ str.length;
+            for(let i = 0; i < str.length; i++){
+                h = Math.imul(h ^ str.charCodeAt(i), 3432918353);
+                h = h << 13 | h >>> 19;
+            }
+            return function() {
+                h = Math.imul(h ^ h >>> 16, 2246822507);
+                h = Math.imul(h ^ h >>> 13, 3266489909);
+                return (h ^= h >>> 16) >>> 0;
+            }
+        }
+
+        function mulberry32(a) {
+            return function() {
+                let t = a += 0x6D2B79F5;
+                t = Math.imul(t ^ t >>> 15, t | 1);
+                t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+                return ((t ^ t >>> 14) >>> 0) / 4294967296;
+            }
+        }
+
+        const SEED_PRNG = xmur3(GLOBAL_SEED);
+        const SEED_RNG = mulberry32(SEED_PRNG());
+
+        function seededShuffle(array, rng) {
+            let currentIndex = array.length, randomIndex;
+            while (currentIndex !== 0) {
+                randomIndex = Math.floor(rng() * currentIndex);
+                currentIndex--;
+                [array[currentIndex], array[randomIndex]] = [array[randomIndex], array[currentIndex]];
+            }
+            return array;
+        }
+
+        // --- TONE.JS LOADER ---
+        function loadToneJSAndBoot({ toneUrl, setLoaderStatus, runtimeState, boot }) {
+            setLoaderStatus('Loading Audio Engine...');
+            import(toneUrl).then(() => {
+                runtimeState.Tone = window.Tone;
+                console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                boot();
+            }).catch(err => {
+                setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                console.error('[BOP Matrix] Critical Tone.js load error:', err);
+            });
+        }
+
+        // --- APP LOGIC ---
+        const appState = {
+            isPowered: false,
+            isPlaying: false,
+            isRecording: false,
+            isLooping: true,
+            quality: 'x2',
+            sequence: Array(16).fill(null),
+            currentStep: 0,
+            voices: [],
+            visualAlgorithms: [],
+            visualToVoiceMap: [],
+            currentVisAlg: null,
+            cpuActivity: false,
+            audioActivity: false,
+            signaturePlayed: false,
+        };
+
+        const Tone = window.Tone; // Will be populated by loader
+        const runtimeState = { Tone: null };
+
+        const canvas = document.getElementById('scope-canvas');
+        const ctx = canvas.getContext('2d');
+        let canvasResizeObserver;
+
+        let audioLedTimeout, cpuLedTimeout;
+        const audioLed = document.getElementById('audio-led');
+        const cpuLed = document.getElementById('cpu-led');
+
+        function setLoaderStatus(text, isError = false) {
+            const loader = document.getElementById('loader-status');
+            loader.textContent = text;
+            loader.style.color = isError ? 'red' : '#0a84ff';
+            loader.style.display = text ? 'block' : 'none';
+        }
+
+        function logToPanel(message) {
+            const panel = document.getElementById('boot-log-panel');
+            panel.textContent += message + '\n';
+            panel.scrollTop = panel.scrollHeight;
+        }
+
+        function updateLEDs() {
+            audioLed.classList.toggle('on', appState.audioActivity);
+            cpuLed.classList.toggle('on', appState.cpuActivity);
+            if (appState.audioActivity) {
+                clearTimeout(audioLedTimeout);
+                audioLedTimeout = setTimeout(() => { appState.audioActivity = false; updateLEDs(); }, 100);
+            }
+            if (appState.cpuActivity) {
+                clearTimeout(cpuLedTimeout);
+                cpuLedTimeout = setTimeout(() => { appState.cpuActivity = false; updateLEDs(); }, 100);
+            }
+        }
+
+        function initializeUI() {
+            document.getElementById('power-btn').addEventListener('click', togglePower);
+            document.getElementById('boot-log-toggle').addEventListener('click', () => {
+                const panel = document.getElementById('boot-log-panel');
+                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+            });
+            document.getElementById('bpm-input').addEventListener('change', (e) => {
+                if (runtimeState.Tone && runtimeState.Tone.Transport) {
+                    runtimeState.Tone.Transport.bpm.value = parseInt(e.target.value) || 120;
+                }
+            });
+            document.getElementById('loop-btn').addEventListener('click', () => {
+                appState.isLooping = !appState.isLooping;
+                document.getElementById('loop-btn').textContent = appState.isLooping ? 'Loop' : 'Once';
+            });
+            document.getElementById('quality-select').addEventListener('change', (e) => {
+                appState.quality = e.target.value;
+            });
+            document.getElementById('play-btn').addEventListener('click', playSequence);
+            document.getElementById('stop-btn').addEventListener('click', stopTransport);
+            document.getElementById('rec-btn').addEventListener('click', () => {
+                appState.isRecording = !appState.isRecording;
+                document.getElementById('rec-btn').style.backgroundColor = appState.isRecording ? 'red' : '';
+            });
+            document.getElementById('save-btn').addEventListener('click', savePattern);
+            document.getElementById('load-btn').addEventListener('click', loadPattern);
+
+            document.querySelectorAll('.voice-btn').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    if (!appState.isPowered) return;
+                    const voiceIndex = parseInt(btn.dataset.voice);
+                    triggerVoice(voiceIndex);
+                });
+            });
+
+            window.addEventListener('keydown', (e) => {
+                if (!appState.isPowered) return;
+                const key = e.key;
+                if (key >= '0' && key <= '9') {
+                    const voiceIndex = parseInt(key);
+                    triggerVoice(voiceIndex);
+                }
+            });
+
+            canvasResizeObserver = new ResizeObserver(() => {
+                canvas.width = canvas.clientWidth * (appState.quality === 'x2' ? 2 : 1);
+                canvas.height = canvas.clientHeight * (appState.quality === 'x2' ? 2 : 1);
+            });
+            canvasResizeObserver.observe(document.getElementById('scope-container'));
+            canvas.width = canvas.clientWidth * (appState.quality === 'x2' ? 2 : 1);
+            canvas.height = canvas.clientHeight * (appState.quality === 'x2' ? 2 : 1);
+        }
+
+        function togglePower() {
+            if (appState.isPowered) {
+                appState.isPowered = false;
+                document.getElementById('power-btn').textContent = 'Power';
+                if (runtimeState.Tone && runtimeState.Tone.Transport) {
+                    runtimeState.Tone.Transport.stop();
+                    runtimeState.Tone.Transport.cancel();
+                }
+                appState.audioActivity = false;
+                appState.cpuActivity = false;
+                updateLEDs();
+                drawScope(); // Clear scope
+            } else {
+                if (!runtimeState.Tone) {
+                    loadToneJSAndBoot({
+                        toneUrl: 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+                        setLoaderStatus,
+                        runtimeState,
+                        boot: onToneLoaded
+                    });
+                } else {
+                    onToneLoaded();
+                }
+            }
+        }
+
+        function onToneLoaded() {
+            appState.isPowered = true;
+            document.getElementById('power-btn').textContent = 'On';
+            logToPanel(`[BOOT] Seed: ${GLOBAL_SEED}`);
+            
+            createVoices();
+            setupTransport();
+            setupVisuals();
+            
+            logToPanel(`[BOOT] Voices Created: ${appState.voices.length}`);
+            logToPanel(`[BOOT] Visuals Mapped: ${appState.visualToVoiceMap.join(', ')}`);
+            
+            playBootSignature();
+        }
+
+        function createVoices() {
+            const voiceTypes = ['fm', 'am', 'subtractive', 'additive', 'wavetable', 'noise', 'ringmod', 'duo', 'pluck', 'metal'];
+            const fxTypes = ['reverb', 'delay', 'chorus', 'distortion', 'filter'];
+            
+            const shuffledVoices = [...voiceTypes];
+            const shuffledFX = [...fxTypes];
+            seededShuffle(shuffledVoices, SEED_RNG);
+            seededShuffle(shuffledFX, SEED_RNG);
+
+            for (let i = 0; i < 10; i++) {
+                const type = shuffledVoices[i];
+                const fxChain = shuffledFX.map(fx => ({ type: fx, active: SEED_RNG() > 0.3 }));
+                fxChain.splice(Math.floor(SEED_RNG() * (fxChain.length + 1)), 0, { type: 'gain', active: true }); // Always have gain
+
+                let synth;
+                switch(type) {
+                    case 'fm': synth = new runtimeState.Tone.FMSynth().toDestination(); break;
+                    case 'am': synth = new runtimeState.Tone.AMSynth().toDestination(); break;
+                    case 'subtractive': synth = new runtimeState.Tone.Synth().toDestination(); break;
+                    case 'additive':
+                        const harmonics = Array.from({length: 8}, (_, i) => SEED_RNG() > 0.5 ? Math.random() : 0);
+                        const real = new Float32Array(harmonics);
+                        const imag = new Float32Array(harmonics.length);
+                        const wave = new runtimeState.Tone.PeriodicWave(real, imag);
+                        synth = new runtimeState.Tone.OmniOscillator(440, 'custom');
+                        synth.set({ periodicWave: wave });
+                        const ampEnv = new runtimeState.Tone.AmplitudeEnvelope({ attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.5 }).toDestination();
+                        synth.connect(ampEnv);
+                        synth.triggerAttackRelease = (note, dur) => { synth.start(); ampEnv.triggerAttackRelease(dur); synth.stop('+0.1'); };
+                        break;
+                    case 'wavetable':
+                        const buffer = generateWavetableBuffer(1024);
+                        const player = new runtimeState.Tone.Player(buffer).toDestination();
+                        player.loop = true;
+                        synth = { triggerAttackRelease: (note, dur) => { player.start(); setTimeout(() => player.stop(), dur * 1000); } };
+                        break;
+                    case 'noise': synth = new runtimeState.Tone.NoiseSynth().toDestination(); break;
+                    case 'ringmod': 
+                        const osc = new runtimeState.Tone.Oscillator(440, 'sine');
+                        const mod = new runtimeState.Tone.Oscillator(220, 'sine');
+                        const ring = new runtimeState.Tone.Multiply();
+                        const rmEnv = new runtimeState.Tone.AmplitudeEnvelope({ attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.1 }).toDestination();
+                        osc.connect(ring, 0, 0);
+                        mod.connect(ring, 0, 1);
+                        ring.connect(rmEnv);
+                        synth = { triggerAttackRelease: (note, dur) => { osc.start(); mod.start(); rmEnv.triggerAttackRelease(dur); osc.stop('+0.1'); mod.stop('+0.1'); } };
+                        break;
+                    case 'duo': synth = new runtimeState.Tone.DuoSynth().toDestination(); break;
+                    case 'pluck': synth = new runtimeState.Tone.PluckSynth().toDestination(); break;
+                    case 'metal': synth = new runtimeState.Tone.MetalSynth().toDestination(); break;
+                    default: synth = new runtimeState.Tone.Synth().toDestination();
+                }
+
+                // Apply simple FX chain (conceptual, Tone.js chaining is more complex)
+                // In a full impl, we'd create effect nodes and connect them.
+                logToPanel(`[BOOT] Voice ${i}: ${type}, FX: ${fxChain.filter(f => f.active).map(f => f.type).join(', ')}`);
+                appState.voices.push({ synth, type, fxChain });
+            }
+        }
+
+        function generateWavetableBuffer(size) {
+            const buffer = new Float32Array(size);
+            for (let i = 0; i < size; i++) {
+                buffer[i] = Math.sin(2 * Math.PI * i / size) + 0.5 * Math.sin(2 * Math.PI * 3 * i / size);
+            }
+            const audioBuffer = runtimeState.Tone.getContext().createBuffer(1, size, runtimeState.Tone.getContext().sampleRate);
+            audioBuffer.copyToChannel(buffer, 0);
+            return audioBuffer;
+        }
+
+        function setupTransport() {
+            runtimeState.Tone.Transport.bpm.value = parseInt(document.getElementById('bpm-input').value) || 120;
+            runtimeState.Tone.Transport.loop = appState.isLooping;
+            runtimeState.Tone.Transport.loopStart = 0;
+            runtimeState.Tone.Transport.loopEnd = `${appState.sequence.length}n`;
+
+            runtimeState.Tone.Transport.scheduleRepeat((time) => {
+                appState.cpuActivity = true;
+                updateLEDs();
+                const step = appState.currentStep;
+                const noteEvent = appState.sequence[step];
+                if (noteEvent !== null) {
+                    triggerVoice(noteEvent);
+                }
+                appState.currentStep = (step + 1) % appState.sequence.length;
+                drawScope(); // Update visualization
+            }, "16n");
+        }
+
+        function setupVisuals() {
+            const algorithms = Array.from({length: 10}, (_, i) => i);
+            seededShuffle(algorithms, SEED_RNG);
+            appState.visualAlgorithms = algorithms;
+            appState.visualToVoiceMap = [...algorithms];
+            seededShuffle(appState.visualToVoiceMap, SEED_RNG);
+        }
+
+        function triggerVoice(index) {
+            if (index < 0 || index >= appState.voices.length) return;
+            const voice = appState.voices[index];
+            const note = `${['C', 'D', 'E', 'F', 'G', 'A', 'B'][Math.floor(SEED_RNG() * 7)]}${Math.floor(SEED_RNG() * 2) + 4}`;
+            const duration = `${Math.floor(SEED_RNG() * 4) + 1}n`;
+            
+            appState.audioActivity = true;
+            updateLEDs();
+            
+            const visIndex = appState.visualToVoiceMap.indexOf(index);
+            appState.currentVisAlg = appState.visualAlgorithms[visIndex];
+
+            try {
+                if (typeof voice.synth.triggerAttackRelease === 'function') {
+                    voice.synth.triggerAttackRelease(note, duration);
+                } else if (typeof voice.synth.start === 'function') {
+                    voice.synth.start();
+                    voice.synth.stop(`+${runtimeState.Tone.Time(duration).toSeconds()}`);
+                }
+            } catch (e) {
+                console.error("Synth trigger error:", e);
+            }
+        }
+
+        function playSequence() {
+            if (!appState.isPowered || appState.isPlaying) return;
+            appState.isPlaying = true;
+            runtimeState.Tone.Transport.start();
+        }
+
+        function stopTransport() {
+            if (!appState.isPowered) return;
+            appState.isPlaying = false;
+            appState.currentStep = 0;
+            runtimeState.Tone.Transport.stop();
+        }
+
+        function savePattern() {
+            const dataStr = JSON.stringify({ sequence: appState.sequence, bpm: runtimeState.Tone.Transport.bpm.value });
+            const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+            const exportFileDefaultName = `bop_pattern_${Date.now()}.json`;
+            const linkElement = document.createElement('a');
+            linkElement.setAttribute('href', dataUri);
+            linkElement.setAttribute('download', exportFileDefaultName);
+            linkElement.click();
+        }
+
+        function loadPattern() {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.accept = 'application/json';
+            input.onchange = e => {
+                const file = e.target.files[0];
+                const reader = new FileReader();
+                reader.onload = event => {
+                    try {
+                        const data = JSON.parse(event.target.result);
+                        appState.sequence = data.sequence || Array(16).fill(null);
+                        if (data.bpm) {
+                            document.getElementById('bpm-input').value = data.bpm;
+                            runtimeState.Tone.Transport.bpm.value = data.bpm;
+                        }
+                    } catch (err) {
+                        console.error("Error parsing pattern file:", err);
+                    }
+                };
+                reader.readAsText(file);
+            };
+            input.click();
+        }
+
+        function playBootSignature() {
+            if (appState.signaturePlayed) return;
+            appState.signaturePlayed = true;
+            logToPanel(`[BOOT] Playing Signature...`);
+            
+            const timeBase = runtimeState.Tone.now();
+            // Call (Chords with voices 0-4)
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => {
+                    triggerVoice(i);
+                    // Assign a visual for the call
+                    const visIndex = appState.visualToVoiceMap.indexOf(i);
+                    appState.currentVisAlg = appState.visualAlgorithms[visIndex];
+                }, (i * 200) + 100);
+            }
+            // Response (Runs with voices 5-9)
+            for (let i = 0; i < 5; i++) {
+                setTimeout(() => {
+                    triggerVoice(i + 5);
+                    // Assign a visual for the response
+                    const visIndex = appState.visualToVoiceMap.indexOf(i + 5);
+                    appState.currentVisAlg = appState.visualAlgorithms[visIndex];
+                }, (i * 150) + 1500);
+            }
+            // Switch to idle pad after signature
+            setTimeout(() => {
+                logToPanel(`[BOOT] Signature Complete. Awaiting Input.`);
+            }, 3500);
+        }
+
+        // --- VISUALIZATION ---
+        const visParams = { t: 0, lastTime: 0 };
+        function drawScope() {
+            if (!appState.isPowered) return;
+            const w = canvas.width;
+            const h = canvas.height;
+            const centerX = w / 2;
+            const centerY = h / 2;
+            const scale = Math.min(w, h) * 0.45;
+
+            ctx.clearRect(0, 0, w, h);
+            ctx.strokeStyle = '#0a84ff';
+            ctx.lineWidth = appState.quality === 'x2' ? 1 : 2;
+
+            const alg = appState.currentVisAlg;
+            visParams.t += 0.01;
+
+            if (alg === 0) { // Lissajous Core
+                ctx.beginPath();
+                for (let i = 0; i <= 1000; i++) {
+                    const a = 3 + Math.sin(visParams.t * 0.1);
+                    const b = 2 + Math.cos(visParams.t * 0.13);
+                    const delta = Math.sin(visParams.t * 0.05);
+                    const t = i / 1000 * Math.PI * 2;
+                    const x = centerX + scale * Math.sin(a * t + delta);
+                    const y = centerY + scale * Math.sin(b * t);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            } else if (alg === 1) { // Spiral–Precess
+                ctx.beginPath();
+                for (let i = 0; i <= 1000; i++) {
+                    const t = i / 1000 * 10 * Math.PI;
+                    const r = scale * (1 - (t / (10 * Math.PI)));
+                    const x = centerX + r * (Math.cos(t) + 0.5 * Math.cos(3 * t + visParams.t));
+                    const y = centerY + r * (Math.sin(t) + 0.5 * Math.sin(3 * t + visParams.t));
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            } else if (alg === 2) { // Polar Rose Sweep
+                ctx.beginPath();
+                const k = 3 + Math.floor(Math.sin(visParams.t * 0.5) * 2);
+                for (let i = 0; i <= 1000; i++) {
+                    const theta = i / 1000 * Math.PI * 2;
+                    const r = scale * Math.cos(k * theta + visParams.t);
+                    const x = centerX + r * Math.cos(theta);
+                    const y = centerY + r * Math.sin(theta);
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.stroke();
+            } else if (alg === 3) { // Phyllotaxis Orbit
+                ctx.beginPath();
+                const c = 137.508 * Math.PI / 180; // Golden angle
+                for (let i = 0; i < 200; i++) {
+                    const r = scale * Math.sqrt(i) * 0.1;
+                    const a = i * c + visParams.t;
+                    const x = centerX + r * Math.cos(a);
+                    const y = centerY + r * Math.sin(a);
+                    ctx.moveTo(x, y);
+                    ctx.arc(x, y, 2, 0, Math.PI * 2);
+                }
+                ctx.stroke();
+            } else if (alg === 4) { // Figure-8 Morph
+                ctx.beginPath();
+                for (let i = 0; i <= 1000; i++) {
+                    const t = i / 1000 * Math.PI * 2;
+                    const morph = Math.sin(visParams.t * 0.3);
+                    const x = centerX + scale * Math.sin(t);
+                    const y = centerY + scale * Math.sin(2 * t) * (1 - morph) + scale * Math.sin(3 * t) * morph;
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            } else if (alg === 5) { // Epicycle Chain
+                let x = centerX, y = centerY;
+                ctx.beginPath();
+                ctx.moveTo(x, y);
+                for (let i = 0; i < 5; i++) {
+                    const R = scale / (i + 1);
+                    const freq = i + 1;
+                    x += R * Math.cos(freq * visParams.t + i);
+                    y += R * Math.sin(freq * visParams.t + i);
+                    ctx.lineTo(x, y);
+                }
+                ctx.stroke();
+            } else if (alg === 6) { // VectorScope XY (Placeholder: Lissajous)
+                drawScope(); // Recursive call for simplicity in this example
+            } else if (alg === 7) { // Torus-Knot Projection
+                ctx.beginPath();
+                const p = 3, q = 2;
+                for (let i = 0; i <= 1000; i++) {
+                    const t = i / 1000 * Math.PI * 2;
+                    const phi = p * t;
+                    const theta = q * t + visParams.t;
+                    const x = centerX + scale * Math.cos(phi) * (1 + 0.5 * Math.cos(theta));
+                    const y = centerY + scale * Math.sin(phi) * (1 + 0.5 * Math.cos(theta));
+                    if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                }
+                ctx.closePath();
+                ctx.stroke();
+            } else if (alg === 8) { // Audio Flowfield (Placeholder: Simple moving particles)
+                for (let i = 0; i < 50; i++) {
+                    const x = (Math.sin(i * 0.3 + visParams.t) * 0.5 + 0.5) * w;
+                    const y = (Math.cos(i * 0.2 + visParams.t) * 0.5 + 0.5) * h;
+                    ctx.beginPath();
+                    ctx.arc(x, y, 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            } else if (alg === 9) { // Harmonic Bloom (Placeholder: Rotating circles)
+                for (let i = 0; i < 12; i++) {
+                    const angle = (i / 12) * Math.PI * 2 + visParams.t;
+                    const radius = scale * (0.5 + 0.2 * Math.sin(visParams.t * 2 + i));
+                    const x = centerX + radius * Math.cos(angle);
+                    const y = centerY + radius * Math.sin(angle);
+                    ctx.beginPath();
+                    ctx.arc(x, y, 5, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+            }
+
+            requestAnimationFrame(drawScope);
+        }
+
+        // --- INIT ---
+        initializeUI();
+        setLoaderStatus(''); // Hide loader on initial load
+    </script>
+</body>
+</html>

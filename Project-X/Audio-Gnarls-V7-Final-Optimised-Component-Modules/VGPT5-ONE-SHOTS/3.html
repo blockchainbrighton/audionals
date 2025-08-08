@@ -1,0 +1,711 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Oscilloscope Synth NFT — Seeded x10 Voices + Sequencer</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  :root {
+    --bg: #0a0a0a;
+    --fg: #cde2c9;
+    --accent: #6ee7b7;
+    --muted: #3a4a3a;
+    --danger: #ff6b6b;
+  }
+  html, body { height:100%; }
+  body {
+    margin:0; background:var(--bg); color:var(--fg);
+    font: 14px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    display:flex; flex-direction:column;
+  }
+  header {
+    display:grid; grid-template-columns: 1fr auto auto auto auto auto auto auto;
+    gap:.5rem; align-items:center; padding:.75rem 1rem; border-bottom:1px solid #122012;
+    background: radial-gradient(120% 120% at 10% -10%, #0d1710 0%, #0a0a0a 45%);
+  }
+  header .brand { font-weight:700; letter-spacing:.02em; color:var(--accent); }
+  button, input, select, label {
+    font: inherit; color: var(--fg);
+    background:#0f1611; border:1px solid #1e2d1e; border-radius:6px; padding:.45rem .6rem;
+  }
+  button { cursor:pointer; }
+  button.primary { border-color:#2b4333; box-shadow:0 0 0 1px #1a2b1f inset; }
+  button.danger { border-color:#4a2020; color:#ffdede; }
+  button.tiny { padding:.25rem .4rem; font-size:12px; }
+  input[type="number"] { width:5.2rem; }
+  #power.on { color:#041; background:#c8ffd6; border-color:#245d3a; }
+  #canvasWrap { position:relative; flex:1; display:flex; }
+  #scope {
+    width:100%; height:100%; display:block; background: #000;
+    box-shadow: inset 0 0 0 1px #0f1a12, inset 0 0 180px rgba(110,231,183,.08);
+  }
+  .hud {
+    position:absolute; top:8px; left:8px; right:8px; display:flex; gap:.5rem; flex-wrap:wrap;
+    pointer-events:none;
+  }
+  .chip {
+    pointer-events:auto;
+    background:rgba(8,16,10,.65); border:1px solid #1e2d1e; border-radius:8px; padding:.3rem .5rem;
+  }
+  .meters { display:flex; gap:.25rem; align-items:flex-end; }
+  .meter { width:6px; height:20px; background:#0d0; opacity:.25; border-radius:2px; }
+  .meter.r { background:#0d0; }
+  .gridOverlay, .reticle {
+    position:absolute; inset:0; pointer-events:none;
+  }
+  .footer {
+    display:flex; gap:.5rem; padding:.5rem 1rem; border-top:1px solid #122012; color:#9fb7a1;
+  }
+  .kbd { display:inline-block; border:1px solid #2b4333; border-radius:4px; padding:.05rem .3rem; font-weight:700; }
+  .right { margin-left:auto; opacity:.75; }
+  a { color:var(--accent); text-decoration:none; }
+</style>
+</head>
+<body>
+  <header>
+    <div class="brand">OSC-NFT</div>
+    <div id="seedBox">seed: <span id="seedText">—</span></div>
+    <div> BPM <input id="bpm" type="number" min="40" max="240" step="1" value="110" /></div>
+    <div> steps <input id="steps" type="number" min="8" max="64" step="1" value="16" /></div>
+    <button id="rec" class="primary">● REC</button>
+    <button id="play">▶ PLAY</button>
+    <label class="chip"><input id="loop" type="checkbox" checked /> loop</label>
+    <button id="save" class="tiny">Save JSON</button>
+    <input id="load" type="file" accept="application/json" style="display:none" />
+    <button id="loadBtn" class="tiny">Load</button>
+    <button id="power" class="danger">POWER</button>
+  </header>
+
+  <div id="canvasWrap">
+    <canvas id="scope"></canvas>
+    <div class="gridOverlay" id="grid"></div>
+    <div class="reticle" id="reticle"></div>
+    <div class="hud">
+      <div class="chip">voice: <span id="voiceName">—</span> <span style="opacity:.6">(<span id="voiceIndex">—</span>)</span></div>
+      <div class="chip">algo: <span id="algoName">—</span></div>
+      <div class="chip meters">
+        <div class="meter" id="mL"></div>
+        <div class="meter" id="mR"></div>
+      </div>
+      <div class="chip">signature: <span id="sig">idle</span></div>
+    </div>
+  </div>
+
+  <div class="footer">
+    Keys <span class="kbd">0–9</span> trigger voices & visuals. Sequencer records number keys at step grid.
+    <span class="right">© BOP Matrix — deterministic seed engine</span>
+  </div>
+
+<script>
+/* ------------------------- Seed & PRNG ------------------------- */
+const urlSeed = new URLSearchParams(location.search).get('seed');
+const SEED = urlSeed ?? cryptoRandomSeed();
+document.getElementById('seedText').textContent = SEED;
+
+function cryptoRandomSeed(){
+  const a = crypto.getRandomValues(new Uint32Array(2));
+  return (a[0].toString(36)+a[1].toString(36)).slice(0,16);
+}
+// Mulberry32 PRNG
+function mulberry32(a){ return function(){ let t = a += 0x6D2B79F5; t = Math.imul(t ^ t>>>15, t | 1); t ^= t + Math.imul(t ^ t>>>7, t | 61); return ((t ^ t>>>14) >>> 0) / 4294967296; } }
+// Seeded pick/float/int helpers
+const RNG = mulberry32(hashStrTo32(SEED));
+function hashStrTo32(s){ let h=1779033703; for(let i=0;i<s.length;i++){ h = Math.imul(h ^ s.charCodeAt(i), 3432918353); h = (h<<13)|(h>>>19); } return (h>>>0); }
+const rand = () => RNG();
+const rint = (min,max)=> Math.floor(rand()*(max-min+1))+min;
+const rfloat = (min,max)=> rand()*(max-min)+min;
+const rpick = (arr)=> arr[Math.floor(rand()*arr.length)];
+const rchoiceW = (pairs)=>{ const sum = pairs.reduce((a,p)=>a+p[1],0); let t=rand()*sum; for(const [v,w] of pairs){ if((t-=w)<=0) return v; } return pairs[pairs.length-1][0]; };
+
+/* ------------------------- Tone Loader (on-chain) ------------------------- */
+const runtimeState = { Tone:null };
+function setLoaderStatus(msg, err){ console.log(msg); if(err) console.error(err); }
+function loadToneJSAndBoot({
+  toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+  setLoaderStatus, runtimeState, boot
+}) {
+  setLoaderStatus('Loading Audio Engine...');
+  import(toneUrl)
+    .then(() => {
+      runtimeState.Tone = window.Tone;
+      console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+      try {
+        boot(); // if boot fails, it's a boot error, not a Tone load error
+      } catch (bootErr) {
+        setLoaderStatus('Boot error — check console.', true);
+        console.error('[BOP Matrix] Boot error:', bootErr);
+      }
+    })
+    .catch(err => {
+      setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+      console.error('[BOP Matrix] Critical Tone.js load error:', err);
+    });
+}
+/* ------------------------- Music Theory (seeded) ------------------------- */
+const NOTES12 = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+const SCALES = {
+  major:[0,2,4,5,7,9,11],
+  minor:[0,2,3,5,7,8,10],
+  dorian:[0,2,3,5,7,9,10],
+  mixo:[0,2,4,5,7,9,10],
+  lydian:[0,2,4,6,7,9,11],
+  phrygian:[0,1,3,5,7,8,10],
+  pentMaj:[0,2,4,7,9],
+  pentMin:[0,3,5,7,10]
+};
+function makeNoteLibrary(){
+  const root = rint(0,11);
+  const scaleName = rpick(Object.keys(SCALES));
+  const scale = SCALES[scaleName];
+  const octBase = rint(3,4);
+  const lib=[];
+  while(lib.length<16){
+    const deg = rpick(scale);
+    const oct = octBase + rint(-1,2);
+    lib.push( midiToFreq(12*oct + root + deg) );
+  }
+  return { notes:lib, root, scaleName };
+}
+function midiToFreq(m){ return 440 * Math.pow(2,(m-69)/12); }
+
+/* ------------------------- Visual Algorithms ------------------------- */
+const ALGO_NAMES = [
+  'Lissajous Core','Spiral–Precess','Polar Rose Sweep','Phyllotaxis Orbit',
+  'Figure-8 Morph','Epicycle Chain','VectorScope XY','Torus-Knot Projection',
+  'Audio Flowfield','Harmonic Bloom'
+];
+// Each returns (x,y) in [-1,1] given t seconds and seed params p
+const VISUALS = {
+  0:(t,p)=>{ const a=p.a, b=p.b, d=p.d, e=p.e; return [Math.sin(a*t+d), Math.sin(b*t+e)]; },
+  1:(t,p)=>{ const w=.35+p.s*.2; const r=.2+.6*Math.sin(w*t*.7); const th= t*w*2.3; return [r*Math.cos(th), r*Math.sin(th)]; },
+  2:(t,p)=>{ const k=3+p.s*5; const th=t*.8; const r=Math.sin(k*th); return [r*Math.cos(th), r*Math.sin(th)]; },
+  3:(t,p)=>{ const n= (p.s*2000|0)+200; const idx=(p.s*9973|0); const a=idx%137/137; const b=(idx%277)/277; const th=t*.7; const r= .5*Math.sin(a*th)+.4*Math.cos(b*th); return [r*Math.cos(th*1.3), r*Math.sin(th*1.1)]; },
+  4:(t,p)=>{ const m=.8+.2*Math.sin(t*.5); return [Math.sin(t)*m, Math.sin(2*t+Math.sin(t))*m]; },
+  5:(t,p)=>{ // simple epicycle: base + small rotor
+    const w1=1.2, w2=3.7+1.5*p.s; const r1=.6, r2=.3;
+    const th1=w1*t, th2=w2*t;
+    const x=r1*Math.cos(th1)+r2*Math.cos(th1+th2);
+    const y=r1*Math.sin(th1)+r2*Math.sin(th1-th2);
+    return [x,y];
+  },
+  6:(t,p)=>{ // vectorscope: stereo phasor with slight detune
+    const f= .9, det = .02+.08*p.s; return [Math.sin((f)*t), Math.sin((f+det)*t+1.1)]; },
+  7:(t,p)=>{ // torus-knot-ish projection
+    const p1=2, q1=3; const th = t*.9;
+    return [Math.cos(q1*th)*(2+Math.cos(p1*th))/3, Math.sin(q1*th)*(2+Math.cos(p1*th))/3];
+  },
+  8:(t,p)=>{ // "audio flowfield" surrogate
+    const a=.7+ .3*Math.sin(.31*t), b=.9+.2*Math.cos(.27*t+p.s*6.28);
+    const x = Math.sin(a*t + Math.cos(b*t));
+    const y = Math.cos(b*t + Math.sin(a*t));
+    return [x,y];
+  },
+  9:(t,p)=>{ // harmonic bloom
+    const n=3+(p.s*5|0);
+    let x=0,y=0;
+    for(let i=1;i<=n;i++){
+      const ph = i*t*(.6+i*.07);
+      x += Math.sin(ph)/i; y += Math.cos(ph)/i;
+    }
+    const d = Math.max(1, n*(n+1)/2);
+    return [x/(n*.9), y/(n*.9)];
+  }
+};
+function algoParamsForIndex(i){
+  // stable per-voice params from seed
+  return {
+    s: (hashStrTo32(SEED + '_algo_'+i)%1000)/1000,
+    a: 1.0 + (hashStrTo32(SEED+'a'+i)%5),
+    b: 2.0 + (hashStrTo32(SEED+'b'+i)%7),
+    d: ((hashStrTo32(SEED+'d'+i)%628)/100)-3.14,
+    e: ((hashStrTo32(SEED+'e'+i)%628)/100)-3.14
+  };
+}
+
+/* ------------------------- Audio Graph ------------------------- */
+let Tone; // filled after loader
+const Audio = {
+  inited:false,
+  limiter:null, meter:null, masterGain:null,
+  voices:[], // {name,type,synth,chain,gain,algo,p,trigger}
+  noteLib:null,
+  idlePad:null
+};
+
+function bootAudio(){
+  Tone = runtimeState.Tone;
+  // Master
+  Audio.masterGain = new Tone.Gain(0.9).toDestination();
+  Audio.limiter = new Tone.Limiter(-1.0).connect(Audio.masterGain);
+  Audio.meter = new Tone.Meter({ channels:2 });
+  Audio.masterGain.connect(Audio.meter);
+
+  // Global FX bus subtle glue
+  const masterComp = new Tone.Compressor({ threshold:-18, ratio:2, attack:0.01, release:0.2 });
+  masterComp.connect(Audio.limiter);
+
+  // Build deterministic note library
+  Audio.noteLib = makeNoteLibrary();
+
+  // Pre-create 10 seeded voices
+  for(let i=0;i<10;i++){
+    Audio.voices.push(makeVoice(i, masterComp));
+  }
+
+  // Idle pad (gentle, sustained; seeded)
+  Audio.idlePad = makeIdlePad(masterComp);
+
+  // Transport defaults
+  Tone.Transport.bpm.value = Number(document.getElementById('bpm').value)||110;
+  Tone.Transport.latencyHint = 'balanced'; // stable timing
+  Tone.Transport.swing = 0;
+
+  Audio.inited = true;
+}
+
+/* Voice Factory: FM, AM, subtractive, additive, periodicWave, noise, ring-mod, etc. */
+function makeVoice(i, outBus){
+  const t = Tone;
+  const seedBias = (hashStrTo32(SEED+'_v'+i)%1000)/1000;
+  const voiceTypes = [
+    'FMSynth','AMSynth','AnalogSub','Additive','Wavetableish','Noise','RingMod','SawLead','TriPad','SquareChorus'
+  ];
+  const type = voiceTypes[i % voiceTypes.length];
+  const name = `${type}`;
+
+  // Per-voice FX (seeded)
+  const rev = new t.Reverb({ decay: 1.5 + seedBias*3.5, wet: 0.15 + seedBias*0.25, preDelay: 0.01 + seedBias*0.04 });
+  const ppd = new t.PingPongDelay({ delayTime: (seedBias*0.3+0.05), feedback: 0.25 + seedBias*0.5, wet: 0.15 + seedBias*0.3 });
+  const ch  = new t.Chorus({ frequency: 0.3 + seedBias*0.8, delayTime: 3 + 8*seedBias, depth: 0.2 + 0.6*seedBias, wet: 0.1 + 0.2*seedBias }).start();
+  const dist= new t.Distortion({ distortion: 0.0 + 0.4*seedBias, oversample:'2x', wet: 0.05 + 0.25*seedBias });
+  const fmot = new t.AutoFilter({ frequency: (0.05 + seedBias*0.3)+'hz', baseFrequency: 200, octaves: 3, type:'sine', depth: 0.6 }).start();
+  const gain = new t.Gain(0.0);
+  gain.connect(fmot).connect(ch).connect(dist).connect(rev).connect(ppd).connect(outBus);
+
+  let synth;
+
+  switch(type){
+    case 'FMSynth':
+      synth = new t.FMSynth({
+        modulationIndex: 3 + seedBias*14,
+        harmonicity: 1.5 + seedBias*3,
+        envelope:{ attack:0.01, decay:0.25, sustain:0.6, release:0.8 },
+        modulationEnvelope:{ attack:0.02, decay:0.2, sustain:0.3, release:0.6 }
+      });
+      break;
+    case 'AMSynth':
+      synth = new t.AMSynth({
+        harmonicity: 1.0 + seedBias*5,
+        detune: (seedBias*200)|0,
+        envelope:{ attack:0.02, decay:0.2, sustain:0.5, release:1.0 },
+        modulationEnvelope:{ attack:0.01, decay:0.1, sustain:0.2, release:0.8 }
+      });
+      break;
+    case 'AnalogSub': {
+      synth = new t.Synth({
+        oscillator:{ type:'fatsawtooth', spread:20+seedBias*40, count:3 },
+        envelope:{ attack:0.01, decay:0.35, sustain:0.7, release:1.2 }
+      });
+      const lp = new t.Filter({ type:'lowpass', frequency: 800 + seedBias*4000, Q: 0.8+seedBias*1.2 });
+      synth.connect(lp);
+      lp.connect(gain);
+      break;
+    }
+    case 'Additive': {
+      const partials = Array.from({length: 6 + (seedBias*6|0)}, (_,k)=> 1/(k+1));
+      const env = new t.AmplitudeEnvelope({ attack:0.02, decay:0.4, sustain:0.65, release:1.4 });
+      const merger = new t.Gain(0.8/(partials.length));
+      partials.forEach((amp, idx)=>{
+        const o = new t.Oscillator({ type:'sine', volume: -6, frequency: 220*(idx+1) });
+        const g = new t.Gain(amp);
+        o.connect(g).connect(merger);
+        o.start();
+      });
+      merger.connect(env).connect(gain);
+      synth = { triggerAttack: f=>env.triggerAttack(), triggerRelease:()=>env.triggerRelease(), set:()=>{} };
+      break;
+    }
+    case 'Wavetableish': {
+      const pw = new t.PWMOscillator({ modulationFrequency: 0.5+seedBias*2 }).start();
+      const filt = new t.Filter({ type:'bandpass', frequency: 400 + seedBias*3000, Q: 1.2+seedBias*6 });
+      pw.connect(filt).connect(gain);
+      synth = {
+        triggerAttack: f=>pw.frequency.rampTo(f, 0.02),
+        triggerRelease: ()=>{},
+        set:()=>{}
+      };
+      break;
+    }
+    case 'Noise': {
+      const ns = new t.Noise('pink').start();
+      const nf = new t.AutoFilter({ frequency:'2hz', baseFrequency: 200, octaves: 4, depth: .8 }).start();
+      const env = new t.AmplitudeEnvelope({ attack:0.01, decay:0.2, sustain:0.5, release:0.8 });
+      ns.connect(nf).connect(env).connect(gain);
+      synth = { triggerAttack: ()=>env.triggerAttack(), triggerRelease: ()=>env.triggerRelease(), set:()=>{} };
+      break;
+    }
+    case 'RingMod': {
+      // Tone v15-safe ring mod:
+      // Prefer true multiplication (bipolar) via Multiply if available; else AM fallback.
+      let outNode, triggerAttack, triggerRelease;
+      const car = new t.Oscillator({ type:'sine' }).start();
+      const mod = new t.Oscillator({ type:'sine', frequency: 120 + seedBias*400 }).start();
+      const env = new t.AmplitudeEnvelope({ attack:0.005, decay:0.25, sustain:0.55, release:0.7 });
+
+      if (t.Multiply) {
+        const mult = new t.Multiply();
+        // v15: use named inputs
+        car.connect(mult.a);
+        mod.connect(mult.b);
+        mult.connect(env).connect(gain);
+        outNode = mult;
+        triggerAttack = (f)=>{ car.frequency.rampTo(f,0.01); env.triggerAttack(); };
+        triggerRelease = ()=>env.triggerRelease();
+      } else {
+        // Fallback (AM): mod -> AudioToGain -> Gain.gain; car -> Gain
+        const atg = new t.AudioToGain();
+        const g = new t.Gain();
+        mod.connect(atg).connect(g.gain);
+        car.connect(g).connect(env).connect(gain);
+        outNode = g;
+        triggerAttack = (f)=>{ car.frequency.rampTo(f,0.01); env.triggerAttack(); };
+        triggerRelease = ()=>env.triggerRelease();
+      }
+      synth = { triggerAttack: triggerAttack, triggerRelease: triggerRelease, set:()=>{} };
+      break;
+    }
+    case 'SawLead':
+      synth = new t.Synth({
+        oscillator:{ type:'sawtooth' },
+        envelope:{ attack:0.005, decay:0.18, sustain:0.5, release:0.6 }
+      });
+      break;
+    case 'TriPad':
+      synth = new t.Synth({
+        oscillator:{ type:'triangle' },
+        envelope:{ attack:0.05, decay:0.4, sustain:0.7, release:1.8 }
+      });
+      break;
+    case 'SquareChorus':
+      synth = new t.Synth({
+        oscillator:{ type:'square' },
+        envelope:{ attack:0.01, decay:0.25, sustain:0.55, release:0.9 }
+      });
+      break;
+  }
+
+  if(synth && synth.connect) synth.connect(gain);
+
+  const baseGain = 0.22; // conservative
+  gain.gain.value = 0.0;
+
+  const algoIndex = i;
+  const algoParams = algoParamsForIndex(i);
+
+  function trigger(vel=0.9){
+    const f = rpick(Audio.noteLib.notes) * (0.5 + (seedBias*1.75));
+    if(synth && synth.set) synth.set({});
+    if(synth && synth.triggerAttack){ synth.triggerAttack(f); }
+    else if(synth && synth.frequency){ synth.frequency.rampTo?.(f, 0.02); }
+    const target = Math.min(1.0, baseGain * (0.6 + vel*0.8));
+    gain.gain.cancelAndHoldAtTime?.(Tone.now());
+    gain.gain.rampTo(target, 0.005);
+  }
+  function release(){
+    if(synth && synth.triggerRelease) synth.triggerRelease();
+    gain.gain.rampTo(0.0001, 0.15);
+  }
+
+  return { name, type, synth, gain, chain:{rev:rev, ppd, ch, dist, fmot}, algoIndex, algoParams, trigger, release };
+}
+
+/* Idle pad */
+function makeIdlePad(outBus){
+  const t = Tone;
+  const pad = new t.PolySynth(t.Synth, {
+    maxPolyphony:4,
+    options: { oscillator:{ type:'sine' }, envelope:{ attack:1.2, decay:0.2, sustain:0.5, release:2.5 } }
+  });
+  const filt = new t.Filter({ type:'lowpass', frequency: 600, Q: 0.6 });
+  const rev = new t.Reverb({ decay: 4.5, wet: 0.18 });
+  const g = new t.Gain(0.12);
+  pad.connect(filt).connect(rev).connect(g).connect(outBus);
+  function play(){ const ns = Audio.noteLib.notes; const now = Tone.now(); pad.triggerAttack(ns.slice(0,3), now); }
+  function stop(){ pad.releaseAll(); }
+  return { pad, gain:g, play, stop };
+}
+
+/* ------------------------- Boot Signature (3.2s) ------------------------- */
+let bootPlayed = false;
+async function playBootSignature(){
+  if(bootPlayed) return;
+  bootPlayed = true;
+  const { voices } = Audio;
+  const lib = Audio.noteLib.notes;
+  const now = Tone.now();
+  const dur = 3.2; // seconds
+  const steps = 16;
+  const dt = dur/steps;
+  for(let s=0;s<steps;s++){
+    const t = now + s*dt;
+    // pick 2-4 voices each step deterministically
+    const count = 2 + (hashStrTo32(SEED+'boot'+s)%3);
+    for(let k=0;k<count;k++){
+      const vidx = (hashStrTo32(SEED+'v'+s+'k'+k)%voices.length);
+      const v = voices[vidx];
+      const vel = 0.6 + ((hashStrTo32(SEED+'vel'+s+'k'+k)%40)/100);
+      // schedule
+      Tone.Transport.scheduleOnce(time=>{
+        v.trigger(vel);
+        // quick tail
+        Tone.Transport.scheduleOnce(()=>v.release(), time + dt*0.75);
+        setActiveVisual(vidx);
+      }, t);
+    }
+  }
+  // After signature, fade to idle pad
+  Tone.Transport.scheduleOnce(()=>{
+    Audio.idlePad.play();
+    document.getElementById('sig').textContent = 'idle';
+  }, now + dur + 0.05);
+  document.getElementById('sig').textContent = 'boot';
+}
+
+/* ------------------------- Sequencer ------------------------- */
+const Sequencer = {
+  length: 16,
+  position: 0,
+  loop:true,
+  recording:false,
+  // steps: array of arrays of voice indices pressed at that step
+  steps: Array.from({length:64}, ()=>[]), // prealloc max; length property controls active region
+  clearActive(){ for(let i=0;i<this.steps.length;i++) this.steps[i]=[]; },
+  recordKey(vidx){
+    const pos = this.position % this.length;
+    if(!this.steps[pos].includes(vidx)) this.steps[pos].push(vidx);
+  },
+  schedule(){
+    Tone.Transport.cancel(0);
+    const sixteenth = '16n';
+    for(let i=0;i<this.length;i++){
+      Tone.Transport.schedule((time)=>{
+        this.position = i;
+        const arr = this.steps[i];
+        for(const vidx of arr){
+          const v = Audio.voices[vidx];
+          v.trigger(0.9);
+          Tone.Transport.scheduleOnce(()=>v.release(), time + Tone.Time(sixteenth).toSeconds()*0.9);
+          setActiveVisual(vidx);
+        }
+      }, `0:${Math.floor(i/4)}:${i%4}`);
+    }
+    Tone.Transport.loop = this.loop;
+    Tone.Transport.loopStart = 0;
+    Tone.Transport.loopEnd = `0:${Math.floor((this.length-1)/4)}:${(this.length-1)%4+1}`;
+  }
+};
+
+/* ------------------------- UI & Interaction ------------------------- */
+const els = {
+  bpm: document.getElementById('bpm'),
+  steps: document.getElementById('steps'),
+  rec: document.getElementById('rec'),
+  play: document.getElementById('play'),
+  loop: document.getElementById('loop'),
+  save: document.getElementById('save'),
+  load: document.getElementById('load'),
+  loadBtn: document.getElementById('loadBtn'),
+  power: document.getElementById('power'),
+  vName: document.getElementById('voiceName'),
+  vIdx: document.getElementById('voiceIndex'),
+  aName: document.getElementById('algoName'),
+  mL: document.getElementById('mL'),
+  mR: document.getElementById('mR'),
+  sig: document.getElementById('sig')
+};
+
+let currentVisualIndex = 0;
+function setActiveVisual(i){
+  currentVisualIndex = i;
+  els.vName.textContent = Audio.voices[i].name;
+  els.vIdx.textContent = i;
+  els.aName.textContent = ALGO_NAMES[ Audio.voices[i].algoIndex ];
+}
+
+// Key events 0–9
+window.addEventListener('keydown', (e)=>{
+  if(!Audio.inited || !/^Digit[0-9]$/.test(e.code)) return;
+  const n = Number(e.key) % 10;
+  const v = Audio.voices[n];
+  v.trigger(0.95);
+  setActiveVisual(n);
+  if(Sequencer.recording) Sequencer.recordKey(n);
+});
+window.addEventListener('keyup', (e)=>{
+  if(!Audio.inited || !/^Digit[0-9]$/.test(e.code)) return;
+  const n = Number(e.key) % 10;
+  Audio.voices[n].release();
+});
+
+els.bpm.addEventListener('change', ()=>{
+  Tone.Transport.bpm.rampTo(Number(els.bpm.value)||110, 0.05);
+});
+els.steps.addEventListener('change', ()=>{
+  const v = Math.max(8, Math.min(64, Number(els.steps.value)||16));
+  Sequencer.length = v;
+  Sequencer.schedule();
+});
+els.loop.addEventListener('change', ()=>{
+  Sequencer.loop = !!els.loop.checked;
+  Sequencer.schedule();
+});
+els.rec.addEventListener('click', ()=>{
+  Sequencer.recording = !Sequencer.recording;
+  els.rec.textContent = Sequencer.recording ? '● REC*' : '● REC';
+  els.rec.style.color = Sequencer.recording ? '#ffb4b4' : '';
+});
+els.play.addEventListener('click', ()=>{
+  if(Tone.Transport.state !== 'started'){
+    Sequencer.schedule();
+    Tone.Transport.start('+0.02');
+    els.play.textContent = '⏸ PAUSE';
+  }else{
+    Tone.Transport.pause();
+    els.play.textContent = '▶ PLAY';
+  }
+});
+els.save.addEventListener('click', ()=>{
+  const data = {
+    seed: SEED,
+    bpm: Number(els.bpm.value)||110,
+    length: Sequencer.length,
+    loop: Sequencer.loop,
+    steps: Sequencer.steps.slice(0, Sequencer.length)
+  };
+  downloadJSON('osc_nft_sequence.json', data);
+});
+els.loadBtn.addEventListener('click', ()=> els.load.click());
+els.load.addEventListener('change', async (e)=>{
+  const file = e.target.files[0]; if(!file) return;
+  const txt = await file.text();
+  try{
+    const data = JSON.parse(txt);
+    els.bpm.value = data.bpm ?? 110;
+    els.steps.value = data.length ?? 16;
+    els.loop.checked = !!data.loop;
+    Sequencer.length = Math.max(8, Math.min(64, data.length||16));
+    Sequencer.loop = !!data.loop;
+    Sequencer.clearActive();
+    const arr = data.steps||[];
+    for(let i=0;i<Math.min(arr.length,64);i++) Sequencer.steps[i] = arr[i].slice(0,10).map(n=>Math.max(0,Math.min(9,n)));
+    Sequencer.schedule();
+  }catch(err){ alert('Invalid JSON'); }
+});
+
+/* POWER (must be user gesture) */
+els.power.addEventListener('click', async ()=>{
+  if(!Audio.inited){
+    await Tone.start(); // resume
+  }
+  Audio.idlePad?.stop?.(); // ensure quiet before boot
+  // fade all gains to 0 first
+  for(const v of Audio.voices) v.gain.gain.value = 0.0001;
+  els.power.classList.add('on');
+  els.power.textContent = 'ON';
+  if(!Audio.inited) bootAudio();
+  playBootSignature();
+});
+
+/* ------------------------- Drawing / Scope ------------------------- */
+const canvas = document.getElementById('scope');
+const ctx = canvas.getContext('2d');
+const grid = document.getElementById('grid');
+const reticle = document.getElementById('reticle');
+
+function resize(){
+  canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight;
+  drawStaticOverlays();
+}
+window.addEventListener('resize', resize);
+function drawStaticOverlays(){
+  // grid
+  const w = canvas.width, h = canvas.height;
+  const gctx = grid.getContext?.('2d');
+  if(!grid.width){ grid.width=w; grid.height=h; }
+  grid.width=w; grid.height=h;
+  if(gctx){
+    gctx.clearRect(0,0,w,h);
+    gctx.strokeStyle='rgba(110,231,183,0.08)'; gctx.lineWidth=1;
+    const step = Math.max(32, Math.min(120, Math.floor(Math.min(w,h)/12)));
+    for(let x=0;x<w;x+=step){ gctx.beginPath(); gctx.moveTo(x,0); gctx.lineTo(x,h); gctx.stroke(); }
+    for(let y=0;y<h;y+=step){ gctx.beginPath(); gctx.moveTo(0,y); gctx.lineTo(w,y); gctx.stroke(); }
+  }
+  // reticle
+  if(!reticle.width){ reticle.width=w; reticle.height=h; }
+  const rctx = reticle.getContext?.('2d');
+  reticle.width=w; reticle.height=h;
+  if(rctx){
+    rctx.clearRect(0,0,w,h);
+    rctx.strokeStyle='rgba(110,231,183,0.18)'; rctx.lineWidth=1;
+    rctx.beginPath(); rctx.moveTo(w/2,0); rctx.lineTo(w/2,h); rctx.moveTo(0,h/2); rctx.lineTo(w,h/2); rctx.stroke();
+  }
+}
+resize();
+
+function draw(){
+  requestAnimationFrame(draw);
+  const w = canvas.width, h = canvas.height;
+  ctx.clearRect(0,0,w,h);
+  // background glow
+  ctx.fillStyle='#000'; ctx.fillRect(0,0,w,h);
+
+  // draw current visual
+  const i = currentVisualIndex % 10;
+  const algo = VISUALS[i];
+  const p = Audio.voices[i]?.algoParams ?? {s:0.5,a:2,b:3,d:0.1,e:0.3};
+
+  // time from Audio context
+  const tNow = runtimeState.Tone ? Tone.now() : performance.now()/1000;
+  const samples = Math.min(4096, Math.floor(Math.min(w,h)*2));
+  ctx.beginPath();
+  for(let s=0;s<samples;s++){
+    const t = tNow + s * 0.0009; // visual sample step
+    const [x,y] = algo(t,p);
+    const X = (x*0.48+0.5)*w;
+    const Y = (y*0.48+0.5)*h;
+    if(s===0) ctx.moveTo(X,Y); else ctx.lineTo(X,Y);
+  }
+  ctx.strokeStyle='rgba(150,255,210,0.9)';
+  ctx.lineWidth=1.2; ctx.stroke();
+
+  // meter update
+  if(Audio.meter){
+    const lvlL = Math.min(1, Math.max(0, Audio.meter.getValue(0)+60)/60);
+    const lvlR = Math.min(1, Math.max(0, Audio.meter.getValue(1)+60)/60);
+    els.mL.style.height = (10 + 50*lvlL) + 'px'; els.mL.style.opacity = 0.25 + 0.65*lvlL;
+    els.mR.style.height = (10 + 50*lvlR) + 'px'; els.mR.style.opacity = 0.25 + 0.65*lvlR;
+  }
+}
+draw();
+
+/* ------------------------- Utilities ------------------------- */
+function downloadJSON(name, data){
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href=url; a.download=name; a.click();
+  setTimeout(()=>URL.revokeObjectURL(url), 1000);
+}
+
+/* ------------------------- Boot ------------------------- */
+function boot(){
+  // Build audio after Tone loaded; keep visuals running
+  bootAudio();
+  setActiveVisual(0);
+}
+loadToneJSAndBoot({ setLoaderStatus, runtimeState, boot });
+
+/* ------------------------- Start in idle (visuals only) ------------------------- */
+document.getElementById('sig').textContent = 'standby';
+</script>
+</body>
+</html>
