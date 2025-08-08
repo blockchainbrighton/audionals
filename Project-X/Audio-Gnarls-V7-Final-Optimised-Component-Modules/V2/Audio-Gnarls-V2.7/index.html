@@ -1,0 +1,330 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Seeded Audiovisual Synthesizer</title>
+<style>
+html,body {
+  margin: 0;
+  padding: 0;
+  background: #000;
+  color: #0f0;
+  font-family: monospace;
+  width: 100%;
+  height: 100vh; /* Use full viewport height */
+  overflow: hidden; /* Prevent scrollbars */
+  display: flex; /* Use flexbox for layout */
+  flex-direction: column; /* Stack UI and canvas vertically */
+}
+#ui {
+  background: rgba(0,0,0,0.7);
+  display: flex;
+  flex-wrap: wrap; /* Allow controls to wrap on smaller screens */
+  justify-content: center; /* Center controls horizontally */
+  align-items: center;
+  padding: 10px;
+  gap: 10px;
+  border-bottom: 1px solid #0f0; /* Visual separator */
+  flex-shrink: 0; /* Prevent the UI bar from shrinking */
+}
+#canvas-wrapper {
+  flex-grow: 1; /* This container will fill the remaining space */
+  display: flex;
+  justify-content: center; /* Center canvas horizontally */
+  align-items: center;    /* Center canvas vertically */
+  overflow: hidden; /* Hide anything that might spill out */
+  padding: 10px; /* Add some padding around the canvas area */
+  box-sizing: border-box;
+}
+#canvas {
+  display: block;
+  border: 1px solid #0f0; /* Clearly show the canvas boundary */
+  /* width and height are set dynamically by JavaScript */
+}
+input,button {
+  background: #111;
+  color: #0f0;
+  border: 1px solid #0f0;
+  padding: 5px 10px; /* Make controls easier to click */
+  font-family: monospace;
+  cursor: pointer;
+}
+button:hover {
+  background: #0f0;
+  color: #000;
+}
+</style>
+</head>
+<body>
+<!-- UI controls are now in their own dedicated bar at the top -->
+<div id="ui">
+  <span>Seed:</span>
+  <input id="seedInput" size="10">
+  <button id="setSeedBtn">Set</button>
+  <button id="randBtn">Randomize</button>
+  <span id="patchName"></span>
+  <button id="fsBtn">Fullscreen</button>
+  <button id="wavBtn">Export WAV</button>
+</div>
+
+<!-- A new wrapper to help center the canvas -->
+<div id="canvas-wrapper">
+  <canvas id="canvas"></canvas>
+</div>
+
+<script>
+/* ---------- PRNG ---------- */
+function mulberry32(a){return function(){var t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return((t^t>>>14)>>>0)/4294967296}}
+let rng;
+function setSeed(s){rng=mulberry32(s>>>0);}
+function randf(min,max){return rng()*(max-min)+min;}
+function randi(min,max){return Math.floor(randf(min,max+1));}
+function pick(arr){return arr[randi(0,arr.length-1)];}
+
+/* ---------- Globals ---------- */
+const canvas=document.getElementById('canvas');
+const ctx=canvas.getContext('2d');
+const canvasWrapper = document.getElementById('canvas-wrapper');
+let W,H;
+// UPDATED: This function now makes the canvas a centered square
+function resize(){
+  // Get the dimensions of the container element
+  const availableWidth = canvasWrapper.clientWidth;
+  const availableHeight = canvasWrapper.clientHeight;
+  
+  // Determine the largest possible square size that fits
+  const size = Math.min(availableWidth, availableHeight);
+  
+  // Set the canvas dimensions to be a square
+  W = canvas.width = size;
+  H = canvas.height = size;
+}
+window.addEventListener('resize',resize);
+// Initial resize is called at the end of the script
+
+let audioCtx, masterGain;
+let analyser;
+let currentPatch=0;
+let patches=[];
+
+/* ---------- Audio Engine ---------- */
+function createSynthVoice(type, params){
+  const now=audioCtx.currentTime;
+  const output=audioCtx.createGain();
+  output.gain.value=0.5;
+  let src;
+  if(type==='additive'){
+    const mix=audioCtx.createGain();
+    for(let i=0;i<params.partials;i++){
+      const osc=audioCtx.createOscillator();
+      osc.type='sine';
+      osc.frequency.value=params.baseFreq*(i+1+params.ratios[i]);
+      const g=audioCtx.createGain();
+      g.gain.value=params.amps[i];
+      osc.connect(g).connect(mix);
+      osc.start();
+    }
+    mix.connect(output);
+  }
+  else if(type==='subtractive'){
+    const osc=audioCtx.createOscillator();
+    osc.type=params.wave;
+    osc.frequency.value=params.baseFreq;
+    const filt=audioCtx.createBiquadFilter();
+    filt.type=params.filterType;
+    filt.frequency.value=params.cutoff;
+    filt.Q.value=params.res;
+    osc.connect(filt).connect(output);
+    osc.start();
+  }
+  else if(type==='fm'){
+    const carrier=audioCtx.createOscillator();
+    carrier.type='sine';
+    carrier.frequency.value=params.carFreq;
+    const mod=audioCtx.createOscillator();
+    mod.type='sine';
+    mod.frequency.value=params.modFreq;
+    const mg=audioCtx.createGain();
+    mg.gain.value=params.index;
+    mod.connect(mg).connect(carrier.frequency);
+    carrier.connect(output);
+    carrier.start(); mod.start();
+  }
+  else if(type==='wavetable'){
+    const real=new Float32Array(params.len);
+    const imag=new Float32Array(params.len);
+    for(let i=0;i<params.len;i++){
+      real[i]=Math.sin(i/params.len*2*Math.PI*params.phase1);
+      imag[i]=Math.cos(i/params.len*2*Math.PI*params.phase2);
+    }
+    const table=audioCtx.createPeriodicWave(real,imag);
+    const osc=audioCtx.createOscillator();
+    osc.setPeriodicWave(table);
+    osc.frequency.value=params.freq;
+    osc.connect(output);
+    osc.start();
+  }
+  else if(type==='noise'){
+    const buffer=audioCtx.createBuffer(1, audioCtx.sampleRate*2, audioCtx.sampleRate);
+    const data=buffer.getChannelData(0);
+    for(let i=0;i<data.length;i++) data[i]=Math.random()*2-1;
+    const srcBuf=audioCtx.createBufferSource();
+    srcBuf.buffer=buffer;
+    srcBuf.loop=true;
+    srcBuf.connect(output);
+    srcBuf.start();
+  }
+  return output;
+}
+
+/* ---------- Patch & Pattern Generation ---------- */
+function makePatch(index){
+  const synthTypes=['additive','subtractive','fm','wavetable','noise'];
+  const type=pick(synthTypes);
+  let params={};
+  if(type==='additive'){
+    params.partials=6;
+    params.baseFreq=randf(80,220);
+    params.ratios=Array.from({length:6},()=>randf(0.1,0.5));
+    params.amps=Array.from({length:6},()=>randf(0.05,0.3));
+  }
+  if(type==='subtractive'){
+    params.wave=pick(['sawtooth','square']);
+    params.baseFreq=randf(80,220);
+    params.filterType=pick(['lowpass','bandpass','highpass']);
+    params.cutoff=randf(200,4000);
+    params.res=randf(0.1,10);
+  }
+  if(type==='fm'){
+    params.carFreq=randf(80,220);
+    params.modFreq=randf(0.5,220);
+    params.index=randf(50,300);
+  }
+  if(type==='wavetable'){
+    params.len=32;
+    params.phase1=randf(0.5,5);
+    params.phase2=randf(0.5,5);
+    params.freq=randf(80,220);
+  }
+  if(type==='noise'){
+    // no extra params
+  }
+  return {
+    name:`Patch ${index+1} (${type})`,
+    type, params,
+    pattern: index
+  };
+}
+
+function buildPatches(){
+  patches=[];
+  for(let i=0;i<10;i++) patches.push(makePatch(i));
+}
+
+/* ---------- Patterns ---------- */
+function drawPattern(id, t){
+  ctx.strokeStyle='#0f0';
+  ctx.beginPath();
+  let points=800;
+  // NOTE: Drawing logic remains the same, but W and H are now always equal.
+  // The patterns are scaled relative to the center of the canvas.
+  let scale = W * 0.45; // Use 45% of width as a scaling factor
+  for(let i=0;i<points;i++){
+    let phase=i/points*2*Math.PI;
+    let x=0,y=0;
+    switch(id){
+      case 0: x=Math.sin(phase*3); y=Math.sin(phase*2); break;
+      case 1: let r=phase/(2*Math.PI); x=r*Math.cos(phase*10); y=r*Math.sin(phase*10); break;
+      case 2: let sides=6; let ang=Math.floor(phase/(2*Math.PI/sides))*(2*Math.PI/sides); x=Math.cos(ang); y=Math.sin(ang); break;
+      case 3: x=Math.cos(3*phase)+Math.cos(7*phase)/2; y=Math.sin(5*phase)-Math.sin(9*phase)/2; break;
+      case 4: let R=1.5,r2=0.5,d=1.0; x=(R-r2)*Math.cos(phase)+d*Math.cos((R-r2)/r2*phase); y=(R-r2)*Math.sin(phase)-d*Math.sin((R-r2)/r2*phase); break;
+      case 5: x=Math.sin(phase)*2; y=Math.sin(phase*2); break;
+      case 6: let s=5; let p=Math.sin(phase*10)*0.5; x=Math.cos(phase)+p; y=Math.sin(phase)+p; break;
+      case 7: let ang3D=phase+t; x=Math.cos(ang3D); y=Math.sin(ang3D)*Math.sin(t); break;
+      case 8: x=Math.sin(phase)+Math.sin(3*phase)/2; y=Math.cos(phase)+Math.cos(5*phase)/2; break;
+      case 9: x=(rng()-0.5)*2; y=(rng()-0.5)*2; break;
+    }
+    if(i===0) ctx.moveTo(W/2+x*scale, H/2+y*scale); else ctx.lineTo(W/2+x*scale, H/2+y*scale);
+  }
+  ctx.stroke();
+}
+
+/* ---------- Playback Control ---------- */
+function selectPatch(i){
+  currentPatch=i;
+  document.getElementById('patchName').textContent=patches[i].name;
+  if(masterGain) masterGain.disconnect();
+  masterGain=audioCtx.createGain();
+  masterGain.gain.value=0.5;
+  const voice=createSynthVoice(patches[i].type, patches[i].params);
+  voice.connect(masterGain).connect(audioCtx.destination);
+  analyser=audioCtx.createAnalyser();
+  masterGain.connect(analyser);
+}
+
+/* ---------- UI Events ---------- */
+document.getElementById('randBtn').onclick=()=>{
+  const seed=Math.floor(Math.random()*0xffffffff);
+  document.getElementById('seedInput').value=seed;
+  setSeed(seed);
+  buildPatches();
+  selectPatch(0);
+};
+document.getElementById('setSeedBtn').onclick=()=>{
+  const seed=parseInt(document.getElementById('seedInput').value)||0;
+  setSeed(seed);
+  buildPatches();
+  selectPatch(0);
+};
+document.getElementById('fsBtn').onclick=()=>{document.documentElement.requestFullscreen()};
+document.getElementById('wavBtn').onclick=()=>{alert('WAV export not yet implemented in this minimal example')};
+
+/* ---------- Keyboard Control ---------- */
+window.addEventListener('keydown',e=>{
+  if(e.key>='0'&&e.key<='9'){
+    let idx=(e.key==='0')?9:parseInt(e.key)-1;
+    selectPatch(idx);
+  }
+});
+
+/* ---------- Animation Loop ---------- */
+let t=0;
+function animate(){
+  ctx.fillStyle='rgba(0,0,0,0.1)'; // Slightly slower fade for a smoother look
+  ctx.fillRect(0,0,W,H);
+  drawPattern(currentPatch, t);
+  t+=0.01;
+  requestAnimationFrame(animate);
+}
+
+/* ---------- Init ---------- */
+(async function(){
+  // User interaction is required to start AudioContext
+  const startInteraction = () => {
+    audioCtx=new (window.AudioContext||window.webkitAudioContext)();
+    const seed=Math.floor(Math.random()*0xffffffff);
+    document.getElementById('seedInput').value=seed;
+    setSeed(seed);
+    buildPatches();
+    selectPatch(0);
+    animate();
+    // Remove the event listeners once started
+    document.removeEventListener('click', startInteraction);
+    document.removeEventListener('keydown', startInteraction);
+  };
+  
+  // Set the initial size of the canvas correctly
+  resize();
+
+  // Add a message asking user to click to start
+  ctx.fillStyle = '#0f0';
+  ctx.textAlign = 'center';
+  ctx.fillText('Click or press any key to start', W/2, H/2);
+
+  document.addEventListener('click', startInteraction, {once: true});
+  document.addEventListener('keydown', startInteraction, {once: true});
+
+})();
+</script>
+</body>
+</html>

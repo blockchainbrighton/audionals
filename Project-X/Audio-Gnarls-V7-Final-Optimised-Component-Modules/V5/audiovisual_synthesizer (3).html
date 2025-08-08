@@ -1,0 +1,1315 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive Audiovisual Synthesizer</title>
+    <style>
+        /*
+         * Basic styles for the application. The page is split into two regions: a
+         * fullscreen canvas on the left which draws the oscilloscope style
+         * visuals, and a scrollable control panel on the right. Colours are
+         * chosen to evoke a dark, performance‑friendly interface. All input
+         * elements stretch to fill their container for ease of use.
+         */
+        html, body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background: #000;
+            color: #f4f4f4;
+            font-family: Arial, sans-serif;
+            height: 100%;
+            width: 100%;
+        }
+        #app {
+            display: flex;
+            height: 100vh;
+            width: 100vw;
+        }
+        /* Container to ensure the oscilloscope canvas remains square and centred */
+        #canvasContainer {
+            flex: 1;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            position: relative; /* allow overlay positioning */
+        }
+        #oscilloscope {
+            background: #000;
+            display: block;
+        }
+
+        /* Indicator displayed while the audio signature is playing. It overlays
+         * the oscilloscope and is hidden when no signature is playing. */
+        #signatureIndicator {
+            position: absolute;
+            top: 10px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.6);
+            color: #0f0;
+            border: 1px solid #0f0;
+            border-radius: 4px;
+            padding: 4px 8px;
+            font-size: 14px;
+            pointer-events: none;
+            display: none;
+        }
+        #controls {
+            width: 340px;
+            max-width: 40%;
+            background: rgba(35, 35, 35, 0.95);
+            overflow-y: auto;
+            padding: 10px;
+            box-sizing: border-box;
+            color: #eee;
+            border-left: 1px solid #444;
+        }
+        .section {
+            margin-bottom: 12px;
+            padding-bottom: 8px;
+            border-bottom: 1px solid #333;
+        }
+        .section:last-child {
+            border-bottom: none;
+        }
+        .section h3 {
+            margin: 0 0 6px 0;
+            font-size: 15px;
+            color: #0bf;
+            font-weight: bold;
+        }
+        .control-group {
+            margin-bottom: 6px;
+        }
+        .control-group label {
+            display: block;
+            font-size: 11px;
+            margin-bottom: 2px;
+            color: #aaa;
+        }
+        .control-group input[type=range],
+        .control-group select,
+        .control-group input[type=number],
+        .control-group input[type=text] {
+            width: 100%;
+        }
+        button {
+            width: 100%;
+            margin-top: 5px;
+            padding: 6px;
+            font-size: 14px;
+            background: #222;
+            border: 1px solid #555;
+            color: #fff;
+            cursor: pointer;
+        }
+        button:hover {
+            background: #333;
+        }
+    </style>
+</head>
+<body>
+<div id="app">
+    <div id="canvasContainer">
+        <canvas id="oscilloscope"></canvas>
+        <div id="signatureIndicator">Signature Playing…</div>
+    </div>
+    <div id="controls"></div>
+</div>
+<script>
+/*
+ * Interactive Audiovisual Synthesizer
+ *
+ * This script implements a self contained audio/visual synthesizer using the
+ * Web Audio API and the canvas API. The left and right audio channels are
+ * repurposed as X/Y coordinates to drive oscilloscope style Lissajous curves,
+ * while a separate monophonic synthesiser voice produces audible sound. A
+ * modulation matrix composed of LFOs and an ADSR envelope can target both
+ * audio and visual parameters. The UI is built dynamically from a set of
+ * specification objects to simplify adding or modifying controls.
+ */
+
+(() => {
+    // --- Utility functions ---
+    function clamp(v, min, max) { return Math.min(Math.max(v, min), max); }
+    // Simple seeded PRNG (Mulberry32) for deterministic randomness.
+    function mulberry32(a) {
+        return function() {
+            let t = a += 0x6D2B79F5;
+            t = Math.imul(t ^ t >>> 15, t | 1);
+            t ^= t + Math.imul(t ^ t >>> 7, t | 61);
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+        };
+    }
+    // Default random seeded with current timestamp. Can be reset by user.
+    let random = mulberry32(Date.now() & 0xffffffff);
+    function setSeed(seed) {
+        const intSeed = (seed >>> 0) & 0xffffffff;
+        random = mulberry32(intSeed || 1);
+        state.seed = intSeed;
+        // Regenerate deterministic patches whenever the seed changes.
+        generateSeedPatches();
+    }
+
+    // --- Global State ---
+    const state = {
+        // Running flag toggled by start/stop button.
+        running: false,
+        seed: 0,
+        // Audio context and processor will be lazily initialised on first start.
+        audioCtx: null,
+        processor: null,
+        sampleRate: 44100,
+        time: 0, // global time for audio processing (seconds)
+        // Ring buffer to store geometry samples for drawing. Size should be
+        // significantly larger than the script processor buffer to avoid
+        // aliasing when drawing at 60 fps.
+        geoBufferSize: 4096,
+        geoBufferX: null,
+        geoBufferY: null,
+        geoWriteIndex: 0,
+        // Configurable parameters. Many of these receive modulated values
+        // computed each audio frame from LFOs and envelope generators.
+        params: {
+            geoFreq: { base: 1.0, mod: 0 },
+            geoAmp: { base: 0.4, mod: 0 },
+            geoRotation: { base: 0.0, mod: 0 },
+            geoScale: { base: 1.0, mod: 0 },
+            filterCutoff: { base: 1000, mod: 0 },
+            fmIndex: { base: 5, mod: 0 },
+            wavetableMorph: { base: 0.0, mod: 0 },
+            pwm: { base: 0.5, mod: 0 },
+            audioVolume: { base: 0.3, mod: 0 }
+        },
+        // Geometry configuration
+        geo: {
+            type: 'lissajous',
+            a: 1,
+            b: 2,
+            phase: 0,
+            // additional params for other types
+            sides: 5,
+            tightness: 3,
+            equationX: 'Math.sin(2*Math.PI*t)',
+            equationY: 'Math.cos(2*Math.PI*t)'
+        },
+        // Synthesizer configuration
+        synth: {
+            type: 'additive',
+            baseFreq: 220,
+            additive: {
+                ratios: [1, 2, 3, 4],
+                amps: [1.0, 0.5, 0.3, 0.2]
+            },
+            fm: {
+                ratio: 2,
+                index: 5
+            },
+            subtractive: {
+                oscType: 'saw',
+                cutoff: 1000,
+                resonance: 0.1,
+                pwm: 0.5
+            },
+            wavetable: {
+                table1: [],
+                table2: [],
+                morph: 0,
+                index: 0,
+                size: 1024
+            },
+            noise: {
+                color: 'white'
+            }
+        },
+        // LFOs: each has rate (Hz), shape, depth, target and phase
+        lfos: [
+            { rate: 0.3, shape: 'sine', depth: 0.5, target: 'geoAmp', phase: 0, lastSH: 0 },
+            { rate: 0.1, shape: 'sine', depth: 0.3, target: 'geoRotation', phase: 0, lastSH: 0 }
+        ],
+        // ADSR envelope generator: triggered via UI
+        envelope: {
+            attack: 0.1,
+            decay: 0.3,
+            sustain: 0.5,
+            release: 0.5,
+            value: 0,
+            state: 'idle',
+            gate: false,
+            startTime: 0,
+            releaseTime: 0,
+            releaseStartValue: 0,
+            target: 'audioVolume'
+        },
+        // Modulation routing: destination names for UI drop downs
+        modulationTargets: [
+            'geoFreq', 'geoAmp', 'geoRotation', 'geoScale',
+            'filterCutoff', 'fmIndex', 'wavetableMorph', 'pwm', 'audioVolume'
+        ],
+        // Visual options
+        visual: {
+            background: '#000'
+        },
+        // A flag used by the export function to avoid starting a new recording
+        // while one is in progress
+        exporting: false,
+        // Patches generated deterministically from the seed. Contains 10 patch
+        // objects keyed by their index. Each patch stores a geometry
+        // configuration, synthesizer configuration and base parameter values.
+        seedPatches: [],
+        // Flag to prevent multiple audio signature sequences from overlapping.
+        playingSignature: false
+    };
+
+    // Initialise ring buffers
+    state.geoBufferX = new Float32Array(state.geoBufferSize);
+    state.geoBufferY = new Float32Array(state.geoBufferSize);
+
+    // Evaluate custom equations safely. Only Math and t are available in scope.
+    function compileEquation(str) {
+        try {
+            /* eslint no-new-func: 0 */
+            return new Function('t', 'with(Math){ return ' + str + '; }');
+        } catch (e) {
+            console.warn('Failed to compile equation', str, e);
+            return t => 0;
+        }
+    }
+
+    // Generate random wavetable content. Called when selecting wavetable synth.
+    function generateWavetable() {
+        const size = state.synth.wavetable.size;
+        state.synth.wavetable.table1 = new Float32Array(size);
+        state.synth.wavetable.table2 = new Float32Array(size);
+        for (let i = 0; i < size; i++) {
+            // random values between -1 and 1 with slight smoothing
+            state.synth.wavetable.table1[i] = (random() * 2 - 1);
+            state.synth.wavetable.table2[i] = (random() * 2 - 1);
+        }
+        // optionally smooth by averaging neighbours for a softer waveform
+        function smooth(table) {
+            for (let i = 1; i < size - 1; i++) {
+                table[i] = (table[i - 1] + table[i] + table[i + 1]) / 3;
+            }
+        }
+        smooth(state.synth.wavetable.table1);
+        smooth(state.synth.wavetable.table2);
+        state.synth.wavetable.index = 0;
+    }
+
+    /**
+     * Generate 10 deterministic patches based on the current seed. Each patch
+     * holds its own geometry, synthesiser settings and base parameter values.
+     * A simple PRNG derived from the seed produces repeatable random values
+     * for each patch. This allows the user to recall the same set of sounds
+     * by reusing the same seed. Patches are indexed 0–9 and stored in
+     * state.seedPatches.
+     */
+    function generateSeedPatches() {
+        state.seedPatches = [];
+        for (let i = 0; i < 10; i++) {
+            const rng = mulberry32((state.seed + i) >>> 0);
+            // Generate geometry type
+            const geoTypes = ['lissajous','spiral','polygon'];
+            const geoType = geoTypes[Math.floor(rng() * geoTypes.length)];
+            // Base parameters
+            const geoFreq = rng() * 9 + 0.2;
+            const geoAmp = rng() * 1.5 + 0.1;
+            const geoRot = rng();
+            const geoScale = rng() * 2 + 0.5;
+            const geoA = Math.floor(rng() * 5) + 1;
+            const geoB = Math.floor(rng() * 5) + 1;
+            const geoSides = Math.floor(rng() * 8) + 3;
+            const geoTight = rng() * 5 + 0.5;
+            // Synth type
+            const synthTypes = ['additive','fm','subtractive','wavetable','noise'];
+            const synthType = synthTypes[Math.floor(rng() * synthTypes.length)];
+            // Base frequency chosen from harmonic series
+            const baseFreq = Math.pow(2, Math.floor(rng() * 7) + 3) * 10;
+            // Build synth parameters
+            const synth = {
+                type: synthType,
+                baseFreq: baseFreq,
+                additive: {
+                    ratios: [],
+                    amps: []
+                },
+                fm: {
+                    ratio: 1,
+                    index: 0
+                },
+                subtractive: {
+                    oscType: ['saw','square'][Math.floor(rng() * 2)],
+                    pwm: 0.5
+                },
+                wavetable: {
+                    table1: [],
+                    table2: [],
+                    index: 0,
+                    morph: 0,
+                    size: 1024
+                },
+                noise: {
+                    color: 'white'
+                }
+            };
+            // Fill additive if needed
+            for (let p = 0; p < state.synth.additive.ratios.length; p++) {
+                synth.additive.ratios[p] = rng() * 5 + 1;
+                synth.additive.amps[p] = rng();
+            }
+            // FM
+            synth.fm.ratio = rng() * 8 + 0.5;
+            synth.fm.index = rng() * 10;
+            // Subtractive
+            synth.subtractive.pwm = rng() * 0.8 + 0.1;
+            // Wavetable
+            // generate wavetables using deterministic rng
+            const wtSize = synth.wavetable.size;
+            synth.wavetable.table1 = new Float32Array(wtSize);
+            synth.wavetable.table2 = new Float32Array(wtSize);
+            for (let j = 0; j < wtSize; j++) {
+                synth.wavetable.table1[j] = (rng() * 2 - 1);
+                synth.wavetable.table2[j] = (rng() * 2 - 1);
+            }
+            // Smooth wavetables
+            function smooth(table) {
+                for (let k = 1; k < wtSize - 1; k++) {
+                    table[k] = (table[k - 1] + table[k] + table[k + 1]) / 3;
+                }
+            }
+            smooth(synth.wavetable.table1);
+            smooth(synth.wavetable.table2);
+            synth.wavetable.morph = rng();
+            // Parameter bases for modulation
+            const params = {
+                geoFreq: { base: geoFreq },
+                geoAmp: { base: geoAmp },
+                geoRotation: { base: geoRot },
+                geoScale: { base: geoScale },
+                filterCutoff: { base: rng() * 4000 + 200 },
+                fmIndex: { base: synth.fm.index },
+                wavetableMorph: { base: synth.wavetable.morph },
+                pwm: { base: synth.subtractive.pwm },
+                audioVolume: { base: rng() * 0.8 + 0.1 }
+            };
+            // Geometry object
+            const geo = {
+                type: geoType,
+                a: geoA,
+                b: geoB,
+                phase: 0,
+                sides: geoSides,
+                tightness: geoTight,
+                equationX: state.geo.equationX,
+                equationY: state.geo.equationY
+            };
+            state.seedPatches.push({ geo, synth, params });
+        }
+    }
+
+    /**
+     * Immediately switch to the patch at the given index (0–9) and play a
+     * short note. Copies the patch data into the global state, rebuilds the
+     * UI so sliders reflect the new values, and triggers the envelope. A
+     * release is scheduled after 1 second to avoid stuck notes.
+     */
+    function playSeedPatch(index) {
+        if (!state.seedPatches || !state.seedPatches[index]) return;
+        const patch = state.seedPatches[index];
+        // Deep copy geometry and synthesiser settings
+        state.geo = JSON.parse(JSON.stringify(patch.geo));
+        state.synth = JSON.parse(JSON.stringify(patch.synth));
+        // Copy base values into params
+        for (const key in patch.params) {
+            if (state.params[key]) {
+                state.params[key].base = patch.params[key].base;
+            }
+        }
+        // Rebuild UI to display new values
+        buildUI();
+        // Trigger envelope
+        triggerEnvelope(true);
+        setTimeout(() => {
+            triggerEnvelope(false);
+        }, 1000);
+    }
+
+    /**
+     * Generate a deterministic audio signature sequence and play it. The
+     * sequence consists of exactly 64 steps. Each step selects one of the
+     * 10 patches and a repeat length of 1, 2, 4 or 8 steps. The base
+     * duration of a step is 300 milliseconds. The entire signature will
+     * therefore take up to 19.2 seconds. Sequence generation is seeded
+     * using the current seed to ensure reproducibility. While the signature
+     * is playing the user cannot trigger another signature.
+     */
+    function playAudioSignature() {
+        if (state.playingSignature) return;
+        // Mark that the signature is playing and show the indicator.
+        state.playingSignature = true;
+        if (signatureIndicator) {
+            signatureIndicator.style.display = 'block';
+        }
+        // Use a dedicated PRNG based on the current seed so that the sequence is
+        // reproducible. Mix in a constant to avoid correlation with other
+        // sequences.
+        const sigRng = mulberry32((state.seed ^ 0xA5A5A5A5) >>> 0);
+        const sequence = [];
+        // Generate a shorter sequence of 32 steps instead of 64, to make
+        // the signature quicker. The lengths array defines possible repeat
+        // lengths that must divide the remaining number of steps.
+        let remaining = 32;
+        const lengths = [8,4,2,1];
+        while (remaining > 0) {
+            const patchIdx = Math.floor(sigRng() * 10);
+            const possible = lengths.filter(l => l <= remaining);
+            const len = possible[Math.floor(sigRng() * possible.length)];
+            sequence.push({ index: patchIdx, length: len });
+            remaining -= len;
+        }
+        // Set a faster base duration per step to make the sequence play
+        // through more quickly. 200ms per step yields a total of 6.4 seconds
+        // for 32 steps if no repeats were used.
+        const stepMs = 200;
+        let offset = 0;
+        sequence.forEach(item => {
+            setTimeout(() => {
+                playSeedPatch(item.index);
+            }, offset);
+            offset += stepMs * item.length;
+        });
+        // Hide the indicator and reset the flag after the sequence finishes.
+        setTimeout(() => {
+            state.playingSignature = false;
+            if (signatureIndicator) {
+                signatureIndicator.style.display = 'none';
+            }
+        }, offset + 10);
+    }
+
+    // Compute LFO value based on its shape and update its phase.
+    function computeLFO(lfo, dt) {
+        const rate = lfo.rate;
+        const shape = lfo.shape;
+        let value = 0;
+        // increment phase
+        lfo.phase += rate * dt;
+        // Keep phase within [0,1] to avoid overflow
+        if (lfo.phase > 1) lfo.phase -= Math.floor(lfo.phase);
+        const p = lfo.phase;
+        switch (shape) {
+            case 'sine':
+                value = Math.sin(2 * Math.PI * p);
+                break;
+            case 'triangle':
+                value = 2 * Math.abs(2 * (p - Math.floor(p + 0.5))) - 1;
+                break;
+            case 'square':
+                value = (p < 0.5 ? 1 : -1);
+                break;
+            case 'random':
+                // sample and hold: sample a new random value when phase wraps
+                if (lfo.phase < dt * rate) {
+                    lfo.lastSH = random() * 2 - 1;
+                }
+                value = lfo.lastSH;
+                break;
+            default:
+                value = 0;
+        }
+        return value;
+    }
+
+    // Update modulated parameters by summing contributions from LFOs and envelope.
+    function updateModulations(dt) {
+        // Reset modulation on all parameters
+        for (const key in state.params) {
+            if (Object.prototype.hasOwnProperty.call(state.params, key)) {
+                state.params[key].mod = 0;
+            }
+        }
+        // Compute LFO contributions
+        for (const lfo of state.lfos) {
+            const target = lfo.target;
+            if (!target || target === 'none') continue;
+            const lfoVal = computeLFO(lfo, dt);
+            // centre around 0; apply depth (0..1) scaled to reasonable range
+            const depth = lfo.depth;
+            if (state.params[target]) {
+                state.params[target].mod += lfoVal * depth;
+            }
+        }
+        // Update envelope
+        const env = state.envelope;
+        if (env.state !== 'idle') {
+            const elapsed = state.time - env.startTime;
+            if (env.state === 'attack') {
+                if (elapsed >= env.attack) {
+                    env.state = 'decay';
+                    env.value = 1;
+                    env.startTime = state.time;
+                } else {
+                    env.value = elapsed / Math.max(0.001, env.attack);
+                }
+            }
+            if (env.state === 'decay') {
+                const e = state.time - env.startTime;
+                if (e >= env.decay) {
+                    env.state = env.gate ? 'sustain' : 'release';
+                    env.value = env.sustain;
+                    env.startTime = state.time;
+                } else {
+                    const decayProgress = e / Math.max(0.001, env.decay);
+                    env.value = 1 - decayProgress * (1 - env.sustain);
+                }
+            }
+            if (env.state === 'sustain') {
+                env.value = env.sustain;
+                // wait for gate off
+            }
+            if (env.state === 'release') {
+                const e = state.time - env.releaseTime;
+                if (e >= env.release) {
+                    env.state = 'idle';
+                    env.value = 0;
+                } else {
+                    const relProg = e / Math.max(0.001, env.release);
+                    env.value = env.releaseStartValue * (1 - relProg);
+                }
+            }
+        }
+        // Apply envelope to its target
+        if (env.target && env.target !== 'none' && state.params[env.target]) {
+            state.params[env.target].mod += env.value;
+        }
+    }
+
+    // Generate the next geometry sample pair (x, y) given the current time t.
+    function computeGeometrySample(t) {
+        const g = state.geo;
+        const freq = state.params.geoFreq.base + state.params.geoFreq.mod;
+        const amp = state.params.geoAmp.base + state.params.geoAmp.mod;
+        const rot = (state.params.geoRotation.base + state.params.geoRotation.mod) * Math.PI * 2;
+        const scale = state.params.geoScale.base + state.params.geoScale.mod;
+        let x = 0, y = 0;
+        if (g.type === 'lissajous') {
+            const a = g.a;
+            const b = g.b;
+            const ph = g.phase;
+            x = Math.sin(2 * Math.PI * freq * a * t + ph);
+            y = Math.sin(2 * Math.PI * freq * b * t);
+        } else if (g.type === 'spiral') {
+            // simple logarithmic spiral
+            const r = amp * Math.exp(g.tightness * (t % 4));
+            const angle = 2 * Math.PI * freq * t;
+            x = r * Math.cos(angle);
+            y = r * Math.sin(angle);
+        } else if (g.type === 'polygon') {
+            const sides = Math.max(3, g.sides);
+            const angle = 2 * Math.PI * freq * t;
+            // star polygon by modulating radius
+            const r = amp * (0.5 + 0.5 * Math.sin(sides * angle));
+            x = r * Math.cos(angle);
+            y = r * Math.sin(angle);
+        } else if (g.type === 'custom') {
+            try {
+                if (!g._compiledX || g._compiledSourceX !== g.equationX) {
+                    g._compiledX = compileEquation(g.equationX);
+                    g._compiledSourceX = g.equationX;
+                }
+                if (!g._compiledY || g._compiledSourceY !== g.equationY) {
+                    g._compiledY = compileEquation(g.equationY);
+                    g._compiledSourceY = g.equationY;
+                }
+                x = g._compiledX(t);
+                y = g._compiledY(t);
+            } catch (e) {
+                x = 0; y = 0;
+            }
+        }
+        // apply rotation and scaling
+        const xr = x * Math.cos(rot) - y * Math.sin(rot);
+        const yr = x * Math.sin(rot) + y * Math.cos(rot);
+        return [xr * amp * scale, yr * amp * scale];
+    }
+
+    // Compute the next audible synthesiser sample value at time t. Uses the
+    // currently selected synthesis method defined in state.synth.
+    function computeSynthSample(t, dt) {
+        const synth = state.synth;
+        const baseFreq = synth.baseFreq;
+        const type = synth.type;
+        let sample = 0;
+        if (type === 'additive') {
+            for (let i = 0; i < synth.additive.ratios.length; i++) {
+                const ratio = synth.additive.ratios[i];
+                const amp = synth.additive.amps[i];
+                sample += Math.sin(2 * Math.PI * baseFreq * ratio * t) * amp;
+            }
+            // normalise amplitude to avoid clipping when many partials
+            sample /= synth.additive.ratios.length;
+        } else if (type === 'fm') {
+            const ratio = synth.fm.ratio;
+            const index = state.params.fmIndex.base + state.params.fmIndex.mod;
+            const mod = Math.sin(2 * Math.PI * baseFreq * ratio * t) * index;
+            sample = Math.sin(2 * Math.PI * baseFreq * t + mod);
+        } else if (type === 'subtractive') {
+            // base oscillator (saw or square with PWM)
+            const oscType = synth.subtractive.oscType;
+            const pwm = state.params.pwm.base + state.params.pwm.mod;
+            let osc = 0;
+            const phase = (t * baseFreq) % 1;
+            if (oscType === 'saw') {
+                osc = 2 * phase - 1;
+            } else if (oscType === 'square') {
+                osc = (phase < pwm) ? 1 : -1;
+            }
+            // one-pole low-pass filter. Cutoff from params.
+            if (!synth.subtractive._lpState) synth.subtractive._lpState = 0;
+            const cutoff = state.params.filterCutoff.base + state.params.filterCutoff.mod;
+            const cutoffClamped = Math.max(10, cutoff);
+            const rc = 1 / (2 * Math.PI * cutoffClamped);
+            const alpha = dt / (rc + dt);
+            const lp = synth.subtractive._lpState + alpha * (osc - synth.subtractive._lpState);
+            synth.subtractive._lpState = lp;
+            sample = lp;
+        } else if (type === 'wavetable') {
+            // ensure wavetables are initialised
+            const wt = synth.wavetable;
+            if (!wt.table1 || wt.table1.length === 0) {
+                generateWavetable();
+            }
+            const size = wt.size;
+            // compute index increment per sample
+            const inc = baseFreq * size / state.sampleRate;
+            wt.index += inc;
+            // wrap index
+            const i0 = Math.floor(wt.index) % size;
+            const frac = wt.index - Math.floor(wt.index);
+            const i1 = (i0 + 1) % size;
+            const m = clamp(state.params.wavetableMorph.base + state.params.wavetableMorph.mod, 0, 1);
+            // fetch samples from tables and interpolate
+            const v1 = wt.table1[i0] * (1 - frac) + wt.table1[i1] * frac;
+            const v2 = wt.table2[i0] * (1 - frac) + wt.table2[i1] * frac;
+            sample = v1 * (1 - m) + v2 * m;
+        } else if (type === 'noise') {
+            // white noise
+            sample = random() * 2 - 1;
+        }
+        return sample;
+    }
+
+    // Audio processing callback. Generates audio output and fills ring buffer for visuals.
+    function audioCallback(e) {
+        const outL = e.outputBuffer.getChannelData(0);
+        const outR = e.outputBuffer.getChannelData(1);
+        const bufferLength = outL.length;
+        const dt = 1 / state.sampleRate;
+        for (let i = 0; i < bufferLength; i++) {
+            // update modulations per sample
+            updateModulations(dt);
+            // compute geometry sample
+            const t = state.time;
+            const [gx, gy] = computeGeometrySample(t);
+            // compute synth sample
+            const synthSample = computeSynthSample(t, dt);
+            // apply envelope and modulated audio volume to audible voice
+            const volume = clamp(state.params.audioVolume.base + state.params.audioVolume.mod, 0, 1);
+            const audible = synthSample * volume;
+            // store geometry into ring buffer for drawing later
+            state.geoBufferX[state.geoWriteIndex] = gx;
+            state.geoBufferY[state.geoWriteIndex] = gy;
+            state.geoWriteIndex = (state.geoWriteIndex + 1) % state.geoBufferSize;
+            // write to audio outputs (left=geoX+audible, right=geoY+audible)
+            outL[i] = gx + audible;
+            outR[i] = gy + audible;
+            // increment time
+            state.time += dt;
+        }
+    }
+
+    // Resize canvas to fit available space
+    const canvas = document.getElementById('oscilloscope');
+    const ctx2d = canvas.getContext('2d');
+    // Element used to indicate when the audio signature is playing. Placed
+    // within the canvas container so that it overlays the oscilloscope. Its
+    // visibility is toggled in playAudioSignature().
+    const signatureIndicator = document.getElementById('signatureIndicator');
+    function resizeCanvas() {
+        // Compute the available space for a square canvas by subtracting the
+        // control panel width from the viewport width and taking the minimum
+        // of that value and the viewport height. Subtract a small margin to
+        // prevent overflow.
+        const controls = document.getElementById('controls');
+        const controlWidth = controls ? controls.offsetWidth || 340 : 340;
+        const availableWidth = window.innerWidth - controlWidth;
+        const availableHeight = window.innerHeight;
+        const size = Math.max(100, Math.min(availableWidth, availableHeight) - 20);
+        canvas.width = size;
+        canvas.height = size;
+        // Ensure the canvas element renders at the computed size. Without this
+        // assignment the canvas may scale without updating its internal drawing
+        // buffer, leading to stretched visuals.
+        canvas.style.width = size + 'px';
+        canvas.style.height = size + 'px';
+    }
+    window.addEventListener('resize', resizeCanvas);
+    resizeCanvas();
+
+    // Draw the contents of the ring buffer to the canvas. Called via requestAnimationFrame.
+    function draw() {
+        requestAnimationFrame(draw);
+        const w = canvas.width;
+        const h = canvas.height;
+        ctx2d.fillStyle = state.visual.background;
+        ctx2d.fillRect(0, 0, w, h);
+        ctx2d.strokeStyle = '#0f0';
+        ctx2d.lineWidth = 1;
+        ctx2d.beginPath();
+        const len = state.geoBufferSize;
+        const idx = state.geoWriteIndex;
+        // iterate over buffer once starting from write index to preserve chronological ordering
+        for (let i = 0; i < len; i++) {
+            const j = (idx + i) % len;
+            const gx = state.geoBufferX[j];
+            const gy = state.geoBufferY[j];
+            const x = w / 2 + gx * (w / 2);
+            const y = h / 2 + gy * (h / 2);
+            if (i === 0) ctx2d.moveTo(x, y);
+            else ctx2d.lineTo(x, y);
+        }
+        ctx2d.stroke();
+    }
+    requestAnimationFrame(draw);
+
+    // --- UI creation ---
+    const controlsDiv = document.getElementById('controls');
+
+    // Helper to create a slider control
+    function createSlider(label, min, max, step, initial, onChange) {
+        const wrap = document.createElement('div');
+        wrap.className = 'control-group';
+        const lbl = document.createElement('label');
+        lbl.textContent = label;
+        const range = document.createElement('input');
+        range.type = 'range';
+        range.min = min;
+        range.max = max;
+        range.step = step;
+        range.value = initial;
+        range.addEventListener('input', e => {
+            onChange(parseFloat(e.target.value));
+        });
+        wrap.appendChild(lbl);
+        wrap.appendChild(range);
+        return wrap;
+    }
+    // Helper to create a number input
+    function createNumber(label, min, max, step, initial, onChange) {
+        const wrap = document.createElement('div');
+        wrap.className = 'control-group';
+        const lbl = document.createElement('label');
+        lbl.textContent = label;
+        const inp = document.createElement('input');
+        inp.type = 'number';
+        inp.min = min;
+        inp.max = max;
+        inp.step = step;
+        inp.value = initial;
+        inp.addEventListener('input', e => {
+            onChange(parseFloat(e.target.value));
+        });
+        wrap.appendChild(lbl);
+        wrap.appendChild(inp);
+        return wrap;
+    }
+    // Helper to create a dropdown select
+    function createSelect(label, options, initial, onChange) {
+        const wrap = document.createElement('div');
+        wrap.className = 'control-group';
+        const lbl = document.createElement('label');
+        lbl.textContent = label;
+        const select = document.createElement('select');
+        options.forEach(opt => {
+            const o = document.createElement('option');
+            o.value = opt;
+            o.textContent = opt;
+            select.appendChild(o);
+        });
+        select.value = initial;
+        select.addEventListener('change', e => {
+            onChange(e.target.value);
+        });
+        wrap.appendChild(lbl);
+        wrap.appendChild(select);
+        return wrap;
+    }
+    // Helper to create a text input
+    function createText(label, initial, onChange) {
+        const wrap = document.createElement('div');
+        wrap.className = 'control-group';
+        const lbl = document.createElement('label');
+        lbl.textContent = label;
+        const inp = document.createElement('input');
+        inp.type = 'text';
+        inp.value = initial;
+        inp.addEventListener('change', e => {
+            onChange(e.target.value);
+        });
+        wrap.appendChild(lbl);
+        wrap.appendChild(inp);
+        return wrap;
+    }
+
+    // Build the control panel
+    function buildUI() {
+        controlsDiv.innerHTML = '';
+        // Start/stop section
+        const startSection = document.createElement('div');
+        startSection.className = 'section';
+        const startBtn = document.createElement('button');
+        startBtn.textContent = state.running ? 'Stop' : 'Start';
+        startBtn.addEventListener('click', () => {
+            if (!state.running) {
+                startAudio();
+                startBtn.textContent = 'Stop';
+            } else {
+                stopAudio();
+                startBtn.textContent = 'Start';
+            }
+        });
+        startSection.appendChild(startBtn);
+        controlsDiv.appendChild(startSection);
+        // Randomizer and presets
+        const randSection = document.createElement('div');
+        randSection.className = 'section';
+        const randBtn = document.createElement('button');
+        randBtn.textContent = 'Generate Random Patch';
+        randBtn.addEventListener('click', randomiseAll);
+        randSection.appendChild(randBtn);
+        const saveBtn = document.createElement('button');
+        saveBtn.textContent = 'Save Preset';
+        saveBtn.addEventListener('click', () => {
+            const name = prompt('Enter a name for this preset:');
+            if (name) savePreset(name);
+        });
+        randSection.appendChild(saveBtn);
+        const loadBtn = document.createElement('button');
+        loadBtn.textContent = 'Load Preset';
+        loadBtn.addEventListener('click', () => {
+            loadPreset();
+        });
+        randSection.appendChild(loadBtn);
+        controlsDiv.appendChild(randSection);
+        // Global settings
+        const globalSection = document.createElement('div');
+        globalSection.className = 'section';
+        globalSection.appendChild(createSlider('Master Volume', 0, 1, 0.01, state.params.audioVolume.base, v => {
+            state.params.audioVolume.base = v;
+        }));
+        globalSection.appendChild(createNumber('Seed', 0, 4294967295, 1, state.seed, v => {
+            setSeed(v);
+        }));
+        controlsDiv.appendChild(globalSection);
+        // Geometry section
+        const geoSection = document.createElement('div');
+        geoSection.className = 'section';
+        const geoHeader = document.createElement('h3');
+        geoHeader.textContent = 'Geometry';
+        geoSection.appendChild(geoHeader);
+        geoSection.appendChild(createSelect('Type', ['lissajous','spiral','polygon','custom'], state.geo.type, v => {
+            state.geo.type = v;
+        }));
+        geoSection.appendChild(createSlider('Frequency', 0.1, 10, 0.01, state.params.geoFreq.base, v => {
+            state.params.geoFreq.base = v;
+        }));
+        geoSection.appendChild(createSlider('Amplitude', 0.1, 2, 0.01, state.params.geoAmp.base, v => {
+            state.params.geoAmp.base = v;
+        }));
+        geoSection.appendChild(createSlider('Rotation', 0, 1, 0.001, state.params.geoRotation.base, v => {
+            state.params.geoRotation.base = v;
+        }));
+        geoSection.appendChild(createSlider('Scale', 0.1, 3, 0.01, state.params.geoScale.base, v => {
+            state.params.geoScale.base = v;
+        }));
+        // Specific parameters for geometry types
+        // Lissajous
+        geoSection.appendChild(createNumber('Lissajous A', 1, 10, 1, state.geo.a, v => { state.geo.a = v; }));
+        geoSection.appendChild(createNumber('Lissajous B', 1, 10, 1, state.geo.b, v => { state.geo.b = v; }));
+        // Polygon
+        geoSection.appendChild(createNumber('Polygon Sides', 3, 12, 1, state.geo.sides, v => { state.geo.sides = v; }));
+        // Spiral
+        geoSection.appendChild(createSlider('Spiral Tightness', 0.1, 10, 0.1, state.geo.tightness, v => { state.geo.tightness = v; }));
+        // Custom equations
+        geoSection.appendChild(createText('X(t) Equation', state.geo.equationX, v => { state.geo.equationX = v; }));
+        geoSection.appendChild(createText('Y(t) Equation', state.geo.equationY, v => { state.geo.equationY = v; }));
+        controlsDiv.appendChild(geoSection);
+        // Synth section
+        const synthSection = document.createElement('div');
+        synthSection.className = 'section';
+        const synthHeader = document.createElement('h3');
+        synthHeader.textContent = 'Synthesizer';
+        synthSection.appendChild(synthHeader);
+        synthSection.appendChild(createSelect('Type', ['additive','fm','subtractive','wavetable','noise'], state.synth.type, v => {
+            state.synth.type = v;
+        }));
+        synthSection.appendChild(createNumber('Base Frequency', 20, 2000, 1, state.synth.baseFreq, v => {
+            state.synth.baseFreq = v;
+        }));
+        // Additive controls
+        for (let i = 0; i < state.synth.additive.ratios.length; i++) {
+            ((index) => {
+                synthSection.appendChild(createNumber('Additive Ratio ' + (index+1), 0.5, 8, 0.1, state.synth.additive.ratios[index], v => {
+                    state.synth.additive.ratios[index] = v;
+                }));
+                synthSection.appendChild(createSlider('Additive Amp ' + (index+1), 0, 1, 0.01, state.synth.additive.amps[index], v => {
+                    state.synth.additive.amps[index] = v;
+                }));
+            })(i);
+        }
+        // FM controls
+        synthSection.appendChild(createNumber('FM Ratio', 0.1, 10, 0.01, state.synth.fm.ratio, v => {
+            state.synth.fm.ratio = v;
+        }));
+        synthSection.appendChild(createSlider('FM Index', 0, 20, 0.1, state.params.fmIndex.base, v => {
+            state.params.fmIndex.base = v;
+        }));
+        // Subtractive controls
+        synthSection.appendChild(createSelect('Subtractive Osc', ['saw','square'], state.synth.subtractive.oscType, v => {
+            state.synth.subtractive.oscType = v;
+        }));
+        synthSection.appendChild(createSlider('Filter Cutoff', 20, 5000, 1, state.params.filterCutoff.base, v => {
+            state.params.filterCutoff.base = v;
+        }));
+        synthSection.appendChild(createSlider('PWM', 0.01, 0.99, 0.01, state.params.pwm.base, v => {
+            state.params.pwm.base = v;
+        }));
+        // Wavetable controls
+        synthSection.appendChild(createSlider('Wavetable Morph', 0, 1, 0.01, state.params.wavetableMorph.base, v => {
+            state.params.wavetableMorph.base = v;
+        }));
+        // Noise colour
+        synthSection.appendChild(createSelect('Noise Colour', ['white'], state.synth.noise.color, v => {
+            state.synth.noise.color = v;
+        }));
+        controlsDiv.appendChild(synthSection);
+        // LFO section
+        const lfoSection = document.createElement('div');
+        lfoSection.className = 'section';
+        const lfoHeader = document.createElement('h3');
+        lfoHeader.textContent = 'LFOs';
+        lfoSection.appendChild(lfoHeader);
+        state.lfos.forEach((lfo, idx) => {
+            const sub = document.createElement('div');
+            sub.style.border = '1px solid #444';
+            sub.style.padding = '4px';
+            sub.style.marginBottom = '4px';
+            const title = document.createElement('label');
+            title.textContent = 'LFO ' + (idx + 1);
+            title.style.fontWeight = 'bold';
+            sub.appendChild(title);
+            sub.appendChild(createSlider('Rate (Hz)', 0.01, 20, 0.01, lfo.rate, v => {
+                lfo.rate = v;
+            }));
+            sub.appendChild(createSelect('Shape', ['sine','triangle','square','random'], lfo.shape, v => {
+                lfo.shape = v;
+            }));
+            sub.appendChild(createSlider('Depth', 0, 1, 0.01, lfo.depth, v => {
+                lfo.depth = v;
+            }));
+            sub.appendChild(createSelect('Target', ['none'].concat(state.modulationTargets), lfo.target, v => {
+                lfo.target = v;
+            }));
+            lfoSection.appendChild(sub);
+        });
+        controlsDiv.appendChild(lfoSection);
+        // Envelope section
+        const envSection = document.createElement('div');
+        envSection.className = 'section';
+        const envHeader = document.createElement('h3');
+        envHeader.textContent = 'Envelope';
+        envSection.appendChild(envHeader);
+        envSection.appendChild(createSlider('Attack', 0.001, 4, 0.001, state.envelope.attack, v => {
+            state.envelope.attack = v;
+        }));
+        envSection.appendChild(createSlider('Decay', 0.001, 4, 0.001, state.envelope.decay, v => {
+            state.envelope.decay = v;
+        }));
+        envSection.appendChild(createSlider('Sustain', 0, 1, 0.01, state.envelope.sustain, v => {
+            state.envelope.sustain = v;
+        }));
+        envSection.appendChild(createSlider('Release', 0.001, 4, 0.001, state.envelope.release, v => {
+            state.envelope.release = v;
+        }));
+        envSection.appendChild(createSelect('Env Target', ['none'].concat(state.modulationTargets), state.envelope.target, v => {
+            state.envelope.target = v;
+        }));
+        const triggerBtn = document.createElement('button');
+        triggerBtn.textContent = 'Trigger Envelope';
+        triggerBtn.addEventListener('mousedown', () => {
+            triggerEnvelope(true);
+        });
+        triggerBtn.addEventListener('mouseup', () => {
+            triggerEnvelope(false);
+        });
+        envSection.appendChild(triggerBtn);
+        controlsDiv.appendChild(envSection);
+        // Export section
+        const exportSection = document.createElement('div');
+        exportSection.className = 'section';
+        const exportBtn = document.createElement('button');
+        exportBtn.textContent = 'Export 5s WAV';
+        exportBtn.addEventListener('click', () => {
+            exportAudio(5);
+        });
+        exportSection.appendChild(exportBtn);
+        // Fullscreen toggle
+        const fsBtn = document.createElement('button');
+        fsBtn.textContent = 'Toggle Fullscreen';
+        fsBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                document.documentElement.requestFullscreen();
+            } else {
+                document.exitFullscreen();
+            }
+        });
+        exportSection.appendChild(fsBtn);
+        controlsDiv.appendChild(exportSection);
+
+        // Audio signature section
+        const sigSection = document.createElement('div');
+        sigSection.className = 'section';
+        const sigBtn = document.createElement('button');
+        sigBtn.textContent = 'Audio Signature';
+        sigBtn.addEventListener('click', () => {
+            playAudioSignature();
+        });
+        sigSection.appendChild(sigBtn);
+        controlsDiv.appendChild(sigSection);
+
+        // After constructing the controls, resize the canvas so that the new
+        // control panel width is taken into account. Without this, the
+        // oscilloscope might not be square or centred correctly.
+        resizeCanvas();
+    }
+
+    // Start the audio engine. Creates an AudioContext and script processor if
+    // necessary and connects the processing node to the destination. In order
+    // to comply with autoplay policies this must be triggered from a user
+    // gesture.
+    function startAudio() {
+        if (state.running) return;
+        if (!state.audioCtx) {
+            state.audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            state.sampleRate = state.audioCtx.sampleRate;
+        }
+        // Resume context in case it was suspended
+        state.audioCtx.resume();
+        // Create processor if it doesn’t exist
+        if (!state.processor) {
+            // Using 1024 samples per buffer is a good compromise between latency and CPU.
+            const bufferSize = 1024;
+            state.processor = state.audioCtx.createScriptProcessor(bufferSize, 0, 2);
+            state.processor.onaudioprocess = audioCallback;
+            // Connect to audio destination
+            state.processor.connect(state.audioCtx.destination);
+        }
+        // reset time and ring buffer
+        state.time = 0;
+        state.geoWriteIndex = 0;
+        state.running = true;
+    }
+    // Stop the audio engine by disconnecting the processor. This releases CPU.
+    function stopAudio() {
+        if (!state.running) return;
+        if (state.processor) {
+            state.processor.disconnect();
+        }
+        state.running = false;
+    }
+
+    // Trigger or release the ADSR envelope. On gate on we begin the attack
+    // phase. On gate off we begin the release phase.
+    function triggerEnvelope(gateOn) {
+        const env = state.envelope;
+        env.gate = gateOn;
+        if (gateOn) {
+            env.state = 'attack';
+            env.startTime = state.time;
+        } else {
+            if (env.state !== 'idle') {
+                env.state = 'release';
+                env.releaseTime = state.time;
+                env.releaseStartValue = env.value;
+            }
+        }
+    }
+
+    // Randomise geometry, synth, LFOs and envelope parameters. Uses the
+    // deterministic PRNG if a seed is set.
+    function randomiseAll() {
+        // Random geometry type
+        const geoTypes = ['lissajous','spiral','polygon'];
+        state.geo.type = geoTypes[Math.floor(random() * geoTypes.length)];
+        // Random geometry parameters
+        state.params.geoFreq.base = random() * 9 + 0.2;
+        state.params.geoAmp.base = random() * 1.5 + 0.1;
+        state.params.geoRotation.base = random();
+        state.params.geoScale.base = random() * 2 + 0.5;
+        state.geo.a = Math.floor(random() * 5) + 1;
+        state.geo.b = Math.floor(random() * 5) + 1;
+        state.geo.sides = Math.floor(random() * 8) + 3;
+        state.geo.tightness = random() * 5 + 0.5;
+        // random equations (from some presets)
+        const eqs = [
+            {x:'Math.sin(2*Math.PI*t)', y:'Math.cos(2*Math.PI*t)'},
+            {x:'Math.sin(6*Math.PI*t) * Math.cos(2*Math.PI*t)', y:'Math.cos(6*Math.PI*t) * Math.sin(2*Math.PI*t)'},
+            {x:'Math.sin(3*Math.PI*t) + 0.5*Math.sin(9*Math.PI*t)', y:'Math.cos(4*Math.PI*t)'}
+        ];
+        const eq = eqs[Math.floor(random() * eqs.length)];
+        state.geo.equationX = eq.x;
+        state.geo.equationY = eq.y;
+        // Random synth type
+        const synthTypes = ['additive','fm','subtractive','wavetable','noise'];
+        state.synth.type = synthTypes[Math.floor(random() * synthTypes.length)];
+        state.synth.baseFreq = Math.pow(2, Math.floor(random() * 7) + 3) * 10; // choose harmonic series like 40,80,...
+        // Additive random
+        for (let i = 0; i < state.synth.additive.ratios.length; i++) {
+            state.synth.additive.ratios[i] = random() * 5 + 1;
+            state.synth.additive.amps[i] = random();
+        }
+        // FM random
+        state.synth.fm.ratio = random() * 8 + 0.5;
+        state.params.fmIndex.base = random() * 10;
+        // Subtractive random
+        state.synth.subtractive.oscType = ['saw','square'][Math.floor(random() * 2)];
+        state.params.filterCutoff.base = random() * 4000 + 200;
+        state.params.pwm.base = random() * 0.8 + 0.1;
+        // Wavetable random
+        generateWavetable();
+        state.params.wavetableMorph.base = random();
+        // Noise random
+        state.synth.noise.color = 'white';
+        // Random LFOs
+        state.lfos.forEach(lfo => {
+            lfo.rate = random() * 5 + 0.1;
+            const shapes = ['sine','triangle','square','random'];
+            lfo.shape = shapes[Math.floor(random() * shapes.length)];
+            lfo.depth = random();
+            const targets = ['none'].concat(state.modulationTargets);
+            lfo.target = targets[Math.floor(random() * targets.length)];
+        });
+        // Random envelope
+        state.envelope.attack = random() * 2;
+        state.envelope.decay = random() * 2;
+        state.envelope.sustain = random();
+        state.envelope.release = random() * 2;
+        state.envelope.target = state.modulationTargets[Math.floor(random() * state.modulationTargets.length)];
+        // Master volume
+        state.params.audioVolume.base = random() * 0.8 + 0.1;
+        // update UI values to reflect new randomised state
+        buildUI();
+    }
+
+    // Save the current patch to localStorage under a given name
+    function savePreset(name) {
+        const obj = JSON.parse(JSON.stringify(state));
+        // strip out large buffers and non-serialisable properties
+        delete obj.audioCtx;
+        delete obj.processor;
+        delete obj.geoBufferX;
+        delete obj.geoBufferY;
+        // Save under key with prefix
+        localStorage.setItem('avsynth_preset_' + name, JSON.stringify(obj));
+        alert('Preset "' + name + '" saved.');
+    }
+    // Load a preset from localStorage. If multiple presets exist, present a prompt.
+    function loadPreset() {
+        const keys = Object.keys(localStorage).filter(k => k.startsWith('avsynth_preset_'));
+        if (keys.length === 0) {
+            alert('No presets found.');
+            return;
+        }
+        const names = keys.map(k => k.replace('avsynth_preset_',''));
+        const name = prompt('Enter preset name to load:\nAvailable: ' + names.join(', '));
+        if (!name) return;
+        const data = localStorage.getItem('avsynth_preset_' + name);
+        if (!data) {
+            alert('Preset not found.');
+            return;
+        }
+        const obj = JSON.parse(data);
+        // merge loaded state into current state
+        Object.assign(state, obj);
+        // reinitialise buffers
+        state.geoBufferX = new Float32Array(state.geoBufferSize);
+        state.geoBufferY = new Float32Array(state.geoBufferSize);
+        // rebuild UI to reflect loaded values
+        buildUI();
+        alert('Preset "' + name + '" loaded.');
+    }
+
+    // Export the audible output as a WAV file. Uses MediaRecorder to capture
+    // audio from the script processor for a fixed duration and then offers
+    // download of the resulting blob.
+    function exportAudio(durationSeconds) {
+        if (state.exporting) {
+            alert('Export already in progress');
+            return;
+        }
+        if (!state.audioCtx) {
+            alert('Start the audio engine first.');
+            return;
+        }
+        state.exporting = true;
+        const dest = state.audioCtx.createMediaStreamDestination();
+        // Reconnect processor to both destination and the export destination
+        state.processor.disconnect();
+        state.processor.connect(state.audioCtx.destination);
+        state.processor.connect(dest);
+        const mediaRecorder = new MediaRecorder(dest.stream);
+        const chunks = [];
+        mediaRecorder.ondataavailable = e => {
+            if (e.data.size > 0) chunks.push(e.data);
+        };
+        mediaRecorder.onstop = () => {
+            const blob = new Blob(chunks, { type: 'audio/wav' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.style.display = 'none';
+            a.href = url;
+            a.download = 'synth_output.wav';
+            document.body.appendChild(a);
+            a.click();
+            URL.revokeObjectURL(url);
+            document.body.removeChild(a);
+            // disconnect export destination
+            state.processor.disconnect(dest);
+            state.exporting = false;
+        };
+        mediaRecorder.start();
+        // Stop recording after durationSeconds
+        setTimeout(() => {
+            mediaRecorder.stop();
+        }, durationSeconds * 1000);
+    }
+
+    // Build UI on initial load
+    buildUI();
+    // Generate deterministic patches once the UI and default seed are set
+    generateSeedPatches();
+
+    // Listen for numeric key presses (0–9) and play the corresponding patch
+    document.addEventListener('keydown', e => {
+        const k = e.key;
+        if (k >= '0' && k <= '9') {
+            playSeedPatch(parseInt(k, 10));
+        }
+    });
+
+})();
+</script>
+</body>
+</html>
