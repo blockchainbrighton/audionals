@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Oscilloscope Music Generator</title>
+<style>
+body {
+    margin: 0;
+    background: #000;
+    color: #0f0;
+    font-family: monospace;
+    display: flex;
+    height: 100vh;
+}
+#oscilloscope {
+    flex: 1;
+    display: block;
+    background: black;
+}
+#controls {
+    width: 320px;
+    background: #111;
+    border-left: 2px solid #0f0;
+    overflow-y: auto;
+    padding: 10px;
+    box-sizing: border-box;
+}
+label {
+    display: block;
+    margin-top: 10px;
+}
+input[type=range], select, input[type=text], button {
+    width: 100%;
+    margin-top: 2px;
+    background: black;
+    color: #0f0;
+    border: 1px solid #0f0;
+}
+button {
+    cursor: pointer;
+}
+</style>
+</head>
+<body>
+<canvas id="oscilloscope"></canvas>
+<div id="controls">
+    <label>Algorithm
+        <select id="algorithm"></select>
+    </label>
+    <label>Waveform X
+        <select id="waveX">
+            <option>sine</option>
+            <option>square</option>
+            <option>triangle</option>
+            <option>sawtooth</option>
+        </select>
+    </label>
+    <label>Waveform Y
+        <select id="waveY">
+            <option>sine</option>
+            <option>square</option>
+            <option>triangle</option>
+            <option>sawtooth</option>
+        </select>
+    </label>
+    <label>Frequency X <input type="range" id="freqX" min="1" max="1000" value="220"></label>
+    <label>Frequency Y <input type="range" id="freqY" min="1" max="1000" value="220"></label>
+    <label>Amplitude X <input type="range" id="ampX" min="0" max="1" step="0.01" value="0.8"></label>
+    <label>Amplitude Y <input type="range" id="ampY" min="0" max="1" step="0.01" value="0.8"></label>
+    <label>Rotation Speed <input type="range" id="rotSpeed" min="-5" max="5" step="0.01" value="0"></label>
+    <label>Scale <input type="range" id="scale" min="0.1" max="2" step="0.01" value="1"></label>
+    <label>Blend Factor <input type="range" id="blend" min="0" max="1" step="0.01" value="0"></label>
+    <label>Trail Length <input type="range" id="trail" min="0.01" max="1" step="0.01" value="0.2"></label>
+    <label>Custom X(t) <input type="text" id="customX" placeholder="e.g. Math.sin(t)"></label>
+    <label>Custom Y(t) <input type="text" id="customY" placeholder="e.g. Math.cos(2*t)"></label>
+    <label>Seed <input type="text" id="seed" value=""></label>
+    <button id="randomize">Random Pattern</button>
+    <button id="savePreset">Save Preset</button>
+    <button id="loadPreset">Load Preset</button>
+    <button id="fullscreen">Toggle Fullscreen</button>
+    <button id="exportWav">Export WAV</button>
+</div>
+<script>
+// --- Audio + Visual Engine ---
+const canvas = document.getElementById('oscilloscope');
+const ctx = canvas.getContext('2d');
+let w = canvas.width = window.innerWidth - 320;
+let h = canvas.height = window.innerHeight;
+window.addEventListener('resize', () => {
+    w = canvas.width = window.innerWidth - 320;
+    h = canvas.height = window.innerHeight;
+});
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+const sampleRate = audioCtx.sampleRate;
+const bufferSize = 1024;
+const scriptNode = audioCtx.createScriptProcessor(bufferSize, 0, 2);
+
+let settings = {
+    waveX: 'sine',
+    waveY: 'sine',
+    freqX: 220,
+    freqY: 220,
+    ampX: 0.8,
+    ampY: 0.8,
+    rotSpeed: 0,
+    scale: 1,
+    blend: 0,
+    trail: 0.2,
+    algorithm: 'Lissajous',
+    customX: '',
+    customY: '',
+    t: 0
+};
+
+const algorithms = {
+    'Lissajous': (t) => [
+        Math.sin(settings.freqX * t) * settings.ampX,
+        Math.sin(settings.freqY * t + Math.PI/2) * settings.ampY
+    ],
+    'Spiral': (t) => {
+        let r = 0.5 + 0.5 * Math.sin(t*0.2);
+        return [r * Math.cos(t), r * Math.sin(t)];
+    },
+    'Flower': (t) => {
+        let k = 6;
+        let r = Math.sin(k * t);
+        return [r * Math.cos(t), r * Math.sin(t)];
+    },
+    'Polygon': (t) => {
+        let sides = 5;
+        let angle = ((t % (Math.PI*2)) / (Math.PI*2)) * sides;
+        let step = Math.floor(angle);
+        let a = (step / sides) * Math.PI*2;
+        return [Math.cos(a), Math.sin(a)];
+    },
+    'Mushroom': (t) => {
+        let x = Math.sin(t) * (1 + 0.3 * Math.sin(6*t));
+        let y = Math.cos(t) - 0.5;
+        return [x, y];
+    },
+    'Chaos': (t) => {
+        return [Math.sin(t*2) + Math.sin(t*3)*0.5, Math.cos(t*5)*0.5 + Math.sin(t)];
+    },
+    'DNA': (t) => {
+        return [Math.sin(t), 0.5*Math.sin(t) + 0.5*Math.sin(t+Math.PI)];
+    },
+    'Custom': (t) => {
+        try {
+            let X = eval(settings.customX);
+            let Y = eval(settings.customY);
+            return [X, Y];
+        } catch {
+            return [0,0];
+        }
+    }
+};
+
+Object.keys(algorithms).forEach(a => {
+    let opt = document.createElement('option');
+    opt.textContent = a;
+    document.getElementById('algorithm').appendChild(opt);
+});
+
+scriptNode.onaudioprocess = e => {
+    let outL = e.outputBuffer.getChannelData(0);
+    let outR = e.outputBuffer.getChannelData(1);
+    for (let i=0; i<bufferSize; i++) {
+        let t = settings.t;
+        let [x, y] = algorithms[settings.algorithm](t);
+        // rotation
+        let rot = settings.rotSpeed * t;
+        let xr = x * Math.cos(rot) - y * Math.sin(rot);
+        let yr = x * Math.sin(rot) + y * Math.cos(rot);
+        outL[i] = xr * settings.scale;
+        outR[i] = yr * settings.scale;
+        settings.t += 1 / sampleRate;
+    }
+};
+
+scriptNode.connect(audioCtx.destination);
+
+// --- Visual ---
+function draw() {
+    requestAnimationFrame(draw);
+    ctx.fillStyle = `rgba(0,0,0,${settings.trail})`;
+    ctx.fillRect(0, 0, w, h);
+    ctx.save();
+    ctx.translate(w/2, h/2);
+    ctx.strokeStyle = '#0f0';
+    ctx.shadowBlur = 15;
+    ctx.shadowColor = '#0f0';
+    ctx.beginPath();
+    let steps = 2000;
+    for (let i=0; i<steps; i++) {
+        let t = settings.t + i / sampleRate;
+        let [x, y] = algorithms[settings.algorithm](t);
+        let rot = settings.rotSpeed * t;
+        let xr = x * Math.cos(rot) - y * Math.sin(rot);
+        let yr = x * Math.sin(rot) + y * Math.cos(rot);
+        if (i===0) ctx.moveTo(xr*200, yr*200);
+        else ctx.lineTo(xr*200, yr*200);
+    }
+    ctx.stroke();
+    ctx.restore();
+}
+draw();
+
+// --- UI bindings ---
+['waveX','waveY','freqX','freqY','ampX','ampY','rotSpeed','scale','blend','trail','algorithm','customX','customY','seed']
+.forEach(id => {
+    document.getElementById(id).addEventListener('input', e => {
+        settings[id] = e.target.type === 'range' ? parseFloat(e.target.value) || e.target.value : e.target.value;
+    });
+});
+
+document.getElementById('randomize').onclick = () => {
+    settings.freqX = Math.random()*500;
+    settings.freqY = Math.random()*500;
+    settings.ampX = Math.random();
+    settings.ampY = Math.random();
+    settings.rotSpeed = (Math.random()-0.5)*4;
+    settings.scale = Math.random()*1.5;
+    settings.trail = 0.1+Math.random()*0.4;
+};
+
+document.getElementById('fullscreen').onclick = () => {
+    if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen();
+    } else {
+        document.exitFullscreen();
+    }
+};
+
+// WAV export placeholder (full implementation needs offline rendering)
+document.getElementById('exportWav').onclick = () => alert('WAV export not yet implemented in this version.');
+
+audioCtx.resume();
+</script>
+</body>
+</html>
