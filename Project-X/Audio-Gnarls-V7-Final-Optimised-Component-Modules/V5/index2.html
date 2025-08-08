@@ -1,0 +1,658 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Interactive Audiovisual Synthesizer</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    html, body { margin:0; padding:0; height:100%; width:100%; background:#000; color:#f4f4f4; font-family:Arial, sans-serif; overflow:hidden; }
+    #app { display:flex; height:100vh; width:100vw; }
+    #canvasContainer { flex:1; display:flex; align-items:center; justify-content:center; position:relative; }
+    #oscilloscope { display:block; background:#000; }
+    #signatureIndicator {
+      position:absolute; top:10px; left:50%; transform:translateX(-50%);
+      background:rgba(0,0,0,.6); color:#0f0; border:1px solid #0f0; border-radius:4px;
+      padding:4px 8px; font-size:14px; pointer-events:none; display:none;
+    }
+    #controls { width:340px; max-width:40%; background:rgba(35,35,35,.95); color:#eee; border-left:1px solid #444; padding:10px; box-sizing:border-box; overflow-y:auto; }
+    .section { margin-bottom:12px; padding-bottom:8px; border-bottom:1px solid #333; }
+    .section:last-child { border-bottom:none; }
+    .section h3 { margin:0 0 6px; font-size:15px; color:#0bf; font-weight:bold; }
+    .control-group { margin-bottom:6px; }
+    .control-group label { display:block; font-size:11px; margin-bottom:2px; color:#aaa; }
+    .control-group input[type=range],
+    .control-group input[type=number],
+    .control-group input[type=text],
+    .control-group select { width:100%; }
+    button { width:100%; margin-top:5px; padding:6px; font-size:14px; background:#222; border:1px solid #555; color:#fff; cursor:pointer; }
+    button:hover { background:#333; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvasContainer">
+      <canvas id="oscilloscope"></canvas>
+      <div id="signatureIndicator">Web3 Audio Signature…</div>
+    </div>
+    <div id="controls"></div>
+  </div>
+
+  <script>
+  (() => {
+    // ---------- Utils ----------
+    const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+    function mulberry32(a) { return function() { let t = a += 0x6D2B79F5; t = Math.imul(t ^ t >>> 15, t | 1); t ^= t + Math.imul(t ^ t >>> 7, t | 61); return ((t ^ t >>> 14) >>> 0) / 4294967296; }; }
+    function compileEquation(str) { try { /* eslint no-new-func:0 */ return new Function('t', 'with(Math){ return ' + str + '; }'); } catch(e) { console.warn('Eq compile fail', str, e); return t => 0; } }
+
+    // ---------- Global State ----------
+    const state = {
+      running:false, seed:0,
+      audioCtx:null, processor:null, sampleRate:44100, time:0,
+      geoBufferSize:4096, geoBufferX:null, geoBufferY:null, geoWriteIndex:0,
+      params:{
+        geoFreq:{base:1,mod:0}, geoAmp:{base:.4,mod:0}, geoRotation:{base:0,mod:0}, geoScale:{base:1,mod:0},
+        filterCutoff:{base:1000,mod:0}, fmIndex:{base:5,mod:0}, wavetableMorph:{base:0,mod:0}, pwm:{base:.5,mod:0},
+        audioVolume:{base:.25,mod:0}
+      },
+      geo:{ type:'lissajous', a:1, b:2, phase:0, sides:5, tightness:3,
+            equationX:'Math.sin(2*Math.PI*t)', equationY:'Math.cos(2*Math.PI*t)' },
+      synth:{
+        type:'subtractive', baseFreq:220,
+        additive:{ ratios:[1,2,3,4], amps:[1,.5,.3,.2] },
+        fm:{ ratio:2, index:5 },
+        subtractive:{ oscType:'saw', cutoff:900, resonance:.1, pwm:.5, _lpState:0 },
+        wavetable:{ table1:[], table2:[], morph:0, index:0, size:1024 },
+        noise:{ color:'white' }
+      },
+      lfos:[ {rate:.12, shape:'sine', depth:.25, target:'geoAmp', phase:0, lastSH:0},
+             {rate:.05, shape:'sine', depth:.15, target:'geoRotation', phase:0, lastSH:0} ],
+      envelope:{ attack:.05, decay:.2, sustain:.8, release:.3, value:0, state:'idle', gate:false, startTime:0, releaseTime:0, releaseStartValue:0, target:'audioVolume' },
+      modulationTargets:['geoFreq','geoAmp','geoRotation','geoScale','filterCutoff','fmIndex','wavetableMorph','pwm','audioVolume'],
+      visual:{ background:'#000' },
+      exporting:false,
+      seedPatches:[],
+      // Signature/idle control
+      playingSignature:false,
+      pendingTimers:[],
+      ignoreInput:false,
+      idlePatch:null // will be created on boot
+    };
+
+    // seeded randomness
+    let random = mulberry32(Date.now() >>> 0);
+    function setSeed(seed) {
+      const s = (seed >>> 0) || 1;
+      random = mulberry32(s);
+      state.seed = s;
+      generateSeedPatches();
+    }
+
+    // ---------- Idle Patch (standard sound/visual) ----------
+    function makeIdlePatch() {
+      // Gentle subtractive pad + simple Lissajous. Independent of seed.
+      const geo = {
+        type:'lissajous', a:1, b:2, phase:0, sides:5, tightness:2.5,
+        equationX:'Math.sin(2*Math.PI*t)', equationY:'Math.cos(2*Math.PI*t)'
+      };
+      const synth = {
+        type:'subtractive', baseFreq:220,
+        additive:{ ratios:[1,2,3,4], amps:[1,.5,.3,.2] },
+        fm:{ ratio:2, index:3 },
+        subtractive:{ oscType:'saw', cutoff:900, resonance:.1, pwm:.5, _lpState:0 },
+        wavetable:{ table1:new Float32Array(0), table2:new Float32Array(0), morph:0, index:0, size:1024 },
+        noise:{ color:'white' }
+      };
+      const params = {
+        geoFreq:{base:0.8}, geoAmp:{base:0.3}, geoRotation:{base:0.0}, geoScale:{base:1.0},
+        filterCutoff:{base:900}, fmIndex:{base:3}, wavetableMorph:{base:0}, pwm:{base:0.5},
+        audioVolume:{base:0.25}
+      };
+      const lfos = [
+        { rate:0.12, shape:'sine', depth:0.25, target:'geoAmp', phase:0, lastSH:0 },
+        { rate:0.05, shape:'sine', depth:0.15, target:'geoRotation', phase:0, lastSH:0 }
+      ];
+      const envelope = { attack:0.05, decay:0.2, sustain:0.8, release:0.3, value:0, state:'idle', gate:false, startTime:0, releaseTime:0, releaseStartValue:0, target:'audioVolume' };
+      return { geo, synth, params, lfos, envelope };
+    }
+
+    function applyIdlePatch({rebuildUI=true, signatureMode=false} = {}) {
+      if (!state.idlePatch) state.idlePatch = makeIdlePatch();
+      const { geo, synth, params, lfos, envelope } = state.idlePatch;
+
+      // Deep copy
+      state.geo   = JSON.parse(JSON.stringify(geo));
+      state.synth = JSON.parse(JSON.stringify(synth));
+      for (const k in params) if (state.params[k]) state.params[k].base = params[k].base;
+
+      // LFOs / Env
+      state.lfos = JSON.parse(JSON.stringify(lfos));
+      state.envelope = JSON.parse(JSON.stringify(envelope));
+
+      // In signature mode we want deterministic entry (no UI rebuild)
+      if (signatureMode) {
+        state.lfos.forEach(l=>{ l.phase=0; l.lastSH=0; });
+        state.envelope.state='sustain'; state.envelope.value=1; state.envelope.gate=true;
+        state.envelope.startTime=state.time; state.envelope.releaseTime=0; state.envelope.releaseStartValue=1;
+        if (state.synth.subtractive) state.synth.subtractive._lpState = 0;
+        if (state.synth.wavetable) state.synth.wavetable.index = 0;
+      } else {
+        // Smooth fade-in on idle when not in signature mode
+        triggerEnvelope(true);
+        setTimeout(()=>triggerEnvelope(false), 300); // short tap to set sustain quickly
+      }
+
+      if (rebuildUI) buildUI();
+    }
+
+    // buffers
+    state.geoBufferX = new Float32Array(state.geoBufferSize);
+    state.geoBufferY = new Float32Array(state.geoBufferSize);
+
+    // ---------- Audio ----------
+    function generateWavetable() {
+      const size = state.synth.wavetable.size;
+      const t1 = state.synth.wavetable.table1 = new Float32Array(size);
+      const t2 = state.synth.wavetable.table2 = new Float32Array(size);
+      for (let i=0;i<size;i++){ t1[i] = random()*2-1; t2[i] = random()*2-1; }
+      const smooth = (t)=>{ for(let i=1;i<size-1;i++) t[i] = (t[i-1]+t[i]+t[i+1])/3; };
+      smooth(t1); smooth(t2);
+      state.synth.wavetable.index = 0;
+    }
+
+    function updateModulations(dt) {
+      // reset mods
+      for (const k in state.params) state.params[k].mod = 0;
+
+      // LFOs
+      for (const l of state.lfos) {
+        l.phase += l.rate * dt; if (l.phase>1) l.phase -= Math.floor(l.phase);
+        let v=0, p=l.phase;
+        if (l.shape==='sine') v = Math.sin(2*Math.PI*p);
+        else if (l.shape==='triangle') v = 2*Math.abs(2*(p-Math.floor(p+.5)))-1;
+        else if (l.shape==='square') v = (p<.5?1:-1);
+        else if (l.shape==='random') { if (l.phase < dt*l.rate) l.lastSH = random()*2-1; v = l.lastSH; }
+        const tgt=l.target; if (tgt && tgt!=='none' && state.params[tgt]) state.params[tgt].mod += v*l.depth;
+      }
+
+      // Envelope
+      const env=state.envelope; if (env.state!=='idle') {
+        const elapsed = state.time - env.startTime;
+        if (env.state==='attack') {
+          if (elapsed>=env.attack) { env.state='decay'; env.value=1; env.startTime=state.time; }
+          else env.value = elapsed/Math.max(.001,env.attack);
+        }
+        if (env.state==='decay') {
+          const e=state.time-env.startTime;
+          if (e>=env.decay) { env.state = env.gate?'sustain':'release'; env.value=env.sustain; env.startTime=state.time; }
+          else env.value = 1 - (e/Math.max(.001,env.decay))*(1-env.sustain);
+        }
+        if (env.state==='sustain') env.value = env.sustain;
+        if (env.state==='release') {
+          const e=state.time-env.releaseTime;
+          if (e>=env.release){ env.state='idle'; env.value=0; }
+          else env.value = env.releaseStartValue*(1 - (e/Math.max(.001,env.release)));
+        }
+      }
+      if (state.envelope.target && state.envelope.target!=='none' && state.params[state.envelope.target]) {
+        state.params[state.envelope.target].mod += state.envelope.value;
+      }
+    }
+
+    function computeGeometrySample(t) {
+      const g=state.geo;
+      const freq = state.params.geoFreq.base + state.params.geoFreq.mod;
+      const amp  = state.params.geoAmp.base + state.params.geoAmp.mod;
+      const rotA = (state.params.geoRotation.base + state.params.geoRotation.mod) * Math.PI*2;
+      const scale= state.params.geoScale.base + state.params.geoScale.mod;
+      let x=0, y=0;
+
+      if (g.type==='lissajous') { x = Math.sin(2*Math.PI*freq*g.a*t + g.phase); y = Math.sin(2*Math.PI*freq*g.b*t); }
+      else if (g.type==='spiral') { const r = amp * Math.exp(g.tightness * (t % 4)); const a = 2*Math.PI*freq*t; x=r*Math.cos(a); y=r*Math.sin(a); }
+      else if (g.type==='polygon') { const sides=Math.max(3,g.sides); const a=2*Math.PI*freq*t; const r=amp*(.5+.5*Math.sin(sides*a)); x=r*Math.cos(a); y=r*Math.sin(a); }
+      else if (g.type==='custom') {
+        try {
+          if(!g._compiledX || g._compiledSourceX !== g.equationX){ g._compiledX = compileEquation(g.equationX); g._compiledSourceX = g.equationX; }
+          if(!g._compiledY || g._compiledSourceY !== g.equationY){ g._compiledY = compileEquation(g.equationY); g._compiledSourceY = g.equationY; }
+          x=g._compiledX(t); y=g._compiledY(t);
+        } catch { x=0; y=0; }
+      }
+      const xr = x*Math.cos(rotA) - y*Math.sin(rotA);
+      const yr = x*Math.sin(rotA) + y*Math.cos(rotA);
+      return [xr*amp*scale, yr*amp*scale];
+    }
+
+    function computeSynthSample(t, dt) {
+      const s=state.synth, f=s.baseFreq;
+      let out=0;
+      if (s.type==='additive') {
+        for (let i=0;i<s.additive.ratios.length;i++) out += Math.sin(2*Math.PI*f*s.additive.ratios[i]*t) * s.additive.amps[i];
+        out /= s.additive.ratios.length || 1;
+      } else if (s.type==='fm') {
+        const mod = Math.sin(2*Math.PI*f*s.fm.ratio*t) * (state.params.fmIndex.base + state.params.fmIndex.mod);
+        out = Math.sin(2*Math.PI*f*t + mod);
+      } else if (s.type==='subtractive') {
+        const phase = (t*f)%1; let osc=0;
+        if (s.subtractive.oscType==='saw') osc = 2*phase-1;
+        else osc = (phase < (state.params.pwm.base + state.params.pwm.mod)) ? 1:-1;
+        const cutoff = Math.max(10, state.params.filterCutoff.base + state.params.filterCutoff.mod);
+        const rc = 1/(2*Math.PI*cutoff); const alpha = dt/(rc+dt);
+        s.subtractive._lpState = s.subtractive._lpState + alpha*(osc - s.subtractive._lpState);
+        out = s.subtractive._lpState;
+      } else if (s.type==='wavetable') {
+        const wt=s.wavetable; if (!wt.table1.length) generateWavetable();
+        const size=wt.size, inc=f*size/state.sampleRate; wt.index += inc;
+        const i0=Math.floor(wt.index)%size, i1=(i0+1)%size, frac=wt.index-Math.floor(wt.index);
+        const m=clamp(state.params.wavetableMorph.base + state.params.wavetableMorph.mod,0,1);
+        const v1 = wt.table1[i0]*(1-frac) + wt.table1[i1]*frac;
+        const v2 = wt.table2[i0]*(1-frac) + wt.table2[i1]*frac;
+        out = v1*(1-m)+v2*m;
+      } else if (s.type==='noise') {
+        out = random()*2-1;
+      }
+      return out;
+    }
+
+    function audioCallback(e) {
+      const L = e.outputBuffer.getChannelData(0);
+      const R = e.outputBuffer.getChannelData(1);
+      const n = L.length, dt = 1/state.sampleRate;
+      for (let i=0;i<n;i++) {
+        updateModulations(dt);
+        const t=state.time;
+        const [gx,gy] = computeGeometrySample(t);
+        const s = computeSynthSample(t, dt);
+        const vol = clamp(state.params.audioVolume.base + state.params.audioVolume.mod, 0, 1);
+        const audible = s*vol;
+        state.geoBufferX[state.geoWriteIndex] = gx;
+        state.geoBufferY[state.geoWriteIndex] = gy;
+        state.geoWriteIndex = (state.geoWriteIndex+1) % state.geoBufferSize;
+        L[i] = gx + audible; R[i] = gy + audible;
+        state.time += dt;
+      }
+    }
+
+    function triggerEnvelope(gateOn) {
+      const e=state.envelope; e.gate = gateOn;
+      if (gateOn){ e.state='attack'; e.startTime=state.time; }
+      else if (e.state!=='idle'){ e.state='release'; e.releaseTime=state.time; e.releaseStartValue=e.value; }
+    }
+
+    // ---------- Canvas ----------
+    const canvas = document.getElementById('oscilloscope');
+    const ctx2d = canvas.getContext('2d');
+    const signatureIndicator = document.getElementById('signatureIndicator');
+    function resizeCanvas(){
+      const controls = document.getElementById('controls');
+      const cw = controls ? (controls.offsetWidth||340) : 340;
+      const aw = window.innerWidth - cw, ah=window.innerHeight;
+      const size = Math.max(100, Math.min(aw,ah) - 20);
+      canvas.width=size; canvas.height=size; canvas.style.width=size+'px'; canvas.style.height=size+'px';
+    }
+    window.addEventListener('resize', resizeCanvas); resizeCanvas();
+
+    function draw(){
+      requestAnimationFrame(draw);
+      const w=canvas.width, h=canvas.height;
+      ctx2d.fillStyle=state.visual.background; ctx2d.fillRect(0,0,w,h);
+      ctx2d.strokeStyle='#0f0'; ctx2d.lineWidth=1; ctx2d.beginPath();
+      const len=state.geoBufferSize, idx=state.geoWriteIndex;
+      for (let i=0;i<len;i++){
+        const j=(idx+i)%len, x = w/2 + state.geoBufferX[j]*(w/2), y = h/2 + state.geoBufferY[j]*(h/2);
+        if (i===0) ctx2d.moveTo(x,y); else ctx2d.lineTo(x,y);
+      }
+      ctx2d.stroke();
+    }
+    requestAnimationFrame(draw);
+
+    // ---------- Seed Patches ----------
+    function generateSeedPatches(){
+      state.seedPatches = [];
+      for (let i=0;i<10;i++){
+        const rng = mulberry32((state.seed + i) >>> 0);
+        const geoTypes=['lissajous','spiral','polygon'];
+        const geoType = geoTypes[Math.floor(rng()*geoTypes.length)];
+        const geoFreq = rng()*9 + .2, geoAmp = rng()*1.5 + .1, geoRot=rng(), geoScale=rng()*2 + .5;
+        const geoA = (Math.floor(rng()*5)+1), geoB=(Math.floor(rng()*5)+1);
+        const geoSides = Math.floor(rng()*8)+3, geoTight=rng()*5 + .5;
+
+        const synthTypes=['additive','fm','subtractive','wavetable','noise'];
+        const synthType = synthTypes[Math.floor(rng()*synthTypes.length)];
+        const baseFreq = Math.pow(2, Math.floor(rng()*7)+3) * 10;
+
+        const synth = {
+          type:synthType, baseFreq,
+          additive:{ ratios:[], amps:[] },
+          fm:{ ratio:1, index:0 },
+          subtractive:{ oscType:['saw','square'][Math.floor(rng()*2)], pwm:.5, _lpState:0 },
+          wavetable:{ table1:[], table2:[], index:0, morph:0, size:1024 },
+          noise:{ color:'white' }
+        };
+        for (let p=0;p<state.synth.additive.ratios.length;p++){ synth.additive.ratios[p]=rng()*5+1; synth.additive.amps[p]=rng(); }
+        synth.fm.ratio = rng()*8 + .5; synth.fm.index = rng()*10;
+        synth.subtractive.pwm = rng()*.8 + .1;
+
+        const wtSize=synth.wavetable.size;
+        const t1=synth.wavetable.table1=new Float32Array(wtSize);
+        const t2=synth.wavetable.table2=new Float32Array(wtSize);
+        for (let j=0;j<wtSize;j++){ t1[j]=rng()*2-1; t2[j]=rng()*2-1; }
+        const smooth=(t)=>{ for(let k=1;k<wtSize-1;k++) t[k]=(t[k-1]+t[k]+t[k+1])/3; };
+        smooth(t1); smooth(t2);
+        synth.wavetable.morph=rng();
+
+        const params={
+          geoFreq:{base:geoFreq}, geoAmp:{base:geoAmp}, geoRotation:{base:geoRot}, geoScale:{base:geoScale},
+          filterCutoff:{base:rng()*4000+200}, fmIndex:{base:synth.fm.index}, wavetableMorph:{base:synth.wavetable.morph},
+          pwm:{base:synth.subtractive.pwm}, audioVolume:{base:rng()*.8+.1}
+        };
+        const geo={ type:geoType, a:geoA, b:geoB, phase:0, sides:geoSides, tightness:geoTight,
+                    equationX:state.geo.equationX, equationY:state.geo.equationY };
+        state.seedPatches.push({geo, synth, params});
+      }
+    }
+
+    function playSeedPatch(index){
+      if (!state.seedPatches[index]) return;
+      const patch = state.seedPatches[index];
+      state.geo = JSON.parse(JSON.stringify(patch.geo));
+      state.synth = JSON.parse(JSON.stringify(patch.synth));
+      for (const k in patch.params) if (state.params[k]) state.params[k].base = patch.params[k].base;
+      buildUI(); // reflect values
+      triggerEnvelope(true); setTimeout(()=>triggerEnvelope(false), 1000);
+    }
+
+    // Deterministic helpers for signature
+    function cancelAllTimers(){ if (state.pendingTimers.length){ state.pendingTimers.forEach(clearTimeout); } state.pendingTimers=[]; }
+    function applyPatchForSignature(index){
+      const patch = state.seedPatches[index]; if (!patch) return;
+      state.geo = JSON.parse(JSON.stringify(patch.geo));
+      state.synth = JSON.parse(JSON.stringify(patch.synth));
+      for (const k in patch.params) if (state.params[k]) state.params[k].base = patch.params[k].base;
+
+      // reset phases/indices for determinism
+      state.lfos.forEach(l=>{ l.phase=0; l.lastSH=0; });
+      state.envelope.state='sustain'; state.envelope.value=1; state.envelope.gate=true;
+      state.envelope.startTime=state.time; state.envelope.releaseTime=0; state.envelope.releaseStartValue=1;
+      if (state.synth.subtractive) state.synth.subtractive._lpState = 0;
+      if (state.synth.wavetable) state.synth.wavetable.index = 0;
+    }
+
+    function playAudioSignature(){
+      if (state.playingSignature) return;
+      if (!state.running) startAudio();
+
+      // full reset + lock
+      cancelAllTimers();
+      state.playingSignature = true; state.ignoreInput = true;
+      if (signatureIndicator) signatureIndicator.style.display='block';
+      state.time=0; state.geoWriteIndex=0; state.geoBufferX.fill(0); state.geoBufferY.fill(0);
+      state.lfos.forEach(l=>{ l.phase=0; l.lastSH=0; });
+      state.envelope.state='sustain'; state.envelope.value=1; state.envelope.gate=true;
+      state.envelope.startTime=0; state.envelope.releaseTime=0; state.envelope.releaseStartValue=1;
+
+      // deterministic 32-step sequence, 200ms step
+      const rng = mulberry32((state.seed ^ 0xA5A5A5A5) >>> 0);
+      const seq=[], lengths=[8,4,2,1]; let remaining=32;
+      while (remaining>0){ const idx=Math.floor(rng()*10); const opts=lengths.filter(l=>l<=remaining); const len=opts[Math.floor(rng()*opts.length)]; seq.push({index:idx,len}); remaining-=len; }
+      const stepMs=200; let offset=0;
+      for (const item of seq){
+        const id=setTimeout(()=>{ applyPatchForSignature(item.index); }, offset);
+        state.pendingTimers.push(id);
+        offset += stepMs*item.len;
+      }
+      const endId=setTimeout(()=>{
+        // Return to the standard idle sound & visuals deterministically
+        applyIdlePatch({ rebuildUI:false, signatureMode:true });
+
+        // Unlock + cleanup
+        state.playingSignature=false; state.ignoreInput=false;
+        if (signatureIndicator) signatureIndicator.style.display='none';
+        cancelAllTimers();
+      }, offset);
+      state.pendingTimers.push(endId);
+    }
+
+    // ---------- UI ----------
+    const controlsDiv = document.getElementById('controls');
+
+    function createSlider(label, min, max, step, initial, onChange){
+      const wrap=document.createElement('div'); wrap.className='control-group';
+      const l=document.createElement('label'); l.textContent=label;
+      const r=document.createElement('input'); r.type='range'; r.min=min; r.max=max; r.step=step; r.value=initial;
+      r.addEventListener('input', e=>onChange(parseFloat(e.target.value)));
+      wrap.append(l,r); return wrap;
+    }
+    function createNumber(label, min, max, step, initial, onChange){
+      const wrap=document.createElement('div'); wrap.className='control-group';
+      const l=document.createElement('label'); l.textContent=label;
+      const i=document.createElement('input'); i.type='number'; i.min=min; i.max=max; i.step=step; i.value=initial;
+      i.addEventListener('input', e=>onChange(parseFloat(e.target.value))); wrap.append(l,i); return wrap;
+    }
+    function createSelect(label, options, initial, onChange){
+      const wrap=document.createElement('div'); wrap.className='control-group';
+      const l=document.createElement('label'); l.textContent=label;
+      const s=document.createElement('select'); options.forEach(opt=>{ const o=document.createElement('option'); o.value=opt; o.textContent=opt; s.appendChild(o); });
+      s.value=initial; s.addEventListener('change', e=>onChange(e.target.value)); wrap.append(l,s); return wrap;
+    }
+    function createText(label, initial, onChange){
+      const wrap=document.createElement('div'); wrap.className='control-group';
+      const l=document.createElement('label'); l.textContent=label;
+      const t=document.createElement('input'); t.type='text'; t.value=initial; t.addEventListener('change', e=>onChange(e.target.value));
+      wrap.append(l,t); return wrap;
+    }
+
+    function buildUI(){
+      controlsDiv.innerHTML='';
+
+      // Start/Stop
+      const s1=document.createElement('div'); s1.className='section';
+      const startBtn=document.createElement('button');
+      startBtn.textContent = state.running?'Stop':'Start';
+      startBtn.addEventListener('click', ()=>{
+        if (state.playingSignature || state.ignoreInput) return;
+        if (!state.running){ startAudio(); startBtn.textContent='Stop'; } else { stopAudio(); startBtn.textContent='Start'; }
+      });
+      s1.appendChild(startBtn); controlsDiv.appendChild(s1);
+
+      // Randomize & Presets
+      const s2=document.createElement('div'); s2.className='section';
+      const randBtn=document.createElement('button'); randBtn.textContent='Generate Random Patch';
+      randBtn.addEventListener('click', ()=>{ if (state.playingSignature||state.ignoreInput) return; randomiseAll(); });
+      const saveBtn=document.createElement('button'); saveBtn.textContent='Save Preset';
+      saveBtn.addEventListener('click', ()=>{ if (state.playingSignature||state.ignoreInput) return; const name=prompt('Preset name:'); if (name) savePreset(name); });
+      const loadBtn=document.createElement('button'); loadBtn.textContent='Load Preset';
+      loadBtn.addEventListener('click', ()=>{ if (state.playingSignature||state.ignoreInput) return; loadPreset(); });
+      s2.append(randBtn, saveBtn, loadBtn); controlsDiv.appendChild(s2);
+
+      // Global
+      const s3=document.createElement('div'); s3.className='section';
+      s3.appendChild(createSlider('Master Volume', 0,1,.01, state.params.audioVolume.base, v=>state.params.audioVolume.base=v));
+      s3.appendChild(createNumber('Seed', 0, 4294967295, 1, state.seed, v=>setSeed(v)));
+      controlsDiv.appendChild(s3);
+
+      // Geometry
+      const g=document.createElement('div'); g.className='section'; g.appendChild(h3('Geometry'));
+      g.appendChild(createSelect('Type',['lissajous','spiral','polygon','custom'], state.geo.type, v=>state.geo.type=v));
+      g.appendChild(createSlider('Frequency', .1, 10, .01, state.params.geoFreq.base, v=>state.params.geoFreq.base=v));
+      g.appendChild(createSlider('Amplitude', .1, 2, .01, state.params.geoAmp.base, v=>state.params.geoAmp.base=v));
+      g.appendChild(createSlider('Rotation', 0, 1, .001, state.params.geoRotation.base, v=>state.params.geoRotation.base=v));
+      g.appendChild(createSlider('Scale', .1, 3, .01, state.params.geoScale.base, v=>state.params.geoScale.base=v));
+      g.appendChild(createNumber('Lissajous A', 1,10,1, state.geo.a, v=>state.geo.a=v));
+      g.appendChild(createNumber('Lissajous B', 1,10,1, state.geo.b, v=>state.geo.b=v));
+      g.appendChild(createNumber('Polygon Sides', 3,12,1, state.geo.sides, v=>state.geo.sides=v));
+      g.appendChild(createSlider('Spiral Tightness', .1, 10, .1, state.geo.tightness, v=>state.geo.tightness=v));
+      g.appendChild(createText('X(t) Equation', state.geo.equationX, v=>state.geo.equationX=v));
+      g.appendChild(createText('Y(t) Equation', state.geo.equationY, v=>state.geo.equationY=v));
+      controlsDiv.appendChild(g);
+
+      // Synth
+      const ys=document.createElement('div'); ys.className='section'; ys.appendChild(h3('Synthesizer'));
+      ys.appendChild(createSelect('Type',['additive','fm','subtractive','wavetable','noise'], state.synth.type, v=>state.synth.type=v));
+      ys.appendChild(createNumber('Base Frequency', 20,2000,1, state.synth.baseFreq, v=>state.synth.baseFreq=v));
+      for (let i=0;i<state.synth.additive.ratios.length;i++){
+        ((idx)=>{ ys.appendChild(createNumber('Additive Ratio '+(idx+1), .5, 8, .1, state.synth.additive.ratios[idx], v=>state.synth.additive.ratios[idx]=v));
+                  ys.appendChild(createSlider('Additive Amp '+(idx+1), 0,1,.01, state.synth.additive.amps[idx], v=>state.synth.additive.amps[idx]=v)); })(i);
+      }
+      ys.appendChild(createNumber('FM Ratio', .1,10,.01, state.synth.fm.ratio, v=>state.synth.fm.ratio=v));
+      ys.appendChild(createSlider('FM Index', 0,20,.1, state.params.fmIndex.base, v=>state.params.fmIndex.base=v));
+      ys.appendChild(createSelect('Subtractive Osc', ['saw','square'], state.synth.subtractive.oscType, v=>state.synth.subtractive.oscType=v));
+      ys.appendChild(createSlider('Filter Cutoff', 20,5000,1, state.params.filterCutoff.base, v=>state.params.filterCutoff.base=v));
+      ys.appendChild(createSlider('PWM', .01,.99,.01, state.params.pwm.base, v=>state.params.pwm.base=v));
+      ys.appendChild(createSlider('Wavetable Morph', 0,1,.01, state.params.wavetableMorph.base, v=>state.params.wavetableMorph.base=v));
+      ys.appendChild(createSelect('Noise Colour', ['white'], state.synth.noise.color, v=>state.synth.noise.color=v));
+      controlsDiv.appendChild(ys);
+
+      // LFOs
+      const lfos=document.createElement('div'); lfos.className='section'; lfos.appendChild(h3('LFOs'));
+      state.lfos.forEach((l,idx)=>{
+        const sub=document.createElement('div'); sub.style.border='1px solid #444'; sub.style.padding='4px'; sub.style.marginBottom='4px';
+        const title=document.createElement('label'); title.textContent='LFO '+(idx+1); title.style.fontWeight='bold'; sub.appendChild(title);
+        sub.appendChild(createSlider('Rate (Hz)', .01, 20, .01, l.rate, v=>l.rate=v));
+        sub.appendChild(createSelect('Shape', ['sine','triangle','square','random'], l.shape, v=>l.shape=v));
+        sub.appendChild(createSlider('Depth', 0,1,.01, l.depth, v=>l.depth=v));
+        sub.appendChild(createSelect('Target', ['none'].concat(state.modulationTargets), l.target, v=>l.target=v));
+        lfos.appendChild(sub);
+      });
+      controlsDiv.appendChild(lfos);
+
+      // Envelope
+      const env=document.createElement('div'); env.className='section'; env.appendChild(h3('Envelope'));
+      env.appendChild(createSlider('Attack', .001, 4, .001, state.envelope.attack, v=>state.envelope.attack=v));
+      env.appendChild(createSlider('Decay', .001, 4, .001, state.envelope.decay, v=>state.envelope.decay=v));
+      env.appendChild(createSlider('Sustain', 0,1,.01, state.envelope.sustain, v=>state.envelope.sustain=v));
+      env.appendChild(createSlider('Release', .001, 4, .001, state.envelope.release, v=>state.envelope.release=v));
+      env.appendChild(createSelect('Env Target', ['none'].concat(state.modulationTargets), state.envelope.target, v=>state.envelope.target=v));
+      const trig=document.createElement('button'); trig.textContent='Trigger Envelope';
+      trig.addEventListener('mousedown', ()=>{ if (state.playingSignature||state.ignoreInput) return; triggerEnvelope(true); });
+      trig.addEventListener('mouseup',   ()=>{ if (state.playingSignature||state.ignoreInput) return; triggerEnvelope(false); });
+      env.appendChild(trig); controlsDiv.appendChild(env);
+
+      // Export + Fullscreen
+      const io=document.createElement('div'); io.className='section';
+      const exportBtn=document.createElement('button'); exportBtn.textContent='Export 5s WAV';
+      exportBtn.addEventListener('click', ()=>{ if (state.playingSignature||state.ignoreInput) return; exportAudio(5); });
+      const fs=document.createElement('button'); fs.textContent='Toggle Fullscreen';
+      fs.addEventListener('click', ()=>{
+        if (state.playingSignature||state.ignoreInput) return;
+        if (!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen();
+      });
+      io.append(exportBtn, fs); controlsDiv.appendChild(io);
+
+      // Signature
+      const sig=document.createElement('div'); sig.className='section';
+      const sigBtn=document.createElement('button'); sigBtn.textContent='Audio Signature';
+      sigBtn.addEventListener('click', ()=>playAudioSignature());
+      sig.appendChild(sigBtn); controlsDiv.appendChild(sig);
+
+      resizeCanvas();
+    }
+    const h3=t=>{ const el=document.createElement('h3'); el.textContent=t; return el; };
+
+    // ---------- Engine Control ----------
+    function startAudio(){
+      if (state.running) return;
+      if (!state.audioCtx){ state.audioCtx = new (window.AudioContext||window.webkitAudioContext)(); state.sampleRate = state.audioCtx.sampleRate; }
+      state.audioCtx.resume();
+      if (!state.processor){
+        const bufferSize=1024;
+        state.processor = state.audioCtx.createScriptProcessor(bufferSize, 0, 2);
+        state.processor.onaudioprocess = audioCallback;
+        state.processor.connect(state.audioCtx.destination);
+      }
+      state.time=0; state.geoWriteIndex=0; state.running=true;
+      // Ensure we are in idle state when engine starts
+      applyIdlePatch({ rebuildUI:false, signatureMode:false });
+    }
+    function stopAudio(){
+      if (!state.running) return;
+      cancelAllTimers();
+      if (state.processor) state.processor.disconnect();
+      state.running=false; state.playingSignature=false; state.ignoreInput=false;
+      if (signatureIndicator) signatureIndicator.style.display='none';
+    }
+
+    // ---------- Randomize / Presets ----------
+    function randomiseAll(){
+      const geoTypes=['lissajous','spiral','polygon'];
+      state.geo.type = geoTypes[Math.floor(random()*geoTypes.length)];
+      state.params.geoFreq.base = random()*9 + .2;
+      state.params.geoAmp.base  = random()*1.5 + .1;
+      state.params.geoRotation.base = random();
+      state.params.geoScale.base = random()*2 + .5;
+      state.geo.a = Math.floor(random()*5)+1; state.geo.b = Math.floor(random()*5)+1;
+      state.geo.sides = Math.floor(random()*8)+3; state.geo.tightness = random()*5 + .5;
+      const eqs=[{x:'Math.sin(2*Math.PI*t)',y:'Math.cos(2*Math.PI*t)'},
+                 {x:'Math.sin(6*Math.PI*t)*Math.cos(2*Math.PI*t)', y:'Math.cos(6*Math.PI*t)*Math.sin(2*Math.PI*t)'},
+                 {x:'Math.sin(3*Math.PI*t)+0.5*Math.sin(9*Math.PI*t)', y:'Math.cos(4*Math.PI*t)'}];
+      const eq=eqs[Math.floor(random()*eqs.length)]; state.geo.equationX=eq.x; state.geo.equationY=eq.y;
+
+      const synthTypes=['additive','fm','subtractive','wavetable','noise'];
+      state.synth.type = synthTypes[Math.floor(random()*synthTypes.length)];
+      state.synth.baseFreq = Math.pow(2, Math.floor(random()*7)+3)*10;
+      for (let i=0;i<state.synth.additive.ratios.length;i++){ state.synth.additive.ratios[i]=random()*5+1; state.synth.additive.amps[i]=random(); }
+      state.synth.fm.ratio = random()*8 + .5; state.params.fmIndex.base = random()*10;
+      state.synth.subtractive.oscType = ['saw','square'][Math.floor(random()*2)];
+      state.params.filterCutoff.base = random()*4000 + 200;
+      state.params.pwm.base = random()*.8 + .1;
+      generateWavetable(); state.params.wavetableMorph.base = random();
+      state.synth.noise.color = 'white';
+      state.lfos.forEach(l=>{ l.rate=random()*5+.1; l.shape=['sine','triangle','square','random'][Math.floor(random()*4)]; l.depth=random(); l.target=(['none'].concat(state.modulationTargets))[Math.floor(random()*(state.modulationTargets.length+1))]; });
+      state.envelope.attack=random()*2; state.envelope.decay=random()*2; state.envelope.sustain=random(); state.envelope.release=random()*2; state.envelope.target=state.modulationTargets[Math.floor(random()*state.modulationTargets.length)];
+      state.params.audioVolume.base = random()*.8 + .1;
+      buildUI();
+    }
+
+    function savePreset(name){
+      const obj=JSON.parse(JSON.stringify(state));
+      delete obj.audioCtx; delete obj.processor; delete obj.geoBufferX; delete obj.geoBufferY;
+      localStorage.setItem('avsynth_preset_'+name, JSON.stringify(obj)); alert('Preset "'+name+'" saved.');
+    }
+    function loadPreset(){
+      const keys=Object.keys(localStorage).filter(k=>k.startsWith('avsynth_preset_'));
+      if (!keys.length){ alert('No presets found.'); return; }
+      const names=keys.map(k=>k.replace('avsynth_preset_','')); const name=prompt('Enter preset name to load:\nAvailable: '+names.join(', '));
+      if (!name) return; const data=localStorage.getItem('avsynth_preset_'+name); if (!data){ alert('Preset not found.'); return; }
+      const obj=JSON.parse(data); Object.assign(state, obj);
+      state.geoBufferX=new Float32Array(state.geoBufferSize); state.geoBufferY=new Float32Array(state.geoBufferSize);
+      buildUI(); alert('Preset "'+name+'" loaded.');
+    }
+
+    function exportAudio(durationSeconds){
+      if (state.exporting){ alert('Export already in progress'); return; }
+      if (!state.audioCtx){ alert('Start the audio engine first.'); return; }
+      state.exporting=true;
+      const dest=state.audioCtx.createMediaStreamDestination();
+      state.processor.disconnect(); state.processor.connect(state.audioCtx.destination); state.processor.connect(dest);
+      const rec=new MediaRecorder(dest.stream); const chunks=[];
+      rec.ondataavailable=e=>{ if (e.data.size>0) chunks.push(e.data); };
+      rec.onstop=()=>{ const blob=new Blob(chunks,{type:'audio/wav'}); const url=URL.createObjectURL(blob); const a=document.createElement('a'); a.style.display='none'; a.href=url; a.download='synth_output.wav'; document.body.appendChild(a); a.click(); URL.revokeObjectURL(url); document.body.removeChild(a); state.processor.disconnect(dest); state.exporting=false; };
+      rec.start(); setTimeout(()=>rec.stop(), durationSeconds*1000);
+    }
+
+    // ---------- Build + Seed + Input ----------
+    function h(key){ return document.createElement(key); } // tiny helper
+    // function h3(t){ const el=document.createElement('h3'); el.textContent=t; return el; }
+
+    // UI + seed + idle on boot
+    buildUI();
+    setSeed(0);              // generate seed patches
+    state.idlePatch = makeIdlePatch();  // create standard idle
+    applyIdlePatch({ rebuildUI:true, signatureMode:false });
+
+    // Key input for 0–9 (blocked during signature)
+    document.addEventListener('keydown', e=>{
+      if (state.playingSignature || state.ignoreInput) return;
+      const k=e.key; if (k>='0' && k<='9') playSeedPatch(parseInt(k,10));
+    });
+
+    // Start/Stop helpers (exposed for convenience)
+    function startAudioSafe(){ if (!state.running) startAudio(); }
+    function stopAudioSafe(){ if (state.running) stopAudio(); }
+
+    // expose (debug)
+    window._avs = { state, setSeed, playAudioSignature, startAudioSafe, stopAudioSafe, applyIdlePatch };
+  })();
+  </script>
+</body>
+</html>
+
