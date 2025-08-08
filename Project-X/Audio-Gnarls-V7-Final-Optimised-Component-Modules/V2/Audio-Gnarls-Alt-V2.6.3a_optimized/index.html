@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Audio Gnarls — Optimized V2.6.3</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    :root { --bg:#0b0b0f; --fg:#e7e7f1; --acc:#6cf; --dim:#6b7280; --card:#11131a; --on:#00d084; --off:#d0004b; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; background:var(--bg); color:var(--fg); font:14px/1.45 system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; }
+    .wrap { max-width:1040px; margin:0 auto; padding:20px; display:grid; gap:16px; }
+    header { display:flex; align-items:center; justify-content:space-between; }
+    h1 { margin:0; font-size:18px; font-weight:600; letter-spacing:.3px; color:#d9e1ff; }
+    .bar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; }
+    button, input[type="number"] {
+      background:var(--card); color:var(--fg); border:1px solid #212433; border-radius:10px; padding:10px 14px;
+      outline:none; transition:transform .05s ease, border-color .2s ease, background .2s ease; font-weight:600; letter-spacing:.2px;
+    }
+    button:hover { border-color:#2c7; }
+    button:active { transform:translateY(1px); }
+    .power[data-on="true"] { border-color:var(--on); box-shadow:0 0 0 1px var(--on) inset; }
+    .power[data-on="false"] { border-color:var(--off); box-shadow:0 0 0 1px var(--off) inset; }
+    .grid { display:grid; grid-template-columns: 600px 1fr; gap:16px; }
+    scope-canvas { display:block; width:100%; height:100%; min-height:600px; border-radius:14px; overflow:hidden; border:1px solid #1c2030; background:#000; }
+    .panel { background:var(--card); border:1px solid #1b1e2a; border-radius:14px; padding:14px; display:grid; gap:12px; }
+    .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+    .note-keys { display:grid; grid-template-columns:repeat(10,1fr); gap:8px; }
+    .note-keys button { padding:10px; border-radius:10px; border:1px solid #22263a; background:#0f1220; font-weight:700; }
+    .note-keys button.active { outline:2px solid var(--acc); }
+    small.note { color:var(--dim); }
+    .steps { display:grid; grid-template-columns:repeat(16, 1fr); gap:6px; }
+    .steps button { padding:8px 0; border:1px solid #212433; border-radius:8px; background:#0e1220; }
+    .steps button[data-on="true"] { background:#13263a; border-color:#244b78; }
+    .muted { opacity:.6; }
+    footer { color:var(--dim); text-align:center; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Audio Gnarls — Optimized V2.6.3</h1>
+      <div class="bar">
+        <tone-loader id="tone"></tone-loader>
+        <button id="power" class="power" data-on="false" title="Start / Stop">Power</button>
+        <label>BPM <input id="bpm" type="number" min="20" max="300" step="1" value="120" /></label>
+        <button id="seedNew" title="Randomize seed">New Seed</button>
+        <span id="seedLabel" class="muted"></span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <scope-canvas id="scope"></scope-canvas>
+      <div class="panel">
+        <div class="row">
+          <span class="muted">Keys: 0–9 switch sounds instantly. Sequencer toggles: click steps.</span>
+        </div>
+        <div class="note-keys" id="keys"></div>
+        <div class="row">
+          <step-sequencer id="seq"></step-sequencer>
+        </div>
+      </div>
+    </div>
+
+    <footer>
+      Stateless, seed-driven drones with de-clicked crossfades. Visuals follow audio via AnalyserNode.
+    </footer>
+  </div>
+
+  <script type="module">
+    import './tone-loader.js';
+    import './osc-synth.js';
+    import './scope-canvas.js';
+    import './step-sequencer.js';
+
+    // Deterministic PRNG
+    const mulberry32 = (a)=>()=>((a|=0,a=a+0x6D2B79F5|0,Math.imul(a^a>>>15,1|a))+Math.imul(a^a>>>7,61|a)^a)>>>0/4294967296;
+
+    // Scale helpers — keep sets harmonious
+    const SCALES = {
+      ionian:[0,2,4,5,7,9,11],
+      dorian:[0,2,3,5,7,9,10],
+      mixolydian:[0,2,4,5,7,9,10],
+      phrygian:[0,1,3,5,7,8,10],
+      lydian:[0,2,4,6,7,9,11],
+      minor:[0,2,3,5,7,8,10],
+      pentatonic:[0,2,4,7,9],
+      atonal:[0,1,2,3,4,5,6,7,8,9,10,11]
+    };
+
+    const noteToFreq = (note)=>{
+      // e.g., A4=440
+      if (typeof note === 'number') return 440 * Math.pow(2, (note-69)/12);
+      const m = /^([A-G])(#|b)?(\d)$/.exec(note);
+      if (!m) return 440;
+      const [_, L, acc, oct] = m;
+      const map = {C:0,D:2,E:4,F:5,G:7,A:9,B:11};
+      let n = map[L] + (acc==='#'?1:acc==='b'?-1:0) + (parseInt(oct)-4)*12;
+      return 440 * Math.pow(2, (n + (69-9))/12);
+    };
+
+    // Build a bank of 10 harmonically related presets from a seed
+        // Build a bank of 10 harmonically related presets from a seed
+        function buildBank(seed){
+      const rnd = mulberry32(seed);
+      const scaleNames = Object.keys(SCALES);
+      // FIX: Removed the "- 1" for correct random index generation.
+      const scaleName = scaleNames[Math.floor(rnd() * scaleNames.length)];
+      const scale = SCALES[scaleName];
+      const rootMidi = 45 + Math.floor(rnd()*12); // around A2–G3
+      const rootFreq = noteToFreq(rootMidi);
+      const oscTypes = ['sine','triangle','sawtooth','square'];
+      const bank = Array.from({length:10}, (_,i)=>{
+        const deg = scale[i % scale.length];
+        const midi = rootMidi + deg + 12 * Math.floor(rnd()*2); // some spread
+        const base = noteToFreq(midi);
+        return {
+          name:`S${i}`,
+          freq: base,
+          filter: {
+            type: (rnd()>.7?'bandpass':(rnd()>.4?'lowpass':'highpass')),
+            frequency: Math.max(200, Math.min(8000, base * (1 + rnd()*3))),
+            Q: 0.5 + rnd()*6
+          },
+          lfoA: { freq: 0.01 + rnd()*0.7, depth: 0.1 + rnd()*0.6, type: (rnd()>.5?'sine':'triangle') },
+          lfoB: { freq: 0.1 + rnd()*3.0, depth: 0.02 + rnd()*0.3, type: (rnd()>.5?'sine':'triangle') },
+          amp: { attack: 0.005, release: 0.04, gain: 0.6 + rnd()*0.3 },
+          oscA: { type: oscTypes[Math.floor(rnd()*oscTypes.length)], detune: (rnd()-0.5)*8 },
+          oscB: { type: oscTypes[Math.floor(rnd()*oscTypes.length)], detune: (rnd()-0.5)*10, mix: 0.3 + rnd()*0.6 },
+        };
+      });
+      return { bank, rootFreq, scaleName };
+    }
+
+    const $ = (sel, root=document)=>root.querySelector(sel);
+
+    class App {
+      constructor(){
+        this.Tone = null;
+        this.on = false;
+        this.seed = 1337;
+        this.bank = buildBank(this.seed);
+        this.currentIndex = 0;
+        this.synth = null;
+        this.scope = $('#scope');
+        this.seq = $('#seq');
+        this.powerBtn = $('#power');
+        this.bpm = $('#bpm');
+        this.seedBtn = $('#seedNew');
+        this.seedLabel = $('#seedLabel');
+        this.keysEl = $('#keys');
+        this._bindUI();
+        this._renderKeys();
+        this._updateSeedLabel();
+        // Keyboard 0–9 to switch sounds
+        window.addEventListener('keydown', (e)=>{
+          if (e.key >= '0' && e.key <= '9') this.switchIndex(parseInt(e.key,10));
+        });
+      }
+      _bindUI(){
+        // Tone ready
+        $('#tone').addEventListener('tone-ready', (e)=>{
+          this.Tone = e.detail.Tone;
+          this.Tone.Transport.bpm.value = parseInt(this.bpm.value,10) || 120;
+          this.seq.attachTone(this.Tone);
+          this.scope.setTone(this.Tone);
+        }, { once:true });
+
+        this.powerBtn.addEventListener('click', ()=> this.togglePower());
+        this.bpm.addEventListener('change', ()=>{
+          const v = Math.max(20, Math.min(300, parseInt(this.bpm.value,10)||120));
+          if (this.Tone) this.Tone.Transport.bpm.rampTo(v, 0.02);
+        });
+        this.seedBtn.addEventListener('click', ()=>{
+          this.seed = (Math.random()*1e9|0)>>>0;
+          this.bank = buildBank(this.seed);
+          this._updateSeedLabel();
+          this._renderKeys();
+          if (this.synth) this.synth.setPreset(this.bank.bank[this.currentIndex]);
+        });
+
+        // Sequencer hooks
+        this.seq.addEventListener('step', (e)=>{
+          if (!this.synth) return;
+          if (e.detail.on) this.synth.noteOn(this.bank.bank[this.currentIndex].freq);
+          else this.synth.noteOff();
+        });
+      }
+      _updateSeedLabel(){
+        this.seedLabel.textContent = `Seed ${this.seed} — scale ${this.bank.scaleName}`;
+      }
+      _renderKeys(){
+        this.keysEl.innerHTML = '';
+        for (let i=0;i<10;i++){
+          const b = document.createElement('button');
+          b.textContent = `${i}`;
+          b.title = `Sound ${i}`;
+          if (i===this.currentIndex) b.classList.add('active');
+          b.addEventListener('click', ()=> this.switchIndex(i));
+          this.keysEl.appendChild(b);
+        }
+      }
+      switchIndex(i){
+        this.currentIndex = i;
+        this.keysEl.querySelectorAll('button').forEach((el,idx)=>el.classList.toggle('active', idx===i));
+        if (this.synth) this.synth.setPreset(this.bank.bank[i]); // instant crossfade
+      }
+      async togglePower(){
+        if (!this.Tone) return;
+        if (!this.on){
+          await this.Tone.start();
+          if (this.synth) this.synth.dispose();
+          this.synth = new window.OscSynth(this.Tone, this.bank.bank[this.currentIndex]);
+          this.scope.start(this.synth.getAnalyser());
+          this.Tone.Transport.start();
+          this.on = true;
+          this.powerBtn.dataset.on = "true";
+        } else {
+          this.Tone.Transport.stop();
+          if (this.synth){ this.synth.dispose(); this.synth = null; }
+          this.scope.stop();
+          this.on = false;
+          this.powerBtn.dataset.on = "false";
+        }
+      }
+    }
+
+    window.addEventListener('DOMContentLoaded', ()=> new App());
+  </script>
+</body>
+</html>

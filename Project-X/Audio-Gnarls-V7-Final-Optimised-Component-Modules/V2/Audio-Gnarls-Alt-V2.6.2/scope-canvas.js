@@ -4,12 +4,14 @@
 // and `stop()` to halt the animation and clear the canvas. All
 // drawing logic lives inside this component, isolated from the rest of
 // the application.
-// <scope-canvas> renders the oscilloscope visuals. It exposes a
-// programmatic API: call `start(analyser, visualParams)` with a Web
-// Audio AnalyserNode and a set of visual parameters to begin drawing,
-// and `stop()` to halt the animation and clear the canvas. All
-// drawing logic lives inside this component, isolated from the rest of
-// the application.
+
+// The drawing routines are defined outside of the class so that they
+// are allocated once and shared across all instances. This reduces
+// per‑instance overhead and ensures the functions are not re‑created
+// for each component. Each drawing function still uses `this` to
+// reference the component’s canvas and context.
+
+
 class ScopeCanvas extends HTMLElement {
   constructor() {
     super();
@@ -18,6 +20,10 @@ class ScopeCanvas extends HTMLElement {
     this._visualParams = null;
     this._animId = null;
     this._particles = [];
+    // Buffer for analyser data reused across frames
+    this._buf = null;
+    // Point this instance to the shared drawing routines defined on the class.
+    this._drawFuncs = ScopeCanvas.drawFuncs;
     this._render();
   }
   _render() {
@@ -54,6 +60,8 @@ class ScopeCanvas extends HTMLElement {
     this.stop();
     this._analyser = analyser;
     this._visualParams = visualParams;
+    // Initialise a reusable buffer sized to the analyser's FFT size.
+    this._buf = new Float32Array(analyser.fftSize);
     this._animate();
   }
   /**
@@ -82,7 +90,9 @@ class ScopeCanvas extends HTMLElement {
     const ana = this._analyser;
     const v = this._visualParams;
     if (!ana || !v) return;
-    const buf = new Float32Array(ana.fftSize);
+    // Use the preallocated buffer to avoid creating a new Float32Array on
+    // every animation frame. The buffer is sized when start() is called.
+    const buf = this._buf;
     ana.getFloatTimeDomainData(buf);
     const now = performance.now();
     // Clear background
@@ -132,7 +142,7 @@ class ScopeCanvas extends HTMLElement {
    * implementation. Each function operates in the context of this
    * component (using its canvas and particles array).
    */
-  _drawFuncs = {
+  static drawFuncs = {
     radial(data, t, p) {
       const S = 0.4 * this.canvas.width;
       const cx = this.canvas.width / 2;

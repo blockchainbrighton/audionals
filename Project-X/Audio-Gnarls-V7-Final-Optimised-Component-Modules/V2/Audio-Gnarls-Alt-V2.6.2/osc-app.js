@@ -103,6 +103,17 @@ class OscApp extends HTMLElement {
     this._bindEvents();
   }
 
+  /**
+   * When the component is detached from the DOM, ensure any ongoing
+   * experience is stopped and Tone resources are released. This
+   * prevents audio from continuing to play when the element is no
+   * longer present and allows garbage collection of the synth and
+   * analyser nodes.
+   */
+  disconnectedCallback() {
+    this.stopExperience();
+  }
+
   _bindEvents() {
     this.addEventListener('tone-ready', (ev) => {
       if (!this.Tone) this.Tone = ev.detail?.Tone;

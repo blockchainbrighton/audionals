@@ -129,13 +129,17 @@ class OscControls extends HTMLElement {
 
   connectedCallback() {
     document.addEventListener('keydown', this._onKeyDown);
-
-    document.querySelector('osc-app')?.addEventListener('seed-changed', (e) => {
+    // Lazily bind the seed change handler so we can remove it later.
+    this._onSeedChanged = (e) => {
       const newSeed = parseInt(e.detail.seed, 10);
-      this._seed = newSeed;
-      this._regeneratePresets();
-      console.log(`[OscControls] Seed updated to ${newSeed}. Sound presets regenerated.`);
-    });
+      if (!Number.isNaN(newSeed)) {
+        this._seed = newSeed;
+        this._regeneratePresets();
+        console.log(`[OscControls] Seed updated to ${newSeed}. Sound presets regenerated.`);
+      }
+    };
+    const oscApp = document.querySelector('osc-app');
+    oscApp?.addEventListener('seed-changed', this._onSeedChanged);
   }
 
   disconnectedCallback() {
@@ -144,6 +148,11 @@ class OscControls extends HTMLElement {
     if (this._onStepTrigger) document.removeEventListener('step-trigger', this._onStepTrigger);
     if (this._onSequenceStart) document.removeEventListener('sequence-start', this._onSequenceStart);
     if (this._onSequenceStop) document.removeEventListener('sequence-stop', this._onSequenceStop);
+    // Clean up seed change listener if the control is removed
+    const oscApp = document.querySelector('osc-app');
+    if (oscApp && this._onSeedChanged) {
+      oscApp.removeEventListener('seed-changed', this._onSeedChanged);
+    }
   }
 
   _setupEventListeners() {
