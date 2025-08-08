@@ -1,3 +1,5 @@
+// sequencer-instrument.js
+
 /**
  * Module: BOP-Sequencer-V10-Modular/instrument.js
  * Purpose: Instrument creation and management

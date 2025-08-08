@@ -1,3 +1,4 @@
+// sequencer-sampler-playback.js
 /**
  * Module: sequencer-sampler-channel-playback.js
  * Purpose: Contains the isolated logic for triggering a single sampler channel,
