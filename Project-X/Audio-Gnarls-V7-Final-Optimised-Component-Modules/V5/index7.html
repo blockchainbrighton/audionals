@@ -1,0 +1,823 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Interactive Audiovisual Synthesizer — Seeded AV Organisms (De-glitched)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  html, body { margin:0; padding:0; height:100%; width:100%; background:#000; color:#e5ffe5; font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; overflow:hidden; }
+  #app { display:flex; height:100vh; width:100vw; }
+  #canvasContainer { flex:1; display:flex; align-items:center; justify-content:center; position:relative; background:radial-gradient(100% 100% at 50% 50%, #020202 0%, #000 60%, #000 100%); }
+  #oscilloscope { display:block; background:#000; box-shadow:0 0 0 1px rgba(0,255,128,.15) inset, 0 0 40px rgba(0,255,128,.08), 0 0 120px rgba(0,255,128,.06); border-radius:10px; }
+  #hud { position:absolute; top:10px; left:50%; transform:translateX(-50%); display:flex; gap:8px; align-items:center; pointer-events:none; font-size:12px; color:#89ffb0; letter-spacing:.3px; text-shadow:0 0 6px rgba(0,255,128,.6); }
+  .pill { pointer-events:none; padding:3px 8px; border:1px solid #1aff86; border-radius:999px; background:rgba(0,14,6,.5); }
+  #signatureIndicator { position:absolute; bottom:10px; left:50%; transform:translateX(-50%); background:rgba(0,0,0,.6); color:#0f0; border:1px solid #0f0; border-radius:4px; padding:4px 8px; font-size:12px; pointer-events:none; display:none; }
+  #controls { width:380px; max-width:40%; background:rgba(22,22,22,.98); color:#e9ffe9; border-left:1px solid #183; padding:12px; box-sizing:border-box; overflow-y:auto; }
+  .section { margin-bottom:12px; padding-bottom:10px; border-bottom:1px dashed #144; }
+  .section:last-child { border-bottom:none; }
+  .section h3 { margin:0 0 8px; font-size:13px; color:#7cf; font-weight:700; letter-spacing:.3px; }
+  .control-group { margin-bottom:8px; }
+  .control-group label { display:block; font-size:11px; margin-bottom:4px; color:#9fd; opacity:.9; }
+  .control-group input[type=range],
+  .control-group input[type=number],
+  .control-group input[type=text],
+  .control-group select { width:100%; box-sizing:border-box; }
+  button { width:100%; margin-top:6px; padding:8px 10px; font-size:13px; background:#0a1510; border:1px solid #1f6; color:#cffff1; cursor:pointer; border-radius:6px; }
+  button:hover { background:#0f241b; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  .tiny { font-size:11px; opacity:.8; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvasContainer">
+      <canvas id="oscilloscope"></canvas>
+      <div id="hud">
+        <span class="pill" id="hudPatch">Patch —</span>
+        <span class="pill" id="hudSeed">Seed —</span>
+        <span class="pill tiny" id="hudHint">Space=Start/Stop · Keys 1–9 / 0 to switch patches</span>
+      </div>
+      <div id="signatureIndicator">Web3 Audio Signature…</div>
+    </div>
+    <div id="controls"></div>
+  </div>
+
+<script>
+(() => {
+  /* ========= Utilities ========= */
+  const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+  function mulberry32(a){ return function(){ let t=a+=0x6D2B79F5; t=Math.imul(t^t>>>15, t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; }; }
+  function compileEquation(str){ try{ return new Function('t','with(Math){return '+str+';}'); }catch(e){ return t=>0; } }
+
+  /* ========= Global State ========= */
+  let currentPatch = 0; // moved up to avoid RefError in updateHUD
+  const state = {
+    running:false, seed:0,
+    audioCtx:null, processor:null, sampleRate:44100, time:0,
+    geoBufferSize:4096, geoBufferX:null, geoBufferY:null, geoWriteIndex:0,
+    params:{
+      geoFreq:{base:1,mod:0}, geoAmp:{base:.35,mod:0}, geoRotation:{base:0,mod:0}, geoScale:{base:1,mod:0},
+      filterCutoff:{base:1600,mod:0}, fmIndex:{base:5,mod:0}, wavetableMorph:{base:0,mod:0}, pwm:{base:.5,mod:0},
+      audioVolume:{base:.38,mod:0},
+      fuzzMix:{base:.04,mod:0}, // now “visual bleed” — hard-clamped to ≤0.15 in audio path
+      lineWidth:{base:1.6,mod:0}, trail:{base:.12,mod:0}
+    },
+    geo:{
+      type:'lissajous', a:3, b:2, phase:0, sides:6, tightness:2.5,
+      super:{m:5,n1:0.3,n2:1.7,n3:1.7,a:1,b:1},
+      rosette:{k:5},
+      orbit:{layers:3, spread:0.33},
+      field:{warp:.0025, timeWarp:.25},
+      symmetry:4
+    },
+    synth:{
+      type:'additive', baseFreq:220,
+      additive:{ ratios:[1,2.02,3.01,4.98,6.99,8.02], amps:[.9,.6,.35,.25,.2,.15] },
+      fm:{ ratio:2.00, index:6.0 },
+      subtractive:{ oscType:'saw', cutoff:1400, resonance:.08, pwm:.5, _lpState:0, _pre:0 },
+      wavetable:{ table1:[], table2:[], morph:0, index:0, size:2048 }
+    },
+    // LFOs are clamped in generator (≤5Hz) to avoid audio-rate “buzz”
+    lfos:[
+      {rate:.27, shape:'sine',    depth:.45, target:'geoRotation', phase:0, lastSH:0},
+      {rate:.12, shape:'triangle',depth:.25, target:'filterCutoff', phase:0, lastSH:0},
+      {rate:.33, shape:'sine',    depth:.22, target:'wavetableMorph', phase:0, lastSH:0}
+    ],
+    envelope:{ attack:.015, decay:.18, sustain:.8, release:.45, value:1, state:'sustain', gate:true, startTime:0, releaseTime:0, releaseStartValue:1, target:'audioVolume' },
+    modulationTargets:['geoFreq','geoAmp','geoRotation','geoScale','filterCutoff','fmIndex','wavetableMorph','pwm','audioVolume','lineWidth','trail'],
+    visual:{
+      showGrid:true, showCrosshair:true,
+      colorMode:'reactive', blend:'lighter',
+      chromaSplit:.7, glowPasses:3, symmetryClones:4,
+      drawMode:'path', particles: { count:600, size:1.0, jitter:.004, life:2.5 }
+    },
+    exporting:false, seedPatches:[], playingSignature:false, pendingTimers:[], ignoreInput:false,
+    palette:['#00ffaa','#00e2ff','#a4ff00','#00ffb9','#7affee'],
+    smoothVol:{ cur:0, tgt:0, timeConst:.02 },
+    // stereo helpers
+    stereo:{ phaseOffsetR:Math.PI/2, // 90° for width
+             freq:{cur:220, tgt:220, tc:.02},
+             cutoff:{cur:1600, tgt:1600, tc:.02} },
+    // DC blockers (y[n] = x[n] − x[n−1] + R * y[n−1])
+    dc:{ L:{prevX:0, prevY:0}, R:{prevX:0, prevY:0}, Rcoef:0.995 }
+  };
+
+  let random = mulberry32(1);
+  function setSeed(seed){
+    const s = (seed>>>0)||1; random=mulberry32(s); state.seed=s;
+    localStorage.setItem('avs_seed', String(s));
+    state.palette = genPalette(random);
+    generateSeedPatches(); updateHUD();
+  }
+  function genPalette(rng){
+    const h = (rng()*360)|0, sat = 68 + rng()*22;
+    const base = (a)=>`hsl(${(h+a)%360} ${sat}% ${58-(a*0.15)}%)`;
+    return [base(0), base(25), base(50), base(75), base(100)];
+  }
+  state.geoBufferX = new Float32Array(state.geoBufferSize);
+  state.geoBufferY = new Float32Array(state.geoBufferSize);
+
+  /* ========= Audio Core (de-glitched) ========= */
+  function smooth(arr, passes=2){
+    const n=arr.length;
+    for(let p=0;p<passes;p++){
+      let prev = arr[0], cur;
+      for(let i=1;i<n-1;i++){ cur = arr[i]; arr[i]=(prev+cur+arr[i+1])/3; prev=cur; }
+    }
+  }
+  function generateWavetable(dst=state.synth.wavetable){
+    const size=dst.size;
+    const t1=dst.table1=new Float32Array(size);
+    const t2=dst.table2=new Float32Array(size);
+    for (let i=0;i<size;i++){ t1[i]=random()*2-1; t2[i]=random()*2-1; }
+    smooth(t1,4); smooth(t2,5);
+    dst.index=0;
+  }
+
+  function updateModulations(dt){
+    for (const k in state.params) state.params[k].mod=0;
+
+    for (const l of state.lfos){
+      let p=l.phase + l.rate*dt; if (p>1) p -= (p|0); l.phase=p;
+      let v=0;
+      if (l.shape==='sine') v=Math.sin(2*Math.PI*p);
+      else if (l.shape==='triangle') v=2*Math.abs(2*(p-(p+.5|0)))-1;
+      else if (l.shape==='square') v=(p<.5?1:-1);
+      else { if (p<dt*l.rate) l.lastSH = random()*2-1; v=l.lastSH; }
+      const tgt=l.target; if (tgt && state.params[tgt]) state.params[tgt].mod += v*l.depth;
+    }
+
+    // Envelope
+    const e=state.envelope;
+    if (e.state!=='idle'){
+      const t=state.time;
+      if (e.state==='attack'){
+        const k=Math.max(.001,e.attack); const prog=(t-e.startTime)/k;
+        if (prog>=1){ e.state='decay'; e.value=1; e.startTime=t; }
+        else e.value=prog;
+      } else if (e.state==='decay'){
+        const k=Math.max(.001,e.decay); const prog=(t-e.startTime)/k;
+        if (prog>=1){ e.state=e.gate?'sustain':'release'; e.value=e.sustain; e.startTime=t; }
+        else e.value = 1 - prog*(1-e.sustain);
+      } else if (e.state==='sustain'){
+        e.value = e.sustain;
+      } else if (e.state==='release'){
+        const k=Math.max(.001,e.release); const prog=(t-e.releaseTime)/k;
+        if (prog>=1){ e.state='idle'; e.value=0; }
+        else e.value = e.releaseStartValue*(1-prog);
+      }
+      if (e.target && state.params[e.target]) state.params[e.target].mod += e.value;
+    }
+  }
+
+  // Soft saturator
+  const saturate = x => Math.tanh(0.9*x);
+
+  // One synth sample for a given phase offset (for stereo)
+  function synthSampleAtPhase(t, dt, phaseShift){
+    const s=state.synth, f=state.stereo.freq.cur;
+    let out=0;
+    if (s.type==='additive'){
+      const r=s.additive.ratios, a=s.additive.amps; let sum=0, N=r.length;
+      for (let i=0;i<N;i++) sum += Math.sin(2*Math.PI*f*r[i]*t + phaseShift) * a[i];
+      out = sum/N;
+    } else if (s.type==='fm'){
+      const mod = Math.sin(2*Math.PI*f*s.fm.ratio*t + phaseShift) * (state.params.fmIndex.base + state.params.fmIndex.mod);
+      out = Math.sin(2*Math.PI*f*t + mod + phaseShift);
+    } else if (s.type==='subtractive'){
+      // band-limited-ish square/saw → single-pole LPF with slewed cutoff
+      const cutoff = Math.max(160, state.stereo.cutoff.cur);
+      const phase = (t*f) % 1;
+      let osc = (s.subtractive.oscType==='saw')
+        ? (2*phase-1)
+        : ((phase < clamp(state.params.pwm.base + state.params.pwm.mod, .08, .92)) ? 1 : -1);
+      // pre-emphasis to soften edges before LP
+      s.subtractive._pre = s.subtractive._pre*0.93 + osc*0.07;
+      const rc = 1/(2*Math.PI*cutoff); const alpha = dt/(rc+dt);
+      s.subtractive._lpState += alpha*(s.subtractive._pre - s.subtractive._lpState);
+      out = s.subtractive._lpState;
+    } else if (s.type==='wavetable'){
+      const wt=s.wavetable; if (!wt.table1.length) generateWavetable(wt);
+      const size=wt.size; const inc=f*size/state.sampleRate;
+      wt.index += inc;
+      const i0=(wt.index|0)%size, i1=(i0+1)%size, frac=wt.index - (wt.index|0);
+      const m=clamp(state.params.wavetableMorph.base + state.params.wavetableMorph.mod,0,1);
+      const v1 = wt.table1[i0]*(1-frac) + wt.table1[i1]*frac;
+      const v2 = wt.table2[i0]*(1-frac) + wt.table2[i1]*frac;
+      out = v1*(1-m) + v2*m;
+      // tiny phase pseudo-offset
+      out = Math.sin( Math.asin(clamp(out,-.999,.999)) + phaseShift );
+    }
+    return out;
+  }
+
+  function audioCallback(e){
+    const L = e.outputBuffer.getChannelData(0);
+    const R = e.outputBuffer.getChannelData(1);
+    const n=L.length, dt = 1/state.sampleRate;
+    const sv = state.smoothVol;
+    const timeStart = state.time;
+    const dc = state.dc, Rcoef = dc.Rcoef;
+    const phaseR = state.stereo.phaseOffsetR;
+
+    for (let i=0;i<n;i++){
+      updateModulations(dt);
+
+      // Slew/glide base frequency & cutoff gently
+      const tgtFreq = clamp(state.synth.baseFreq, 20, 8000);
+      const kf = (1 - Math.exp(-dt/state.stereo.freq.tc));
+      state.stereo.freq.cur += (tgtFreq - state.stereo.freq.cur) * kf;
+
+      const tgtCut = clamp(state.params.filterCutoff.base + state.params.filterCutoff.mod, 160, 6000);
+      const kc = (1 - Math.exp(-dt/state.stereo.cutoff.tc));
+      state.stereo.cutoff.cur += (tgtCut - state.stereo.cutoff.cur) * kc;
+
+      const t = timeStart + i*dt;
+
+      // Geometry sample strictly for visuals (kept in buffers)
+      const gxy = computeGeometrySample(t);
+      state.geoBufferX[state.geoWriteIndex] = gxy[0];
+      state.geoBufferY[state.geoWriteIndex] = gxy[1];
+      state.geoWriteIndex = (state.geoWriteIndex+1) % state.geoBufferSize;
+
+      // Stereo synth — decoupled from geometry
+      let sL = synthSampleAtPhase(t, dt, 0);
+      let sR = synthSampleAtPhase(t, dt, phaseR);
+
+      // Very small optional visual bleed for texture (capped)
+      const bleed = Math.min(0.15, Math.max(0, state.params.fuzzMix.base + state.params.fuzzMix.mod));
+      sL = (1-bleed)*sL + bleed*gxy[0];
+      sR = (1-bleed)*sR + bleed*gxy[1];
+
+      // Volume smoothing + soft saturation
+      const tgtVol = clamp(state.params.audioVolume.base + state.params.audioVolume.mod, 0, 1);
+      const kv = (1 - Math.exp(-dt/sv.timeConst));
+      sv.cur += (tgtVol - sv.cur) * kv;
+      let outL = saturate(sL * sv.cur * 0.9);
+      let outR = saturate(sR * sv.cur * 0.9);
+
+      // DC blockers
+      const yL = outL - dc.L.prevX + Rcoef*dc.L.prevY;
+      dc.L.prevX = outL; dc.L.prevY = yL;
+      const yR = outR - dc.R.prevX + Rcoef*dc.R.prevY;
+      dc.R.prevX = outR; dc.R.prevY = yR;
+
+      L[i] = yL;
+      R[i] = yR;
+    }
+    state.time += n*dt;
+  }
+
+  function triggerEnvelope(on){
+    const e=state.envelope; e.gate=on;
+    if (on){ e.state='attack'; e.startTime=state.time; }
+    else if (e.state!=='idle'){ e.state='release'; e.releaseTime=state.time; e.releaseStartValue=e.value; }
+  }
+
+  /* ========= Geometry & Rendering ========= */
+  const canvas = document.getElementById('oscilloscope');
+  const hudPatch = document.getElementById('hudPatch');
+  const hudSeed  = document.getElementById('hudSeed');
+  const signatureIndicator = document.getElementById('signatureIndicator');
+
+  function sizeCanvasTo80vhSquare(){
+    const size = Math.floor(window.innerHeight * 0.8);
+    const px = size * DPR;
+    canvas.width = px; canvas.height = px;
+    canvas.style.width = size+'px'; canvas.style.height = size+'px';
+  }
+  window.addEventListener('resize', sizeCanvasTo80vhSquare); sizeCanvasTo80vhSquare();
+  const ctx = canvas.getContext('2d'); ctx.lineJoin='round'; ctx.lineCap='round';
+
+  function drawGrid(w,h){
+    const step = Math.max(20, Math.floor(w/16));
+    ctx.save(); ctx.globalAlpha = .18; ctx.strokeStyle = '#0a2'; ctx.beginPath();
+    for (let x=step+0.5; x<w; x+=step){ ctx.moveTo(x,0); ctx.lineTo(x,h); }
+    for (let y=step+0.5; y<h; y+=step){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
+    ctx.stroke();
+    ctx.globalAlpha=.35; ctx.beginPath();
+    ctx.moveTo(0.5, h/2+0.5); ctx.lineTo(w+0.5, h/2+0.5);
+    ctx.moveTo(w/2+0.5, 0.5); ctx.lineTo(w/2+0.5, h+0.5);
+    ctx.stroke(); ctx.restore();
+  }
+  function reactiveColor(){
+    const env = clamp(state.envelope.value, 0, 1);
+    const g = Math.floor(180 + 60*env);
+    const b = 180;
+    return `rgb(0,${g},${b})`;
+  }
+
+  const particles = [];
+  function ensureParticles(){
+    const need = state.visual.particles.count - particles.length;
+    for (let i=0;i<need;i++) particles.push({x:0,y:0,vx:0,vy:0,t:0,life:1});
+  }
+  function updateParticles(w,h){
+    ensureParticles();
+    const pConf = state.visual.particles;
+    const life = Math.max(0.5, pConf.life);
+    const jitter = pConf.jitter;
+    for (let i=0;i<particles.length;i++){
+      const p = particles[i];
+      if (p.t<=0){
+        const idx = (state.geoWriteIndex + ((Math.random()*state.geoBufferSize)|0)) % state.geoBufferSize;
+        const x = (w/2) + state.geoBufferX[idx]*(w/2 - 6*DPR);
+        const y = (h/2) + state.geoBufferY[idx]*(h/2 - 6*DPR);
+        p.x=x; p.y=y; p.vx=(Math.random()-.5)*2; p.vy=(Math.random()-.5)*2; p.t=life*(.5+Math.random()); p.life=p.t;
+      } else {
+        p.vx += (Math.random()-.5)*jitter*w;
+        p.vy += (Math.random()-.5)*jitter*h;
+        p.x += p.vx; p.y += p.vy; p.t -= 1/60;
+      }
+    }
+  }
+  function drawParticles(color){
+    ctx.save(); ctx.globalCompositeOperation='lighter';
+    for (const p of particles){
+      const a = clamp(p.t / p.life, 0, 1); ctx.globalAlpha = 0.12 * a;
+      ctx.beginPath(); ctx.arc(p.x, p.y, DPR*(state.visual.particles.size), 0, Math.PI*2);
+      ctx.fillStyle = color; ctx.fill();
+    }
+    ctx.restore();
+  }
+  function draw(){
+    requestAnimationFrame(draw);
+    const w=canvas.width, h=canvas.height;
+    const trail = clamp(state.params.trail.base + state.params.trail.mod, 0.02, .6);
+    ctx.globalCompositeOperation='source-over';
+    ctx.fillStyle = `rgba(0,0,0,${trail})`; ctx.fillRect(0,0,w,h);
+    if (state.visual.showGrid) drawGrid(w,h);
+
+    const baseColor = state.visual.colorMode==='reactive' ? reactiveColor() : state.palette[(state.time*0.25|0)%state.palette.length];
+    const lw = Math.max(0.6, (state.params.lineWidth.base + state.params.lineWidth.mod) * DPR);
+
+    const len = state.geoBufferSize, idx0 = state.geoWriteIndex;
+    const clones = Math.max(1, (state.visual.symmetryClones|0) || state.geo.symmetry || 1);
+    const blend = state.visual.blend;
+    const chroma = clamp(state.visual.chromaSplit, 0, 4)*DPR;
+    const glow = Math.max(1, state.visual.glowPasses|0);
+
+    const ptsX = new Float32Array(len);
+    const ptsY = new Float32Array(len);
+    for (let i=0;i<len;i++){
+      const j=(idx0+i)%len;
+      ptsX[i] = (w/2) + state.geoBufferX[j]*(w/2 - 6*DPR);
+      ptsY[i] = (h/2) + state.geoBufferY[j]*(h/2 - 6*DPR);
+    }
+
+    ctx.save(); ctx.globalCompositeOperation=blend;
+    for (let pass=0; pass<glow; pass++){
+      const passAlpha = 0.65 / (pass+1);
+      const passWidth = lw + pass*1.2*DPR;
+      const chromaLayers = chroma>0 ? [
+        {dx: chroma, dy:0, col: 'rgba(255,80,120,1)'},
+        {dx:-chroma, dy:0, col: 'rgba(120,255,180,1)'},
+        {dx:0, dy: chroma*0.66, col: 'rgba(160,200,255,1)'}
+      ] : [{dx:0,dy:0,col:baseColor}];
+
+      for (const layer of chromaLayers){
+        for (let c=0;c<clones;c++){
+          const ang = (c/clones)*Math.PI*2, ca=Math.cos(ang), sa=Math.sin(ang);
+          ctx.beginPath();
+          let x = ptsX[0]-w/2, y = ptsY[0]-h/2;
+          let rx = x*ca - y*sa, ry = x*sa + y*ca;
+          ctx.moveTo(rx + w/2 + layer.dx, ry + h/2 + layer.dy);
+          for (let i=1;i<len;i++){
+            x = ptsX[i]-w/2; y = ptsY[i]-h/2;
+            rx = x*ca - y*sa; ry = x*sa + y*ca;
+            ctx.lineTo(rx + w/2 + layer.dx, ry + h/2 + layer.dy);
+          }
+          ctx.lineWidth = passWidth; ctx.globalAlpha = passAlpha;
+          ctx.strokeStyle = layer.col; ctx.shadowColor = layer.col; ctx.shadowBlur = 8*DPR*(1+pass*0.4);
+          ctx.stroke();
+        }
+      }
+    }
+    ctx.restore();
+
+    if (state.visual.drawMode==='particles'){ updateParticles(w,h); drawParticles(baseColor); }
+
+    if (state.visual.showCrosshair){
+      ctx.save(); ctx.globalAlpha=.35; ctx.strokeStyle=baseColor; ctx.lineWidth=1*DPR;
+      ctx.beginPath(); ctx.moveTo(w/2, h/2 - 12*DPR); ctx.lineTo(w/2, h/2 + 12*DPR);
+      ctx.moveTo(w/2 - 12*DPR, h/2); ctx.lineTo(w/2 + 12*DPR, h/2);
+      ctx.stroke(); ctx.restore();
+    }
+  }
+  requestAnimationFrame(draw);
+
+  function computeGeometrySample(t){
+    const g=state.geo;
+    const freq  = Math.max(.01, state.params.geoFreq.base + state.params.geoFreq.mod);
+    const amp   = state.params.geoAmp.base + state.params.geoAmp.mod;
+    const rotA  = (state.params.geoRotation.base + state.params.geoRotation.mod) * 2*Math.PI;
+    const scale = state.params.geoScale.base + state.params.geoScale.mod;
+
+    let x=0, y=0;
+    if (g.type==='lissajous'){
+      x=Math.sin(2*Math.PI*freq*g.a*t + g.phase); y=Math.sin(2*Math.PI*freq*g.b*t);
+    } else if (g.type==='spiral'){
+      const a=2*Math.PI*freq*t; const r = amp * (0.25 + 0.75*Math.sin(g.tightness*(t%8)));
+      x=r*Math.cos(a); y=r*Math.sin(a);
+    } else if (g.type==='polygon'){
+      const sides=Math.max(3,g.sides); const a = 2*Math.PI*freq*t, step=(2*Math.PI)/sides;
+      const edge = Math.floor(a/step)*step; const r = amp*(.6+.4*Math.sin(a*sides*0.5));
+      x=Math.cos(edge)*r; y=Math.sin(edge)*r;
+    } else if (g.type==='rosette'){
+      const a=2*Math.PI*freq*t; const r = amp * Math.cos(g.rosette.k * a);
+      x = r*Math.cos(a); y = r*Math.sin(a);
+    } else if (g.type==='super'){
+      const a=2*Math.PI*freq*t; const {m,n1,n2,n3} = g.super; const A=g.super.a||1, B=g.super.b||1;
+      const term = () => Math.pow(Math.abs(Math.cos(m*a/4)/A), n2) + Math.pow(Math.abs(Math.sin(m*a/4)/B), n3);
+      const r = amp * Math.pow(term(), -1/Math.max(0.01,n1));
+      x = r*Math.cos(a); y = r*Math.sin(a);
+    } else if (g.type==='orbit'){
+      const a=2*Math.PI*freq*t; const layer = 1 + (Math.sin(a*0.5)+1)*0.5*(g.orbit.layers-1);
+      const r = amp * (0.4 + layer * g.orbit.spread); x = r*Math.cos(a*layer); y = r*Math.sin(a*layer);
+    } else if (g.type==='custom'){
+      try{
+        if(!g._compiledX || g._compiledSourceX!==g.equationX){ g._compiledX=compileEquation(g.equationX); g._compiledSourceX=g.equationX; }
+        if(!g._compiledY || g._compiledSourceY!==g.equationY){ g._compiledY=compileEquation(g.equationY); g._compiledSourceY=g.equationY; }
+        x=g._compiledX(t); y=g._compiledY(t);
+      } catch{ x=0; y=0; }
+    }
+    const fw = state.visual.drawMode==='path' ? state.geo.field.warp : state.geo.field.warp*1.6;
+    const tw = state.geo.field.timeWarp, tt = t*tw;
+    x += Math.sin(x*8 + tt)*fw; y += Math.cos(y*8 - tt)*fw;
+
+    const xr = x*Math.cos(rotA) - y*Math.sin(rotA);
+    const yr = x*Math.sin(rotA) + y*Math.cos(rotA);
+    return [xr*amp*scale, yr*amp*scale];
+  }
+
+  function updateHUD(){
+    hudPatch.textContent = `Patch ${currentPatch+1}`;
+    hudSeed.textContent  = `Seed ${state.seed}`;
+  }
+
+  /* ========= Seed Patches (safer audio) ========= */
+  function midiToFreq(m){ return 440 * Math.pow(2, (m-69)/12); }
+  function chooseScale(rng){
+    const scales = [
+      [0,2,4,5,7,9,11],           // major
+      [0,2,3,5,7,8,10],           // minor
+      [0,3,5,7,10],               // minor pent
+      [0,2,5,7,9],                // major pent
+      [0,1,4,5,7,8,11]            // lydian-ish spice
+    ];
+    return scales[(rng()*scales.length)|0];
+  }
+
+  function generateSeedPatches(){
+    state.seedPatches.length=0;
+    for (let i=0;i<10;i++){
+      const rng = mulberry32((state.seed + i*2654435761)>>>0);
+
+      // Geo variety (unchanged-ish)
+      const geoTypes=['lissajous','spiral','polygon','rosette','super','orbit'];
+      const geoType = geoTypes[(rng()*geoTypes.length)|0];
+      const geo = {
+        type: geoType,
+        a: (rng()*6|0)+1, b: (rng()*6|0)+1,
+        phase: rng()*Math.PI*2, sides: (rng()*10|0)+3, tightness: rng()*4 + .6,
+        super:{m: (rng()*9|0)+2, n1: .3 + rng()*1.2, n2: 1 + rng()*2.0, n3: 1 + rng()*2.0, a:1, b:1},
+        rosette:{k: (rng()*8|0)+2},
+        orbit:{layers: (rng()*5|0)+2, spread: 0.2 + rng()*0.5},
+        field:{warp: 0.0015 + rng()*0.0035, timeWarp: 0.15 + rng()*0.35},
+        symmetry: (rng()*8|0)+2
+      };
+
+      // Musical base frequency from seed scale
+      const root = 45 + (rng()*24|0); // somewhere around A2–A4
+      const scale = chooseScale(rng);
+      const note = root + scale[(rng()*scale.length)|0];
+      const baseFreq = midiToFreq(note);
+
+      // Safer synth type distribution (less “noise”)
+      const synthBag = ['additive','fm','subtractive','wavetable','additive','fm','subtractive','wavetable','additive','fm'];
+      const type = synthBag[(rng()*synthBag.length)|0];
+
+      const params = {
+        geoFreq:{base: 0.4 + rng()*4.0}, geoAmp:{base: 0.5 + rng()*0.7},
+        geoRotation:{base: rng()}, geoScale:{base: 0.9 + rng()*0.8},
+        filterCutoff:{base: 900 + rng()*2600},
+        fmIndex:{base: 3 + rng()*9},
+        wavetableMorph:{base:rng()},
+        pwm:{base: 0.2 + rng()*0.6},
+        audioVolume:{base: 0.32 + rng()*0.28},
+        fuzzMix:{base: Math.min(0.15, rng()*0.12)}, // tiny by design
+        lineWidth:{base: 1.0 + rng()*1.6},
+        trail:{base: .06 + rng()*.14}
+      };
+
+      const synth = {
+        type, baseFreq,
+        additive:{
+          ratios:[1,2,3,4,5,6].map((r,idx)=>r + (idx? (rng()*.03 - .015) : 0)),
+          amps:[.95,.65,.35,.25,.18,.12]
+        },
+        fm:{ ratio: 0.5 + rng()*4.5, index: 3 + rng()*10 },
+        subtractive:{ oscType: (rng()>.55?'saw':'square'), cutoff: 1000 + rng()*2400, resonance:.08, pwm:.5, _lpState:0, _pre:0 },
+        wavetable:{ table1:new Float32Array(2048), table2:new Float32Array(2048), index:0, morph:rng(), size:2048 }
+      };
+      // build wavetable up front (smoothed)
+      for (let j=0;j<synth.wavetable.size;j++){ synth.wavetable.table1[j]=rng()*2-1; synth.wavetable.table2[j]=rng()*2-1; }
+      smooth(synth.wavetable.table1,4); smooth(synth.wavetable.table2,5);
+
+      // LFOs: ≤5Hz to avoid “buzz”
+      const lfos = [
+        {rate: 0.05 + rng()*0.7, shape:'sine',     depth: 0.35 + rng()*0.25, target:'geoRotation', phase:0, lastSH:0},
+        {rate: 0.08 + rng()*0.9, shape:'triangle', depth: 0.2  + rng()*0.25, target:'filterCutoff', phase:0, lastSH:0},
+        {rate: 0.04 + rng()*0.6, shape:'sine',     depth: 0.15 + rng()*0.25, target:'wavetableMorph', phase:0, lastSH:0}
+      ];
+
+      state.seedPatches.push({geo,synth,params,lfos});
+    }
+  }
+
+  function applyPatch(patch){
+    state.geo   = JSON.parse(JSON.stringify(patch.geo));
+    state.synth = JSON.parse(JSON.stringify(patch.synth));
+    for (const k in patch.params){ if (state.params[k]) state.params[k].base = patch.params[k].base; }
+    if (patch.lfos) state.lfos = JSON.parse(JSON.stringify(patch.lfos));
+    state.lfos.forEach(l=>{ l.phase=0; l.lastSH=0; });
+
+    // reset engine helpers
+    state.envelope.state='sustain'; state.envelope.value=1; state.envelope.gate=true; state.envelope.startTime=state.time;
+    state.stereo.freq.cur = state.synth.baseFreq; state.stereo.freq.tgt = state.synth.baseFreq;
+    state.stereo.cutoff.cur = clamp(state.params.filterCutoff.base, 160, 6000);
+    if (state.synth.subtractive){ state.synth.subtractive._lpState=0; state.synth.subtractive._pre=0; }
+    if (state.synth.wavetable)   state.synth.wavetable.index=0;
+
+    // visuals seeded per patch
+    state.visual.symmetryClones = Math.max(1, (state.geo.symmetry|0));
+    state.visual.glowPasses = 3;
+    state.visual.chromaSplit = 0.6 + ((state.seed>>currentPatch) % 6)*0.1;
+  }
+
+  function playSeedPatch(index){
+    if (!state.seedPatches[index]) return;
+    currentPatch=index; applyPatch(state.seedPatches[index]);
+    state.smoothVol.cur *= .9; updateHUD(); buildUI();
+  }
+
+  /* ========= Signature demo (unchanged UX) ========= */
+  let _signatureSnapshot = null;
+  function snapshotCurrentStateAsPatch() {
+    const params = {}; for (const k in state.params) params[k] = { base: state.params[k].base };
+    return { geo: JSON.parse(JSON.stringify(state.geo)), synth: JSON.parse(JSON.stringify(state.synth)), params, lfos: JSON.parse(JSON.stringify(state.lfos)) };
+  }
+  function restoreSignatureSnapshot() {
+    if (!_signatureSnapshot) return;
+    applyPatch(_signatureSnapshot.patch);
+    currentPatch = _signatureSnapshot.index;
+    const e = state.envelope, s = _signatureSnapshot.envelope;
+    e.attack=s.attack; e.decay=s.decay; e.sustain=s.sustain; e.release=s.release; e.target=s.target;
+    e.state='sustain'; e.value=1; e.gate=true; e.startTime=state.time; e.releaseTime=0; e.releaseStartValue=1;
+    updateHUD(); buildUI(); _signatureSnapshot = null;
+  }
+  function cancelAllTimers(){ state.pendingTimers.forEach(clearTimeout); state.pendingTimers=[]; }
+  function playAudioSignature(){
+    if (state.playingSignature) return;
+    if (!state.running) startAudio();
+    _signatureSnapshot = {
+      index: currentPatch,
+      patch: snapshotCurrentStateAsPatch(),
+      envelope: { attack: state.envelope.attack, decay: state.envelope.decay, sustain: state.envelope.sustain, release: state.envelope.release, target: state.envelope.target }
+    };
+    cancelAllTimers(); state.playingSignature = true; state.ignoreInput = true; signatureIndicator.style.display = 'block';
+    state.time = 0; state.geoWriteIndex = 0; state.geoBufferX.fill(0); state.geoBufferY.fill(0);
+    state.lfos.forEach(l=>{ l.phase=0; l.lastSH=0; });
+    state.envelope.state='sustain'; state.envelope.value=1; state.envelope.gate=true; state.smoothVol.cur = 0;
+
+    const rng = mulberry32((state.seed ^ 0xA5A5A5A5)>>>0);
+    const lengths=[1,2,4,8]; let remaining=32, seq=[];
+    while (remaining>0){
+      const idx=(rng()*10)|0; const opts=lengths.filter(l=>l<=remaining);
+      const len=opts[(rng()*opts.length)|0]; seq.push({idx,len}); remaining-=len;
+    }
+    const stepMs=220; let offset=0;
+    for (const step of seq){
+      const id=setTimeout(()=>{ playSeedPatch(step.idx); }, offset);
+      state.pendingTimers.push(id); offset += stepMs*step.len;
+    }
+    const endId=setTimeout(()=>{
+      state.playingSignature=false; state.ignoreInput=false; signatureIndicator.style.display='none';
+      cancelAllTimers(); restoreSignatureSnapshot();
+    }, offset + 50);
+    state.pendingTimers.push(endId);
+  }
+
+  /* ========= UI ========= */
+  const controlsDiv = document.getElementById('controls');
+  const el = (tag, cls, text)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; };
+  const row=()=>el('div','row');
+  function slider(label, min,max,step,val,on){ const wrap=el('div','control-group'); const l=el('label',null,label); const r=el('input'); r.type='range'; r.min=min; r.max=max; r.step=step; r.value=val; r.addEventListener('input', e=>on(parseFloat(e.target.value))); wrap.append(l,r); return wrap; }
+  function number(label, min,max,step,val,on){ const wrap=el('div','control-group'); const l=el('label',null,label); const i=el('input'); i.type='number'; i.min=min; i.max=max; i.step=step; i.value=val; i.addEventListener('input', e=>on(parseFloat(e.target.value))); wrap.append(l,i); return wrap; }
+  function select(label, opts, val, on){ const wrap=el('div','control-group'); const l=el('label',null,label); const s=el('select'); opts.forEach(o=>{ const op=el('option'); op.value=o; op.textContent=o; s.appendChild(op); }); s.value=val; s.addEventListener('change', e=>on(e.target.value)); wrap.append(l,s); return wrap; }
+  function text(label, val, on){ const wrap=el('div','control-group'); const l=el('label',null,label); const t=el('input'); t.type='text'; t.value=val; t.addEventListener('change', e=>on(e.target.value)); wrap.append(l,t); return wrap; }
+
+  function buildUI(){
+    controlsDiv.innerHTML = '';
+
+    // Transport
+    const s1=el('div','section'); s1.appendChild(el('h3',null,'Transport & Seed'));
+    const row1=row();
+    const start=el('button',null, state.running?'Stop (Space)':'Start (Space)');
+    start.addEventListener('click', ()=>{ if(!state.running) startAudio(); else stopAudio(); buildUI(); });
+    row1.appendChild(start);
+    const sig=el('button',null,'Signature Demo'); sig.addEventListener('click', ()=>playAudioSignature()); row1.appendChild(sig);
+    s1.appendChild(row1);
+
+    const saved = Number(localStorage.getItem('avs_seed')||'0')||0;
+    const seedRow=row();
+    seedRow.appendChild(number('Seed',0, 0xFFFFFFFF, 1, state.seed||saved, v=>{ setSeed(v>>>0); }));
+    const randBtn=el('button',null,'New Random Seed');
+    randBtn.addEventListener('click', ()=>{ setSeed((Math.random()*0xFFFFFFFF)>>>0); playSeedPatch(currentPatch); });
+    s1.appendChild(seedRow); s1.appendChild(randBtn); controlsDiv.appendChild(s1);
+
+    // Mix / Output
+    const s2=el('div','section'); s2.appendChild(el('h3',null,'Mix & Output'));
+    s2.appendChild(slider('Master Volume',0,1,.01, state.params.audioVolume.base, v=>state.params.audioVolume.base=v));
+    s2.appendChild(slider('Visual Bleed (≤0.15)',0,0.15,.001, Math.min(0.15,state.params.fuzzMix.base), v=>state.params.fuzzMix.base=v));
+    const ioRow=row();
+    const exp=el('button',null,'Export 6s WEBM'); exp.addEventListener('click', ()=>exportAudio(6));
+    const fs=el('button',null,'Fullscreen'); fs.addEventListener('click', ()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
+    ioRow.append(exp,fs); s2.appendChild(ioRow); controlsDiv.appendChild(s2);
+
+    // Visuals
+    const s3=el('div','section'); s3.appendChild(el('h3',null,'Visuals'));
+    s3.appendChild(select('Color Mode',['reactive','neon'], state.visual.colorMode, v=>state.visual.colorMode=v));
+    s3.appendChild(select('Blend Mode',['lighter','screen','overlay','source-over'], state.visual.blend, v=>state.visual.blend=v));
+    s3.appendChild(slider('Line Width', .5, 4, .05, state.params.lineWidth.base, v=>state.params.lineWidth.base=v));
+    s3.appendChild(slider('Trail / Persistence', .02, .6, .01, state.params.trail.base, v=>state.params.trail.base=v));
+    s3.appendChild(slider('Chroma Split', 0, 4, .05, state.visual.chromaSplit, v=>state.visual.chromaSplit=v));
+    s3.appendChild(number('Glow Passes',1,6,1, state.visual.glowPasses, v=>state.visual.glowPasses=v|0));
+    s3.appendChild(number('Symmetry Clones',1,12,1, state.visual.symmetryClones, v=>state.visual.symmetryClones=v|0));
+    s3.appendChild(select('Draw Mode',['path','particles'], state.visual.drawMode, v=>state.visual.drawMode=v));
+    const toggles=row();
+    const gridBtn=el('button',null, state.visual.showGrid?'Grid: ON':'Grid: OFF');
+    gridBtn.addEventListener('click', ()=>{ state.visual.showGrid=!state.visual.showGrid; buildUI(); });
+    const crossBtn=el('button',null, state.visual.showCrosshair?'Crosshair: ON':'Crosshair: OFF');
+    crossBtn.addEventListener('click', ()=>{ state.visual.showCrosshair=!state.visual.showCrosshair; buildUI(); });
+    toggles.append(gridBtn,crossBtn); s3.appendChild(toggles); controlsDiv.appendChild(s3);
+
+    // Geometry
+    const geoSec=el('div','section'); geoSec.appendChild(el('h3',null,'Geometry'));
+    geoSec.appendChild(select('Type',['lissajous','spiral','polygon','rosette','super','orbit','custom'], state.geo.type, v=>state.geo.type=v));
+    geoSec.appendChild(slider('Frequency', .05, 8, .01, state.params.geoFreq.base, v=>state.params.geoFreq.base=v));
+    geoSec.appendChild(slider('Amplitude', .05, 2, .01, state.params.geoAmp.base, v=>state.params.geoAmp.base=v));
+    geoSec.appendChild(slider('Rotation', 0, 1, .001, state.params.geoRotation.base, v=>state.params.geoRotation.base=v));
+    geoSec.appendChild(slider('Scale', .25, 2.5, .01, state.params.geoScale.base, v=>state.params.geoScale.base=v));
+    geoSec.appendChild(number('A (Lissajous)',1,10,1, state.geo.a, v=>state.geo.a=v));
+    geoSec.appendChild(number('B (Lissajous)',1,10,1, state.geo.b, v=>state.geo.b=v));
+    geoSec.appendChild(number('Polygon Sides',3,20,1, state.geo.sides, v=>state.geo.sides=v));
+    geoSec.appendChild(slider('Spiral Tightness', .1, 10, .1, state.geo.tightness, v=>state.geo.tightness=v));
+    geoSec.appendChild(number('Super m',1,20,1, state.geo.super.m, v=>state.geo.super.m=v|0));
+    geoSec.appendChild(slider('Super n1', .1, 6, .01, state.geo.super.n1, v=>state.geo.super.n1=v));
+    geoSec.appendChild(slider('Super n2', .1, 6, .01, state.geo.super.n2, v=>state.geo.super.n2=v));
+    geoSec.appendChild(slider('Super n3', .1, 6, .01, state.geo.super.n3, v=>state.geo.super.n3=v));
+    geoSec.appendChild(number('Rosette k',1,16,1, state.geo.rosette.k, v=>state.geo.rosette.k=v|0));
+    geoSec.appendChild(number('Orbit Layers',1,12,1, state.geo.orbit.layers, v=>state.geo.orbit.layers=v|0));
+    geoSec.appendChild(slider('Orbit Spread', .05, 1, .01, state.geo.orbit.spread, v=>state.geo.orbit.spread=v));
+    geoSec.appendChild(slider('Field Warp', 0, .01, .0001, state.geo.field.warp, v=>state.geo.field.warp=v));
+    geoSec.appendChild(slider('Field Time Warp', 0, 2, .01, state.geo.field.timeWarp, v=>state.geo.field.timeWarp=v));
+    geoSec.appendChild(text('X(t) Equation', 'sin(2*PI*t)', v=>{ state.geo.equationX=v; state.geo._compiledX=null; }));
+    geoSec.appendChild(text('Y(t) Equation', 'cos(3*PI*t)', v=>{ state.geo.equationY=v; state.geo._compiledY=null; }));
+    controlsDiv.appendChild(geoSec);
+
+    // Synth
+    const synthSec=el('div','section'); synthSec.appendChild(el('h3',null,'Synth'));
+    synthSec.appendChild(select('Type',['additive','fm','subtractive','wavetable'], state.synth.type, v=>state.synth.type=v)); // noise removed from UI
+    synthSec.appendChild(number('Base Frequency', 20, 4000, 1, state.synth.baseFreq, v=>state.synth.baseFreq=v));
+    for (let i=0;i<state.synth.additive.ratios.length;i++){
+      synthSec.appendChild(number(`Ratio ${i+1}`, .5, 16, .01, state.synth.additive.ratios[i], v=>state.synth.additive.ratios[i]=v));
+      synthSec.appendChild(slider(`Amp ${i+1}`, 0, 1, .01, state.synth.additive.amps[i], v=>state.synth.additive.amps[i]=v));
+    }
+    synthSec.appendChild(number('FM Ratio', .1, 12, .01, state.synth.fm.ratio, v=>state.synth.fm.ratio=v));
+    synthSec.appendChild(slider('FM Index', 0, 24, .1, state.params.fmIndex.base, v=>state.params.fmIndex.base=v));
+    synthSec.appendChild(select('Sub Osc',['saw','square'], state.synth.subtractive.oscType, v=>state.synth.subtractive.oscType=v));
+    synthSec.appendChild(slider('Filter Cutoff', 160, 6000, 1, state.params.filterCutoff.base, v=>state.params.filterCutoff.base=v));
+    synthSec.appendChild(slider('PWM (square)', .08, .92, .01, state.params.pwm.base, v=>state.params.pwm.base=v));
+    synthSec.appendChild(slider('Wavetable Morph', 0,1,.01, state.params.wavetableMorph.base, v=>state.params.wavetableMorph.base=v));
+    controlsDiv.appendChild(synthSec);
+
+    // LFOs
+    const lfoSec=el('div','section'); lfoSec.appendChild(el('h3',null,'LFOs'));
+    state.lfos.forEach((l,idx)=>{
+      const box=el('div',null); box.style.cssText='border:1px solid #124;padding:8px;border-radius:6px;margin-bottom:8px;';
+      box.appendChild(el('div','tiny',`LFO ${idx+1}`));
+      box.appendChild(slider('Rate (Hz)', .01, 5, .01, l.rate, v=>l.rate=v)); // clamp UI to ≤5Hz
+      box.appendChild(select('Shape',['sine','triangle','square','random'], l.shape, v=>l.shape=v));
+      box.appendChild(slider('Depth', 0,1,.01, l.depth, v=>l.depth=v));
+      box.appendChild(select('Target',['none'].concat(state.modulationTargets), l.target, v=>l.target=v));
+      lfoSec.appendChild(box);
+    });
+    controlsDiv.appendChild(lfoSec);
+
+    // Envelope
+    const envSec=el('div','section'); envSec.appendChild(el('h3',null,'Envelope (ADSR)'));
+    envSec.appendChild(slider('Attack', .001, 2, .001, state.envelope.attack, v=>state.envelope.attack=v));
+    envSec.appendChild(slider('Decay', .001, 2, .001, state.envelope.decay, v=>state.envelope.decay=v));
+    envSec.appendChild(slider('Sustain', 0, 1, .01, state.envelope.sustain, v=>state.envelope.sustain=v));
+    envSec.appendChild(slider('Release', .001, 3, .001, state.envelope.release, v=>state.envelope.release=v));
+    envSec.appendChild(select('Env Target',['none'].concat(state.modulationTargets), state.envelope.target, v=>state.envelope.target=v));
+    const gateRow=row();
+    const trig=el('button',null,'Gate On/Off (hold mouse)'); trig.addEventListener('mousedown', ()=>triggerEnvelope(true)); trig.addEventListener('mouseup', ()=>triggerEnvelope(false));
+    gateRow.appendChild(trig); envSec.appendChild(gateRow); controlsDiv.appendChild(envSec);
+
+    // Presets
+    const preset=el('div','section'); preset.appendChild(el('h3',null,'Presets'));
+    const save=el('button',null,'Save Preset');
+    save.addEventListener('click', ()=>{ const name=prompt('Preset name?'); if(!name) return; const obj=serializeState(); localStorage.setItem('avsynth_preset_'+name, JSON.stringify(obj)); alert('Saved '+name); });
+    const load=el('button',null,'Load Preset');
+    load.addEventListener('click', ()=>{
+      const keys=Object.keys(localStorage).filter(k=>k.startsWith('avsynth_preset_'));
+      if(!keys.length) return alert('No presets');
+      const names=keys.map(k=>k.replace('avsynth_preset_',''));
+      const name=prompt('Which preset?\n'+names.join(', ')); if(!name) return;
+      const data=localStorage.getItem('avsynth_preset_'+name); if(!data) return alert('Not found');
+      applySerialized(JSON.parse(data)); buildUI();
+    });
+    preset.append(save,load); controlsDiv.appendChild(preset);
+  }
+
+  function serializeState(){
+    const o = JSON.parse(JSON.stringify(state));
+    delete o.audioCtx; delete o.processor; delete o.geoBufferX; delete o.geoBufferY;
+    return o;
+  }
+  function applySerialized(obj){
+    Object.assign(state, obj);
+    state.geoBufferX=new Float32Array(state.geoBufferSize);
+    state.geoBufferY=new Float32Array(state.geoBufferSize);
+  }
+
+  /* ========= Transport / Export ========= */
+  function startAudio(){
+    if(state.running) return;
+    if(!state.audioCtx){ state.audioCtx = new (window.AudioContext||window.webkitAudioContext)(); state.sampleRate = state.audioCtx.sampleRate; }
+    state.audioCtx.resume();
+    if(!state.processor){
+      const bufferSize=1024;
+      state.processor = state.audioCtx.createScriptProcessor(bufferSize, 0, 2);
+      state.processor.onaudioprocess = audioCallback;
+      state.processor.connect(state.audioCtx.destination);
+    }
+    state.time=0; state.geoWriteIndex=0; state.running=true;
+  }
+  function stopAudio(){
+    if(!state.running) return;
+    cancelAllTimers();
+    if(state.processor) state.processor.disconnect();
+    const wasSignature = state.playingSignature;
+    state.running=false; state.playingSignature=false; state.ignoreInput=false;
+    signatureIndicator.style.display='none';
+    if (wasSignature) restoreSignatureSnapshot();
+  }
+
+  function exportAudio(seconds=6){
+    if(!state.audioCtx) return alert('Start audio first.');
+    if(state.exporting) return;
+    const dest = state.audioCtx.createMediaStreamDestination();
+    state.processor.disconnect();
+    state.processor.connect(state.audioCtx.destination);
+    state.processor.connect(dest);
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    const rec = new MediaRecorder(dest.stream,{mimeType:mime});
+    const chunks=[];
+    rec.ondataavailable = e=>{ if(e.data.size) chunks.push(e.data); };
+    rec.onstop = ()=>{
+      const blob=new Blob(chunks,{type:mime}); const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='avsynth_'+Date.now()+'.webm'; a.click();
+      URL.revokeObjectURL(url); state.processor.disconnect(dest); state.exporting=false;
+    };
+    state.exporting=true; rec.start(); setTimeout(()=>rec.stop(), Math.max(1,seconds)*1000);
+  }
+
+  /* ========= Input ========= */
+  document.addEventListener('keydown', e=>{
+    if (state.playingSignature || state.ignoreInput) return;
+    if (e.code==='Space'){ e.preventDefault(); if(!state.running) startAudio(); else stopAudio(); buildUI(); return; }
+    const k=e.key; if (k>='0' && k<='9'){ const idx=(k==='0')?9:(parseInt(k,10)-1); playSeedPatch(idx); }
+  });
+
+  /* ========= Boot ========= */
+  function boot(){
+    sizeCanvasTo80vhSquare();
+    const savedSeed = Number(localStorage.getItem('avs_seed')||'0');
+    setSeed(savedSeed || ((Math.random()*0xFFFFFFFF)>>>0));
+    generateSeedPatches();
+    buildUI();
+    playSeedPatch(0);
+    updateHUD();
+  }
+  boot();
+
+  window._av = { state, setSeed, playSeedPatch, startAudio, stopAudio, exportAudio, playAudioSignature };
+})();
+</script>
+</body>
+</html>

@@ -1,0 +1,975 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Interactive Audiovisual Synthesizer — Seeded AV Organisms (Optimized)</title>
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<style>
+  html, body {
+    margin:0; padding:0; height:100%; width:100%;
+    background:#000; color:#e5ffe5; font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+    overflow:hidden;
+  }
+  #app { display:flex; height:100vh; width:100vw; }
+
+  /* Canvas pane */
+  #canvasContainer {
+    flex:1; display:flex; align-items:center; justify-content:center; position:relative;
+    background: radial-gradient(100% 100% at 50% 50%, #020202 0%, #000 60%, #000 100%);
+  }
+  #oscilloscope {
+    display:block; background:#000;
+    box-shadow:
+      0 0 0 1px rgba(0,255,128,.15) inset,
+      0 0 40px rgba(0,255,128,.08),
+      0 0 120px rgba(0,255,128,.06);
+    border-radius: 10px;
+  }
+  #hud {
+    position:absolute; top:10px; left:50%; transform:translateX(-50%);
+    display:flex; gap:8px; align-items:center; pointer-events:none;
+    font-size:12px; color:#89ffb0; letter-spacing:.3px;
+    text-shadow:0 0 6px rgba(0,255,128,.6);
+  }
+  .pill {
+    pointer-events:none; padding:3px 8px; border:1px solid #1aff86; border-radius:999px;
+    background:rgba(0,14,6,.5);
+  }
+  #signatureIndicator {
+    position:absolute; bottom:10px; left:50%; transform:translateX(-50%);
+    background:rgba(0,0,0,.6); color:#0f0; border:1px solid #0f0; border-radius:4px;
+    padding:4px 8px; font-size:12px; pointer-events:none; display:none;
+  }
+
+  /* Controls pane */
+  #controls {
+    width:360px; max-width:40%;
+    background:rgba(22,22,22,.98); color:#e9ffe9;
+    border-left:1px solid #183; padding:12px; box-sizing:border-box; overflow-y:auto;
+  }
+  .section { margin-bottom:12px; padding-bottom:10px; border-bottom:1px dashed #144; }
+  .section:last-child { border-bottom:none; }
+  .section h3 { margin:0 0 8px; font-size:13px; color:#7cf; font-weight:700; letter-spacing:.3px; }
+  .control-group { margin-bottom:8px; }
+  .control-group label { display:block; font-size:11px; margin-bottom:4px; color:#9fd; opacity:.9; }
+  .control-group input[type=range],
+  .control-group input[type=number],
+  .control-group input[type=text],
+  .control-group select { width:100%; box-sizing:border-box; }
+  button {
+    width:100%; margin-top:6px; padding:8px 10px; font-size:13px;
+    background:#0a1510; border:1px solid #1f6; color:#cffff1; cursor:pointer; border-radius:6px;
+  }
+  button:hover { background:#0f241b; }
+  .row { display:flex; gap:8px; }
+  .row > * { flex:1; }
+  .tiny { font-size:11px; opacity:.8; }
+</style>
+</head>
+<body>
+  <div id="app">
+    <div id="canvasContainer">
+      <canvas id="oscilloscope"></canvas>
+      <div id="hud">
+        <span class="pill" id="hudPatch">Patch —</span>
+        <span class="pill" id="hudSeed">Seed —</span>
+        <span class="pill tiny" id="hudHint">Space=Start/Stop · Keys 1–9 / 0 to switch patches</span>
+      </div>
+      <div id="signatureIndicator">Web3 Audio Signature…</div>
+    </div>
+    <div id="controls"></div>
+  </div>
+
+<script>
+(() => {
+  /* =========================
+     Utilities
+  ========================== */
+  const clamp = (v, min, max) => Math.min(Math.max(v, min), max);
+  const DPR = Math.max(1, Math.min(2, window.devicePixelRatio||1));
+  const TAU = Math.PI * 2;
+  function mulberry32(a){ return function(){ let t=a+=0x6D2B79F5; t=Math.imul(t^t>>>15, t|1); t^=t+Math.imul(t^t>>>7,t|61); return ((t^t>>>14)>>>0)/4294967296; }; }
+  function compileEquation(str){ try{ return new Function('t','with(Math){return '+str+';}'); }catch(e){ console.warn('Eq compile fail',str,e); return t=>0; } }
+  const el = (tag, cls, text)=>{ const e=document.createElement(tag); if(cls) e.className=cls; if(text!=null) e.textContent=text; return e; };
+
+  /* =========================
+     Global State
+  ========================== */
+  const state = {
+    running:false, seed:0,
+    audioCtx:null, processor:null, sampleRate:44100, time:0,
+    geoBufferSize:4096, geoBufferX:null, geoBufferY:null, geoWriteIndex:0,
+    params:{
+      geoFreq:{base:1,mod:0}, geoAmp:{base:.35,mod:0}, geoRotation:{base:0,mod:0}, geoScale:{base:1,mod:0},
+      filterCutoff:{base:1200,mod:0}, fmIndex:{base:6,mod:0}, wavetableMorph:{base:0,mod:0}, pwm:{base:.5,mod:0},
+      audioVolume:{base:.35,mod:0}, fuzzMix:{base:.15,mod:0}, lineWidth:{base:1.6,mod:0}, trail:{base:.12,mod:0}
+    },
+    geo:{
+      type:'lissajous', a:3, b:2, phase:0, sides:6, tightness:2.5,
+      equationX:'sin(2*PI*t)', equationY:'cos(3*PI*t)',
+      // Extended shape params
+      roseK:5, roseN:2,
+      spiro:{ R:1.0, r:0.33, d:0.7, mode:'epi' }, // epi or hypo
+      superformula:{ m:6, a:1, b:1, n1:0.5, n2:1.7, n3:1.7 }
+    },
+    synth:{
+      type:'additive', baseFreq:220,
+      additive:{ ratios:[1,2.02,3.01,4.98,6.99,8.02], amps:[.9,.6,.35,.25,.2,.15] },
+      fm:{ ratio:2.01, index:7.0 },
+      subtractive:{ oscType:'saw', cutoff:1000, resonance:.1, pwm:.5, _lpState:0 },
+      wavetable:{ table1:[], table2:[], morph:0, index:0, size:2048 },
+      noise:{ color:'white' }
+    },
+    lfos:[
+      {rate:.27, shape:'sine',    depth:.55, target:'geoRotation', phase:0, lastSH:0},
+      {rate:.09, shape:'triangle',depth:.30, target:'filterCutoff', phase:0, lastSH:0},
+      {rate:.41, shape:'random',  depth:.25, target:'wavetableMorph', phase:0, lastSH:0}
+    ],
+    envelope:{ attack:.02, decay:.20, sustain:.75, release:.35, value:1, state:'sustain', gate:true, startTime:0, releaseTime:0, releaseStartValue:1, target:'audioVolume' },
+    modulationTargets:['geoFreq','geoAmp','geoRotation','geoScale','filterCutoff','fmIndex','wavetableMorph','pwm','audioVolume','fuzzMix','lineWidth','trail'],
+    visual:{
+      background:'#000', showGrid:true, showCrosshair:true, colorMode:'reactive',
+      engine:'auto', // auto | path | particleBloom | mirrorKaleido | orbit
+      symmetry:4, kaleidoSteps:8
+    },
+    exporting:false,
+    seedPatches:[],
+    playingSignature:false,
+    pendingTimers:[],
+    ignoreInput:false,
+    smoothVol:{ cur:0, tgt:0, timeConst:.012 }, // faster but click-safe
+    palette:[ '#00ff99', '#66ffd1', '#25ffa1' ],
+  };
+
+  // seeded randomness
+  let random = mulberry32(1);
+  function setSeed(seed){
+    const s = (seed>>>0) || 1;
+    random = mulberry32(s);
+    state.seed = s;
+    localStorage.setItem('avs_seed', String(s));
+    seedVisualsByPalette();
+    generateSeedPatches();
+    updateHUD();
+  }
+
+  // buffers
+  state.geoBufferX = new Float32Array(state.geoBufferSize);
+  state.geoBufferY = new Float32Array(state.geoBufferSize);
+
+  /* =========================
+     Palette / Visual seed
+  ========================== */
+  function hsl(h,s,l){ return `hsl(${(h%360+360)%360} ${s}% ${l}%)`; }
+  function seedVisualsByPalette(){
+    // triad palette
+    const h = Math.floor(random()*360);
+    state.palette = [hsl(h,100,60), hsl(h+120,100,60), hsl(h+240,100,60)];
+    // engine auto-pick
+    const engines = ['path','particleBloom','mirrorKaleido','orbit'];
+    state.visual.engine = engines[(random()*engines.length)|0];
+    state.visual.symmetry = 4 + ((random()*4)|0)*2;     // even symmetry 4–10
+    state.visual.kaleidoSteps = 6 + ((random()*7)|0);   // 6–12 slices
+  }
+
+  /* =========================
+     Audio Engine
+  ========================== */
+  function smooth(arr, passes=2){
+    const n=arr.length;
+    for(let p=0;p<passes;p++){
+      let prev = arr[0], cur;
+      for(let i=1;i<n-1;i++){ cur = arr[i]; arr[i]=(prev+cur+arr[i+1])/3; prev=cur; }
+    }
+  }
+  function generateWavetable(dst = state.synth.wavetable){
+    const size = dst.size;
+    const t1 = dst.table1 = new Float32Array(size);
+    const t2 = dst.table2 = new Float32Array(size);
+    for (let i=0;i<size;i++) { t1[i] = random()*2-1; t2[i] = random()*2-1; }
+    smooth(t1, 3); smooth(t2, 4);
+    dst.index=0;
+  }
+
+  function updateModulations(dt){
+    for (const k in state.params) state.params[k].mod = 0;
+
+    for (const l of state.lfos){
+      l.phase += l.rate*dt; if (l.phase>1) l.phase -= Math.floor(l.phase);
+      let v=0, p=l.phase;
+      if (l.shape==='sine') v=Math.sin(TAU*p);
+      else if (l.shape==='triangle') v=2*Math.abs(2*(p-Math.floor(p+.5)))-1;
+      else if (l.shape==='square') v=(p<.5?1:-1);
+      else if (l.shape==='random'){ if (p<dt*l.rate) l.lastSH = random()*2-1; v=l.lastSH; }
+      const tgt=l.target; if (tgt && tgt!=='none' && state.params[tgt]) state.params[tgt].mod += v*l.depth;
+    }
+
+    const env=state.envelope;
+    if (env.state!=='idle'){
+      const elapsed = state.time-env.startTime;
+      if (env.state==='attack'){
+        if (elapsed>=env.attack){ env.state='decay'; env.value=1; env.startTime=state.time; }
+        else env.value = elapsed/Math.max(.001,env.attack);
+      } else if (env.state==='decay'){
+        const e=state.time-env.startTime;
+        if (e>=env.decay){ env.state=env.gate?'sustain':'release'; env.value=env.sustain; env.startTime=state.time; }
+        else env.value = 1 - (e/Math.max(.001,env.decay))*(1-env.sustain);
+      } else if (env.state==='sustain'){
+        env.value = env.sustain;
+      } else if (env.state==='release'){
+        const e=state.time-env.releaseTime;
+        if (e>=env.release){ env.state='idle'; env.value=0; }
+        else env.value = env.releaseStartValue*(1 - (e/Math.max(.001,env.release)));
+      }
+    }
+    if (env.target && env.target!=='none' && state.params[env.target]) state.params[env.target].mod += env.value;
+  }
+
+  function computeSynthSample(t, dt){
+    const s=state.synth, f=clamp(s.baseFreq,20,8000);
+    let out=0;
+    if (s.type==='additive'){
+      let sum=0, N=s.additive.ratios.length||1;
+      for (let i=0;i<N;i++){
+        sum += Math.sin(TAU*f*s.additive.ratios[i]*t) * s.additive.amps[i];
+      }
+      out = sum/N;
+    } else if (s.type==='fm'){
+      const mod = Math.sin(TAU*f*s.fm.ratio*t) * clamp(state.params.fmIndex.base + state.params.fmIndex.mod, 0, 36);
+      out = Math.sin(TAU*f*t + mod);
+    } else if (s.type==='subtractive'){
+      const phase = (t*f)%1;
+      const pwm = clamp(state.params.pwm.base + state.params.pwm.mod, .02, .98);
+      let osc = (s.subtractive.oscType==='saw') ? (2*phase-1) : ((phase<pwm)?1:-1);
+      const cutoff = Math.max(60, state.params.filterCutoff.base + state.params.filterCutoff.mod);
+      // one-pole LPF
+      const rc = 1/(TAU*cutoff); const alpha = dt/(rc+dt);
+      s.subtractive._lpState += alpha*(osc - s.subtractive._lpState);
+      out = s.subtractive._lpState;
+    } else if (s.type==='wavetable'){
+      const wt=s.wavetable; if (!wt.table1.length) generateWavetable(wt);
+      const size=wt.size, inc=f*size/state.sampleRate; wt.index+=inc;
+      const i0=(wt.index|0)%size, i1=(i0+1)%size, frac=wt.index - (wt.index|0);
+      const m=clamp(state.params.wavetableMorph.base + state.params.wavetableMorph.mod,0,1);
+      const v1 = wt.table1[i0]*(1-frac) + wt.table1[i1]*frac;
+      const v2 = wt.table2[i0]*(1-frac) + wt.table2[i1]*frac;
+      out = v1*(1-m) + v2*m;
+    } else if (s.type==='noise'){
+      out = (Math.random()*2-1)*.8;
+    }
+    return out;
+  }
+
+  function computeGeometrySample(t){
+    const g=state.geo;
+    const freq  = Math.max(.01, state.params.geoFreq.base + state.params.geoFreq.mod);
+    const amp   = state.params.geoAmp.base + state.params.geoAmp.mod;
+    const rotA  = (state.params.geoRotation.base + state.params.geoRotation.mod) * TAU;
+    const scale = state.params.geoScale.base + state.params.geoScale.mod;
+
+    let x=0, y=0;
+    if (g.type==='lissajous'){
+      x=Math.sin(TAU*freq*g.a*t + g.phase);
+      y=Math.sin(TAU*freq*g.b*t);
+    } else if (g.type==='spiral'){
+      const a=TAU*freq*t; const r = amp * (0.25 + 0.75*Math.sin(g.tightness*(t%8)));
+      x=r*Math.cos(a); y=r*Math.sin(a);
+    } else if (g.type==='polygon'){
+      const sides=Math.max(3,g.sides);
+      const a = TAU*freq*t, step = (TAU)/sides;
+      const edge = Math.floor(a/step)*step;
+      const r = amp*(.6+.4*Math.sin(a*sides*0.5));
+      x=Math.cos(edge)*r; y=Math.sin(edge)*r;
+    } else if (g.type==='rose'){ // rhodonea: r = cos(k * theta)
+      const k = Math.max(.2, g.roseK);
+      const n = Math.max(.5, g.roseN);
+      const a = TAU*freq*t;
+      const r = amp * Math.cos(k*a) ** n;
+      x = r*Math.cos(a); y = r*Math.sin(a);
+    } else if (g.type==='spiro'){ // epitrochoid/hypotrochoid
+      const {R,r,d,mode} = g.spiro;
+      const a = TAU*freq*t;
+      if (mode==='epi'){
+        x = (R+r)*Math.cos(a) - d*Math.cos(((R+r)/r)*a);
+        y = (R+r)*Math.sin(a) - d*Math.sin(((R+r)/r)*a);
+      } else {
+        x = (R-r)*Math.cos(a) + d*Math.cos(((R-r)/r)*a);
+        y = (R-r)*Math.sin(a) - d*Math.sin(((R-r)/r)*a);
+      }
+    } else if (g.type==='superformula'){ // Johan Gielis' superformula
+      const {m,a,b,n1,n2,n3} = g.superformula;
+      const a0 = TAU*freq*t;
+      const r = (phi)=>{
+        const t1 = Math.abs(Math.cos(m*phi/4)/a)**n2;
+        const t2 = Math.abs(Math.sin(m*phi/4)/b)**n3;
+        const rr = (t1 + t2) ** (-1/Math.max(0.0001,n1));
+        return rr;
+      };
+      const rr = r(a0) * amp;
+      x = rr*Math.cos(a0); y = rr*Math.sin(a0);
+    } else if (g.type==='custom'){
+      if(!g._compiledX || g._compiledSourceX!==g.equationX){ g._compiledX=compileEquation(g.equationX); g._compiledSourceX=g.equationX; }
+      if(!g._compiledY || g._compiledSourceY!==g.equationY){ g._compiledY=compileEquation(g.equationY); g._compiledSourceY=g.equationY; }
+      try { x=g._compiledX(t); y=g._compiledY(t); } catch { x=0; y=0; }
+    }
+
+    const xr = x*Math.cos(rotA) - y*Math.sin(rotA);
+    const yr = x*Math.sin(rotA) + y*Math.cos(rotA);
+    return [xr*amp*scale, yr*amp*scale];
+  }
+
+  function audioCallback(e){
+    const L = e.outputBuffer.getChannelData(0);
+    const R = e.outputBuffer.getChannelData(1);
+    const n=L.length, dt = 1/state.sampleRate;
+
+    for (let i=0;i<n;i++){
+      updateModulations(dt);
+
+      const t = state.time;
+      const [gx,gy] = computeGeometrySample(t);
+      const s       = computeSynthSample(t, dt);
+
+      // click-safe but responsive master smoothing
+      const tgtVol  = clamp(state.params.audioVolume.base + state.params.audioVolume.mod, 0.02, 1);
+      const tc      = state.smoothVol.timeConst;
+      state.smoothVol.tgt = tgtVol;
+      state.smoothVol.cur += (state.smoothVol.tgt - state.smoothVol.cur) * (1 - Math.exp(-dt/tc));
+      const audible = s * state.smoothVol.cur;
+
+      const fuzz = clamp(state.params.fuzzMix.base + state.params.fuzzMix.mod, 0, .95);
+      const x = gx*(1-fuzz) + audible*fuzz;
+      const y = gy*(1-fuzz) + audible*fuzz;
+
+      state.geoBufferX[state.geoWriteIndex] = x;
+      state.geoBufferY[state.geoWriteIndex] = y;
+      state.geoWriteIndex = (state.geoWriteIndex+1) % state.geoBufferSize;
+
+      L[i] = x + audible * 0.75;
+      R[i] = y + audible * 0.75;
+
+      state.time += dt;
+    }
+  }
+
+  function triggerEnvelope(on){
+    const e=state.envelope; e.gate=on;
+    if (on){ e.state='attack'; e.startTime=state.time; }
+    else if (e.state!=='idle'){ e.state='release'; e.releaseTime=state.time; e.releaseStartValue=e.value; }
+  }
+
+  /* =========================
+     Canvas / Rendering
+  ========================== */
+  const canvas = document.getElementById('oscilloscope');
+  const hudPatch = document.getElementById('hudPatch');
+  const hudSeed  = document.getElementById('hudSeed');
+  const signatureIndicator = document.getElementById('signatureIndicator');
+
+  function sizeCanvasTo80vhSquare(){
+    const size = Math.floor(window.innerHeight * 0.8);
+    const px = size * DPR;
+    canvas.width = px; canvas.height = px;
+    canvas.style.width = size+'px'; canvas.style.height = size+'px';
+  }
+  window.addEventListener('resize', sizeCanvasTo80vhSquare); sizeCanvasTo80vhSquare();
+
+  const ctx = canvas.getContext('2d', { alpha:false });
+  ctx.lineJoin='round'; ctx.lineCap='round';
+
+  function drawGrid(w,h){
+    const step = Math.max(20, Math.floor(w/16));
+    ctx.save();
+    ctx.globalAlpha = .18;
+    ctx.strokeStyle = '#0a2';
+    ctx.beginPath();
+    for (let x=step+0.5; x<w; x+=step){ ctx.moveTo(x,0); ctx.lineTo(x,h); }
+    for (let y=step+0.5; y<h; y+=step){ ctx.moveTo(0,y); ctx.lineTo(w,y); }
+    ctx.stroke();
+    ctx.globalAlpha=.35;
+    ctx.beginPath();
+    ctx.moveTo(0.5, h/2+0.5); ctx.lineTo(w+0.5, h/2+0.5);
+    ctx.moveTo(w/2+0.5, 0.5); ctx.lineTo(w/2+0.5, h+0.5);
+    ctx.stroke();
+    ctx.restore();
+  }
+
+  function reactiveColor(){
+    const env = clamp(state.envelope.value, 0, 1);
+    const fuzz = clamp(state.params.fuzzMix.base + state.params.fuzzMix.mod,0,1);
+    const [c1,c2,c3] = state.palette;
+    // quick pick + brightness lift with env and fuzz
+    const sel = (env>.66)?c1 : (env>.33?c2:c3);
+    return sel.replace('60%)', `${60 + Math.floor(fuzz*15)}%)`); // cheap reactive lift
+  }
+
+  function drawPath(w,h,color,lw){
+    const len = state.geoBufferSize, idx = state.geoWriteIndex;
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = color;
+    ctx.save();
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 12*DPR;
+
+    // slight chromatic echo using multiple strokes
+    for (let pass=0; pass<3; pass++){
+      const off = pass*1.5*DPR;
+      const alpha = pass===0 ? 1 : 0.5/(pass);
+      ctx.globalAlpha = alpha;
+      ctx.beginPath();
+      for (let i=0;i<len;i++){
+        const j=(idx+i)%len;
+        const x = (w/2)+off + state.geoBufferX[j]*(w/2 - 6*DPR);
+        const y = (h/2)+off + state.geoBufferY[j]*(h/2 - 6*DPR);
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  function drawParticles(w,h,color,lw){
+    const len = state.geoBufferSize, idx = state.geoWriteIndex;
+    ctx.save();
+    ctx.fillStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 8*DPR;
+    for (let i=0;i<len; i+=4){
+      const j=(idx+i)%len;
+      const x = (w/2) + state.geoBufferX[j]*(w/2 - 8*DPR);
+      const y = (h/2) + state.geoBufferY[j]*(h/2 - 8*DPR);
+      const r = (0.6 + (i%32)/32) * lw*0.6;
+      ctx.globalAlpha = 0.35 + (i%64)/128;
+      ctx.beginPath(); ctx.arc(x,y,r,0,TAU); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  function drawKaleido(w,h,color,lw){
+    const cx=w/2, cy=h/2;
+    const steps = state.visual.kaleidoSteps;
+    const len = state.geoBufferSize, idx = state.geoWriteIndex;
+    ctx.save();
+    ctx.lineWidth=lw;
+    ctx.strokeStyle=color;
+    ctx.shadowColor=color;
+    ctx.shadowBlur=10*DPR;
+
+    for (let s=0;s<steps;s++){
+      const rot = (TAU*s)/steps;
+      ctx.save();
+      ctx.translate(cx,cy);
+      ctx.rotate(rot);
+      // mirror
+      for (let m=0;m<2;m++){
+        ctx.save();
+        if (m) ctx.scale(1,-1);
+        ctx.beginPath();
+        for (let i=0;i<len;i++){
+          const j=(idx+i)%len;
+          const x = state.geoBufferX[j]*(w/2 - 10*DPR);
+          const y = state.geoBufferY[j]*(h/2 - 10*DPR);
+          if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+        }
+        ctx.stroke();
+        ctx.restore();
+      }
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function drawOrbit(w,h,color,lw){
+    const len = state.geoBufferSize, idx = state.geoWriteIndex;
+    ctx.save();
+    ctx.lineWidth = lw;
+    ctx.strokeStyle = color;
+    ctx.shadowColor = color;
+    ctx.shadowBlur = 14*DPR;
+    const copies = 3 + (state.visual.symmetry>>1);
+    for (let k=0;k<copies;k++){
+      const rot = (TAU*k)/copies + state.time*0.12;
+      const s = 0.7 + k*0.05;
+      ctx.save();
+      ctx.translate(w/2,h/2);
+      ctx.rotate(rot);
+      ctx.scale(s,s);
+      ctx.beginPath();
+      for (let i=0;i<len;i++){
+        const j=(idx+i)%len;
+        const x = state.geoBufferX[j]*(w/2 - 12*DPR);
+        const y = state.geoBufferY[j]*(h/2 - 12*DPR);
+        if (i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+      }
+      ctx.stroke();
+      ctx.restore();
+    }
+    ctx.restore();
+  }
+
+  function draw(){
+    requestAnimationFrame(draw);
+    const w = canvas.width, h = canvas.height;
+
+    // adaptive motion blur trail
+    const trail = clamp(state.params.trail.base + state.params.trail.mod, 0.04, .55);
+    ctx.fillStyle = `rgba(0,0,0,${trail})`;
+    ctx.fillRect(0,0,w,h);
+
+    if (state.visual.showGrid) drawGrid(w,h);
+
+    const color = state.visual.colorMode==='reactive' ? reactiveColor() : state.palette[0];
+    const lw = Math.max(0.6, (state.params.lineWidth.base + state.params.lineWidth.mod) * DPR);
+
+    // choose engine
+    const engine = state.visual.engine==='auto' ? (state.visual.engineAuto || 'path') : state.visual.engine;
+    // lightweight “engine auto” that shifts slowly with time to avoid stasis
+    if (!state.visual.engineAuto) state.visual.engineAuto = state.visual.engine;
+    if ((Math.floor(state.time) % 16) === 0 && Math.random()<0.003){
+      const engines = ['path','particleBloom','mirrorKaleido','orbit'];
+      state.visual.engineAuto = engines[(Math.random()*engines.length)|0];
+    }
+
+    if (engine==='path') drawPath(w,h,color,lw);
+    else if (engine==='particleBloom') drawParticles(w,h,color,lw);
+    else if (engine==='mirrorKaleido') drawKaleido(w,h,color,lw);
+    else if (engine==='orbit') drawOrbit(w,h,color,lw);
+    else drawPath(w,h,color,lw); // fallback
+
+    if (state.visual.showCrosshair){
+      ctx.save();
+      ctx.globalAlpha=.28; ctx.strokeStyle=color; ctx.lineWidth=1*DPR;
+      ctx.beginPath();
+      ctx.moveTo(w/2, h/2 - 12*DPR); ctx.lineTo(w/2, h/2 + 12*DPR);
+      ctx.moveTo(w/2 - 12*DPR, h/2); ctx.lineTo(w/2 + 12*DPR, h/2);
+      ctx.stroke(); ctx.restore();
+    }
+  }
+  requestAnimationFrame(draw);
+
+  function updateHUD(){
+    hudPatch.textContent = `Patch ${currentPatch+1}`;
+    hudSeed.textContent  = `Seed ${state.seed}`;
+  }
+
+  /* =========================
+     Seed Patches (10)
+  ========================== */
+  let currentPatch = 0;
+
+  function generateSeedPatches(){
+    state.seedPatches=[];
+    const geoTypes=['lissajous','spiral','polygon','rose','spiro','superformula'];
+    const synthTypes=['additive','fm','subtractive','wavetable','noise'];
+
+    for (let i=0;i<10;i++){
+      const rng = mulberry32((state.seed + i*2654435761)>>>0);
+      // Geometry
+      const geoType = geoTypes[(rng()*geoTypes.length)|0];
+      const geo = JSON.parse(JSON.stringify(state.geo));
+      geo.type = geoType;
+      if (geoType==='lissajous'){ geo.a=(rng()*7|0)+1; geo.b=(rng()*7|0)+1; geo.phase=rng()*TAU; }
+      if (geoType==='spiral'){ geo.tightness = rng()*5 + .5; }
+      if (geoType==='polygon'){ geo.sides = (rng()*12|0)+3; }
+      if (geoType==='rose'){ geo.roseK = 1 + (rng()*7|0); geo.roseN = 1 + (rng()*3|0); }
+      if (geoType==='spiro'){
+        geo.spiro = { R: 0.6 + rng()*0.8, r: 0.15 + rng()*0.45, d: 0.3 + rng()*1.2, mode: rng()>.5?'epi':'hypo' };
+      }
+      if (geoType==='superformula'){
+        geo.superformula = {
+          m: 4 + (rng()*10|0), a:1, b:1,
+          n1: 0.2 + rng()*2.0, n2:0.8 + rng()*2.2, n3:0.8 + rng()*2.2
+        };
+      }
+
+      // Params
+      const params = {
+        geoFreq:{base: rng()*8+.25}, geoAmp:{base: rng()*1.4+.12},
+        geoRotation:{base: rng()}, geoScale:{base: rng()*1.4+.6},
+        filterCutoff:{base: 300 + rng()*5200}, fmIndex:{base: rng()*14+2},
+        wavetableMorph:{base:rng()}, pwm:{base: rng()*.8+.1}, audioVolume:{base: 0.28 + rng()*.55},
+        fuzzMix:{base: rng()*.3}, lineWidth:{base: 1.0 + rng()*1.6}, trail:{base: .07 + rng()*.16}
+      };
+
+      // Synth
+      const type = synthTypes[(rng()*synthTypes.length)|0];
+      const baseFreq = Math.pow(2, (rng()*6|0)+3) * 11;
+      const synth = {
+        type, baseFreq,
+        additive:{ ratios:[], amps:[] },
+        fm:{ ratio: 0.6 + rng()*7.4, index: 4 + rng()*10 },
+        subtractive:{ oscType: (rng()>.5?'saw':'square'), cutoff: 800 + rng()*2800, resonance:.1, pwm:.5, _lpState:0 },
+        wavetable:{ table1:[], table2:[], index:0, morph:rng(), size:2048 },
+        noise:{ color:'white' }
+      };
+      for (let p=0;p<6;p++){
+        synth.additive.ratios[p]= 1 + p + (rng()*.04 - .02);
+        synth.additive.amps[p]= Math.max(.06, 1/(p+1) + (rng()*.1-.05));
+      }
+      const wt = synth.wavetable;
+      wt.table1=new Float32Array(wt.size); wt.table2=new Float32Array(wt.size);
+      for (let j=0;j<wt.size;j++){ wt.table1[j]=rng()*2-1; wt.table2[j]=rng()*2-1; }
+      smooth(wt.table1,3); smooth(wt.table2,4);
+
+      state.seedPatches.push({geo,synth,params});
+    }
+  }
+
+  function applyPatch(patch){
+    state.geo   = JSON.parse(JSON.stringify(patch.geo));
+    state.synth = JSON.parse(JSON.stringify(patch.synth));
+    for (const k in patch.params){ if (state.params[k]) state.params[k].base = patch.params[k].base; }
+    state.lfos.forEach(l=>{ l.phase=0; l.lastSH=0; });
+    state.envelope.state='sustain'; state.envelope.value=1; state.envelope.gate=true;
+    state.envelope.startTime=state.time;
+    if (state.synth.subtractive) state.synth.subtractive._lpState=0;
+    if (state.synth.wavetable) state.synth.wavetable.index=0;
+  }
+
+  function playSeedPatch(index){
+    if (!state.seedPatches[index]) return;
+    currentPatch=index;
+    applyPatch(state.seedPatches[index]);
+    state.smoothVol.cur *= .9; // micro de-click
+    updateHUD();
+    buildUI();
+  }
+
+  // Signature snapshot helpers (unchanged behavior, cleaner)
+  let _signatureSnapshot = null;
+  function snapshotCurrentStateAsPatch() {
+    const params = {};
+    for (const k in state.params) params[k] = { base: state.params[k].base };
+    return {
+      geo: JSON.parse(JSON.stringify(state.geo)),
+      synth: JSON.parse(JSON.stringify(state.synth)),
+      params
+    };
+  }
+  function restoreSignatureSnapshot() {
+    if (!_signatureSnapshot) return;
+    applyPatch(_signatureSnapshot.patch);
+    currentPatch = _signatureSnapshot.index;
+    const e = state.envelope, s = _signatureSnapshot.envelope;
+    Object.assign(e, { attack:s.attack, decay:s.decay, sustain:s.sustain, release:s.release, target:s.target,
+      state:'sustain', value:1, gate:true, startTime:state.time, releaseTime:0, releaseStartValue:1 });
+    updateHUD(); buildUI();
+    _signatureSnapshot = null;
+  }
+
+  /* =========================
+     Signature demo (deterministic & non-destructive)
+  ========================== */
+  function cancelAllTimers(){ state.pendingTimers.forEach(clearTimeout); state.pendingTimers=[]; }
+
+  function playAudioSignature(){
+    if (state.playingSignature) return;
+    if (!state.running) startAudio();
+
+    _signatureSnapshot = {
+      index: currentPatch,
+      patch: snapshotCurrentStateAsPatch(),
+      envelope: { attack: state.envelope.attack, decay: state.envelope.decay, sustain: state.envelope.sustain, release: state.envelope.release, target: state.envelope.target }
+    };
+
+    cancelAllTimers();
+    state.playingSignature = true;
+    state.ignoreInput = true;
+    signatureIndicator.style.display = 'block';
+
+    state.time = 0;
+    state.geoWriteIndex = 0;
+    state.geoBufferX.fill(0);
+    state.geoBufferY.fill(0);
+    state.lfos.forEach(l=>{ l.phase=0; l.lastSH=0; });
+    state.envelope.state='sustain'; state.envelope.value=1; state.envelope.gate=true;
+    state.smoothVol.cur = 0;
+
+    const rng = mulberry32((state.seed ^ 0xA5A5A5A5)>>>0);
+    const lengths=[1,2,4,8]; let remaining=32, seq=[];
+    while (remaining>0){
+      const idx=(rng()*10)|0;
+      const opts=lengths.filter(l=>l<=remaining);
+      const len=opts[(rng()*opts.length)|0];
+      seq.push({idx,len});
+      remaining-=len;
+    }
+    const stepMs=200; let offset=0;
+    for (const step of seq){
+      const id=setTimeout(()=>{ playSeedPatch(step.idx); }, offset);
+      state.pendingTimers.push(id);
+      offset += stepMs*step.len;
+    }
+
+    const endId=setTimeout(()=>{
+      state.playingSignature=false;
+      state.ignoreInput=false;
+      signatureIndicator.style.display='none';
+      cancelAllTimers();
+      restoreSignatureSnapshot();   // revert instantly
+    }, offset + 50);
+    state.pendingTimers.push(endId);
+  }
+
+  /* =========================
+     UI
+  ========================== */
+  const controlsDiv = document.getElementById('controls');
+  function row(){ return el('div','row'); }
+  function slider(label, min,max,step,val,on){
+    const wrap=el('div','control-group');
+    const l=el('label',null,label);
+    const r=el('input'); r.type='range'; r.min=min; r.max=max; r.step=step; r.value=val;
+    r.addEventListener('input', e=>on(parseFloat(e.target.value)));
+    wrap.append(l,r); return wrap;
+  }
+  function number(label, min,max,step,val,on){
+    const wrap=el('div','control-group');
+    const l=el('label',null,label);
+    const i=el('input'); i.type='number'; i.min=min; i.max=max; i.step=step; i.value=val;
+    i.addEventListener('input', e=>on(parseFloat(e.target.value)));
+    wrap.append(l,i); return wrap;
+  }
+  function select(label, opts, val, on){
+    const wrap=el('div','control-group');
+    const l=el('label',null,label);
+    const s=el('select');
+    opts.forEach(o=>{ const op=el('option'); op.value=o; op.textContent=o; s.appendChild(op); });
+    s.value=val; s.addEventListener('change', e=>on(e.target.value));
+    wrap.append(l,s); return wrap;
+  }
+  function text(label, val, on){
+    const wrap=el('div','control-group');
+    const l=el('label',null,label);
+    const t=el('input'); t.type='text'; t.value=val; t.addEventListener('change', e=>on(e.target.value));
+    wrap.append(l,t); return wrap;
+  }
+
+  function buildUI(){
+    controlsDiv.innerHTML = '';
+
+    // Transport & Seed
+    const s1=el('div','section'); s1.appendChild(el('h3',null,'Transport & Seed'));
+    const row1=row();
+    const start=el('button',null, state.running?'Stop (Space)':'Start (Space)');
+    start.addEventListener('click', ()=>{ if(!state.running) startAudio(); else stopAudio(); buildUI(); });
+    row1.appendChild(start);
+    const sig=el('button',null,'Signature Demo');
+    sig.addEventListener('click', ()=>playAudioSignature());
+    row1.appendChild(sig);
+    s1.appendChild(row1);
+
+    const saved = Number(localStorage.getItem('avs_seed')||'0')||0;
+    const seedRow=row();
+    seedRow.appendChild(number('Seed',0, 0xFFFFFFFF, 1, state.seed||saved, v=>{ setSeed(v>>>0); }));
+    const randBtn=el('button',null,'New Random Seed');
+    randBtn.addEventListener('click', ()=>{ setSeed((Math.random()*0xFFFFFFFF)>>>0); playSeedPatch(currentPatch); });
+    s1.appendChild(seedRow); s1.appendChild(randBtn);
+    controlsDiv.appendChild(s1);
+
+    // Mix & Output
+    const s2=el('div','section'); s2.appendChild(el('h3',null,'Mix & Output'));
+    s2.appendChild(slider('Master Volume',0,1,.01, state.params.audioVolume.base, v=>state.params.audioVolume.base=v));
+    s2.appendChild(slider('Fuzz / Agitation (audible→XY)',0,1,.01, state.params.fuzzMix.base, v=>state.params.fuzzMix.base=v));
+    const ioRow=row();
+    const exp=el('button',null,'Export 6s WEBM'); exp.addEventListener('click', ()=>exportAudio(6));
+    const fs=el('button',null,'Fullscreen'); fs.addEventListener('click', ()=>{ if(!document.fullscreenElement) document.documentElement.requestFullscreen(); else document.exitFullscreen(); });
+    ioRow.append(exp,fs); s2.appendChild(ioRow);
+    controlsDiv.appendChild(s2);
+
+    // Visuals
+    const s3=el('div','section'); s3.appendChild(el('h3',null,'Visuals'));
+    s3.appendChild(select('Color Mode',['reactive','neon'], state.visual.colorMode, v=>state.visual.colorMode=v));
+    s3.appendChild(select('Engine',['auto','path','particleBloom','mirrorKaleido','orbit'], state.visual.engine, v=>state.visual.engine=v));
+    s3.appendChild(slider('Line Width', .5, 4, .05, state.params.lineWidth.base, v=>state.params.lineWidth.base=v));
+    s3.appendChild(slider('Trail / Persistence', .02, .6, .01, state.params.trail.base, v=>state.params.trail.base=v));
+    const toggles=row();
+    const gridBtn=el('button',null, state.visual.showGrid?'Grid: ON':'Grid: OFF');
+    gridBtn.addEventListener('click', ()=>{ state.visual.showGrid=!state.visual.showGrid; buildUI(); });
+    const crossBtn=el('button',null, state.visual.showCrosshair?'Crosshair: ON':'Crosshair: OFF');
+    crossBtn.addEventListener('click', ()=>{ state.visual.showCrosshair=!state.visual.showCrosshair; buildUI(); });
+    toggles.append(gridBtn,crossBtn); s3.appendChild(toggles);
+    controlsDiv.appendChild(s3);
+
+    // Geometry
+    const geoSec=el('div','section'); geoSec.appendChild(el('h3',null,'Geometry'));
+    geoSec.appendChild(select('Type',['lissajous','spiral','polygon','rose','spiro','superformula','custom'], state.geo.type, v=>state.geo.type=v));
+    geoSec.appendChild(slider('Frequency', .05, 12, .01, state.params.geoFreq.base, v=>state.params.geoFreq.base=v));
+    geoSec.appendChild(slider('Amplitude', .05, 2, .01, state.params.geoAmp.base, v=>state.params.geoAmp.base=v));
+    geoSec.appendChild(slider('Rotation', 0, 1, .001, state.params.geoRotation.base, v=>state.params.geoRotation.base=v));
+    geoSec.appendChild(slider('Scale', .25, 2.5, .01, state.params.geoScale.base, v=>state.params.geoScale.base=v));
+    geoSec.appendChild(number('A (Lissajous)',1,12,1, state.geo.a, v=>state.geo.a=v));
+    geoSec.appendChild(number('B (Lissajous)',1,12,1, state.geo.b, v=>state.geo.b=v));
+    geoSec.appendChild(number('Polygon Sides',3,24,1, state.geo.sides, v=>state.geo.sides=v));
+    geoSec.appendChild(slider('Spiral Tightness', .1, 10, .1, state.geo.tightness, v=>state.geo.tightness=v));
+    geoSec.appendChild(number('Rose k',0.2,12,0.1, state.geo.roseK, v=>state.geo.roseK=v));
+    geoSec.appendChild(number('Rose n',0.5,6,0.1, state.geo.roseN, v=>state.geo.roseN=v));
+    geoSec.appendChild(number('Spiro R',0.2,2,0.01, state.geo.spiro.R, v=>state.geo.spiro.R=v));
+    geoSec.appendChild(number('Spiro r',0.05,1,0.01, state.geo.spiro.r, v=>state.geo.spiro.r=v));
+    geoSec.appendChild(number('Spiro d',0.1,2,0.01, state.geo.spiro.d, v=>state.geo.spiro.d=v));
+    geoSec.appendChild(select('Spiro mode',['epi','hypo'], state.geo.spiro.mode, v=>state.geo.spiro.mode=v));
+    geoSec.appendChild(number('Super m',1,20,1, state.geo.superformula.m, v=>state.geo.superformula.m=v));
+    geoSec.appendChild(number('Super n1',0.1,5,0.1, state.geo.superformula.n1, v=>state.geo.superformula.n1=v));
+    geoSec.appendChild(number('Super n2',0.1,5,0.1, state.geo.superformula.n2, v=>state.geo.superformula.n2=v));
+    geoSec.appendChild(number('Super n3',0.1,5,0.1, state.geo.superformula.n3, v=>state.geo.superformula.n3=v));
+    geoSec.appendChild(text('X(t) Equation', state.geo.equationX, v=>state.geo.equationX=v));
+    geoSec.appendChild(text('Y(t) Equation', state.geo.equationY, v=>state.geo.equationY=v));
+    controlsDiv.appendChild(geoSec);
+
+    // Synth
+    const synthSec=el('div','section'); synthSec.appendChild(el('h3',null,'Synth'));
+    synthSec.appendChild(select('Type',['additive','fm','subtractive','wavetable','noise'], state.synth.type, v=>state.synth.type=v));
+    synthSec.appendChild(number('Base Frequency', 20, 4000, 1, state.synth.baseFreq, v=>state.synth.baseFreq=v));
+    for (let i=0;i<state.synth.additive.ratios.length;i++){
+      synthSec.appendChild(number(`Ratio ${i+1}`, .5, 16, .01, state.synth.additive.ratios[i], v=>state.synth.additive.ratios[i]=v));
+      synthSec.appendChild(slider(`Amp ${i+1}`, 0, 1, .01, state.synth.additive.amps[i], v=>state.synth.additive.amps[i]=v));
+    }
+    synthSec.appendChild(number('FM Ratio', .1, 12, .01, state.synth.fm.ratio, v=>state.synth.fm.ratio=v));
+    synthSec.appendChild(slider('FM Index', 0, 24, .1, state.params.fmIndex.base, v=>state.params.fmIndex.base=v));
+    synthSec.appendChild(select('Sub Osc',['saw','square'], state.synth.subtractive.oscType, v=>state.synth.subtractive.oscType=v));
+    synthSec.appendChild(slider('Filter Cutoff', 60, 8000, 1, state.params.filterCutoff.base, v=>state.params.filterCutoff.base=v));
+    synthSec.appendChild(slider('PWM (square)', .02, .98, .01, state.params.pwm.base, v=>state.params.pwm.base=v));
+    synthSec.appendChild(slider('Wavetable Morph', 0,1,.01, state.params.wavetableMorph.base, v=>state.params.wavetableMorph.base=v));
+    controlsDiv.appendChild(synthSec);
+
+    // LFOs
+    const lfoSec=el('div','section'); lfoSec.appendChild(el('h3',null,'LFOs'));
+    state.lfos.forEach((l,idx)=>{
+      const box=el('div',null); box.style.cssText='border:1px solid #124;padding:8px;border-radius:6px;margin-bottom:8px;';
+      box.appendChild(el('div','tiny',`LFO ${idx+1}`));
+      box.appendChild(slider('Rate (Hz)', .01, 20, .01, l.rate, v=>l.rate=v));
+      box.appendChild(select('Shape',['sine','triangle','square','random'], l.shape, v=>l.shape=v));
+      box.appendChild(slider('Depth', 0,1,.01, l.depth, v=>l.depth=v));
+      box.appendChild(select('Target',['none'].concat(state.modulationTargets), l.target, v=>l.target=v));
+      lfoSec.appendChild(box);
+    });
+    controlsDiv.appendChild(lfoSec);
+
+    // Envelope
+    const envSec=el('div','section'); envSec.appendChild(el('h3',null,'Envelope (ADSR)'));
+    envSec.appendChild(slider('Attack', .001, 4, .001, state.envelope.attack, v=>state.envelope.attack=v));
+    envSec.appendChild(slider('Decay', .001, 4, .001, state.envelope.decay, v=>state.envelope.decay=v));
+    envSec.appendChild(slider('Sustain', 0, 1, .01, state.envelope.sustain, v=>state.envelope.sustain=v));
+    envSec.appendChild(slider('Release', .001, 4, .001, state.envelope.release, v=>state.envelope.release=v));
+    envSec.appendChild(select('Env Target',['none'].concat(state.modulationTargets), state.envelope.target, v=>state.envelope.target=v));
+    const gateRow=row();
+    const trig=el('button',null,'Gate On/Off (hold mouse)');
+    trig.addEventListener('mousedown', ()=>triggerEnvelope(true));
+    trig.addEventListener('mouseup',   ()=>triggerEnvelope(false));
+    gateRow.appendChild(trig); envSec.appendChild(gateRow);
+    controlsDiv.appendChild(envSec);
+
+    // Presets
+    const preset=el('div','section'); preset.appendChild(el('h3',null,'Presets'));
+    const save=el('button',null,'Save Preset');
+    save.addEventListener('click', ()=>{ const name=prompt('Preset name?'); if(!name) return; const obj=serializeState(); localStorage.setItem('avsynth_preset_'+name, JSON.stringify(obj)); alert('Saved '+name); });
+    const load=el('button',null,'Load Preset');
+    load.addEventListener('click', ()=>{
+      const keys=Object.keys(localStorage).filter(k=>k.startsWith('avsynth_preset_'));
+      if(!keys.length) return alert('No presets');
+      const names=keys.map(k=>k.replace('avsynth_preset_',''));
+      const name=prompt('Which preset?\n'+names.join(', ')); if(!name) return;
+      const data=localStorage.getItem('avsynth_preset_'+name); if(!data) return alert('Not found');
+      applySerialized(JSON.parse(data)); buildUI();
+    });
+    preset.append(save,load); controlsDiv.appendChild(preset);
+  }
+
+  function serializeState(){
+    const o = JSON.parse(JSON.stringify(state));
+    delete o.audioCtx; delete o.processor; delete o.geoBufferX; delete o.geoBufferY;
+    return o;
+  }
+  function applySerialized(obj){
+    Object.assign(state, obj);
+    state.geoBufferX=new Float32Array(state.geoBufferSize);
+    state.geoBufferY=new Float32Array(state.geoBufferSize);
+  }
+
+  /* =========================
+     Transport
+  ========================== */
+  function startAudio(){
+    if(state.running) return;
+    if(!state.audioCtx){ state.audioCtx = new (window.AudioContext||window.webkitAudioContext)(); state.sampleRate = state.audioCtx.sampleRate; }
+    state.audioCtx.resume();
+    if(!state.processor){
+      const bufferSize=1024;
+      state.processor = state.audioCtx.createScriptProcessor(bufferSize, 0, 2);
+      state.processor.onaudioprocess = audioCallback;
+      state.processor.connect(state.audioCtx.destination);
+    }
+    state.time=0; state.geoWriteIndex=0; state.running=true;
+  }
+  function stopAudio(){
+    if(!state.running) return;
+    cancelAllTimers();
+    if(state.processor) state.processor.disconnect();
+    const wasSignature = state.playingSignature;
+
+    state.running=false;
+    state.playingSignature=false;
+    state.ignoreInput=false;
+    signatureIndicator.style.display='none';
+
+    if (wasSignature) restoreSignatureSnapshot(); // ensure revert even on manual stop
+  }
+
+  /* =========================
+     Export (MediaRecorder)
+  ========================== */
+  function exportAudio(seconds=6){
+    if(!state.audioCtx) return alert('Start audio first.');
+    if(state.exporting) return;
+    const dest = state.audioCtx.createMediaStreamDestination();
+    state.processor.disconnect(); // rewire during record
+    state.processor.connect(state.audioCtx.destination);
+    state.processor.connect(dest);
+
+    const mime = MediaRecorder.isTypeSupported('audio/webm;codecs=opus') ? 'audio/webm;codecs=opus' : 'audio/webm';
+    const rec = new MediaRecorder(dest.stream,{mimeType:mime});
+    const chunks=[];
+    rec.ondataavailable = e=>{ if(e.data.size) chunks.push(e.data); };
+    rec.onstop = ()=>{
+      const blob=new Blob(chunks,{type:mime});
+      const url=URL.createObjectURL(blob);
+      const a=document.createElement('a'); a.href=url; a.download='avsynth_'+Date.now()+'.webm'; a.click();
+      URL.revokeObjectURL(url);
+      // restore
+      state.processor.disconnect(dest);
+      state.exporting=false;
+    };
+    state.exporting=true; rec.start();
+    setTimeout(()=>rec.stop(), Math.max(1,seconds)*1000);
+  }
+
+  /* =========================
+     Input
+  ========================== */
+  document.addEventListener('keydown', e=>{
+    if (state.playingSignature || state.ignoreInput) return;
+    if (e.code==='Space'){ e.preventDefault(); if(!state.running) startAudio(); else stopAudio(); buildUI(); return; }
+    const k=e.key;
+    if (k>='0' && k<='9'){ const idx=(k==='0')?9:(parseInt(k,10)-1); playSeedPatch(idx); }
+  });
+
+  /* =========================
+     Boot
+  ========================== */
+  function boot(){
+    sizeCanvasTo80vhSquare();
+    const savedSeed = Number(localStorage.getItem('avs_seed')||'0');
+    setSeed(savedSeed || ((Math.random()*0xFFFFFFFF)>>>0));
+    generateSeedPatches();
+    buildUI();
+    playSeedPatch(0);
+    updateHUD();
+  }
+  boot();
+
+  // Expose for quick debugging
+  window._av = { state, setSeed, playSeedPatch, startAudio, stopAudio, exportAudio, playAudioSignature };
+})();
+</script>
+</body>
+</html>

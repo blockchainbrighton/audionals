@@ -1,0 +1,1152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARC-Style Patchable Synth</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #0af;
+        }
+        #container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+        #canvas-container {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+        }
+        #p5-container {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            width: 200px;
+            height: 200px;
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        #sequencer {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 300px;
+            height: 200px;
+            background: rgba(0, 20, 40, 0.7);
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            box-sizing: border-box;
+        }
+        #sequencer h3 {
+            margin: 0 0 10px 0;
+            text-align: center;
+            color: #0af;
+        }
+        .step-row {
+            display: flex;
+            margin-bottom: 5px;
+        }
+        .step-cell {
+            width: 15px;
+            height: 15px;
+            margin: 0 2px;
+            background: rgba(0, 50, 100, 0.5);
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            border-radius: 3px;
+            cursor: pointer;
+        }
+        .step-cell.active {
+            background: #0af;
+        }
+        .step-cell.current {
+            box-shadow: 0 0 8px #0af;
+        }
+        .step-controls {
+            display: flex;
+            justify-content: space-between;
+            margin-top: 10px;
+        }
+        .step-control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .step-control-group label {
+            font-size: 10px;
+            margin-bottom: 3px;
+        }
+        .step-control-group input {
+            width: 80px;
+        }
+        #preset-info {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 20, 40, 0.7);
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 14px;
+        }
+        #instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 20, 40, 0.7);
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            font-size: 12px;
+            max-width: 300px;
+        }
+        .jack {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #000;
+            border: 2px solid #0af;
+            cursor: pointer;
+            z-index: 10;
+        }
+        .jack.input {
+            background: #0af;
+        }
+        .jack.output {
+            background: #000;
+        }
+        .jack.meter {
+            position: relative;
+            display: inline-block;
+            width: 8px;
+            height: 8px;
+            border-radius: 50%;
+            background: #000;
+            border: 1px solid #0af;
+            margin: 0 2px;
+        }
+        .meter-bar {
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            background: #0af;
+            transform-origin: bottom;
+            transition: height 0.05s;
+        }
+        .module {
+            position: absolute;
+            background: rgba(0, 20, 40, 0.7);
+            border: 1px solid rgba(0, 170, 255, 0.3);
+            border-radius: 8px;
+            padding: 10px;
+            min-width: 120px;
+            box-sizing: border-box;
+        }
+        .module h3 {
+            margin: 0 0 10px 0;
+            text-align: center;
+            font-size: 14px;
+            color: #0af;
+        }
+        .module-controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 5px;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-width: 50px;
+        }
+        .control-group label {
+            font-size: 10px;
+            margin-bottom: 3px;
+        }
+        .control-group input {
+            width: 80%;
+        }
+        .cable {
+            position: absolute;
+            pointer-events: none;
+            z-index: 5;
+        }
+        #loading {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: #0af;
+            font-size: 24px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="canvas-container"></div>
+        <div id="p5-container"></div>
+        <div id="sequencer">
+            <h3>SEQUENCER</h3>
+            <div class="step-row" id="step-row"></div>
+            <div class="step-controls">
+                <div class="step-control-group">
+                    <label>BPM</label>
+                    <input type="range" id="bpm-control" min="60" max="200" value="110">
+                </div>
+                <div class="step-control-group">
+                    <label>VELOCITY</label>
+                    <input type="range" id="velocity-control" min="0" max="1" step="0.01" value="0.8">
+                </div>
+                <div class="step-control-group">
+                    <label>PROBABILITY</label>
+                    <input type="range" id="probability-control" min="0" max="1" step="0.01" value="1">
+                </div>
+            </div>
+        </div>
+        <div id="preset-info">
+            <div>Preset: <span id="preset-name">Bright Bell</span></div>
+            <div>Key: <span id="preset-key">0</span></div>
+        </div>
+        <div id="instructions">
+            <p>Drag cables between jacks to patch the synth</p>
+            <p>Keys 1-0: Load presets</p>
+            <p>Click sequencer steps to toggle</p>
+            <p>Adjust BPM, velocity, and probability</p>
+        </div>
+        <div id="loading">Initializing Synth...</div>
+    </div>
+
+    <script>
+        // Global variables
+        let scene, camera, renderer;
+        let modules = {};
+        let cables = [];
+        let activeCable = null;
+        let dragging = false;
+        let sequencerSteps = Array(16).fill(false);
+        let currentStep = 0;
+        let bpm = 110;
+        let velocity = 0.8;
+        let probability = 1;
+        let currentPreset = 0;
+        let presets = [];
+        let audioContextStarted = false;
+        
+        // Tone.js audio nodes
+        let vco1, vco2, vco3, noise, mixer, filter, vca;
+        let adsr1, adsr2, lfo1, lfo2, sampleHold, ringMod, glide;
+        let feedbackComb, pingPongDelay, reverb;
+        let masterGain;
+        let sequencer;
+        
+        // THREE.js visual elements
+        let nodes = [];
+        let connections = [];
+        
+        // Initialize the application
+        function init() {
+            // Initialize THREE.js
+            initThreeJS();
+            
+            // Initialize Tone.js
+            initToneJS();
+            
+            // Create modules
+            createModules();
+            
+            // Create presets
+            createPresets();
+            
+            // Load initial preset
+            loadPreset(0);
+            
+            // Initialize sequencer
+            initSequencer();
+            
+            // Start animation loop
+            animate();
+            
+            // Hide loading message
+            document.getElementById('loading').style.display = 'none';
+        }
+        
+        // Initialize THREE.js scene
+        function initThreeJS() {
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x000810);
+            
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+            camera.position.z = 50;
+            
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            document.getElementById('canvas-container').appendChild(renderer.domElement);
+            
+            // Add ambient light
+            const ambientLight = new THREE.AmbientLight(0x224466);
+            scene.add(ambientLight);
+            
+            // Add directional light
+            const directionalLight = new THREE.DirectionalLight(0x00aaff, 1);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+            
+            // Create nodes
+            createNodes();
+            
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+        }
+        
+        // Create metallic nodes
+        function createNodes() {
+            const nodeGeometry = new THREE.SphereGeometry(2, 16, 16);
+            const nodeMaterial = new THREE.MeshPhongMaterial({
+                color: 0x00aaff,
+                emissive: 0x004466,
+                shininess: 100,
+                transparent: true,
+                opacity: 0.9
+            });
+            
+            // Create central node
+            const centerNode = new THREE.Mesh(nodeGeometry, nodeMaterial);
+            scene.add(centerNode);
+            nodes.push(centerNode);
+            
+            // Create surrounding nodes
+            for (let i = 0; i < 20; i++) {
+                const angle = (i / 20) * Math.PI * 2;
+                const distance = 15 + Math.random() * 10;
+                const node = new THREE.Mesh(nodeGeometry, nodeMaterial);
+                node.position.set(
+                    Math.cos(angle) * distance,
+                    Math.sin(angle * 1.3) * 5,
+                    Math.sin(angle) * distance
+                );
+                scene.add(node);
+                nodes.push(node);
+            }
+            
+            // Create connections between nodes
+            const connectionMaterial = new THREE.LineBasicMaterial({
+                color: 0x00aaff,
+                transparent: true,
+                opacity: 0.3
+            });
+            
+            for (let i = 0; i < 30; i++) {
+                const startNode = nodes[Math.floor(Math.random() * nodes.length)];
+                const endNode = nodes[Math.floor(Math.random() * nodes.length)];
+                
+                if (startNode !== endNode) {
+                    const points = [
+                        startNode.position.clone(),
+                        endNode.position.clone()
+                    ];
+                    
+                    const connectionGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                    const connection = new THREE.Line(connectionGeometry, connectionMaterial);
+                    scene.add(connection);
+                    connections.push(connection);
+                }
+            }
+        }
+        
+        // Initialize Tone.js
+        function initToneJS() {
+            // Create audio nodes
+            vco1 = new Tone.Oscillator(440, "sine").set({ 
+                volume: -12,
+                detune: 0
+            });
+            
+            vco2 = new Tone.Oscillator(220, "triangle").set({ 
+                volume: -12,
+                detune: 0
+            });
+            
+            vco3 = new Tone.Oscillator(880, "sine").set({ 
+                volume: -12,
+                detune: 0
+            });
+            
+            noise = new Tone.Noise("white").set({ volume: -20 });
+            
+            mixer = new Tone.Gain();
+            
+            filter = new Tone.Filter({
+                type: "lowpass",
+                frequency: 2000,
+                rolloff: -12,
+                Q: 1
+            });
+            
+            vca = new Tone.Gain();
+            
+            adsr1 = new Tone.AmplitudeEnvelope({
+                attack: 0.01,
+                decay: 0.2,
+                sustain: 0.5,
+                release: 0.5
+            });
+            
+            adsr2 = new Tone.FrequencyEnvelope({
+                attack: 0.1,
+                decay: 0.3,
+                sustain: 0.7,
+                release: 0.5,
+                baseFrequency: 200,
+                octaves: 4
+            });
+            
+            lfo1 = new Tone.LFO("sine", 0.1, 10).set({ 
+                phase: 0,
+                min: 0,
+                max: 1
+            });
+            
+            lfo2 = new Tone.LFO("sine", 1, 100).set({ 
+                phase: 90,
+                min: 50,
+                max: 500
+            });
+            
+            sampleHold = new Tone.Sampler({
+                urls: {
+                    C4: "data:audio/wav;base64,UklGRnoGAABXQVZFZm10IBAAAAABAAEAQB8AAEAfAAABAAgAZGF0YQoGAACBhYqFbF1fdJivrJBhNjVgodDbq2EcBj+a2/LDciUFLIHO8tiJNwgZaLvt559NEAxQp+PwtmMcBjiR1/LMeSwFJHfH8N2QQAoUXrTp66hVFApGn+DyvmwhBSuBzvLZiTYIG2m98OScTgwOUarm7blmGgU7k9n1unEiBC13yO/eizEIHWq+8+OWT"
+                }
+            }).set({ volume: -10 });
+            
+            ringMod = new Tone.Multiply();
+            
+            glide = new Tone.Gain();
+            
+            feedbackComb = new Tone.FeedbackCombFilter({
+                delayTime: 0.01,
+                resonance: 0.7
+            });
+            
+            pingPongDelay = new Tone.PingPongDelay({
+                delayTime: 0.25,
+                feedback: 0.3
+            }).set({ wet: 0.2 });
+            
+            reverb = new Tone.Reverb({
+                decay: 2,
+                wet: 0.3
+            }).generate();
+            
+            masterGain = new Tone.Gain(0.7);
+            
+            // Connect audio nodes
+            vco1.connect(mixer);
+            vco2.connect(mixer);
+            vco3.connect(mixer);
+            noise.connect(mixer);
+            mixer.connect(filter);
+            filter.connect(vca);
+            vca.connect(adsr1);
+            adsr1.connect(feedbackComb);
+            feedbackComb.connect(pingPongDelay);
+            pingPongDelay.connect(reverb);
+            reverb.connect(masterGain);
+            masterGain.toDestination();
+            
+            // Set up modulation
+            adsr2.connect(vco1.frequency);
+            lfo1.connect(vco2.frequency);
+            lfo2.connect(filter.frequency);
+            
+            // Start LFOs
+            lfo1.start();
+            lfo2.start();
+            
+            // Create sequencer
+            sequencer = new Tone.Sequence((time, step) => {
+                if (sequencerSteps[step] && Math.random() < probability) {
+                    const note = 440 * Math.pow(2, (step - 9) / 12);
+                    vco1.frequency.value = note;
+                    adsr1.triggerAttackRelease("8n", time, velocity);
+                }
+                currentStep = step;
+                updateSequencerDisplay();
+            }, [0,1,2,3,4,5,6,7,8,9,10,11,12,13,14,15], "16n");
+            
+            // Start sequencer
+            Tone.Transport.start();
+        }
+        
+        // Create synth modules
+        function createModules() {
+            // VCO1 Module
+            createModule("VCO1", 50, 50, [
+                { name: "Wave", type: "select", options: ["sine", "triangle"], value: "sine" },
+                { name: "Freq", type: "range", min: 20, max: 2000, value: 440 },
+                { name: "FM", type: "range", min: 0, max: 1, value: 0.45 }
+            ], ["output", "fm"]);
+            
+            // VCO2 Module
+            createModule("VCO2", 200, 50, [
+                { name: "Wave", type: "select", options: ["sine", "triangle"], value: "triangle" },
+                { name: "Freq", type: "range", min: 20, max: 2000, value: 220 },
+                { name: "FM", type: "range", min: 0, max: 1, value: 0 }
+            ], ["output", "fm"]);
+            
+            // VCO3 Module
+            createModule("VCO3", 350, 50, [
+                { name: "Wave", type: "select", options: ["sine", "triangle"], value: "sine" },
+                { name: "Freq", type: "range", min: 20, max: 2000, value: 880 },
+                { name: "FM", type: "range", min: 0, max: 1, value: 0 }
+            ], ["output", "fm"]);
+            
+            // Noise Module
+            createModule("Noise", 500, 50, [
+                { name: "Type", type: "select", options: ["white", "pink", "brown"], value: "white" }
+            ], ["output"]);
+            
+            // Mixer Module
+            createModule("Mixer", 50, 200, [
+                { name: "VCO1", type: "range", min: 0, max: 1, value: 0.5 },
+                { name: "VCO2", type: "range", min: 0, max: 1, value: 0.5 },
+                { name: "VCO3", type: "range", min: 0, max: 1, value: 0.5 },
+                { name: "Noise", type: "range", min: 0, max: 1, value: 0.2 }
+            ], ["input1", "input2", "input3", "input4", "output"]);
+            
+            // Filter Module
+            createModule("Filter", 200, 200, [
+                { name: "Type", type: "select", options: ["lowpass", "highpass", "bandpass"], value: "lowpass" },
+                { name: "Freq", type: "range", min: 20, max: 20000, value: 2000 },
+                { name: "Q", type: "range", min: 0.1, max: 20, value: 1 }
+            ], ["input", "output"]);
+            
+            // ADSR1 Module
+            createModule("ADSR1", 350, 200, [
+                { name: "A", type: "range", min: 0, max: 2, value: 0.01 },
+                { name: "D", type: "range", min: 0, max: 2, value: 0.2 },
+                { name: "S", type: "range", min: 0, max: 1, value: 0.5 },
+                { name: "R", type: "range", min: 0, max: 5, value: 0.5 }
+            ], ["input", "output", "gate"]);
+            
+            // ADSR2 Module
+            createModule("ADSR2", 500, 200, [
+                { name: "A", type: "range", min: 0, max: 2, value: 0.1 },
+                { name: "D", type: "range", min: 0, max: 2, value: 0.3 },
+                { name: "S", type: "range", min: 0, max: 1, value: 0.7 },
+                { name: "R", type: "range", min: 0, max: 5, value: 0.5 }
+            ], ["input", "output", "gate"]);
+            
+            // LFO1 Module
+            createModule("LFO1", 50, 350, [
+                { name: "Wave", type: "select", options: ["sine", "square", "triangle", "sawtooth"], value: "sine" },
+                { name: "Rate", type: "range", min: 0.1, max: 20, value: 1 },
+                { name: "Depth", type: "range", min: 0, max: 1, value: 0.5 }
+            ], ["output"]);
+            
+            // LFO2 Module
+            createModule("LFO2", 200, 350, [
+                { name: "Wave", type: "select", options: ["sine", "square", "triangle", "sawtooth"], value: "sine" },
+                { name: "Rate", type: "range", min: 0.1, max: 20, value: 2 },
+                { name: "Depth", type: "range", min: 0, max: 1, value: 0.5 }
+            ], ["output"]);
+            
+            // S&H Module
+            createModule("S&H", 350, 350, [
+                { name: "Rate", type: "range", min: 0.1, max: 20, value: 4 }
+            ], ["input", "output", "trigger"]);
+            
+            // Ring Mod Module
+            createModule("Ring Mod", 500, 350, [
+                { name: "Mix", type: "range", min: 0, max: 1, value: 0.5 }
+            ], ["input1", "input2", "output"]);
+            
+            // Glide Module
+            createModule("Glide", 50, 500, [
+                { name: "Time", type: "range", min: 0, max: 1, value: 0.1 }
+            ], ["input", "output"]);
+            
+            // FX Module
+            createModule("FX", 200, 500, [
+                { name: "Comb", type: "range", min: 0, max: 1, value: 0.3 },
+                { name: "Delay", type: "range", min: 0, max: 1, value: 0.2 },
+                { name: "Reverb", type: "range", min: 0, max: 1, value: 0.3 }
+            ], ["input", "output"]);
+            
+            // VCA Module
+            createModule("VCA", 350, 500, [
+                { name: "Gain", type: "range", min: 0, max: 1, value: 0.7 }
+            ], ["input", "output", "cv"]);
+        }
+        
+        // Create a module with controls and jacks
+        function createModule(name, x, y, controls, jacks) {
+            const module = document.createElement('div');
+            module.className = 'module';
+            module.id = name.toLowerCase().replace(' ', '-');
+            module.style.left = `${x}px`;
+            module.style.top = `${y}px`;
+            
+            const title = document.createElement('h3');
+            title.textContent = name;
+            module.appendChild(title);
+            
+            const controlsDiv = document.createElement('div');
+            controlsDiv.className = 'module-controls';
+            
+            controls.forEach(control => {
+                const group = document.createElement('div');
+                group.className = 'control-group';
+                
+                const label = document.createElement('label');
+                label.textContent = control.name;
+                group.appendChild(label);
+                
+                let input;
+                if (control.type === "range") {
+                    input = document.createElement('input');
+                    input.type = 'range';
+                    input.min = control.min;
+                    input.max = control.max;
+                    input.step = control.step || 0.01;
+                    input.value = control.value;
+                } else if (control.type === "select") {
+                    input = document.createElement('select');
+                    control.options.forEach(option => {
+                        const opt = document.createElement('option');
+                        opt.value = option;
+                        opt.textContent = option;
+                        input.appendChild(opt);
+                    });
+                    input.value = control.value;
+                }
+                
+                group.appendChild(input);
+                controlsDiv.appendChild(group);
+            });
+            
+            module.appendChild(controlsDiv);
+            
+            // Create jacks
+            jacks.forEach((jack, index) => {
+                const jackElement = document.createElement('div');
+                jackElement.className = `jack ${jack.includes('input') ? 'input' : 'output'}`;
+                jackElement.dataset.module = name.toLowerCase().replace(' ', '-');
+                jackElement.dataset.type = jack;
+                
+                // Position jacks around the module
+                const positions = {
+                    input: { top: '30px', left: `${10 + index * 20}px` },
+                    output: { bottom: '10px', right: `${10 + index * 20}px` },
+                    gate: { bottom: '10px', left: `${10 + index * 20}px` },
+                    cv: { top: '30px', right: `${10 + index * 20}px` },
+                    fm: { top: '30px', right: `${10 + index * 20}px` },
+                    trigger: { bottom: '10px', right: `${10 + index * 20}px` }
+                };
+                
+                const position = positions[jack] || { top: '10px', left: `${10 + index * 20}px` };
+                Object.assign(jackElement.style, position);
+                
+                // Add meter to output jacks
+                if (jack.includes('output')) {
+                    const meter = document.createElement('div');
+                    meter.className = 'jack meter';
+                    meter.innerHTML = '<div class="meter-bar"></div>';
+                    jackElement.appendChild(meter);
+                }
+                
+                module.appendChild(jackElement);
+            });
+            
+            document.getElementById('container').appendChild(module);
+            modules[name.toLowerCase().replace(' ', '-')] = module;
+            
+            // Add event listeners for jacks
+            module.querySelectorAll('.jack').forEach(jack => {
+                jack.addEventListener('mousedown', startCable);
+                jack.addEventListener('mouseup', endCable);
+                jack.addEventListener('mouseover', hoverJack);
+            });
+        }
+        
+        // Start dragging a cable
+        function startCable(e) {
+            if (e.button !== 0) return; // Only left mouse button
+            
+            const jack = e.currentTarget;
+            if (jack.classList.contains('output')) {
+                dragging = true;
+                activeCable = document.createElement('div');
+                activeCable.className = 'cable';
+                activeCable.style.backgroundColor = '#0af';
+                activeCable.style.height = '2px';
+                activeCable.style.transformOrigin = '0 0';
+                document.getElementById('container').appendChild(activeCable);
+                
+                const rect = jack.getBoundingClientRect();
+                const startX = rect.left + rect.width / 2;
+                const startY = rect.top + rect.height / 2;
+                
+                activeCable.style.left = `${startX}px`;
+                activeCable.style.top = `${startY}px`;
+                activeCable.style.width = '0px';
+                
+                document.addEventListener('mousemove', updateCable);
+                document.addEventListener('mouseup', cancelCable);
+            }
+        }
+        
+        // Update cable position while dragging
+        function updateCable(e) {
+            if (!dragging || !activeCable) return;
+            
+            const rect = activeCable.getBoundingClientRect();
+            const startX = parseFloat(activeCable.style.left);
+            const startY = parseFloat(activeCable.style.top);
+            const endX = e.clientX;
+            const endY = e.clientY;
+            
+            const length = Math.sqrt(Math.pow(endX - startX, 2) + Math.pow(endY - startY, 2));
+            const angle = Math.atan2(endY - startY, endX - startX) * 180 / Math.PI;
+            
+            activeCable.style.width = `${length}px`;
+            activeCable.style.transform = `rotate(${angle}deg)`;
+        }
+        
+        // Finish cable connection
+        function endCable(e) {
+            if (!dragging || !activeCable) return;
+            
+            const jack = e.currentTarget;
+            if (jack.classList.contains('input')) {
+                // Create permanent cable
+                const cable = activeCable.cloneNode();
+                cable.style.backgroundColor = 'rgba(0, 170, 255, 0.7)';
+                cables.push(cable);
+                document.getElementById('container').appendChild(cable);
+            }
+            
+            // Clean up
+            document.removeEventListener('mousemove', updateCable);
+            document.removeEventListener('mouseup', cancelCable);
+            activeCable.remove();
+            activeCable = null;
+            dragging = false;
+        }
+        
+        // Cancel cable dragging
+        function cancelCable() {
+            if (activeCable) {
+                activeCable.remove();
+                activeCable = null;
+                dragging = false;
+                document.removeEventListener('mousemove', updateCable);
+                document.removeEventListener('mouseup', cancelCable);
+            }
+        }
+        
+        // Highlight jack on hover
+        function hoverJack(e) {
+            if (dragging && activeCable) {
+                const jack = e.currentTarget;
+                if (jack.classList.contains('input')) {
+                    jack.style.boxShadow = '0 0 10px #0af';
+                }
+            }
+        }
+        
+        // Initialize sequencer display
+        function initSequencer() {
+            const stepRow = document.getElementById('step-row');
+            stepRow.innerHTML = '';
+            
+            for (let i = 0; i < 16; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'step-cell';
+                cell.dataset.step = i;
+                cell.addEventListener('click', toggleStep);
+                stepRow.appendChild(cell);
+            }
+            
+            // Set up sequencer controls
+            document.getElementById('bpm-control').addEventListener('input', (e) => {
+                bpm = parseInt(e.target.value);
+                Tone.Transport.bpm.value = bpm;
+            });
+            
+            document.getElementById('velocity-control').addEventListener('input', (e) => {
+                velocity = parseFloat(e.target.value);
+            });
+            
+            document.getElementById('probability-control').addEventListener('input', (e) => {
+                probability = parseFloat(e.target.value);
+            });
+            
+            // Start sequencer
+            sequencer.start(0);
+            Tone.Transport.bpm.value = bpm;
+        }
+        
+        // Toggle sequencer step
+        function toggleStep(e) {
+            const step = parseInt(e.currentTarget.dataset.step);
+            sequencerSteps[step] = !sequencerSteps[step];
+            e.currentTarget.classList.toggle('active', sequencerSteps[step]);
+        }
+        
+        // Update sequencer display
+        function updateSequencerDisplay() {
+            document.querySelectorAll('.step-cell').forEach((cell, index) => {
+                cell.classList.toggle('current', index === currentStep);
+            });
+        }
+        
+        // Create presets
+        function createPresets() {
+            presets = [
+                { // 0 - Bright Bell
+                    name: "Bright Bell",
+                    key: "0",
+                    vco1: { wave: "sine", freq: 440, fm: 0.45 },
+                    vco2: { wave: "triangle", freq: 880, fm: 0 },
+                    vco3: { wave: "sine", freq: 1760, fm: 0 },
+                    mixer: { vco1: 0.7, vco2: 0.3, vco3: 0.2, noise: 0 },
+                    filter: { type: "lowpass", freq: 5000, q: 0.5 },
+                    adsr1: { attack: 0.01, decay: 0.2, sustain: 0, release: 0.5 },
+                    adsr2: { attack: 0.1, decay: 0.3, sustain: 0.7, release: 0.5 },
+                    lfo1: { wave: "sine", rate: 5, depth: 0.2 },
+                    lfo2: { wave: "sine", rate: 2, depth: 0.3 },
+                    fx: { comb: 0.3, delay: 0.2, reverb: 0.4 },
+                    vca: { gain: 0.7 },
+                    bpm: 110,
+                    velocity: 0.8,
+                    probability: 1
+                },
+                { // 1 - Deep Pad
+                    name: "Deep Pad",
+                    key: "1",
+                    vco1: { wave: "sine", freq: 110, fm: 0.1 },
+                    vco2: { wave: "triangle", freq: 220, fm: 0.05 },
+                    vco3: { wave: "sine", freq: 330, fm: 0 },
+                    mixer: { vco1: 0.5, vco2: 0.5, vco3: 0.5, noise: 0.1 },
+                    filter: { type: "lowpass", freq: 800, q: 2 },
+                    adsr1: { attack: 2, decay: 1, sustain: 0.7, release: 2 },
+                    adsr2: { attack: 1, decay: 2, sustain: 0.5, release: 3 },
+                    lfo1: { wave: "sine", rate: 0.2, depth: 0.5 },
+                    lfo2: { wave: "triangle", rate: 0.1, depth: 0.3 },
+                    fx: { comb: 0.1, delay: 0.5, reverb: 0.7 },
+                    vca: { gain: 0.6 },
+                    bpm: 70,
+                    velocity: 0.6,
+                    probability: 0.8
+                },
+                { // 2 - Acid Bass
+                    name: "Acid Bass",
+                    key: "2",
+                    vco1: { wave: "sawtooth", freq: 110, fm: 0 },
+                    vco2: { wave: "sawtooth", freq: 111, fm: 0 },
+                    vco3: { wave: "sine", freq: 0, fm: 0 },
+                    mixer: { vco1: 0.8, vco2: 0.8, vco3: 0, noise: 0 },
+                    filter: { type: "lowpass", freq: 1000, q: 8 },
+                    adsr1: { attack: 0.01, decay: 0.3, sustain: 0.5, release: 0.2 },
+                    adsr2: { attack: 0.1, decay: 0.2, sustain: 0.7, release: 0.1 },
+                    lfo1: { wave: "sine", rate: 4, depth: 0.8 },
+                    lfo2: { wave: "sawtooth", rate: 0.5, depth: 0.6 },
+                    fx: { comb: 0, delay: 0.1, reverb: 0.2 },
+                    vca: { gain: 0.8 },
+                    bpm: 125,
+                    velocity: 0.9,
+                    probability: 1
+                },
+                { // 3 - Ethereal Lead
+                    name: "Ethereal Lead",
+                    key: "3",
+                    vco1: { wave: "sine", freq: 440, fm: 0.3 },
+                    vco2: { wave: "triangle", freq: 660, fm: 0.2 },
+                    vco3: { wave: "sine", freq: 880, fm: 0.1 },
+                    mixer: { vco1: 0.6, vco2: 0.4, vco3: 0.3, noise: 0 },
+                    filter: { type: "bandpass", freq: 2000, q: 5 },
+                    adsr1: { attack: 0.2, decay: 0.5, sustain: 0.8, release: 0.8 },
+                    adsr2: { attack: 0.3, decay: 0.4, sustain: 0.6, release: 0.5 },
+                    lfo1: { wave: "sine", rate: 6, depth: 0.4 },
+                    lfo2: { wave: "triangle", rate: 3, depth: 0.3 },
+                    fx: { comb: 0.2, delay: 0.4, reverb: 0.6 },
+                    vca: { gain: 0.7 },
+                    bpm: 100,
+                    velocity: 0.7,
+                    probability: 0.9
+                },
+                { // 4 - Noisy Breaks
+                    name: "Noisy Breaks",
+                    key: "4",
+                    vco1: { wave: "square", freq: 220, fm: 0 },
+                    vco2: { wave: "sawtooth", freq: 330, fm: 0 },
+                    vco3: { wave: "triangle", freq: 440, fm: 0 },
+                    mixer: { vco1: 0.5, vco2: 0.5, vco3: 0.5, noise: 0.8 },
+                    filter: { type: "highpass", freq: 300, q: 1 },
+                    adsr1: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
+                    adsr2: { attack: 0.01, decay: 0.05, sustain: 0.3, release: 0.05 },
+                    lfo1: { wave: "square", rate: 8, depth: 0.6 },
+                    lfo2: { wave: "sawtooth", rate: 12, depth: 0.4 },
+                    fx: { comb: 0.4, delay: 0.3, reverb: 0.2 },
+                    vca: { gain: 0.9 },
+                    bpm: 140,
+                    velocity: 1,
+                    probability: 1
+                },
+                { // 5 - Ambient Drone
+                    name: "Ambient Drone",
+                    key: "5",
+                    vco1: { wave: "sine", freq: 55, fm: 0.05 },
+                    vco2: { wave: "triangle", freq: 110, fm: 0.03 },
+                    vco3: { wave: "sine", freq: 220, fm: 0.02 },
+                    mixer: { vco1: 0.7, vco2: 0.6, vco3: 0.5, noise: 0.2 },
+                    filter: { type: "lowpass", freq: 400, q: 3 },
+                    adsr1: { attack: 5, decay: 3, sustain: 0.8, release: 5 },
+                    adsr2: { attack: 4, decay: 2, sustain: 0.6, release: 4 },
+                    lfo1: { wave: "sine", rate: 0.05, depth: 0.3 },
+                    lfo2: { wave: "triangle", rate: 0.03, depth: 0.2 },
+                    fx: { comb: 0.2, delay: 0.6, reverb: 0.8 },
+                    vca: { gain: 0.5 },
+                    bpm: 60,
+                    velocity: 0.5,
+                    probability: 0.7
+                },
+                { // 6 - FM Percussion
+                    name: "FM Percussion",
+                    key: "6",
+                    vco1: { wave: "sine", freq: 220, fm: 0.8 },
+                    vco2: { wave: "sine", freq: 440, fm: 0.6 },
+                    vco3: { wave: "sine", freq: 880, fm: 0.4 },
+                    mixer: { vco1: 0.9, vco2: 0.7, vco3: 0.5, noise: 0.3 },
+                    filter: { type: "bandpass", freq: 1000, q: 10 },
+                    adsr1: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.01 },
+                    adsr2: { attack: 0.01, decay: 0.03, sustain: 0.2, release: 0.01 },
+                    lfo1: { wave: "sine", rate: 20, depth: 0.5 },
+                    lfo2: { wave: "square", rate: 15, depth: 0.7 },
+                    fx: { comb: 0.5, delay: 0.1, reverb: 0.3 },
+                    vca: { gain: 1 },
+                    bpm: 130,
+                    velocity: 1,
+                    probability: 1
+                },
+                { // 7 - Glitch Sequence
+                    name: "Glitch Sequence",
+                    key: "7",
+                    vco1: { wave: "sawtooth", freq: 110, fm: 0.2 },
+                    vco2: { wave: "square", freq: 220, fm: 0.1 },
+                    vco3: { wave: "triangle", freq: 330, fm: 0 },
+                    mixer: { vco1: 0.6, vco2: 0.6, vco3: 0.6, noise: 0.5 },
+                    filter: { type: "lowpass", freq: 2000, q: 4 },
+                    adsr1: { attack: 0.01, decay: 0.05, sustain: 0.3, release: 0.02 },
+                    adsr2: { attack: 0.02, decay: 0.03, sustain: 0.4, release: 0.01 },
+                    lfo1: { wave: "random", rate: 8, depth: 0.6 },
+                    lfo2: { wave: "sawtooth", rate: 12, depth: 0.5 },
+                    fx: { comb: 0.3, delay: 0.4, reverb: 0.2 },
+                    vca: { gain: 0.8 },
+                    bpm: 150,
+                    velocity: 0.9,
+                    probability: 0.9
+                },
+                { // 8 - Space Organ
+                    name: "Space Organ",
+                    key: "8",
+                    vco1: { wave: "sine", freq: 220, fm: 0.1 },
+                    vco2: { wave: "sine", freq: 330, fm: 0.05 },
+                    vco3: { wave: "sine", freq: 440, fm: 0.03 },
+                    mixer: { vco1: 0.8, vco2: 0.6, vco3: 0.4, noise: 0 },
+                    filter: { type: "lowpass", freq: 3000, q: 1 },
+                    adsr1: { attack: 0.5, decay: 0.8, sustain: 0.7, release: 1 },
+                    adsr2: { attack: 0.3, decay: 0.5, sustain: 0.6, release: 0.8 },
+                    lfo1: { wave: "sine", rate: 0.3, depth: 0.2 },
+                    lfo2: { wave: "triangle", rate: 0.2, depth: 0.1 },
+                    fx: { comb: 0.1, delay: 0.3, reverb: 0.7 },
+                    vca: { gain: 0.7 },
+                    bpm: 80,
+                    velocity: 0.7,
+                    probability: 0.8
+                },
+                { // 9 - Digital Arp
+                    name: "Digital Arp",
+                    key: "9",
+                    vco1: { wave: "square", freq: 440, fm: 0 },
+                    vco2: { wave: "sawtooth", freq: 550, fm: 0 },
+                    vco3: { wave: "triangle", freq: 660, fm: 0 },
+                    mixer: { vco1: 0.7, vco2: 0.7, vco3: 0.7, noise: 0.1 },
+                    filter: { type: "highpass", freq: 500, q: 2 },
+                    adsr1: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.05 },
+                    adsr2: { attack: 0.02, decay: 0.08, sustain: 0.4, release: 0.03 },
+                    lfo1: { wave: "square", rate: 16, depth: 0.4 },
+                    lfo2: { wave: "sawtooth", rate: 8, depth: 0.3 },
+                    fx: { comb: 0.2, delay: 0.2, reverb: 0.4 },
+                    vca: { gain: 0.9 },
+                    bpm: 140,
+                    velocity: 0.8,
+                    probability: 1
+                }
+            ];
+        }
+        
+        // Load a preset
+        function loadPreset(index) {
+            if (index < 0 || index >= presets.length) return;
+            
+            const preset = presets[index];
+            currentPreset = index;
+            
+            // Update UI
+            document.getElementById('preset-name').textContent = preset.name;
+            document.getElementById('preset-key').textContent = preset.key;
+            
+            // Update sequencer
+            bpm = preset.bpm;
+            velocity = preset.velocity;
+            probability = preset.probability;
+            
+            document.getElementById('bpm-control').value = bpm;
+            document.getElementById('velocity-control').value = velocity;
+            document.getElementById('probability-control').value = probability;
+            
+            Tone.Transport.bpm.value = bpm;
+            
+            // Update module parameters
+            updateModuleParams('vco1', preset.vco1);
+            updateModuleParams('vco2', preset.vco2);
+            updateModuleParams('vco3', preset.vco3);
+            updateModuleParams('mixer', preset.mixer);
+            updateModuleParams('filter', preset.filter);
+            updateModuleParams('adsr1', preset.adsr1);
+            updateModuleParams('adsr2', preset.adsr2);
+            updateModuleParams('lfo1', preset.lfo1);
+            updateModuleParams('lfo2', preset.lfo2);
+            updateModuleParams('fx', preset.fx);
+            updateModuleParams('vca', preset.vca);
+            
+            // Morph to new preset over 25ms
+            // In a real implementation, this would smoothly interpolate parameters
+        }
+        
+        // Update module parameters
+        function updateModuleParams(moduleId, params) {
+            const module = modules[moduleId];
+            if (!module) return;
+            
+            Object.keys(params).forEach(key => {
+                const input = module.querySelector(`[name="${key}"]`);
+                if (input) {
+                    if (input.type === 'range') {
+                        input.value = params[key];
+                    } else if (input.tagName === 'SELECT') {
+                        input.value = params[key];
+                    }
+                }
+            });
+        }
+        
+        // Handle keyboard input for presets
+        function handleKeyPress(e) {
+            if (e.key >= '0' && e.key <= '9') {
+                const index = e.key === '0' ? 9 : parseInt(e.key) - 1;
+                loadPreset(index);
+            }
+        }
+        
+        // Animation loop
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Rotate nodes
+            const time = Date.now() * 0.001;
+            nodes.forEach((node, i) => {
+                node.rotation.x = time * 0.1 + i * 0.1;
+                node.rotation.y = time * 0.2 + i * 0.2;
+                node.scale.x = 1 + Math.sin(time + i) * 0.1;
+                node.scale.y = 1 + Math.cos(time + i) * 0.1;
+                node.scale.z = 1 + Math.sin(time * 1.3 + i) * 0.1;
+            });
+            
+            // Update connections
+            connections.forEach((connection, i) => {
+                const startNode = nodes[Math.floor(i / 1.5) % nodes.length];
+                const endNode = nodes[(Math.floor(i / 1.5) + 5) % nodes.length];
+                
+                const positions = [
+                    startNode.position.clone(),
+                    endNode.position.clone()
+                ];
+                
+                connection.geometry.setFromPoints(positions);
+            });
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Handle window resize
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+        
+        // Initialize p5.js sketch for oscilloscope
+        function setup() {
+            const canvas = createCanvas(200, 200);
+            canvas.parent('p5-container');
+            noFill();
+            stroke(0, 170, 255);
+            strokeWeight(1);
+        }
+        
+        function draw() {
+            background(0, 20, 40, 100);
+            
+            // Draw XY oscilloscope (Lissajous)
+            beginShape();
+            for (let i = 0; i < width; i++) {
+                const angle = map(i, 0, width, 0, TWO_PI);
+                const x = width/2 + sin(angle * 2) * 60;
+                const y = height/2 + sin(angle * 3 + frameCount * 0.05) * 60;
+                vertex(x, y);
+            }
+            endShape();
+            
+            // Draw center crosshair
+            stroke(0, 100, 150);
+            line(width/2, 0, width/2, height);
+            line(0, height/2, width, height/2);
+        }
+        
+        // Start audio context on first interaction
+        function startAudioContext() {
+            if (!audioContextStarted) {
+                Tone.start();
+                audioContextStarted = true;
+                document.removeEventListener('click', startAudioContext);
+                document.removeEventListener('touchstart', startAudioContext);
+            }
+        }
+        
+        // Initialize when page loads
+        window.addEventListener('load', () => {
+            init();
+            document.addEventListener('click', startAudioContext);
+            document.addEventListener('touchstart', startAudioContext);
+            document.addEventListener('keydown', handleKeyPress);
+        });
+    </script>
+</body>
+</html>

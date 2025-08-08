@@ -1,0 +1,937 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>ARC-Style Modular (THREE + p5 + Tone)</title>
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<style>
+  :root { --bg:#0b0d10; --fg:#cfe8ff; --muted:#7aa2c6; --ok:#76e3a0; --hot:#ff857f; --wire:#66d9ef; }
+  html,body { margin:0; height:100%; background:linear-gradient(180deg,#0b0d10 0%, #0a0f14 100%); color:var(--fg); font:13px/1.4 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; }
+  #app { position:fixed; inset:0; overflow:hidden; }
+  #three { position:absolute; inset:0; }
+  /* p5 canvas mounts absolutely as well */
+  #hud { position:absolute; inset:0; pointer-events:none; }
+  #bootHint {
+    position:absolute; inset:auto 20px 20px auto; background:#0a0f14cc; border:1px solid #1e2633;
+    padding:8px 10px; border-radius:8px; pointer-events:auto; cursor:pointer; user-select:none;
+  }
+  #bootHint b { color:var(--ok); }
+  .legend {
+    position:absolute; left:16px; bottom:16px; background:#0a0f14cc; border:1px solid #1e2633; padding:8px 10px; border-radius:8px;
+  }
+  .legend div { margin:2px 0 }
+  .kbd { display:inline-block; min-width:14px; text-align:center; background:#111722; color:#cde7ff; border:1px solid #263248; border-radius:4px; padding:0 4px; }
+</style>
+</head>
+<body>
+<div id="app">
+  <canvas id="three"></canvas>
+  <div id="hud"></div>
+  <div id="bootHint"><b>Click to start audio</b><br/>Drag cables, press <span class="kbd">1</span>…<span class="kbd">0</span> to load seeds.</div>
+  <div class="legend">
+    <div>Seed: <span id="seedTxt">n/a</span></div>
+    <div>Preset: <span id="presetTxt">0</span> / 10 &nbsp; <span id="presetName">—</span></div>
+    <div>BPM: <span id="bpmTxt">92</span> &nbsp; Scale: <span id="scaleTxt">D Dorian</span></div>
+  </div>
+</div>
+
+<!-- libs: ONLY three, p5, tone -->
+<script src="https://unpkg.com/three@0.160.0/build/three.min.js"></script>
+<script src="https://unpkg.com/p5@1.9.3/lib/p5.min.js"></script>
+<script src="https://unpkg.com/tone@14.8.49/build/Tone.js"></script>
+
+<script>
+/* ===========================
+   Utility: deterministic PRNG
+   =========================== */
+function mulberry32(a){return function(){let t=a+=0x6D2B79F5;t=Math.imul(t^t>>>15,t|1);t^=t+Math.imul(t^t>>>7,t|61);return ((t^t>>>14)>>>0)/4294967296}}
+const hashSeed = (s) => {
+  let h=2166136261>>>0; for(let i=0;i<s.length;i++){h^=s.charCodeAt(i); h = Math.imul(h,16777619)}
+  return h>>>0;
+};
+const rrange = (rng, a, b) => a + (b-a)*rng();
+
+/* ==========================================
+   Music helpers: scales, freq, chords, timing
+   ========================================== */
+const A4 = 440;
+const midiToFreq = m => A4 * Math.pow(2,(m-69)/12);
+const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+const parseKey = (rootName) => {
+  const i = noteNames.indexOf(rootName.toUpperCase().replace('♯','#'));
+  return (i<0?2:i); // default D
+};
+// D Dorian degrees (relative semitones)
+const SCALE_DORIAN = [0,2,3,5,7,9,10];
+const buildScale = (root="D", octave=3, octaves=3) => {
+  const rootIdx=parseKey(root);
+  const result=[];
+  for(let o=0;o<octaves;o++){
+    for(const deg of SCALE_DORIAN) result.push(12*octave + o*12 + ((rootIdx + deg) % 12));
+  }
+  return result;
+};
+const defaultScale = buildScale("D",3,3);
+
+/* ========================
+   Global state + constants
+   ======================== */
+const STATE = {
+  booted:false,
+  rng: mulberry32(hashSeed(location.hash.slice(1)||"arc")),
+  seed: location.hash.slice(1) || "arc",
+  presetIndex:0,
+  presets:[], // 10 generated per-seed
+  humanize:true,
+  bpm:92,
+  scaleName:"D Dorian",
+  scale: defaultScale,
+  // Macro XY values 0..1:
+  macroX:0.5, macroY:0.5
+};
+const UI = {};
+const AUDIO = {};
+
+/* ==================================================
+   Audio Engine: 8-voice poly modular with FX & matrix
+   ================================================== */
+// Lightweight Sample & Hold source: steps a Noise at interval using a clock
+class SampleHold {
+  constructor(T, rateHz=2){
+    this.T=T;
+    this.rate = new T.ToneConstantSource(0).start();
+    this.noise = new T.Noise("white").start();
+    this.mul = new T.Multiply();
+    this.level = new T.Signal(0);  // output signal (0..1 noise sampled)
+    this._val = 0;
+    this.interval = new T.Interval(()=> {
+      // sample instantaneous noise by reading analyser RMS approx
+      // (cheap approximation: random because white noise)
+      this._val = Math.random(); // deterministic enough for music use
+      this.level.rampTo(this._val, 0.01);
+    }, 1/rateHz).start();
+    this.level.connect(this.mul);
+  }
+  connect(dest){ this.level.connect(dest); return this; }
+  dispose(){ this.interval.dispose(); this.noise.dispose(); this.level.dispose(); this.mul.dispose(); }
+}
+
+// Per-voice chain: 3 VCO + Noise -> Mixer -> SVF -> VCA (AmpEnv) -> Out
+class Voice {
+  constructor(T, options){
+    this.T=T;
+    this.opts=options;
+    // signals
+    this.pitch = new T.Signal(440);
+    // Oscillators
+    this.vco1 = new T.Oscillator({ type: "sawtooth", frequency: 440, volume:-12 }).start();
+    this.vco2 = new T.Oscillator({ type: "triangle",  frequency: 440, volume:-12 }).start();
+    this.vco3 = new T.Oscillator({ type: "square",    frequency: 440, volume:-18 }).start();
+    // PWM via LFO to width if PulseOscillator, else detune
+    this.pwmLFO = new T.LFO({ type:"sine", frequency:0.15, min:-20, max:20 }).start();
+    // Noise
+    this.noise = new T.Noise("white").start();
+    this.noiseGain = new T.Gain(0.02);
+    this.noise.connect(this.noiseGain);
+
+    // Ring Mod: multiply vco1 * vco2 (audio-rate AM)
+    this.ringMul = new T.Multiply();
+    this.vco1.connect(this.ringMul, 0, 0);
+    this.vco2.connect(this.ringMul, 0, 1);
+
+    // Mixer
+    this.mix = new T.Gain(1);
+    this.vco1.connect(this.mix);
+    this.vco2.connect(this.mix);
+    this.vco3.connect(this.mix);
+    this.noiseGain.connect(this.mix);
+    this.ringMul.connect(this.mix);
+
+    // State-variable filter (SVF multimode)
+    this.filter = new T.Filter(1200, "lowpass", -12);
+    this.filter.set({ Q: 0.2 });
+
+    // Dual envelopes
+    this.ampEnv = new T.AmplitudeEnvelope({ attack:0.3, decay:1.2, sustain:0.6, release:2.5 });
+    this.modEnv = new T.Envelope({ attack:0.3, decay:1.2, sustain:0.6, release:2.5 });
+
+    // VCA / final gain for clickless switching per voice too
+    this.vca = new T.Gain(0.7);
+
+    // ADSR routing
+    this.mix.connect(this.filter);
+    this.filter.connect(this.ampEnv);
+    this.ampEnv.connect(this.vca);
+
+    // Glide (portamento) via frequency ramping
+    this.glideTime = 0.045;
+
+    // LFOs (global per-voice so modulation matrix can sum)
+    this.lfo1 = new T.LFO({ type:"sine", frequency:0.06, min:-1, max:1 }).start();
+    this.lfo2 = new T.LFO({ type:"triangle", frequency:0.09, min:-1, max:1 }).start();
+
+    // Hook frequency: all oscillators follow pitch with glide
+    const follow = (osc) => this.pitch.connect(osc.frequency);
+    follow(this.vco1); follow(this.vco2); follow(this.vco3);
+
+    // Output
+    this.output = this.vca;
+
+    // Runtime modulation accumulators
+    this._add = {
+      cutoff:0, resonance:0, amp:0, detune:0, pw:0, pan:0
+    };
+
+    // Panner per voice for width staging
+    this.pan = new T.Panner(0);
+    this.vca.connect(this.pan);
+    this.out = this.pan;
+  }
+
+  trigger(noteHz, vel=0.9){
+    const now = this.T.now();
+    // clickless frequency glide
+    const t = this.glideTime;
+    this.pitch.cancelAndHoldAtTime(now);
+    this.pitch.setTargetAtTime(noteHz, now, t);
+
+    // set per-trigger envelopes
+    this.ampEnv.triggerAttack(now, vel);
+    this.modEnv.triggerAttack(now, vel);
+  }
+
+  release(){
+    const now = this.T.now();
+    this.ampEnv.triggerRelease(now);
+    this.modEnv.triggerRelease(now);
+  }
+
+  setVCOMix(a=1,b=1,c=0.5, noise=0.02, ring=0.0){
+    this.vco1.volume.value = -12 + 20*Math.log10(Math.max(1e-4,a));
+    this.vco2.volume.value = -12 + 20*Math.log10(Math.max(1e-4,b));
+    this.vco3.volume.value = -12 + 20*Math.log10(Math.max(1e-4,c));
+    this.noiseGain.gain.rampTo(noise, 0.03);
+    this.ringMul.gain ? this.ringMul.gain.rampTo(ring, 0.03) : 0; // Multiply has no gain in Tone14; safe-guard
+  }
+
+  setWaveTypes(t1="sawtooth", t2="triangle", t3="square"){
+    this.vco1.type=t1; this.vco2.type=t2; this.vco3.type=t3;
+  }
+
+  setFilter(cutoff=1200, q=0.2, type="lowpass"){
+    this.filter.set({ frequency: cutoff, Q:q, type });
+  }
+
+  setPwmDepth(depthCents=8){
+    // Push as detune (approx PWM feel across osc2/3)
+    this.pwmLFO.connect(this.vco2.detune);
+    this.pwmLFO.connect(this.vco3.detune);
+    this.pwmLFO.min = -depthCents; this.pwmLFO.max = depthCents;
+  }
+
+  setPan(p){ this.pan.pan.rampTo(p, 0.05); }
+
+  connect(dest){ this.out.connect(dest); return this; }
+
+  dispose(){
+    [this.vco1,this.vco2,this.vco3,this.noise,this.noiseGain,this.mix,this.filter,
+     this.ampEnv,this.modEnv,this.vca,this.pitch,this.pwmLFO,this.lfo1,this.lfo2,
+     this.pan].forEach(n=> n && n.dispose && n.dispose());
+  }
+}
+
+// Poly engine with two layers for 30ms crossfade preset switching
+class PolyEngine {
+  constructor(T, voices=8){
+    this.T=T;
+    this.voices=voices;
+    this.layerA = this._buildLayer();
+    this.layerB = this._buildLayer();
+    this.active = this.layerA;
+    this.inactive = this.layerB;
+
+    // FX rack (shared)
+    this.fx = {
+      chorus: new T.Chorus({ frequency:1.2, delayTime:4.5, depth:0.35, spread:180, wet:0.4 }).start(),
+      phaser: new T.Phaser({ frequency:0.3, octaves:3, baseFrequency:700, Q:3, wet:0.15 }),
+      widener: new T.StereoWidener({ width:0.7 }),
+      reverb: new T.Reverb({ decay:6.5, preDelay:0.03, wet:0.45 }),
+      delay: new T.FeedbackDelay({ delayTime:0.32, feedback:0.35, wet:0.25 })
+    };
+    // Master meters for p5
+    this.analyser = new T.Analyser("fft", 256);
+    this.level = new T.Meter({ channels:2 });
+
+    // Routing: active layer -> FX -> Destination
+    this.outGain = new T.Gain(0.85).toDestination();
+    this.bus = new T.Gain(1);
+    this.bus.chain(this.fx.chorus, this.fx.phaser, this.fx.widener, this.fx.reverb, this.fx.delay, this.outGain, this.analyser, this.level);
+    this.layerA.sum.connect(this.bus);
+    this.layerB.sum.connect(this.bus);
+
+    // prewarm
+    this._prewarm();
+  }
+
+  _buildLayer(){
+    const T=this.T;
+    const layer = { voices:[], free:[], sum:new T.Gain(1), vIndex:0, params:{} };
+    for(let i=0;i<this.voices;i++){
+      const v=new Voice(T,{});
+      // subtle static pan spread
+      v.setPan((i/(this.voices-1))*1.6 - 0.8);
+      v.connect(layer.sum);
+      layer.voices.push(v);
+      layer.free.push(i);
+    }
+    return layer;
+  }
+
+  _prewarm(){
+    // touch oscillators so they’re running and caches are warm
+    const now = this.T.now();
+    for(const v of this.active.voices){
+      v.pitch.setValueAtTime(440, now);
+    }
+  }
+
+  setParams(p){
+    // Apply to active layer
+    const L=this.active;
+    L.params=p;
+    for(const v of L.voices){
+      v.setWaveTypes(p.vco1.type,p.vco2.type,p.vco3.type);
+      v.setVCOMix(p.vco1.level,p.vco2.level,p.vco3.level,p.noise.level,p.ring.amount);
+      v.setFilter(p.filter.cutoff,p.filter.resonance,p.filter.type);
+      v.ampEnv.set(p.ampEnv);
+      v.modEnv.set(p.modEnv);
+      v.glideTime = p.glide;
+      v.setPwmDepth(p.pwmDepth);
+    }
+    // FX
+    this.fx.chorus.set({ frequency:p.fx.chorusFreq, depth:p.fx.chorusDepth, wet:p.fx.chorusWet });
+    this.fx.phaser.set({ frequency:p.fx.phaserFreq, Q:p.fx.phaserQ, baseFrequency:p.fx.phaserBase, wet:p.fx.phaserWet });
+    this.fx.widener.set({ width: p.fx.width });
+    this.fx.reverb.set({ decay:p.fx.reverbDecay, wet:p.fx.reverbWet });
+    this.fx.delay.set({ delayTime:p.fx.delayTime, feedback:p.fx.feedback, wet:p.fx.delayWet });
+  }
+
+  // Clickless 30ms crossfade by swapping active<->inactive, copying params to inactive first
+  xfadeTo(newParams){
+    const T=this.T; const now=T.now();
+    // Load params into inactive layer
+    const to = this.inactive;
+    for(const v of to.voices){
+      v.setWaveTypes(newParams.vco1.type,newParams.vco2.type,newParams.vco3.type);
+      v.setVCOMix(newParams.vco1.level,newParams.vco2.level,newParams.vco3.level,newParams.noise.level,newParams.ring.amount);
+      v.setFilter(newParams.filter.cutoff,newParams.filter.resonance,newParams.filter.type);
+      v.ampEnv.set(newParams.ampEnv);
+      v.modEnv.set(newParams.modEnv);
+      v.glideTime = newParams.glide;
+      v.setPwmDepth(newParams.pwmDepth);
+    }
+    // quick, musical crossfade at sum bus
+    this.active.sum.gain.cancelAndHoldAtTime(now);
+    this.inactive.sum.gain.cancelAndHoldAtTime(now);
+    this.active.sum.gain.rampTo(0, 0.03);
+    this.inactive.sum.gain.rampTo(1, 0.03);
+    // swap pointers
+    const tmp=this.active; this.active=this.inactive; this.inactive=tmp;
+    this.active.params=newParams;
+  }
+
+  noteOn(midi, vel=0.9){
+    const hz = midiToFreq(midi);
+    const L = this.active;
+    // allocate voice (round-robin)
+    const i = L.vIndex++ % this.voices;
+    const v = L.voices[i];
+    v.trigger(hz, vel);
+  }
+  noteOff(){
+    // in pad context, release all currently sounding (simple)
+    for(const v of this.active.voices) v.release();
+  }
+}
+
+/* ==================
+   Sequencer (16 step)
+   ================== */
+class Sequencer {
+  constructor(T, engine){
+    this.T=T; this.engine=engine;
+    this.steps = new Array(16).fill(null).map(()=>[]); // array of chord arrays
+    this.playing=false; this.idx=0;
+    this.part = null;
+    this.bpm = STATE.bpm;
+    this.humanize = STATE.humanize;
+    T.Transport.bpm.value=this.bpm;
+  }
+  setPattern(pattern){ this.steps=pattern.map(s=>Array.isArray(s)?s:[]); }
+  start(){
+    const T=this.T;
+    if(this.part) this.part.dispose();
+    this.idx=0;
+    const dur = "16n";
+    this.part = new T.Part((time, stepIndex)=>{
+      const chord = this.steps[stepIndex] || [];
+      // humanize microtiming
+      const jitter = this.humanize ? (Math.random()-0.5)*0.012 : 0;
+      const at = time + jitter;
+      chord.forEach(m=> this.engine.noteOn(m, 0.9));
+      this.T.Transport.scheduleOnce(()=> this.engine.noteOff(), at + T.Time("8n").toSeconds());
+    }, Array.from({length:16}, (_,i)=> [i*T.Time("16n").toSeconds(), i]));
+    this.part.loop = 16;
+    this.part.loopEnd = T.Time("16n")*16;
+    this.part.start(0);
+    T.Transport.start("+0.05"); // tiny nudge for stability
+    this.playing=true;
+  }
+  stop(){
+    this.playing=false;
+    if(this.part){ this.part.dispose(); this.part=null; }
+    this.T.Transport.stop();
+  }
+  toggle(){ this.playing?this.stop():this.start(); }
+}
+
+/* =========================
+   Mod Matrix (8x8 + cables)
+   ========================= */
+// We use continuous control application per animation tick.
+// Sources: LFO1, LFO2, ENV1, ENV2, S&H, MacroX, MacroY, Velocity (placeholder)
+// Dests: pitch, cutoff, reso, amp, detune, pan, fxMix(reverb), pulseWidth(sim via detune)
+const SOURCES = ["LFO1","LFO2","ENV1","ENV2","S&H","MacroX","MacroY","Velocity"];
+const DESTS   = ["pitch","cutoff","resonance","amp","detune","pan","reverb","delay"];
+class ModMatrix {
+  constructor(engine){
+    this.engine=engine;
+    // depths [8x8], -1..+1
+    this.depth = Array.from({length:8},()=> Array(8).fill(0));
+    // visualize levels for meters (0..1)
+    this.levels = new Float32Array(8);
+    // cable graph for UI
+    this.cables = []; // {src,dst,weight}
+  }
+
+  addRoute(src, dst, amount){
+    this.depth[src][dst] = amount;
+    const found = this.cables.find(c=>c.src===src && c.dst===dst);
+    if(found) found.weight=amount; else this.cables.push({src,dst,weight:amount});
+  }
+  clear(){ this.depth.forEach(r=>r.fill(0)); this.cables.length=0; }
+
+  tick(){
+    // compute each source value (-1..+1)
+    const L = this.engine.active.voices[0]; // use first voice modulators as drivers
+    const nowVal = [
+      L.lfo1.value, L.lfo2.value,
+      L.modEnv.value?L.modEnv.value:0, // ENV1
+      L.ampEnv.value?L.ampEnv.value:0, // ENV2 (okay to swap)
+      Math.random()*2-1, // S&H (quick hack; separate SampleHold class could drive)
+      STATE.macroX*2-1,
+      STATE.macroY*2-1,
+      0 // Velocity from sequencer (could be expanded)
+    ];
+    // update meters
+    for(let i=0;i<8;i++) this.levels[i] = (nowVal[i]+1)/2;
+
+    // accumulate on active layer
+    const layer = this.engine.active;
+    const p = layer.params;
+    // baselines
+    const base = {
+      cutoff:p.filter.cutoff, reso:p.filter.resonance, amp:0.7, detune:0, pan:0, reverb:p.fx.reverbWet, delay:p.fx.delayWet
+    };
+
+    let sum = {
+      cutoff:0, resonance:0, amp:0, detune:0, pan:0, reverb:0, delay:0, pitch:0
+    };
+    // apply matrix
+    for(let s=0;s<8;s++){
+      for(let d=0;d<8;d++){
+        const amt = this.depth[s][d];
+        if(amt===0) continue;
+        const val = nowVal[s]*amt; // -1..+1 scaled
+        switch(d){
+          case 0: sum.pitch += val*25; break; // cents
+          case 1: sum.cutoff += val*2000; break;
+          case 2: sum.resonance += val*0.6; break;
+          case 3: sum.amp += val*0.3; break;
+          case 4: sum.detune += val*15; break; // cents
+          case 5: sum.pan += val*0.8; break;
+          case 6: sum.reverb += val*0.3; break;
+          case 7: sum.delay  += val*0.3; break;
+        }
+      }
+    }
+
+    // write to all voices (fast ramps)
+    const T=Tone;
+    for(const v of layer.voices){
+      // pitch detune via osc detune signals
+      const cents = sum.detune + sum.pitch;
+      v.vco1.detune.rampTo(cents, 0.015);
+      v.vco2.detune.rampTo(cents, 0.015);
+      v.vco3.detune.rampTo(cents, 0.015);
+      // filter
+      const fc = Math.max(80, Math.min(15000, base.cutoff + sum.cutoff));
+      v.filter.frequency.rampTo(fc, 0.02);
+      const q = Math.max(0.1, Math.min(12, (base.reso + sum.resonance)));
+      v.filter.Q.rampTo(q, 0.02);
+      // amp
+      const ga = Math.max(0, Math.min(1, 0.7 + sum.amp));
+      v.vca.gain.rampTo(ga, 0.015);
+      // pan
+      v.pan.pan.rampTo(Math.max(-1,Math.min(1,sum.pan)), 0.02);
+    }
+    // FX wet
+    const fx = this.engine.fx;
+    fx.reverb.wet.rampTo(Math.max(0,Math.min(1, base.reverb + sum.reverb)), 0.03);
+    fx.delay.wet.rampTo(Math.max(0,Math.min(1, base.delay + sum.delay)), 0.03);
+  }
+}
+
+/* ====================
+   Presets (seeded 1–0)
+   ==================== */
+function makePreset(rng, index){
+  // Base: lush poly pad defaults
+  const base = {
+    name: `Pad-${index+1}`,
+    vco1:{ type:"sawtooth", level:0.9 },
+    vco2:{ type:"triangle", level:0.85 },
+    vco3:{ type: rng()<0.5?"square":"sawtooth", level:0.35 },
+    noise:{ level: 0.02 + 0.03*rng() },
+    ring:{ amount: 0.0 + 0.2*rng() },
+    filter:{ type:"lowpass", cutoff:1200, resonance:0.2 },
+    ampEnv:{ attack:0.3, decay:1.2, sustain:0.6, release:2.5 },
+    modEnv:{ attack:0.3, decay:1.2, sustain:0.6, release:2.5 },
+    pwmDepth: 8 + 12*rng(),
+    glide: 0.045,
+    fx:{
+      chorusFreq: 1.1 + 0.3*rng(), chorusDepth: 0.3 + 0.15*rng(), chorusWet: 0.4 + 0.1*rng(),
+      phaserFreq: 0.2 + 0.3*rng(), phaserQ: 3, phaserBase: 700, phaserWet: 0.1 + 0.12*rng(),
+      width: 0.7,
+      reverbDecay: 6 + 2*rng(), reverbWet: 0.45 + 0.1*rng(),
+      delayTime: 0.28 + 0.12*rng(), feedback: 0.25 + 0.2*rng(), delayWet: 0.2 + 0.15*rng()
+    }
+  };
+  // Flavor tweaks per index for variety
+  if(index%3===1){ base.vco1.type="triangle"; base.vco2.type="sawtooth"; base.filter.cutoff=900; }
+  if(index%3===2){ base.vco3.type="square"; base.vco3.level=0.5; base.filter.resonance=0.3; }
+  if(index===0){ base.name="Lush Poly Pad (Default)"; } // exact default
+  return base;
+}
+
+function buildPresetsForSeed(seed){
+  const rng = mulberry32(hashSeed(seed));
+  const list = Array.from({length:10}, (_,i)=> makePreset(rng,i));
+  return list;
+}
+
+/* ==========================
+   THREE.js graph (node cards)
+   ========================== */
+const ThreeUI = (function(){
+  const W=window, D=document;
+  let renderer, scene, camera, raycaster, mouse, dragging=false;
+  const modules = []; // visual nodes
+  const sockets = []; // {module, pos (Vector3), type:"src"|"dst", index}
+  const lines  = [];  // cable lines
+
+  const socketRadius=0.05;
+  const lineMat = new THREE.LineBasicMaterial({ transparent:true, opacity:0.9 });
+
+  function init(){
+    const canvas = D.getElementById("three");
+    renderer = new THREE.WebGLRenderer({ canvas, antialias:true, alpha:true });
+    resize();
+    scene = new THREE.Scene();
+    camera = new THREE.PerspectiveCamera(35, canvas.clientWidth/canvas.clientHeight, 0.1, 1000);
+    camera.position.set(0,0,7);
+    raycaster = new THREE.Raycaster();
+    mouse = new THREE.Vector2();
+
+    // soft parallax lights
+    const amb = new THREE.AmbientLight(0x6688aa, 0.6); scene.add(amb);
+    const d1 = new THREE.DirectionalLight(0xffffff, 0.6); d1.position.set(2,4,6); scene.add(d1);
+
+    // Create cards for modules (audio + mod)
+    const rows = [
+      ["VCO1","VCO2","VCO3","Noise","Mixer","SVF","VCA","FX"],
+      ["LFO1","LFO2","ADSR1","ADSR2","S&H","Glide","RingMod","Seq"]
+    ];
+    const cardMat = new THREE.MeshStandardMaterial({ color:0x111826, metalness:0.1, roughness:0.9 });
+    const edgeMat = new THREE.LineBasicMaterial({ color:0x263248, transparent:true, opacity:0.8 });
+
+    rows.forEach((row,y)=>{
+      row.forEach((name,x)=>{
+        const group = new THREE.Group(); scene.add(group);
+        const geo = new THREE.BoxGeometry(1.3,0.9,0.05);
+        const mesh = new THREE.Mesh(geo, cardMat.clone());
+        mesh.position.set((x-3.5)*1.6, (1 - y)*1.3, 0);
+        mesh.castShadow=true; mesh.receiveShadow=true;
+        group.add(mesh);
+        // border
+        const edges = new THREE.EdgesGeometry(geo);
+        const line = new THREE.LineSegments(edges, edgeMat.clone());
+        mesh.add(line);
+
+        // title as small Sprite
+        const label = makeLabel(name);
+        label.position.set(0,0.55,0.03);
+        mesh.add(label);
+
+        modules.push({name, mesh});
+        // sockets: round = source, square = dest
+        const src = makeSocket(true); src.position.set(-0.55,0,0.06); mesh.add(src);
+        const dst = makeSocket(false); dst.position.set( 0.55,0,0.06); mesh.add(dst);
+        sockets.push({module:name, obj:src, type:"src"});
+        sockets.push({module:name, obj:dst, type:"dst"});
+      });
+    });
+
+    // events for cable dragging
+    renderer.domElement.addEventListener("pointerdown", onDown);
+    renderer.domElement.addEventListener("pointermove", onMove);
+    renderer.domElement.addEventListener("pointerup", onUp);
+    animate();
+  }
+
+  function resize(){
+    const canvas = D.getElementById("three");
+    const w = canvas.clientWidth = canvas.width = window.innerWidth;
+    const h = canvas.clientHeight = canvas.height = window.innerHeight;
+    if(renderer){
+      renderer.setSize(w,h,false);
+      camera.aspect = w/h; camera.updateProjectionMatrix();
+    }
+  }
+  window.addEventListener("resize", resize);
+
+  function makeLabel(text){
+    const canvas = document.createElement("canvas");
+    canvas.width=256; canvas.height=64;
+    const ctx = canvas.getContext("2d");
+    ctx.fillStyle="#0b0d10"; ctx.fillRect(0,0,256,64);
+    ctx.fillStyle="#cfe8ff"; ctx.font="28px ui-monospace";
+    ctx.textAlign="center"; ctx.textBaseline="middle";
+    ctx.fillText(text, 128, 32);
+    const tex = new THREE.CanvasTexture(canvas);
+    const mat = new THREE.SpriteMaterial({ map:tex, transparent:true });
+    const sp = new THREE.Sprite(mat); sp.scale.set(1.1,0.28,1);
+    return sp;
+  }
+
+  function makeSocket(isRound){
+    const g = isRound ? new THREE.CircleGeometry(socketRadius, 24) : new THREE.PlaneGeometry(socketRadius*2, socketRadius*2);
+    const m = new THREE.MeshBasicMaterial({ color: isRound?0x66d9ef:0x76e3a0, transparent:true, opacity:0.95 });
+    return new THREE.Mesh(g, m);
+  }
+
+  let dragLine=null, dragStart=null;
+  function onDown(e){
+    dragging=false;
+    const pick = pickSocket(e);
+    if(pick){
+      dragStart = pick;
+      dragLine = createCable(pick.obj.getWorldPosition(new THREE.Vector3()), cursorWorld(e));
+      scene.add(dragLine);
+      dragging=true;
+    }
+  }
+  function onMove(e){
+    if(!dragging||!dragLine) return;
+    updateCable(dragLine, cursorWorld(e));
+  }
+  function onUp(e){
+    if(!dragging) return;
+    dragging=false;
+    const drop = pickSocket(e);
+    if(drop && dragStart && dragStart.type==="src" && drop.type==="dst"){
+      finalizeCable(dragStart, drop, dragLine);
+    } else {
+      scene.remove(dragLine);
+    }
+    dragLine=null; dragStart=null;
+  }
+
+  function pickSocket(e){
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX-rect.left)/rect.width)*2 -1;
+    mouse.y = -((e.clientY-rect.top)/rect.height)*2 +1;
+    raycaster.setFromCamera(mouse, camera);
+    const objs = sockets.map(s=>s.obj);
+    const hits = raycaster.intersectObjects(objs);
+    if(hits.length){
+      const obj=hits[0].object;
+      return sockets.find(s=>s.obj===obj);
+    }
+    return null;
+  }
+  function cursorWorld(e){
+    const rect = renderer.domElement.getBoundingClientRect();
+    mouse.x = ((e.clientX-rect.left)/rect.width)*2 -1;
+    mouse.y = -((e.clientY-rect.top)/rect.height)*2 +1;
+    raycaster.setFromCamera(mouse, camera);
+    const z=0;
+    const pos = new THREE.Vector3(mouse.x, mouse.y, 0).unproject(camera);
+    // project onto z=0 plane
+    const dir = pos.sub(camera.position).normalize();
+    const distance = -camera.position.z/dir.z;
+    return camera.position.clone().add(dir.multiplyScalar(distance));
+  }
+
+  function createCable(a,b){
+    const geo = new THREE.BufferGeometry().setFromPoints([a,b]);
+    const mat = lineMat.clone(); mat.color = new THREE.Color(0x66d9ef);
+    return new THREE.Line(geo, mat);
+  }
+  function updateCable(line, end){
+    const positions = line.geometry.attributes.position.array;
+    positions[3]=end.x; positions[4]=end.y; positions[5]=end.z;
+    line.geometry.attributes.position.needsUpdate=true;
+  }
+  function finalizeCable(src, dst, line){
+    // Snap line endpoints to exact socket world positions
+    const A = src.obj.getWorldPosition(new THREE.Vector3());
+    const B = dst.obj.getWorldPosition(new THREE.Vector3());
+    const positions = line.geometry.attributes.position.array;
+    positions[0]=A.x; positions[1]=A.y; positions[2]=A.z;
+    positions[3]=B.x; positions[4]=B.y; positions[5]=B.z;
+    line.geometry.attributes.position.needsUpdate=true;
+    lines.push({src,dst,line});
+
+    // Wire into mod matrix if it matches a source/dest
+    const si = SOURCES.indexOf(src.module.replace("Seq","Velocity")); // remap Seq->Velocity
+    const di = DESTS.indexOf(
+      dst.module==="SVF"?"cutoff":
+      dst.module==="VCA"?"amp":
+      dst.module==="FX" ?"reverb":
+      dst.module==="RingMod"?"detune":
+      dst.module==="Mixer"?"pan":
+      dst.module
+    );
+    if(si>=0 && di>=0){
+      MATRIX.addRoute(si, di, 0.6); // default depth
+    }
+  }
+
+  function animate(){
+    requestAnimationFrame(animate);
+    // gentle parallax
+    const t = performance.now()*0.00015;
+    scene.rotation.y = Math.sin(t)*0.04;
+    scene.rotation.x = Math.cos(t*0.7)*0.03;
+    renderer.render(scene,camera);
+  }
+
+  return { init, resize };
+})();
+
+/* ===========================
+   p5 HUD: spectrum + XY Macro
+   =========================== */
+let P5HUD = null;
+function makeP5(){
+  const hud = document.getElementById("hud");
+  new p5((p)=>{
+    let fftBuf=[];
+    p.setup = ()=>{
+      const c = p.createCanvas(window.innerWidth, window.innerHeight);
+      c.parent(hud);
+      p.noStroke(); p.frameRate(60);
+    };
+    p.windowResized = ()=> p.resizeCanvas(window.innerWidth, window.innerHeight);
+
+    const xy = { x:0.6, y:0.4, down:false };
+    const pad = { x: 22, y: 22, w: 220, h: 160 };
+
+    function drawSpectrum(){
+      const fft = AUDIO.engine.analyser.getValue();
+      if(!fft) return;
+      const arr = Array.from(fft);
+      const N = arr.length;
+      const W = 260, H=80, x = p.width- W - 20, y = 20;
+      p.push();
+      p.translate(x,y);
+      p.fill(10,16,22,200); p.rect(0,0,W,H,8);
+      p.fill(118,227,160);
+      for(let i=0;i<N;i++){
+        const v = (arr[i]+140)/140; // approx normalize
+        const h = v*H;
+        p.rect(i*(W/N), H-h, W/N - 1, h);
+      }
+      p.pop();
+    }
+
+    function drawXY(){
+      p.push();
+      p.translate(pad.x, pad.y);
+      p.fill(10,16,22,200); p.rect(0,0,pad.w,pad.h,12);
+      p.stroke(38,50,72,220); p.noFill();
+      for(let i=1;i<4;i++){
+        p.rect(i*pad.w/4 - 1, 0, 2, pad.h, 2);
+        p.rect(0, i*pad.h/4 - 1, pad.w, 2, 2);
+      }
+      // handle
+      const hx = xy.x*pad.w, hy=(1-xy.y)*pad.h;
+      p.noStroke(); p.fill(102,217,239);
+      p.circle(hx, hy, 16);
+      p.pop();
+      // export macros
+      STATE.macroX = xy.x;
+      STATE.macroY = xy.y;
+    }
+
+    p.mousePressed = ()=>{
+      if(p.mouseX>pad.x && p.mouseX<pad.x+pad.w && p.mouseY>pad.y && p.mouseY<pad.y+pad.h){
+        xy.down=true; p.mouseDragged();
+      }
+    };
+    p.mouseReleased = ()=> xy.down=false;
+    p.mouseDragged = ()=>{
+      if(!xy.down) return;
+      xy.x = Math.min(1,Math.max(0,(p.mouseX-pad.x)/pad.w));
+      xy.y = Math.min(1,Math.max(0,1-(p.mouseY-pad.y)/pad.h));
+    };
+
+    p.draw = ()=>{
+      p.clear();
+      drawSpectrum();
+      drawXY();
+      // meters for modulation sources
+      const levels = MATRIX.levels;
+      const x0=22, y0=pad.y+pad.h+16;
+      p.push();
+      p.translate(x0,y0);
+      for(let i=0;i<SOURCES.length;i++){
+        p.fill(10,16,22,200); p.rect(0,i*18,200,12,6);
+        p.fill(118,227,160); p.rect(0,i*18, Math.max(2, levels[i]*200), 12,6);
+        p.fill(207,232,255); p.text(SOURCES[i], 206, i*18+10);
+      }
+      p.pop();
+    };
+    P5HUD = p;
+  });
+}
+
+/* ========================
+   Wiring it all together
+   ======================== */
+let ENGINE, MATRIX, SEQ;
+
+async function boot(){
+  if(STATE.booted) return;
+  await Tone.start(); // user gesture satisfied via click on hint box
+  STATE.booted=true;
+  document.getElementById("bootHint").style.display="none";
+
+  ENGINE = new PolyEngine(Tone, 8);
+  AUDIO.engine = ENGINE;
+  MATRIX = new ModMatrix(ENGINE);
+
+  SEQ = new Sequencer(Tone, ENGINE);
+  Tone.Transport.swing = 0.02; // slight swing to taste
+  Tone.Transport.humanize = true;
+
+  // seed + presets
+  STATE.presets = buildPresetsForSeed(STATE.seed);
+  applyPreset(0, /*immediate*/true);
+
+  // default sequencer chords (D Dorian pad)
+  const base = STATE.scale; // midi numbers
+  const pattern = [
+    [base[0], base[2], base[4]], [], [base[3],base[5],base[7]], [], // Dm to G
+    [base[1], base[3], base[5]], [], [base[4],base[6],base[8]], [], // Em to A
+    [base[0], base[2], base[4]], [], [base[3],base[5],base[7]], [],
+    [base[6], base[8], base[10]], [], [base[4],base[6],base[8]], []
+  ];
+  SEQ.setPattern(pattern);
+  SEQ.start();
+
+  // Initial helpful routes in the matrix
+  MATRIX.addRoute(SOURCES.indexOf("LFO1"), DESTS.indexOf("cutoff"), 0.45);
+  MATRIX.addRoute(SOURCES.indexOf("LFO2"), DESTS.indexOf("pan"), 0.25);
+  MATRIX.addRoute(SOURCES.indexOf("MacroX"), DESTS.indexOf("reverb"), 0.4);
+  MATRIX.addRoute(SOURCES.indexOf("MacroY"), DESTS.indexOf("delay"), 0.35);
+
+  // Engine tick loop for mod matrix
+  function tick(){
+    if(MATRIX) MATRIX.tick();
+    requestAnimationFrame(tick);
+  }
+  tick();
+
+  // HUD labels
+  document.getElementById("seedTxt").textContent = STATE.seed;
+  document.getElementById("bpmTxt").textContent = STATE.bpm;
+  document.getElementById("scaleTxt").textContent = STATE.scaleName;
+}
+
+function presetForKey(k){
+  // '1'..'9','0' -> 0..9
+  if(k==="0") return 9;
+  const n = (+k|0);
+  if(n>=1 && n<=9) return n-1;
+  return null;
+}
+
+function applyPreset(i, immediate=false){
+  i = Math.max(0,Math.min(9,i));
+  STATE.presetIndex=i;
+  const p = STATE.presets[i];
+  if(!p) return;
+  const name = p.name;
+  document.getElementById("presetTxt").textContent = (i+1);
+  document.getElementById("presetName").textContent = name;
+
+  if(immediate){
+    ENGINE.setParams(p);
+  } else {
+    ENGINE.xfadeTo(p); // 30ms crossfade inside
+  }
+}
+
+/* ==============
+   Event handlers
+   ============== */
+document.getElementById("bootHint").addEventListener("click", boot);
+window.addEventListener("keydown", (e)=>{
+  if(!STATE.booted && (e.key>="0" && e.key<="9")) boot();
+  const idx = presetForKey(e.key);
+  if(idx!=null && STATE.booted){
+    applyPreset(idx, /*immediate*/false);
+  }
+  if(e.key===" " && STATE.booted){ e.preventDefault(); SEQ.toggle(); }
+});
+
+/* ===========================
+   Init visuals (THREE + p5)
+   =========================== */
+ThreeUI.init();
+makeP5();
+
+/* ===========================
+   Seed handling from URL hash
+   =========================== */
+(function initSeed(){
+  const seed = (location.hash.slice(1) || "arc");
+  STATE.seed = seed;
+  STATE.rng = mulberry32(hashSeed(seed));
+  document.getElementById("seedTxt").textContent = seed;
+})();
+
+/* ============
+   Safety nets
+   ============ */
+// resume audio on visibility changes (iOS/Chrome quirks)
+document.addEventListener("visibilitychange", ()=>{
+  if(document.visibilityState==="visible" && STATE.booted){
+    Tone.context.resume();
+  }
+});
+</script>
+</body>
+</html>

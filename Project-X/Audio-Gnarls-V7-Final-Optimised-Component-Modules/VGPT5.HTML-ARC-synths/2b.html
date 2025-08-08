@@ -1,0 +1,1027 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARC Modular Synth</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/p5.js/1.4.0/p5.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        body {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: #e6e6e6;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        header {
+            padding: 15px 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border-bottom: 1px solid rgba(100, 150, 255, 0.2);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        h1 {
+            font-size: 1.8rem;
+            background: linear-gradient(90deg, #4cc9f0, #4361ee);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 10px rgba(76, 201, 240, 0.3);
+        }
+        .controls {
+            display: flex;
+            gap: 15px;
+        }
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        label {
+            font-size: 0.9rem;
+            color: #a0a0c0;
+        }
+        input[type="range"] {
+            width: 100px;
+            -webkit-appearance: none;
+            height: 5px;
+            border-radius: 5px;
+            background: rgba(100, 150, 255, 0.2);
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 15px;
+            height: 15px;
+            border-radius: 50%;
+            background: #4361ee;
+            cursor: pointer;
+            box-shadow: 0 0 5px rgba(67, 97, 238, 0.8);
+        }
+        .presets {
+            display: flex;
+            gap: 8px;
+        }
+        .preset-btn {
+            background: rgba(67, 97, 238, 0.2);
+            border: 1px solid rgba(67, 97, 238, 0.4);
+            color: #a0c0ff;
+            border-radius: 4px;
+            padding: 5px 10px;
+            cursor: pointer;
+            font-size: 0.9rem;
+            transition: all 0.2s;
+        }
+        .preset-btn:hover {
+            background: rgba(67, 97, 238, 0.4);
+            transform: translateY(-2px);
+        }
+        .preset-btn.active {
+            background: rgba(67, 97, 238, 0.6);
+            box-shadow: 0 0 10px rgba(67, 97, 238, 0.5);
+        }
+        .container {
+            display: flex;
+            flex: 1;
+            overflow: hidden;
+        }
+        #three-container {
+            flex: 3;
+            position: relative;
+        }
+        #p5-container {
+            flex: 1;
+            position: relative;
+            min-width: 300px;
+            background: rgba(0, 0, 0, 0.2);
+            border-left: 1px solid rgba(100, 150, 255, 0.2);
+        }
+        .module-info {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            max-width: 300px;
+            backdrop-filter: blur(5px);
+        }
+        .module-info h3 {
+            color: #4cc9f0;
+            margin-bottom: 10px;
+        }
+        .module-info p {
+            font-size: 0.9rem;
+            line-height: 1.5;
+            color: #c0c0e0;
+        }
+        .status-bar {
+            padding: 8px 20px;
+            background: rgba(0, 0, 0, 0.4);
+            border-top: 1px solid rgba(100, 150, 255, 0.2);
+            font-size: 0.9rem;
+            color: #a0a0c0;
+            display: flex;
+            justify-content: space-between;
+        }
+        .signal-meter {
+            display: inline-block;
+            width: 80px;
+            height: 12px;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 3px;
+            margin-left: 10px;
+            position: relative;
+            overflow: hidden;
+        }
+        .signal-level {
+            height: 100%;
+            background: linear-gradient(90deg, #00c9a7, #00ffcc);
+            width: 0%;
+            transition: width 0.1s;
+        }
+        .signal-label {
+            position: absolute;
+            top: 0;
+            left: 5px;
+            font-size: 0.7rem;
+            line-height: 12px;
+            color: rgba(255, 255, 255, 0.7);
+        }
+        .instructions {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.6);
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid rgba(100, 150, 255, 0.3);
+            max-width: 250px;
+            backdrop-filter: blur(5px);
+            font-size: 0.85rem;
+            line-height: 1.5;
+        }
+        .instructions h3 {
+            color: #f72585;
+            margin-bottom: 10px;
+        }
+        .instructions ul {
+            padding-left: 20px;
+        }
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        .instructions kbd {
+            background: rgba(67, 97, 238, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>ARC MODULAR SYNTH</h1>
+        <div class="controls">
+            <div class="control-group">
+                <label for="bpm">BPM:</label>
+                <input type="range" id="bpm" min="60" max="180" value="92">
+                <span id="bpm-value">92</span>
+            </div>
+            <div class="control-group">
+                <label for="humanize">Humanize:</label>
+                <input type="checkbox" id="humanize" checked>
+            </div>
+            <div class="presets">
+                <button class="preset-btn active" data-preset="0">1</button>
+                <button class="preset-btn" data-preset="1">2</button>
+                <button class="preset-btn" data-preset="2">3</button>
+                <button class="preset-btn" data-preset="3">4</button>
+                <button class="preset-btn" data-preset="4">5</button>
+                <button class="preset-btn" data-preset="5">6</button>
+                <button class="preset-btn" data-preset="6">7</button>
+                <button class="preset-btn" data-preset="7">8</button>
+                <button class="preset-btn" data-preset="8">9</button>
+                <button class="preset-btn" data-preset="9">0</button>
+            </div>
+        </div>
+    </header>
+    
+    <div class="container">
+        <div id="three-container"></div>
+        <div id="p5-container"></div>
+    </div>
+    
+    <div class="module-info">
+        <h3>Current Module: VCO1</h3>
+        <p>Triangle/Saw blend oscillator with PWM modulation. Connect to mixer or filter for sound shaping.</p>
+        <div class="signal-meter">
+            <div class="signal-level" style="width: 65%"></div>
+            <div class="signal-label">65%</div>
+        </div>
+    </div>
+    
+    <div class="instructions">
+        <h3>CONTROLS</h3>
+        <ul>
+            <li><kbd>1-0</kbd> Load presets</li>
+            <li><kbd>Click</kbd> Select modules</li>
+            <li><kbd>Drag</kbd> Create patch cables</li>
+            <li><kbd>Space</kbd> Start/stop sequencer</li>
+            <li><kbd>Shift + Click</kbd> Delete cables</li>
+        </ul>
+    </div>
+    
+    <div class="status-bar">
+        <div>Status: <span id="status">Ready</span></div>
+        <div>Voices: <span id="voices">0/8</span></div>
+        <div>Seed: <span id="seed">default</span></div>
+    </div>
+
+    <script>
+        // Initialize Tone.js
+        const synth = new Tone.PolySynth(Tone.Synth, {
+            oscillator: {
+                type: "triangle"
+            },
+            envelope: {
+                attack: 0.3,
+                decay: 1.2,
+                sustain: 0.6,
+                release: 2.5
+            }
+        }).toDestination();
+
+        // Create a reverb effect
+        const reverb = new Tone.Reverb({
+            decay: 8,
+            wet: 0.5
+        }).toDestination();
+
+        // Create a chorus effect
+        const chorus = new Tone.Chorus({
+            frequency: 0.5,
+            delayTime: 3.5,
+            depth: 0.7,
+            wet: 0.4
+        }).connect(reverb);
+
+        // Create a phaser effect
+        const phaser = new Tone.Phaser({
+            frequency: 15,
+            octaves: 5,
+            baseFrequency: 1000
+        }).connect(chorus);
+
+        // Create a delay effect
+        const delay = new Tone.FeedbackDelay({
+            delayTime: "8n",
+            feedback: 0.5,
+            wet: 0.3
+        }).connect(phaser);
+
+        // Connect synth to effects
+        synth.connect(delay);
+
+        // Sequencer setup
+        let sequence = [
+            ["D3", "F3", "A3", "C4"],
+            ["E3", "G3", "B3", "D4"],
+            ["F3", "A3", "C4", "E4"],
+            ["G3", "B3", "D4", "F4"],
+            ["A3", "C4", "E4", "G4"],
+            ["B3", "D4", "F4", "A4"],
+            ["C4", "E4", "G4", "B4"],
+            ["D4", "F4", "A4", "C5"],
+            ["E4", "G4", "B4", "D5"],
+            ["F4", "A4", "C5", "E5"],
+            ["G4", "B4", "D5", "F5"],
+            ["A4", "C5", "E5", "G5"],
+            ["B4", "D5", "F5", "A5"],
+            ["C5", "E5", "G5", "B5"],
+            ["D5", "F5", "A5", "C6"],
+            ["E5", "G5", "B5", "D6"]
+        ];
+
+        let step = 0;
+        let isPlaying = false;
+        let transport;
+
+        // BPM control
+        const bpmSlider = document.getElementById('bpm');
+        const bpmValue = document.getElementById('bpm-value');
+        
+        bpmSlider.addEventListener('input', () => {
+            bpmValue.textContent = bpmSlider.value;
+            Tone.Transport.bpm.value = parseInt(bpmSlider.value);
+        });
+
+        // Humanize control
+        const humanizeCheckbox = document.getElementById('humanize');
+
+        // Preset buttons
+        const presetButtons = document.querySelectorAll('.preset-btn');
+        presetButtons.forEach(button => {
+            button.addEventListener('click', () => {
+                presetButtons.forEach(btn => btn.classList.remove('active'));
+                button.classList.add('active');
+                loadPreset(parseInt(button.dataset.preset));
+            });
+        });
+
+        // Load preset function
+        function loadPreset(presetIndex) {
+            document.getElementById('seed').textContent = `preset-${presetIndex}`;
+            
+            // Apply preset-specific settings
+            switch(presetIndex) {
+                case 0: // Default lush pad
+                    synth.set({
+                        oscillator: { type: "triangle" },
+                        envelope: { attack: 0.3, decay: 1.2, sustain: 0.6, release: 2.5 }
+                    });
+                    chorus.wet.value = 0.4;
+                    reverb.decay = 8;
+                    break;
+                case 1: // Bass lead
+                    synth.set({
+                        oscillator: { type: "sawtooth" },
+                        envelope: { attack: 0.01, decay: 0.3, sustain: 0.8, release: 0.5 }
+                    });
+                    chorus.wet.value = 0.2;
+                    reverb.decay = 2;
+                    break;
+                case 2: // Arpeggiated
+                    synth.set({
+                        oscillator: { type: "square" },
+                        envelope: { attack: 0.005, decay: 0.1, sustain: 0.7, release: 0.2 }
+                    });
+                    chorus.wet.value = 0.3;
+                    reverb.decay = 1.5;
+                    break;
+                case 3: // Pad with vibrato
+                    synth.set({
+                        oscillator: { type: "sine" },
+                        envelope: { attack: 1, decay: 2, sustain: 0.7, release: 3 }
+                    });
+                    chorus.wet.value = 0.6;
+                    reverb.decay = 10;
+                    break;
+                case 4: // Plucked strings
+                    synth.set({
+                        oscillator: { type: "sine" },
+                        envelope: { attack: 0.001, decay: 0.5, sustain: 0, release: 0.1 }
+                    });
+                    chorus.wet.value = 0.1;
+                    reverb.decay = 1;
+                    break;
+                case 5: // Filter sweep
+                    synth.set({
+                        oscillator: { type: "sawtooth" },
+                        envelope: { attack: 0.1, decay: 0.5, sustain: 0.5, release: 0.5 }
+                    });
+                    chorus.wet.value = 0.3;
+                    reverb.decay = 3;
+                    break;
+                case 6: // Bell-like
+                    synth.set({
+                        oscillator: { type: "sine" },
+                        envelope: { attack: 0.001, decay: 1, sustain: 0, release: 1 }
+                    });
+                    chorus.wet.value = 0.5;
+                    reverb.decay = 5;
+                    break;
+                case 7: // Noise percussion
+                    synth.set({
+                        oscillator: { type: "noise" },
+                        envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 }
+                    });
+                    chorus.wet.value = 0.1;
+                    reverb.decay = 0.5;
+                    break;
+                case 8: // FM lead
+                    synth.set({
+                        oscillator: { type: "fmsquare" },
+                        envelope: { attack: 0.01, decay: 0.2, sustain: 0.8, release: 0.3 }
+                    });
+                    chorus.wet.value = 0.4;
+                    reverb.decay = 2;
+                    break;
+                case 9: // Drone
+                    synth.set({
+                        oscillator: { type: "triangle" },
+                        envelope: { attack: 2, decay: 0, sustain: 1, release: 3 }
+                    });
+                    chorus.wet.value = 0.7;
+                    reverb.decay = 15;
+                    break;
+            }
+        }
+
+        // Transport setup
+        function startSequencer() {
+            if (isPlaying) return;
+            
+            isPlaying = true;
+            document.getElementById('status').textContent = "Playing";
+            
+            transport = Tone.Transport.scheduleRepeat((time) => {
+                // Get current step
+                const currentStep = step % 16;
+                
+                // Play notes with humanization if enabled
+                const notes = sequence[currentStep];
+                if (humanizeCheckbox.checked) {
+                    // Add slight timing variation
+                    const variation = (Math.random() - 0.5) * 0.05;
+                    synth.triggerAttackRelease(notes, "8n", time + variation);
+                } else {
+                    synth.triggerAttackRelease(notes, "8n", time);
+                }
+                
+                // Update step
+                step = (step + 1) % 16;
+                
+                // Update voice count display
+                document.getElementById('voices').textContent = `${synth.voices.length}/8`;
+            }, "8n");
+            
+            Tone.Transport.start();
+        }
+
+        function stopSequencer() {
+            if (!isPlaying) return;
+            
+            isPlaying = false;
+            document.getElementById('status').textContent = "Stopped";
+            
+            Tone.Transport.stop();
+            Tone.Transport.clear(transport);
+        }
+
+        // Keyboard controls
+        document.addEventListener('keydown', (e) => {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (isPlaying) {
+                    stopSequencer();
+                } else {
+                    startSequencer();
+                }
+            }
+            
+            // Preset keys 1-0
+            if (e.code >= 'Digit1' && e.code <= 'Digit0') {
+                const presetIndex = e.code === 'Digit0' ? 9 : parseInt(e.code.replace('Digit', '')) - 1;
+                presetButtons.forEach(btn => btn.classList.remove('active'));
+                presetButtons[presetIndex].classList.add('active');
+                loadPreset(presetIndex);
+            }
+        });
+
+        // Initialize with default preset
+        loadPreset(0);
+    </script>
+
+    <script>
+        // THREE.js visualization
+        let scene, camera, renderer;
+        let modules = [];
+        let cables = [];
+        let selectedModule = null;
+        let isDragging = false;
+        let dragStart = new THREE.Vector2();
+        let cableStart = null;
+        let tempCable = null;
+
+        function initThree() {
+            const container = document.getElementById('three-container');
+            
+            // Create scene
+            scene = new THREE.Scene();
+            scene.background = new THREE.Color(0x0c0c1a);
+            
+            // Create camera
+            camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.z = 20;
+            
+            // Create renderer
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+            
+            // Add lighting
+            const ambientLight = new THREE.AmbientLight(0x404040, 1.5);
+            scene.add(ambientLight);
+            
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1);
+            directionalLight.position.set(5, 5, 5);
+            scene.add(directionalLight);
+            
+            // Create modules
+            createModules();
+            
+            // Add event listeners
+            window.addEventListener('resize', onWindowResize);
+            container.addEventListener('mousedown', onMouseDown);
+            container.addEventListener('mousemove', onMouseMove);
+            container.addEventListener('mouseup', onMouseUp);
+            
+            // Start animation loop
+            animate();
+        }
+        
+        function createModules() {
+            const moduleTypes = [
+                { name: "VCO1", color: 0x4361ee, inputs: 2, outputs: 2 },
+                { name: "VCO2", color: 0x4361ee, inputs: 2, outputs: 2 },
+                { name: "VCO3", color: 0x4361ee, inputs: 2, outputs: 2 },
+                { name: "Noise", color: 0x7209b7, inputs: 1, outputs: 1 },
+                { name: "Mixer", color: 0x3a0ca3, inputs: 4, outputs: 2 },
+                { name: "SVF", color: 0x4cc9f0, inputs: 3, outputs: 3 },
+                { name: "VCA", color: 0xf72585, inputs: 2, outputs: 1 },
+                { name: "ADSR1", color: 0x7209b7, inputs: 1, outputs: 1 },
+                { name: "ADSR2", color: 0x7209b7, inputs: 1, outputs: 1 },
+                { name: "LFO1", color: 0x4cc9f0, inputs: 1, outputs: 2 },
+                { name: "LFO2", color: 0x4cc9f0, inputs: 1, outputs: 2 },
+                { name: "S&H", color: 0xf72585, inputs: 2, outputs: 1 },
+                { name: "Glide", color: 0x3a0ca3, inputs: 2, outputs: 1 },
+                { name: "Ring Mod", color: 0xf72585, inputs: 2, outputs: 1 },
+                { name: "Chorus", color: 0x4cc9f0, inputs: 1, outputs: 1 },
+                { name: "Phaser", color: 0x4cc9f0, inputs: 1, outputs: 1 },
+                { name: "StereoWidener", color: 0x4cc9f0, inputs: 1, outputs: 1 },
+                { name: "Reverb", color: 0x4cc9f0, inputs: 1, outputs: 1 },
+                { name: "Delay", color: 0x4cc9f0, inputs: 2, outputs: 1 },
+                { name: "Mod Matrix", color: 0x3a0ca3, inputs: 8, outputs: 8 },
+                { name: "Sequencer", color: 0x7209b7, inputs: 2, outputs: 4 }
+            ];
+            
+            const gridSize = 5;
+            const spacing = 4;
+            
+            for (let i = 0; i < moduleTypes.length; i++) {
+                const type = moduleTypes[i];
+                const row = Math.floor(i / gridSize);
+                const col = i % gridSize;
+                
+                const module = createModule(
+                    type.name,
+                    type.color,
+                    col * spacing - (gridSize * spacing) / 2 + spacing / 2,
+                    -row * spacing + (Math.floor(moduleTypes.length / gridSize) * spacing) / 2 - spacing / 2,
+                    type.inputs,
+                    type.outputs
+                );
+                
+                scene.add(module);
+                modules.push(module);
+            }
+        }
+        
+        function createModule(name, color, x, y, inputs, outputs) {
+            const group = new THREE.Group();
+            group.position.set(x, y, 0);
+            
+            // Module body
+            const geometry = new THREE.BoxGeometry(3, 1.5, 0.2);
+            const material = new THREE.MeshPhongMaterial({ 
+                color: color,
+                shininess: 80,
+                emissive: new THREE.Color(color).multiplyScalar(0.1)
+            });
+            const cube = new THREE.Mesh(geometry, material);
+            group.add(cube);
+            
+            // Module label
+            const canvas = document.createElement('canvas');
+            const context = canvas.getContext('2d');
+            canvas.width = 256;
+            canvas.height = 128;
+            
+            context.fillStyle = '#ffffff';
+            context.font = 'bold 36px Arial';
+            context.textAlign = 'center';
+            context.fillText(name, 128, 70);
+            
+            const texture = new THREE.CanvasTexture(canvas);
+            const labelMaterial = new THREE.MeshBasicMaterial({ map: texture, transparent: true });
+            const labelGeometry = new THREE.PlaneGeometry(2.8, 1);
+            const label = new THREE.Mesh(labelGeometry, labelMaterial);
+            label.position.z = 0.11;
+            group.add(label);
+            
+            // Input ports
+            const portRadius = 0.15;
+            const portSpacing = 0.4;
+            const portY = 0.5;
+            
+            for (let i = 0; i < inputs; i++) {
+                const portGeometry = new THREE.CylinderGeometry(portRadius, portRadius, 0.1, 16);
+                portGeometry.rotateX(Math.PI / 2);
+                const portMaterial = new THREE.MeshPhongMaterial({ color: 0x228b22 });
+                const port = new THREE.Mesh(portGeometry, portMaterial);
+                port.position.set(
+                    -1.2 + i * portSpacing,
+                    portY,
+                    0.11
+                );
+                port.userData.type = 'input';
+                port.userData.index = i;
+                group.add(port);
+            }
+            
+            // Output ports
+            for (let i = 0; i < outputs; i++) {
+                const portGeometry = new THREE.CylinderGeometry(portRadius, portRadius, 0.1, 16);
+                portGeometry.rotateX(Math.PI / 2);
+                const portMaterial = new THREE.MeshPhongMaterial({ color: 0xdc143c });
+                const port = new THREE.Mesh(portGeometry, portMaterial);
+                port.position.set(
+                    -1.2 + i * portSpacing,
+                    -portY,
+                    0.11
+                );
+                port.userData.type = 'output';
+                port.userData.index = i;
+                group.add(port);
+            }
+            
+            group.userData = {
+                name: name,
+                inputs: inputs,
+                outputs: outputs
+            };
+            
+            return group;
+        }
+        
+        function onMouseDown(event) {
+            event.preventDefault();
+            
+            const rect = renderer.domElement.getBoundingClientRect();
+            const mouse = new THREE.Vector2();
+            mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+            mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+            
+            const raycaster = new THREE.Raycaster();
+            raycaster.setFromCamera(mouse, camera);
+            
+            const intersects = raycaster.intersectObjects(modules, true);
+            
+            if (intersects.length > 0) {
+                const object = intersects[0].object;
+                const module = object.parent;
+                
+                // Check if we clicked on a port
+                if (object.userData.type === 'input' || object.userData.type === 'output') {
+                    if (event.shiftKey) {
+                        // Delete cable if shift is pressed
+                        deleteCable(module, object);
+                    } else {
+                        // Start cable creation
+                        cableStart = {
+                            module: module,
+                            port: object,
+                            type: object.userData.type
+                        };
+                        
+                        // Create temporary cable
+                        const points = [];
+                        points.push(new THREE.Vector3(
+                            cableStart.module.position.x + cableStart.port.position.x,
+                            cableStart.module.position.y + cableStart.port.position.y,
+                            cableStart.module.position.z + cableStart.port.position.z
+                        ));
+                        points.push(new THREE.Vector3(
+                            cableStart.module.position.x + cableStart.port.position.x,
+                            cableStart.module.position.y + cableStart.port.position.y,
+                            cableStart.module.position.z + cableStart.port.position.z
+                        ));
+                        
+                        const cableGeometry = new THREE.BufferGeometry().setFromPoints(points);
+                        const cableMaterial = new THREE.LineBasicMaterial({ 
+                            color: cableStart.type === 'output' ? 0xdc143c : 0x228b22,
+                            linewidth: 2
+                        });
+                        tempCable = new THREE.Line(cableGeometry, cableMaterial);
+                        scene.add(tempCable);
+                    }
+                } else {
+                    // Select module
+                    selectedModule = module;
+                    isDragging = true;
+                    dragStart.set(event.clientX, event.clientY);
+                    
+                    // Update module info
+                    const info = document.querySelector('.module-info h3');
+                    info.textContent = `Current Module: ${module.userData.name}`;
+                }
+            } else {
+                // Deselect if clicking elsewhere
+                selectedModule = null;
+            }
+        }
+        
+        function onMouseMove(event) {
+            if (isDragging && selectedModule) {
+                const deltaX = event.clientX - dragStart.x;
+                const deltaY = event.clientY - dragStart.y;
+                
+                selectedModule.position.x += deltaX * 0.01;
+                selectedModule.position.y -= deltaY * 0.01;
+                
+                dragStart.set(event.clientX, event.clientY);
+            }
+            
+            if (tempCable) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                const mouse = new THREE.Vector2();
+                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                
+                const vector = new THREE.Vector3(mouse.x, mouse.y, 0.5);
+                vector.unproject(camera);
+                
+                const dir = vector.sub(camera.position).normalize();
+                const distance = -camera.position.z / dir.z;
+                const pos = camera.position.clone().add(dir.multiplyScalar(distance));
+                
+                const positions = tempCable.geometry.attributes.position.array;
+                positions[3] = pos.x;
+                positions[4] = pos.y;
+                positions[5] = pos.z;
+                tempCable.geometry.attributes.position.needsUpdate = true;
+            }
+        }
+        
+        function onMouseUp(event) {
+            if (tempCable) {
+                const rect = renderer.domElement.getBoundingClientRect();
+                const mouse = new THREE.Vector2();
+                mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+                mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+                
+                const raycaster = new THREE.Raycaster();
+                raycaster.setFromCamera(mouse, camera);
+                
+                const intersects = raycaster.intersectObjects(modules, true);
+                
+                if (intersects.length > 0) {
+                    const object = intersects[0].object;
+                    const module = object.parent;
+                    
+                    // Check if we can connect
+                    if (object.userData.type === 'input' && cableStart.type === 'output') {
+                        createCable(cableStart.module, cableStart.port, module, object);
+                    } else if (object.userData.type === 'output' && cableStart.type === 'input') {
+                        createCable(module, object, cableStart.module, cableStart.port);
+                    }
+                }
+                
+                // Remove temporary cable
+                scene.remove(tempCable);
+                tempCable = null;
+                cableStart = null;
+            }
+            
+            isDragging = false;
+        }
+        
+        function createCable(sourceModule, sourcePort, targetModule, targetPort) {
+            const points = [];
+            points.push(new THREE.Vector3(
+                sourceModule.position.x + sourcePort.position.x,
+                sourceModule.position.y + sourcePort.position.y,
+                sourceModule.position.z + sourcePort.position.z
+            ));
+            points.push(new THREE.Vector3(
+                targetModule.position.x + targetPort.position.x,
+                targetModule.position.y + targetPort.position.y,
+                targetModule.position.z + targetPort.position.z
+            ));
+            
+            // Create a curved cable
+            const curve = new THREE.CubicBezierCurve3(
+                points[0],
+                new THREE.Vector3(
+                    (points[0].x + points[1].x) / 2,
+                    points[0].y + 1,
+                    (points[0].z + points[1].z) / 2
+                ),
+                new THREE.Vector3(
+                    (points[0].x + points[1].x) / 2,
+                    points[1].y + 1,
+                    (points[0].z + points[1].z) / 2
+                ),
+                points[1]
+            );
+            
+            const curvePoints = curve.getPoints(50);
+            const cableGeometry = new THREE.BufferGeometry().setFromPoints(curvePoints);
+            const cableMaterial = new THREE.LineBasicMaterial({ 
+                color: 0x4cc9f0,
+                linewidth: 3
+            });
+            const cable = new THREE.Line(cableGeometry, cableMaterial);
+            
+            cable.userData = {
+                source: { module: sourceModule, port: sourcePort },
+                target: { module: targetModule, port: targetPort }
+            };
+            
+            scene.add(cable);
+            cables.push(cable);
+        }
+        
+        function deleteCable(module, port) {
+            for (let i = cables.length - 1; i >= 0; i--) {
+                const cable = cables[i];
+                if ((cable.userData.source.module === module && cable.userData.source.port === port) ||
+                    (cable.userData.target.module === module && cable.userData.target.port === port)) {
+                    scene.remove(cable);
+                    cables.splice(i, 1);
+                }
+            }
+        }
+        
+        function onWindowResize() {
+            const container = document.getElementById('three-container');
+            camera.aspect = container.clientWidth / container.clientHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(container.clientWidth, container.clientHeight);
+        }
+        
+        function animate() {
+            requestAnimationFrame(animate);
+            
+            // Add subtle animation to modules
+            const time = Date.now() * 0.001;
+            modules.forEach((module, index) => {
+                module.rotation.x = Math.sin(time * 0.2 + index) * 0.05;
+                module.rotation.y = Math.cos(time * 0.3 + index) * 0.03;
+                module.position.z = Math.sin(time * 0.5 + index) * 0.2;
+            });
+            
+            // Animate cables
+            cables.forEach((cable, index) => {
+                const positions = cable.geometry.attributes.position.array;
+                for (let i = 0; i < positions.length; i += 3) {
+                    positions[i+1] += Math.sin(time * 2 + i * 0.1) * 0.01;
+                }
+                cable.geometry.attributes.position.needsUpdate = true;
+            });
+            
+            renderer.render(scene, camera);
+        }
+        
+        // Initialize THREE.js when the page loads
+        window.addEventListener('load', initThree);
+    </script>
+
+    <script>
+        // p5.js visualization
+        let fft, waveform;
+        let xyPadX = 0.5;
+        let xyPadY = 0.5;
+        let isDraggingPad = false;
+
+        function setup() {
+            const container = document.getElementById('p5-container');
+            const canvas = createCanvas(container.clientWidth, container.clientHeight);
+            canvas.parent('p5-container');
+            
+            // Create analyzers
+            fft = new Tone.FFT(128);
+            waveform = new Tone.Waveform(1024);
+            synth.connect(fft);
+            synth.connect(waveform);
+            
+            // Add event listeners for XY pad
+            canvas.mousePressed(() => {
+                if (mouseX > width * 0.2 && mouseX < width * 0.8 &&
+                    mouseY > height * 0.2 && mouseY < height * 0.8) {
+                    isDraggingPad = true;
+                }
+            });
+            
+            canvas.mouseReleased(() => {
+                isDraggingPad = false;
+            });
+        }
+
+        function draw() {
+            background(10, 15, 30, 100);
+            
+            // Draw spectrum analyzer
+            const spectrum = fft.getValue();
+            noStroke();
+            fill(67, 97, 238, 150);
+            
+            const barWidth = width / spectrum.length;
+            for (let i = 0; i < spectrum.length; i++) {
+                const amp = map(spectrum[i], -80, 0, 0, height * 0.4);
+                rect(i * barWidth, height - amp, barWidth - 1, amp);
+            }
+            
+            // Draw waveform
+            const wave = waveform.getValue();
+            noFill();
+            stroke(76, 201, 240);
+            strokeWeight(2);
+            
+            beginShape();
+            for (let i = 0; i < wave.length; i++) {
+                const x = map(i, 0, wave.length, 0, width);
+                const y = map(wave[i], -1, 1, height * 0.6, height * 0.9);
+                vertex(x, y);
+            }
+            endShape();
+            
+            // Draw XY pad
+            const padX = width * 0.2;
+            const padY = height * 0.2;
+            const padW = width * 0.6;
+            const padH = height * 0.6;
+            
+            // Update XY pad position if dragging
+            if (isDraggingPad) {
+                xyPadX = constrain((mouseX - padX) / padW, 0, 1);
+                xyPadY = constrain((mouseY - padY) / padH, 0, 1);
+            }
+            
+            // Draw pad background
+            fill(20, 25, 50, 150);
+            stroke(100, 150, 255, 100);
+            strokeWeight(1);
+            rect(padX, padY, padW, padH, 10);
+            
+            // Draw grid
+            stroke(100, 150, 255, 50);
+            strokeWeight(0.5);
+            for (let i = 1; i < 4; i++) {
+                const x = padX + (padW / 4) * i;
+                const y = padY + (padH / 4) * i;
+                line(x, padY, x, padY + padH);
+                line(padX, y, padX + padW, y);
+            }
+            
+            // Draw center lines
+            stroke(100, 150, 255, 100);
+            strokeWeight(1);
+            line(padX + padW/2, padY, padX + padW/2, padY + padH);
+            line(padX, padY + padH/2, padX + padW, padY + padH/2);
+            
+            // Draw pad handle
+            fill(76, 201, 240);
+            noStroke();
+            const handleX = padX + xyPadX * padW;
+            const handleY = padY + xyPadY * padH;
+            ellipse(handleX, handleY, 20, 20);
+            
+            // Draw labels
+            fill(200, 220, 255);
+            noStroke();
+            textSize(12);
+            textAlign(CENTER, CENTER);
+            text("XY MODULATION PAD", width/2, padY - 20);
+            
+            // Draw modulation values
+            textSize(10);
+            textAlign(LEFT, TOP);
+            text(`X: ${xyPadX.toFixed(2)}`, padX + 10, padY + padH + 10);
+            text(`Y: ${xyPadY.toFixed(2)}`, padX + padW - 50, padY + padH + 10);
+            
+            // Apply modulation to synth parameters
+            if (synth) {
+                // Modulate filter cutoff with X axis
+                const cutoff = map(xyPadX, 0, 1, 200, 4000);
+                // Modulate resonance with Y axis
+                const resonance = map(xyPadY, 0, 1, 0.1, 10);
+                
+                // Apply to all voices
+                synth.voices.forEach(voice => {
+                    if (voice.oscillator) {
+                        voice.oscillator.detune.value = (xyPadX - 0.5) * 20;
+                    }
+                });
+            }
+        }
+
+        function windowResized() {
+            const container = document.getElementById('p5-container');
+            resizeCanvas(container.clientWidth, container.clientHeight);
+        }
+    </script>
+</body>
+</html>
