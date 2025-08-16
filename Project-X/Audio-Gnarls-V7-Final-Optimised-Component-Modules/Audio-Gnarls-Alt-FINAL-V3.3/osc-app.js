@@ -45,7 +45,9 @@ class OscApp2 extends HTMLElement {
       presets: {},
       contextUnlocked: false,
       initialBufferingStarted: false,
-      initialShapeBuffered: false
+      initialShapeBuffered: false,
+      // New: generation token increments on each (re)start to cancel stale tasks
+      bufferGeneration: 0
     };
     // Bind handlers
     this._onToneReady = this._onToneReady.bind(this);
@@ -91,7 +93,7 @@ class OscApp2 extends HTMLElement {
     </ul>
   </li>
   <li><b>Mix Sounds:</b> Change shapes while audio is on to layer and blend rich effects.</li>
-  <li><b>Toggle Audio:</b> Click the image or use <b>Start Audio</b> button to start/stop.</li>
+  <li><b>Toggle Audio:</b> Click the image or use <b>POWER ON</b> to start/stop.</li>
 </ol>`;
     const seedForm = document.createElement('form');
     seedForm.id = 'seedForm';
@@ -443,9 +445,13 @@ class OscApp2 extends HTMLElement {
       if (!contextResumed) throw new Error('Could not resume AudioContext');
       state.contextUnlocked = true;
       state.initialBufferingStarted = true;
+      // Increment generation to cancel any prior background tasks
+      const myGen = ++state.bufferGeneration;
       const initialShape = this._controls.shadowRoot.querySelector('#shapeSelect').value;
       this._loader.textContent = `Preparing ${initialShape} synth...`;
       await this.bufferShapeChain(initialShape);
+      // If generation changed while awaiting, abort
+      if (myGen !== state.bufferGeneration) return;
       // Activate initial chain and mark buffered
       this.setActiveChain(initialShape);
       state.initialShapeBuffered = true;
@@ -453,19 +459,21 @@ class OscApp2 extends HTMLElement {
       this._canvas.isPlaying = true;
       this._controls.updateState({ isAudioStarted: true, isPlaying: true, isMuted: state.Tone.Destination.mute, shapeKey: initialShape, sequencerVisible: state.isSequencerMode });
       this._loader.textContent = 'Ready. Shape: ' + initialShape;
-      // Background buffer remaining shapes
-      (async () => {
+      // Background buffer remaining shapes with generation guard
+      (async (gen) => {
         for (const shape of this.shapes) {
-          if (shape !== initialShape && state.contextUnlocked) {
+          if (shape !== initialShape && state.contextUnlocked && gen === state.bufferGeneration) {
             try {
               await this.bufferShapeChain(shape);
             } catch (e) {
               console.error('Error background buffering chain for', shape, e);
             }
+            // Yield to UI thread; re-check generation after await
+            if (gen !== state.bufferGeneration) return;
             await new Promise(r => setTimeout(r, 0));
           }
         }
-      })();
+      })(myGen);
     } catch (e) {
       console.error('Failed to unlock AudioContext:', e);
       this._loader.textContent = 'Failed to unlock AudioContext.';
@@ -481,6 +489,8 @@ class OscApp2 extends HTMLElement {
   stopAudioAndDraw() {
     const state = this.state;
     if (!state.isPlaying && !state.initialBufferingStarted) return;
+    // Invalidate any background buffering
+    state.bufferGeneration++;
     this.disposeAllChains();
     state.isPlaying = false;
     state.initialBufferingStarted = false;
@@ -508,7 +518,7 @@ class OscApp2 extends HTMLElement {
     // Populate control state
     this._controls.disableAll(false);
     this._controls.updateState({ isAudioStarted: true, isPlaying: false, isMuted: true, shapeKey: initialShape, sequencerVisible: false });
-    this._loader.textContent = 'Tone.js loaded. Click \u2018Start Audio + Draw\u2019 or the image to begin.';
+    this._loader.textContent = 'Tone.js loaded. Click ‘POWER ON’ to begin.';
   }
 
   // Start button handler.  Delegates to unlockAudioAndBufferInitial().
@@ -594,7 +604,7 @@ class OscApp2 extends HTMLElement {
     this._canvas.mode = 'seed';
     // Update controls
     this._controls.updateState({ isAudioStarted: false, isPlaying: false, isMuted: true, shapeKey: firstShape, sequencerVisible: state.isSequencerMode });
-    this._loader.textContent = "Seed updated. Click Start Audio + Draw.";
+    this._loader.textContent = "Seed updated. Click POWER ON.";
     // Reset sequence to empty
     state.sequence = Array(8).fill(null);
     this.updateSequenceUI();

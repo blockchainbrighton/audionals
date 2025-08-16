@@ -19,12 +19,24 @@ class ToneLoader extends HTMLElement {
       if (!window.Tone && (mod?.default || mod?.Tone)) {
         window.Tone = mod.default ?? mod.Tone;
       }
-      this.dispatchEvent(new CustomEvent('tone-ready', {
-        bubbles: true,
-        composed: true
-      }));
+      if (!window.Tone) throw new Error('Tone module did not expose Tone');
+      // Fire once
+      if (!this._dispatched) {
+        this._dispatched = true;
+        this.dispatchEvent(new CustomEvent('tone-ready', {
+          bubbles: true,
+          composed: true
+        }));
+      }
     }).catch(err => {
       console.error('Failed to load Tone.js:', err);
+      // Minimal inline message to inform user without external assets
+      try {
+        const msg = document.createElement('div');
+        msg.style.cssText = 'color:#f99;font-size:12px;padding:4px 8px;';
+        msg.textContent = 'Tone.js failed to load from on-chain source.';
+        this.shadowRoot.appendChild(msg);
+      } catch (_) {}
     });
   }
 }
