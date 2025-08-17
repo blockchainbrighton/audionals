@@ -1,0 +1,98 @@
+<!doctype html>
+<title>µSeq</title>
+<style>
+  body{font:11px/1.3em monospace;margin:0;background:#111;color:#eee}
+  button{margin:2px;padding:4px 8px;background:#222;border:1px solid #555;color:#eee}
+  .step{display:inline-block;width:12px;height:12px;border:1px solid #333;margin:1px}
+  .on{background:#0f0}
+  .ch{margin:4px 0}
+</style>
+<body>
+<button id="play">▶</button><button id="rec">●</button><button id="stop">■</button>
+<div class="ch">Sampler <input type="file" id="file"><input id="url" placeholder="or URL"></div>
+<div id="sGrid"></div>
+<div class="ch">Synth</div>
+<div id="yGrid"></div>
+<script>
+/* ---------- CONFIG ---------- */
+const STEPS=64,TEMPO=120;
+/* ---------- AUDIO ---------- */
+const ctx=new(window.AudioContext||webkitAudioContext)();
+const master=ctx.createGain();master.connect(ctx.destination);
+/* Sampler channel */
+let buf=null;
+function loadBuf(b){buf=b;}
+const sampleGain=ctx.createGain();sampleGain.connect(master);
+/* Synth channel */
+const oscGain=ctx.createGain();oscGain.connect(master);
+function playNote(note,vel=0.7){
+  const o=ctx.createOscillator(),g=ctx.createGain();
+  o.type='square';o.frequency.value=440*Math.pow(2,(note-69)/12);
+  g.gain.setValueAtTime(vel,ctx.currentTime);
+  g.gain.exponentialRampToValueAtTime(0.001,ctx.currentTime+0.3);
+  o.connect(g);g.connect(oscGain);o.start();o.stop(ctx.currentTime+0.3);
+}
+/* ---------- UI ---------- */
+function makeGrid(id,cb){
+  const box=document.getElementById(id);
+  for(let i=0;i<STEPS;i++){
+    const s=document.createElement('div');
+    s.className='step';s.idx=i;
+    s.onclick=()=>{s.classList.toggle('on');cb(i,s.classList.contains('on'))};
+    box.appendChild(s);
+  }
+}
+makeGrid('sGrid',()=>{});
+makeGrid('yGrid',()=>{});
+/* ---------- SEQUENCER ---------- */
+let playing=false,rec=false,step=0,next=0;
+const seq=[[],[]]; // seq[0]=sampler, seq[1]=synth
+function tick(){
+  if(!playing)return;
+  // advance step
+  step=(step+1)%STEPS;
+  // highlight
+  document.querySelectorAll('.step').forEach((e,i)=>e.style.border=
+    (i%STEPS===step)?'1px solid #0ff':'1px solid #333');
+  // sampler
+  if(seq[0][step] && buf){
+    const s=ctx.createBufferSource();
+    s.buffer=buf;s.connect(sampleGain);s.start();
+  }
+  // synth
+  if(seq[1][step]) playNote(seq[1][step]);
+  // schedule next
+  next+=60/TEMPO/4;
+  setTimeout(tick,(next-ctx.currentTime)*1000);
+}
+/* ---------- CONTROLS ---------- */
+document.getElementById('play').onclick=()=>{
+  if(!playing){playing=true;next=ctx.currentTime;ctx.resume();tick();}
+};
+document.getElementById('rec').onclick=()=>rec=!rec;
+document.getElementById('stop').onclick=()=>{playing=false;step=0;rec=false;};
+
+/* ---------- FILE / URL ---------- */
+document.getElementById('file').onchange=e=>{
+  const r=new FileReader();r.onload=ev=>ctx.decodeAudioData(ev.target.result,loadBuf);
+  r.readAsArrayBuffer(e.target.files[0]);
+};
+document.getElementById('url').onchange=e=>{
+  fetch(e.target.value).then(r=>r.arrayBuffer()).then(d=>ctx.decodeAudioData(d,loadBuf));
+};
+
+/* ---------- MIDI ---------- */
+if(navigator.requestMIDIAccess){
+  navigator.requestMIDIAccess().then(acc=>{
+    acc.inputs.forEach(i=>i.onmidimessage=handleMidi);
+    acc.onstatechange=()=>acc.inputs.forEach(i=>i.onmidimessage=handleMidi);
+  });
+}
+function handleMidi(e){
+  const [s,n,v]=e.data;
+  if(s===0x90&&v>0){          // note on
+    if(rec){seq[1][step]=n;document.querySelectorAll('#yGrid .step')[step].classList.add('on');}
+    playNote(n,v/127);
+  }
+}
+</script>

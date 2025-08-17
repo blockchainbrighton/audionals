@@ -1,0 +1,704 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tiny 64‑Step Sequencer</title>
+  <style>
+    :root {
+      --bg-dark: #121212;
+      --bg-darker: #0a0a0a;
+      --bg-panel: #1e1e1e;
+      --bg-light: #2d2d2d;
+      --accent: #bb86fc;
+      --accent-light: #d0b4ff;
+      --accent-dark: #8858d2;
+      --text-primary: #e0e0e0;
+      --text-secondary: #a0a0a0;
+      --text-disabled: #606060;
+      --grid-bg: #1a1a1a;
+      --grid-cell-off: #2a2a2a;
+      --grid-cell-on: #bb86fc;
+      --grid-cell-note: #03dac6;
+      --grid-cell-playhead: #ff4081;
+      --success: #03dac6;
+      --warning: #ffb74d;
+      --error: #cf6679;
+      --border-radius: 8px;
+      --transition: all 0.2s ease;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    html, body {
+      margin: 0;
+      background: var(--bg-dark);
+      color: var(--text-primary);
+      font-family: 'Segoe UI', system-ui, -apple-system, sans-serif;
+      font-size: 16px;
+      line-height: 1.5;
+      height: 100%;
+      overflow-x: hidden;
+    }
+
+    body {
+      display: flex;
+      flex-direction: column;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    header {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 1rem;
+      align-items: center;
+      justify-content: space-between;
+      padding: 1.25rem;
+      background: var(--bg-panel);
+      border-radius: var(--border-radius);
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+      margin-bottom: 1.5rem;
+    }
+
+    header h1 {
+      font-size: 1.5rem;
+      font-weight: 600;
+      color: var(--accent);
+      margin: 0;
+    }
+
+    .controls {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 0.75rem;
+      align-items: center;
+    }
+
+    button {
+      padding: 0.6rem 1.2rem;
+      border: none;
+      border-radius: var(--border-radius);
+      background: var(--bg-light);
+      color: var(--text-primary);
+      font-weight: 500;
+      cursor: pointer;
+      transition: var(--transition);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    button:hover {
+      background: var(--accent);
+      color: var(--bg-dark);
+      transform: translateY(-2px);
+    }
+
+    button:active {
+      transform: translateY(0);
+    }
+
+    button.primary {
+      background: var(--accent);
+      color: var(--bg-dark);
+    }
+
+    button.primary:hover {
+      background: var(--accent-light);
+    }
+
+    .pill {
+      display: inline-flex;
+      gap: 0.5rem;
+      align-items: center;
+      padding: 0.5rem 1rem;
+      border: 1px solid var(--bg-light);
+      border-radius: 999px;
+      background: var(--bg-panel);
+      transition: var(--transition);
+    }
+
+    .pill:hover {
+      border-color: var(--accent);
+    }
+
+    input[type="number"], input[type="text"] {
+      padding: 0.6rem 1rem;
+      border: 1px solid var(--bg-light);
+      border-radius: var(--border-radius);
+      background: var(--bg-panel);
+      color: var(--text-primary);
+      font-size: 1rem;
+      transition: var(--transition);
+    }
+
+    input[type="number"]:focus, input[type="text"]:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px rgba(187, 134, 252, 0.2);
+    }
+
+    .row {
+      display: grid;
+      grid-template-columns: 100px 1fr;
+      gap: 1rem;
+      align-items: center;
+      padding: 1rem;
+      background: var(--bg-panel);
+      border-radius: var(--border-radius);
+      margin-bottom: 1.5rem;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .label {
+      font-weight: 600;
+      color: var(--accent);
+      text-transform: uppercase;
+      font-size: 0.85rem;
+      letter-spacing: 0.5px;
+    }
+
+    .grid-container {
+      display: flex;
+      flex-direction: column;
+      gap: 0.5rem;
+    }
+
+    .grid {
+      display: grid;
+      grid-template-columns: repeat(64, 1fr);
+      gap: 2px;
+      background: var(--grid-bg);
+      padding: 0.5rem;
+      border-radius: var(--border-radius);
+    }
+
+    .cell {
+      aspect-ratio: 1.6/1;
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      background: var(--grid-cell-off);
+      cursor: pointer;
+      position: relative;
+      transition: var(--transition);
+      border-radius: 2px;
+    }
+
+    .cell:hover {
+      transform: scale(1.05);
+      z-index: 2;
+    }
+
+    .cell.on {
+      background: var(--grid-cell-on);
+      box-shadow: 0 0 8px rgba(187, 134, 252, 0.4);
+    }
+
+    .cell.note {
+      background: var(--grid-cell-note);
+      box-shadow: 0 0 8px rgba(3, 218, 198, 0.4);
+    }
+
+    .cell.playhead {
+      box-shadow: 0 0 0 2px var(--grid-cell-playhead);
+      z-index: 3;
+    }
+
+    .bar-marks {
+      display: grid;
+      grid-template-columns: repeat(64, 1fr);
+      gap: 2px;
+      margin: 0 0.5rem;
+      height: 8px;
+    }
+
+    .bar-marks div {
+      background: transparent;
+    }
+
+    .bar-marks div:nth-child(16n+1) {
+      background: var(--text-secondary);
+    }
+
+    .keyboard-container {
+      background: var(--bg-panel);
+      border-radius: var(--border-radius);
+      padding: 1.5rem;
+      margin-bottom: 1.5rem;
+      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    }
+
+    .keyboard-title {
+      font-weight: 600;
+      color: var(--accent);
+      margin-bottom: 1rem;
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .keyboard {
+      display: flex;
+      gap: 2px;
+      padding: 0.5rem;
+      background: var(--bg-light);
+      border-radius: var(--border-radius);
+      position: relative;
+      overflow-x: auto;
+      padding-bottom: 1rem;
+    }
+
+    .key {
+      flex: 1 0 40px;
+      height: 140px;
+      background: #fff;
+      border: 1px solid #ddd;
+      border-radius: 0 0 4px 4px;
+      cursor: pointer;
+      display: flex;
+      align-items: flex-end;
+      justify-content: center;
+      font-size: 0.8rem;
+      color: #333;
+      user-select: none;
+      transition: var(--transition);
+      position: relative;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+    }
+
+    .key:hover {
+      background: #f0f0f0;
+    }
+
+    .key.active {
+      background: var(--accent) !important;
+      color: var(--bg-dark);
+      box-shadow: 0 0 12px rgba(187, 134, 252, 0.6);
+    }
+
+    .key.black {
+      background: #333;
+      color: #eee;
+      height: 90px;
+      margin: 0 -20px;
+      z-index: 2;
+      flex: 0 0 30px;
+      position: relative;
+      top: 0;
+      border-radius: 0 0 3px 3px;
+    }
+
+    .key.black:hover {
+      background: #444;
+    }
+
+    .key.black.active {
+      background: var(--accent-dark) !important;
+      box-shadow: 0 0 12px rgba(136, 88, 210, 0.6);
+    }
+
+    #status {
+      padding: 1rem;
+      background: var(--bg-panel);
+      border-radius: var(--border-radius);
+      color: var(--text-secondary);
+      font-size: 0.9rem;
+      text-align: center;
+      margin-top: auto;
+      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    .hint {
+      font-size: 0.85rem;
+      color: var(--text-secondary);
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+    }
+
+    .hint::before {
+      content: "ℹ";
+      font-size: 1rem;
+    }
+
+    .file-input-wrapper {
+      position: relative;
+      display: inline-block;
+      overflow: hidden;
+    }
+
+    .file-input-wrapper input[type="file"] {
+      position: absolute;
+      left: 0;
+      top: 0;
+      opacity: 0;
+      width: 100%;
+      height: 100%;
+      cursor: pointer;
+    }
+
+    .file-input-button {
+      display: inline-block;
+      padding: 0.6rem 1.2rem;
+      background: var(--bg-light);
+      border: 1px solid var(--bg-light);
+      border-radius: var(--border-radius);
+      color: var(--text-primary);
+      cursor: pointer;
+      transition: var(--transition);
+    }
+
+    .file-input-button:hover {
+      background: var(--accent);
+      color: var(--bg-dark);
+      border-color: var(--accent);
+    }
+
+    .grid-label {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .grid-label span {
+      font-weight: 600;
+      color: var(--accent);
+    }
+
+    .grid-label .indicator {
+      width: 12px;
+      height: 12px;
+      border-radius: 50%;
+    }
+
+    .grid-label .sampler-indicator {
+      background: var(--grid-cell-on);
+    }
+
+    .grid-label .synth-indicator {
+      background: var(--grid-cell-note);
+    }
+
+    @media (max-width: 900px) {
+      .row {
+        grid-template-columns: 1fr;
+        gap: 0.75rem;
+      }
+      
+      .label {
+        text-align: left;
+      }
+      
+      header {
+        flex-direction: column;
+        align-items: stretch;
+      }
+      
+      .controls {
+        justify-content: center;
+      }
+    }
+
+    @media (max-width: 600px) {
+      .key {
+        flex: 1 0 30px;
+        height: 100px;
+        font-size: 0.7rem;
+      }
+      
+      .key.black {
+        height: 65px;
+        margin: 0 -15px;
+        flex: 0 0 22px;
+      }
+      
+      .grid {
+        gap: 1px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>🎵 Tiny 64‑Step Sequencer</h1>
+    <div class="controls">
+      <button id="play" class="primary">▶ Play</button>
+      <button id="stop">⏹ Stop</button>
+      <label class="pill">
+        <input type="checkbox" id="record"> 
+        <span>● Record</span>
+      </label>
+      <label class="pill">
+        BPM 
+        <input id="bpm" type="number" value="120" min="40" max="240" style="width:70px">
+      </label>
+    </div>
+  </header>
+
+  <div class="row">
+    <div class="label">Sample</div>
+    <div class="controls" style="gap:0.5rem">
+      <input id="sampleUrl" type="text" placeholder="Sample URL (mp3/opus/wav) — optional" style="flex:1;min-width:240px">
+      <div class="file-input-wrapper">
+        <div class="file-input-button">Choose File</div>
+        <input id="sampleFile" type="file" accept="audio/*">
+      </div>
+      <button id="loadSample">Load</button>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="label">Synth</div>
+    <div class="controls" style="gap:0.5rem">
+      <input id="synthUrl" type="text" placeholder="Headless synth module URL (optional)" style="flex:1;min-width:240px">
+      <button id="loadSynth">Load Synth</button>
+      <span class="hint">(A simple built‑in demo synth is included)</span>
+    </div>
+  </div>
+
+  <div class="keyboard-container">
+    <div class="keyboard-title">
+      <span>🎹 Virtual Keyboard</span>
+    </div>
+    <div class="keyboard" id="keyboard"></div>
+  </div>
+
+  <div class="bar-marks" aria-hidden="true"></div>
+
+  <div class="row">
+    <div class="label">Sampler</div>
+    <div class="grid-container">
+      <div class="grid-label">
+        <div class="indicator sampler-indicator"></div>
+        <span>Sampler Steps</span>
+      </div>
+      <div id="samplerGrid" class="grid" role="grid" aria-label="Sampler steps"></div>
+    </div>
+  </div>
+
+  <div class="row">
+    <div class="label">Synth</div>
+    <div class="grid-container">
+      <div class="grid-label">
+        <div class="indicator synth-indicator"></div>
+        <span>Synth Steps</span>
+      </div>
+      <div id="synthGrid" class="grid" role="grid" aria-label="Synth steps"></div>
+    </div>
+  </div>
+
+  <div id="status">Ready to sequence. Click Play to unlock audio.</div>
+
+<script>
+(() => {
+  const steps = 64;
+  const $ = sel => document.querySelector(sel);
+  const $$ = sel => Array.from(document.querySelectorAll(sel));
+  const log = m => { const el=$('#status'); el.textContent = m; };
+
+  // UI refs
+  const playBtn = $('#play'), stopBtn = $('#stop'), bpmEl = $('#bpm'), recEl = $('#record');
+  const samplerGrid = $('#samplerGrid'), synthGrid = $('#synthGrid');
+
+  // Audio Context
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  let isPlaying = false, currentStep = 0, nextNoteTime = 0, startTime = 0;
+  let timerId = 0; const lookahead = 0.05; // 50ms
+  const sampleSteps = new Array(steps).fill(false);
+  const synthSteps  = new Array(steps).fill(null);
+  let sampleBuf = null;
+  let bpm = +bpmEl.value;
+
+  const midiToHz = n => 440 * Math.pow(2, (n - 69) / 12);
+
+  // Built-in headless synth demo
+  function demoSynth(context) {
+    return {
+      noteOn(note, time, dur=0.2, vel=1.0) {
+        const osc = context.createOscillator();
+        const gain = context.createGain();
+        const filt = context.createBiquadFilter();
+        filt.type = 'lowpass'; filt.frequency.setValueAtTime(Math.min(12000, midiToHz(note)*3), time);
+        const freq = midiToHz(note);
+        osc.type = 'sawtooth'; osc.frequency.setValueAtTime(freq, time);
+        gain.gain.setValueAtTime(0, time);
+        const a=.005,d=.06,s=.2,r=.12, peak = Math.max(0.05, vel);
+        gain.gain.linearRampToValueAtTime(peak, time + a);
+        gain.gain.linearRampToValueAtTime(s*peak, time + a + d);
+        gain.gain.setValueAtTime(s*peak, time + Math.max(dur, a+d));
+        gain.gain.linearRampToValueAtTime(0, time + Math.max(dur, a+d) + r);
+        osc.connect(filt).connect(gain).connect(context.destination);
+        osc.start(time);
+        osc.stop(time + Math.max(dur, a+d) + r + 0.02);
+      }
+    }
+  }
+  let synth = demoSynth(ctx);
+
+  // External synth loader
+  $('#loadSynth').addEventListener('click', async () => {
+    const url = $('#synthUrl').value.trim();
+    if (!url) { synth = demoSynth(ctx); log('Using built‑in demo synth.'); return; }
+    try {
+      const mod = await import(url);
+      const factory = mod.default || mod.createSynth || mod.synth || mod;
+      const s = typeof factory === 'function' ? factory(ctx) : null;
+      if (s && typeof s.noteOn === 'function') { synth = s; log('Loaded headless synth module.'); }
+      else { synth = demoSynth(ctx); log('Module invalid. Using demo synth.'); }
+    } catch (e) {
+      synth = demoSynth(ctx);
+      log('Failed to load synth module. Using demo synth.');
+    }
+  });
+
+  // Sample loading
+  $('#loadSample').addEventListener('click', async () => {
+    await ctx.resume();
+    const f = $('#sampleFile').files[0];
+    const url = $('#sampleUrl').value.trim();
+    try {
+      let ab;
+      if (f) ab = await f.arrayBuffer();
+      else if (url) { const res = await fetch(url); ab = await res.arrayBuffer(); }
+      else { log('Choose a file or paste a URL.'); return; }
+      sampleBuf = await ctx.decodeAudioData(ab);
+      log('Sample loaded successfully.');
+    } catch (e) { log('Could not load sample. Please check the file or URL.'); }
+  });
+
+  // Grids
+  const sampCells = [], synthCells = [];
+  for (let i=0;i<steps;i++) {
+    const c = document.createElement('div'); c.className='cell';
+    c.addEventListener('click', ()=>{ sampleSteps[i] = !sampleSteps[i]; render(); });
+    samplerGrid.appendChild(c); sampCells.push(c);
+  }
+  for (let i=0;i<steps;i++) {
+    const c = document.createElement('div'); c.className='cell';
+    c.addEventListener('click', ()=>{ if (synthSteps[i]!==null){ synthSteps[i]=null; render(); }});
+    synthGrid.appendChild(c); synthCells.push(c);
+  }
+  const bm = document.querySelector('.bar-marks');
+  for (let i=0;i<steps;i++){ bm.appendChild(document.createElement('div')); }
+
+  function stepDur() { return 60 / bpm / 4; }
+  function schedule(step, time) {
+    if (sampleSteps[step] && sampleBuf) { const src = ctx.createBufferSource(); src.buffer = sampleBuf; src.connect(ctx.destination); src.start(time); }
+    const note = synthSteps[step];
+    if (note !== null) synth.noteOn(note, time, stepDur()*0.95, 0.9);
+  }
+  function scheduler(){
+    const ahead = ctx.currentTime + lookahead;
+    while (nextNoteTime < ahead) {
+      schedule(currentStep, nextNoteTime);
+      nextNoteTime += stepDur();
+      currentStep = (currentStep + 1) % steps;
+    }
+  }
+  function animate(){
+    if (!isPlaying) return;
+    const ph = (currentStep + steps - 1) % steps;
+    sampCells.forEach((c,i)=> c.classList.toggle('playhead', i===ph));
+    synthCells.forEach((c,i)=> c.classList.toggle('playhead', i===ph));
+    requestAnimationFrame(animate);
+  }
+  function render(){
+    sampCells.forEach((c,i)=> c.classList.toggle('on', !!sampleSteps[i]));
+    synthCells.forEach((c,i)=> c.classList.toggle('note', synthSteps[i]!==null));
+  }
+  function start(){
+    if (isPlaying) return;
+    ctx.resume();
+    isPlaying = true; currentStep = 0; startTime = ctx.currentTime; nextNoteTime = startTime + 0.06;
+    timerId = setInterval(scheduler, 25);
+    animate();
+    log('Playing sequence...');
+  }
+  function stop(){
+    if (!isPlaying) return;
+    isPlaying = false; clearInterval(timerId);
+    sampCells.forEach(c=>c.classList.remove('playhead'));
+    synthCells.forEach(c=>c.classList.remove('playhead'));
+    log('Sequence stopped.');
+  }
+
+  playBtn.addEventListener('click', start);
+  stopBtn.addEventListener('click', stop);
+  bpmEl.addEventListener('change', e=>{ bpm = Math.max(40, Math.min(240, +e.target.value||120)); });
+
+  // MIDI support
+  async function initMIDI(){
+    if (!('requestMIDIAccess' in navigator)) return;
+    try {
+      const access = await navigator.requestMIDIAccess();
+      function handleInput(input){ input.onmidimessage = ev => {
+        const [st,d1,d2] = ev.data; const cmd = st & 0xf0;
+        if (cmd === 0x90 && d2>0) triggerNote(d1,d2/127);
+      }}
+      access.inputs.forEach(handleInput);
+      access.onstatechange = e => { if (e.port.type==='input' && e.port.state==='connected') handleInput(e.port); };
+    } catch(e) {}
+  }
+  initMIDI();
+
+  // Virtual keyboard - Full piano keyboard
+  const kb = $('#keyboard');
+  const whiteKeys = [60, 62, 64, 65, 67, 69, 71, 72]; // C4 to C5
+  const blackKeys = [61, 63, 66, 68, 70]; // C#4 to A#4
+  
+  // Create white keys
+  whiteKeys.forEach(note => {
+    const k = document.createElement('div');
+    k.className = 'key';
+    k.dataset.note = note;
+    k.textContent = ['C', 'D', 'E', 'F', 'G', 'A', 'B', 'C'][whiteKeys.indexOf(note)];
+    k.addEventListener('mousedown', ()=>{ 
+      k.classList.add('active'); 
+      triggerNote(note, 1); 
+    });
+    k.addEventListener('mouseup', ()=>k.classList.remove('active'));
+    k.addEventListener('mouseleave', ()=>k.classList.remove('active'));
+    kb.appendChild(k);
+  });
+  
+  // Create black keys
+  blackKeys.forEach(note => {
+    const k = document.createElement('div');
+    k.className = 'key black';
+    k.dataset.note = note;
+    k.textContent = ['C#', 'D#', 'F#', 'G#', 'A#'][blackKeys.indexOf(note)];
+    k.addEventListener('mousedown', ()=>{ 
+      k.classList.add('active'); 
+      triggerNote(note, 1); 
+    });
+    k.addEventListener('mouseup', ()=>k.classList.remove('active'));
+    k.addEventListener('mouseleave', ()=>k.classList.remove('active'));
+    kb.appendChild(k);
+  });
+
+  function triggerNote(note, vel){
+    const t = ctx.currentTime;
+    synth.noteOn(note, t, 0.25, vel);
+    if (recEl.checked && isPlaying) {
+      const idx = (currentStep + steps - 1) % steps;
+      synthSteps[idx] = note; render();
+    }
+  }
+
+  window.addEventListener('keydown', (e)=>{ 
+    if (e.code==='Space'){ 
+      e.preventDefault(); 
+      isPlaying ? stop() : start(); 
+    }
+  });
+  
+  render();
+})();
+</script>
+</body>
+</html>
