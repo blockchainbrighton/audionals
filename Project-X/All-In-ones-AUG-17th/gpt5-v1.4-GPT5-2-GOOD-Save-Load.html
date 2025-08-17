@@ -1,0 +1,584 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Enhanced 64-Step Sequencer (with Save/Load)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg-main:#1a1c20;--bg-surface:#25282e;--bg-inset:#111214;
+      --fg-main:#e1e3e8;--fg-muted:#8c919c;--border-color:#363a42;
+      --primary-color:#5d87ff;--primary-color-light:#83a3ff;--primary-color-dark:#4d75e6;
+      --cell-on-color:#5d87ff;--cell-note-color:#2ecf94;--cell-playhead-outline:#ffab40;
+      --font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      --shadow-sm:0 2px 4px rgba(0,0,0,.1)
+    }
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg-main);color:var(--fg-main);font:14px/1.4 var(--font-family);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+    .container{max-width:1200px;margin:0 auto;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}
+    header{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between;padding-bottom:1.25rem;border-bottom:1px solid var(--border-color)}
+    .title{margin:0;font-size:1.25rem;font-weight:600}
+
+    .panel{background:var(--bg-surface);border-radius:12px;border:1px solid var(--border-color);padding:1rem;box-shadow:var(--shadow-sm)}
+    .panel-title{font-weight:600;color:var(--fg-main);margin:0 0 .75rem;border-bottom:1px solid var(--border-color);padding-bottom:.6rem;font-size:1rem}
+
+    .row{display:grid;grid-template-columns:90px 1fr;gap:1rem;align-items:center;padding:.4rem 0}
+    .label{font-weight:500;color:var(--fg-muted);text-align:right}
+    .controls{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center}
+
+    button,.button-style{padding:8px 14px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-surface);color:var(--fg-main);font-weight:500;cursor:pointer;transition:background-color .2s,border-color .2s,transform .1s;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+    button:hover,.button-style:hover{background:#31343a;border-color:#4a4e57}
+    button:active,.button-style:active{transform:translateY(1px)}
+    #play{background:var(--primary-color);border-color:var(--primary-color-dark);color:#fff}
+    #play:hover{background:var(--primary-color-light);border-color:var(--primary-color)}
+    #stop{background:#363a42;border-color:#4a4e57}
+    #stop:hover{background:#4a4e57}
+    input[type="number"],input[type="text"]{padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-inset);color:var(--fg-main);font-family:var(--font-family)}
+    input[type="number"]:focus,input[type="text"]:focus{outline:2px solid var(--primary-color);outline-offset:2px;border-color:var(--primary-color)}
+    input[type="file"]{display:none}
+    .file-label{display:inline-block;padding:8px 14px;background:#363a42;border-radius:8px;cursor:pointer}
+    .pill-group{display:flex;align-items:center;gap:.5rem}
+    .pill{display:inline-flex;gap:.5rem;align-items:center;padding:8px 12px;border:1px solid var(--border-color);border-radius:999px;background:var(--bg-surface);font-size:13px}
+    .pill input[type="checkbox"]{accent-color:var(--primary-color)}
+
+    .grid-container{display:flex;flex-direction:column;gap:4px;padding:0 1rem}
+    .grid{display:grid;grid-template-columns:repeat(64,1fr);gap:3px}
+    .cell{aspect-ratio:1.5/1;border:1px solid var(--border-color);background:var(--bg-surface);border-radius:3px;cursor:pointer;position:relative;transition:background-color .1s,border-color .1s}
+    .cell:hover{background:#31343a}
+    .cell.on{background:var(--cell-on-color);border-color:var(--primary-color-light)}
+    .cell.note{background:var(--cell-note-color);border-color:#57d9a9}
+    .cell.playhead::after{content:"";position:absolute;inset:-3px;border:2px solid var(--cell-playhead-outline);border-radius:5px;pointer-events:none;animation:pulse 1s infinite alternate}
+    @keyframes pulse{from{opacity:.7}to{opacity:1}}
+
+    .barMarks{display:grid;grid-template-columns:105px repeat(16,1fr);margin-bottom:.5rem;padding:0 1rem}
+    .barMarks div{text-align:left;font-size:11px;color:var(--fg-muted);border-left:1px solid var(--border-color)}
+    .barMarks div:first-child{border-left:none}
+
+    #keyboard{--white-count:14;--white-w:calc(100%/var(--white-count));display:flex;width:100%;padding:1rem;background:var(--bg-inset);border-radius:8px;box-shadow:inset 0 2px 8px rgba(0,0,0,.3);margin-top:1rem;position:relative;overflow:hidden}
+    .key{position:relative;border:1px solid #222;border-radius:5px;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;font-size:11px;color:#333;user-select:none;box-shadow:inset 0 0 5px rgba(255,255,255,.1),0 2px 3px rgba(0,0,0,.4);transition:background-color .08s}
+    .key.white{height:120px;width:var(--white-w);background:linear-gradient(to bottom,#f9f9f9,#d1d1d1);z-index:1}
+    .key.black{height:75px;width:calc(var(--white-w)*.6);background:linear-gradient(to bottom,#444,#111);color:#eee;z-index:2;margin:0 calc(var(--white-w)*-.3);box-shadow:inset 0 -2px 5px rgba(255,255,255,.2),0 3px 5px rgba(0,0,0,.6)}
+    .key.active{background:var(--primary-color-light)!important;border-color:var(--primary-color-dark);transform:scale(.985)}
+
+    #status{padding:8px 12px;color:var(--fg-muted);font-size:13px;min-height:2em}
+    .hint{font-size:12px;color:var(--fg-muted);opacity:.9;text-align:right}
+
+    .dropzone{border:1px dashed var(--border-color);border-radius:10px;padding:.75rem;opacity:.85}
+    .dropzone.drag{background:rgba(131,163,255,.08);border-color:var(--primary-color)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1 class="title">Enhanced 64-Step Sequencer</h1>
+      <div class="controls">
+        <button id="play">▶︎ Play</button>
+        <button id="stop">■ Stop</button>
+        <div class="pill-group">
+          <label class="pill"><input type="checkbox" id="record"> Record</label>
+          <label class="pill">BPM <input id="bpm" type="number" value="120" min="40" max="240" style="width:64px;margin-left:6px"></label>
+        </div>
+      </div>
+    </header>
+
+    <div class="panel">
+      <h2 class="panel-title">Audio Sources</h2>
+      <div class="row">
+        <div class="label">Sample</div>
+        <div class="controls">
+          <input id="sampleUrl" type="text" placeholder="Sample URL (mp3/opus/wav)" style="flex:1;min-width:200px">
+          <label for="sampleFile" class="button-style file-label">Choose File</label>
+          <input id="sampleFile" type="file" accept="audio/*">
+          <button id="loadSample">Load Sample</button>
+        </div>
+      </div>
+      <div class="row">
+        <div class="label">Synth</div>
+        <div class="controls">
+          <input id="synthUrl" type="text" placeholder="Headless synth module URL" style="flex:1;min-width:200px">
+          <button id="loadSynth">Load Synth</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Keyboard & MIDI</h2>
+      <div class="hint" style="text-align:left;margin:-.5rem 0 1rem">MIDI: Connect a USB keyboard or use the on-screen keyboard. Click Play/Load to unlock audio.</div>
+      <div id="keyboard"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Sequencer Grids</h2>
+      <div class="barMarks" aria-hidden="true"></div>
+      <div class="grid-container">
+        <div class="row" style="grid-template-columns:90px 1fr;">
+          <div class="label">Sampler</div>
+          <div id="samplerGrid" class="grid" role="grid" aria-label="Sampler steps"></div>
+        </div>
+        <div class="row" style="grid-template-columns:90px 1fr;">
+          <div class="label">Synth</div>
+          <div id="synthGrid" class="grid" role="grid" aria-label="Synth steps"></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="panel dropzone" id="sessionPanel">
+      <h2 class="panel-title">Session (Save / Load)</h2>
+      <div class="row">
+        <div class="label">Snapshot</div>
+        <div class="controls">
+          <button id="saveState">Save JSON</button>
+          <label for="loadStateFile" class="button-style">Load JSON</label>
+          <input id="loadStateFile" type="file" accept="application/json">
+          <button id="copyState">Copy JSON</button>
+          <button id="newSession">New Session</button>
+        </div>
+      </div>
+      <div class="hint" style="text-align:left">Tip: You can also drag a previously saved JSON file onto this box to load it.</div>
+    </div>
+
+    <div id="status">Ready.</div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  /*** Helpers ***/
+  const $  = sel => document.querySelector(sel);
+  const el = (t,cls) => { const n = document.createElement(t); if (cls) n.className = cls; return n; };
+  const clamp = (v,min,max)=> v<min?min:(v>max?max:v);
+  const log = m => { $('#status').textContent = m; };
+  const sleep = ms => new Promise(r=>setTimeout(r,ms));
+
+  /*** Constants & State ***/
+  const STEPS = 64;
+  const BARS  = 16;
+  const LOOKAHEAD = 0.05; // seconds of audio to schedule ahead
+  const STEP_DIV = 4;     // 16th notes (4 per beat)
+
+  // Typed arrays reduce GC thrash
+  const sampleSteps = new Uint8Array(STEPS);          // 0/1
+  const synthSteps  = new Int16Array(STEPS).fill(-1); // MIDI note or -1
+  const sampCells = new Array(STEPS);
+  const synthCells = new Array(STEPS);
+
+  // UI refs
+  const playBtn = $('#play'), stopBtn = $('#stop'), bpmEl = $('#bpm'), recEl = $('#record');
+  const samplerGrid = $('#samplerGrid'), synthGrid = $('#synthGrid');
+  const sampleUrlEl = $('#sampleUrl'), sampleFileEl = $('#sampleFile'), loadSampleBtn = $('#loadSample');
+  const synthUrlEl = $('#synthUrl'), loadSynthBtn = $('#loadSynth');
+  const saveStateBtn = $('#saveState'), loadStateFile = $('#loadStateFile');
+  const copyStateBtn = $('#copyState'), newSessionBtn = $('#newSession');
+  const sessionPanel = $('#sessionPanel');
+
+  /*** Audio ***/
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  let isPlaying = false, currentStep = 0, nextNoteTime = 0, rafId = 0;
+  let bpm = +bpmEl.value || 120;
+  let sampleBuf = null;
+
+  // Track sample origin for save/load
+  let sampleSource = { type:'none' }; // none | url | data
+  let synthModuleUrl = null;          // null => builtin
+
+  const midiToHz = n => 440 * Math.pow(2, (n - 69) / 12);
+  const stepDur = () => (60 / bpm) / STEP_DIV;
+
+  // Simple headless synth (kept tiny/fast)
+  function demoSynth(context){
+    const master = context.createGain();
+    master.gain.value = 0.9;
+    master.connect(context.destination);
+    return {
+      noteOn(note, t, dur=0.22, vel=1){
+        const osc = context.createOscillator();
+        const vca = context.createGain();
+        const lp  = context.createBiquadFilter();
+        const f = midiToHz(note);
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(f, t);
+        lp.type = 'lowpass';
+        lp.frequency.setValueAtTime(Math.min(12000, f*3), t);
+        vca.gain.setValueAtTime(0, t);
+        const a=.005,d=.06,s=.2,r=.1, peak=Math.max(.05, vel);
+        vca.gain.linearRampToValueAtTime(peak, t+a);
+        vca.gain.linearRampToValueAtTime(s*peak, t+a+d);
+        const hold = Math.max(dur, a+d);
+        vca.gain.setValueAtTime(s*peak, t+hold);
+        vca.gain.linearRampToValueAtTime(0, t+hold+r);
+        osc.connect(lp).connect(vca).connect(master);
+        osc.start(t);
+        osc.stop(t+hold+r+.01);
+      }
+    }
+  }
+  let synth = demoSynth(ctx);
+
+  /*** External synth loader ***/
+  async function loadSynthFromUrl(url){
+    await ctx.resume();
+    if (!url){ synth = demoSynth(ctx); synthModuleUrl = null; log('Using built-in demo synth.'); return; }
+    try{
+      const mod = await import(/* @vite-ignore */ url);
+      const factory = mod.default || mod.createSynth || mod.synth || mod;
+      const s = typeof factory === 'function' ? factory(ctx) : null;
+      if (s && typeof s.noteOn === 'function'){ synth = s; synthModuleUrl = url; log('Loaded headless synth module.'); }
+      else { synth = demoSynth(ctx); synthModuleUrl = null; log('Module invalid. Using demo synth.'); }
+    }catch(e){ synth = demoSynth(ctx); synthModuleUrl = null; log('Failed to load synth module. Using demo synth.'); }
+  }
+  loadSynthBtn.addEventListener('click', ()=> loadSynthFromUrl(synthUrlEl.value.trim()));
+
+  /*** Sample loading ***/
+  async function decodeSampleFromArrayBuffer(ab){
+    try{ sampleBuf = await ctx.decodeAudioData(ab); return true; }catch(e){ return false; }
+  }
+
+  loadSampleBtn.addEventListener('click', async () => {
+    await ctx.resume();
+    const f = sampleFileEl.files[0];
+    const url = sampleUrlEl.value.trim();
+    try{
+      if (f){
+        // Keep a DataURL for portable save files
+        const dataUrl = await new Promise((res,rej)=>{ const r = new FileReader(); r.onerror=rej; r.onload=()=>res(r.result); r.readAsDataURL(f); });
+        const ab = await f.arrayBuffer();
+        const ok = await decodeSampleFromArrayBuffer(ab);
+        if (!ok) throw new Error('decode failed');
+        sampleSource = { type:'data', name:f.name, mime:f.type || 'audio/wav', dataUrl };
+        log(`Sample loaded: ${f.name}`);
+      } else if (url){
+        const res = await fetch(url);
+        const ab = await res.arrayBuffer();
+        const ok = await decodeSampleFromArrayBuffer(ab);
+        if (!ok) throw new Error('decode failed');
+        sampleSource = { type:'url', url };
+        log(`Sample loaded: ${url}`);
+      } else { log('Choose a file or paste a URL.'); return; }
+    }catch(e){ log('Could not load sample.'); }
+  });
+
+  /*** Grids (built via fragments) ***/
+  function buildGrid(container, cellsArr, clickHandler){
+    const frag = document.createDocumentFragment();
+    for (let i=0;i<STEPS;i++){
+      const c = el('div','cell');
+      c.dataset.idx = i;
+      frag.appendChild(c);
+      cellsArr[i] = c;
+    }
+    container.appendChild(frag);
+    container.addEventListener('click', (e)=>{
+      const t = e.target;
+      if (!t.classList.contains('cell')) return;
+      clickHandler(+t.dataset.idx);
+    });
+  }
+  buildGrid(samplerGrid, sampCells, (i)=>{ sampleSteps[i] ^= 1; renderStep(i); });
+  buildGrid(synthGrid,   synthCells, (i)=>{ if (synthSteps[i] !== -1){ synthSteps[i] = -1; renderStep(i); }});
+
+  /*** Bar marks ***/
+  (function buildBarMarks(){
+    const bm = document.querySelector('.barMarks');
+    const frag = document.createDocumentFragment();
+    frag.appendChild(el('div','spacer'));
+    for (let i=1;i<=BARS;i++){ const d = el('div'); d.textContent = i; frag.appendChild(d); }
+    bm.appendChild(frag);
+  })();
+
+  /*** Render ***/
+  function renderAll(){
+    for (let i=0;i<STEPS;i++) renderStep(i);
+  }
+  function renderStep(i){
+    const sc = sampCells[i], yc = synthCells[i];
+    sc.classList.toggle('on', !!sampleSteps[i]);
+    yc.classList.toggle('note', synthSteps[i] !== -1);
+  }
+  function updatePlayhead(ph){
+    for (let i=0;i<STEPS;i++){
+      const on = (i===ph);
+      if (sampCells[i]._ph !== on){ sampCells[i]._ph = on; sampCells[i].classList.toggle('playhead', on); }
+      if (synthCells[i]._ph !== on){ synthCells[i]._ph = on; synthCells[i].classList.toggle('playhead', on); }
+    }
+  }
+
+  /*** Scheduling (single rAF loop) ***/
+  function scheduleStep(step, time){
+    if (sampleSteps[step] && sampleBuf){
+      const src = ctx.createBufferSource();
+      src.buffer = sampleBuf;
+      src.connect(ctx.destination);
+      src.start(time);
+    }
+    const note = synthSteps[step];
+    if (note !== -1) synth.noteOn(note, time, stepDur()*0.95, 0.9);
+  }
+  function tick(){
+    if (!isPlaying) return;
+    const ahead = ctx.currentTime + LOOKAHEAD;
+    while (nextNoteTime < ahead){
+      scheduleStep(currentStep, nextNoteTime);
+      nextNoteTime += stepDur();
+      currentStep = (currentStep + 1) % STEPS;
+    }
+    const ph = (currentStep + STEPS - 1) % STEPS;
+    updatePlayhead(ph);
+    rafId = requestAnimationFrame(tick);
+  }
+
+  /*** Transport ***/
+  function start(){
+    if (isPlaying) return;
+    ctx.resume();
+    isPlaying = true;
+    currentStep = 0;
+    nextNoteTime = ctx.currentTime + 0.06;
+    log('Playing.');
+    playBtn.textContent = '❚❚ Pause';
+    rafId = requestAnimationFrame(tick);
+  }
+  function stop(){
+    if (!isPlaying) return;
+    isPlaying = false;
+    cancelAnimationFrame(rafId);
+    updatePlayhead(-1);
+    log('Stopped.');
+    playBtn.textContent = '▶︎ Play';
+  }
+  playBtn.addEventListener('click', ()=> isPlaying ? stop() : start());
+  stopBtn.addEventListener('click', stop);
+
+  /*** BPM input (live, clamped) ***/
+  bpmEl.addEventListener('input', e=>{
+    bpm = clamp(+e.target.value||120, 40, 240);
+    e.target.value = bpm;
+  });
+
+  /*** MIDI ***/
+  (async function initMIDI(){
+    if (!('requestMIDIAccess' in navigator)) return;
+    try{
+      const access = await navigator.requestMIDIAccess();
+      const handleInput = input => { input.onmidimessage = ev => {
+        const [st,d1,d2] = ev.data; const cmd = st & 0xf0;
+        if (cmd === 0x90 && d2>0) triggerNote(d1, d2/127);
+      }};
+      access.inputs.forEach(handleInput);
+      access.onstatechange = e => { if (e.port.type==='input' && e.port.state==='connected') handleInput(e.port); };
+    }catch{ log('Could not initialize MIDI.'); }
+  })();
+
+  /*** Virtual Keyboard (pointer events, fragment build) ***/
+  function createKeyboard(){
+    const keyboard = $('#keyboard');
+    keyboard.innerHTML = '';
+    const startNote = 36; // C2
+    const endNote   = 84; // C6
+    const isBlack = n => { const m = n % 12; return m===1||m===3||m===6||m===8||m===10; };
+    const noteNames = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+
+    // count white keys for responsive CSS width
+    let whiteCount = 0;
+    for (let n=startNote;n<=endNote;n++) if (!isBlack(n)) whiteCount++;
+    keyboard.style.setProperty('--white-count', String(whiteCount));
+
+    const frag = document.createDocumentFragment();
+    for (let note=startNote; note<=endNote; note++){
+      const black = isBlack(note);
+      const k = el('div', 'key ' + (black ? 'black' : 'white'));
+      k.dataset.note = note;
+      if (!black && (note % 12) === 0){ // C labels
+        const octave = Math.floor(note/12)-1;
+        k.textContent = `C${octave}`;
+      }
+      frag.appendChild(k);
+    }
+    keyboard.appendChild(frag);
+
+    // unified pointer input
+    keyboard.addEventListener('pointerdown', e=>{
+      const t = e.target;
+      if (!t.classList.contains('key')) return;
+      e.preventDefault();
+      ctx.resume();
+      t.setPointerCapture(e.pointerId);
+      t.classList.add('active');
+      triggerNote(+t.dataset.note, 1);
+    });
+    const up = e=>{
+      const t = e.target;
+      if (t && t.classList && t.classList.contains('key')) t.classList.remove('active');
+    };
+    keyboard.addEventListener('pointerup', up);
+    keyboard.addEventListener('pointerleave', up);
+    keyboard.addEventListener('pointercancel', up);
+  }
+  createKeyboard();
+
+  /*** Recording & manual trigger ***/
+  function triggerNote(note, vel){
+    const t = ctx.currentTime;
+    synth.noteOn(note, t, 0.25, vel);
+    if (recEl.checked && isPlaying){
+      const idx = (currentStep + STEPS - 1) % STEPS;
+      synthSteps[idx] = note;
+      renderStep(idx);
+    }
+  }
+
+  /*** Spacebar transport ***/
+  window.addEventListener('keydown', (e)=>{
+    if (e.code==='Space' && e.target.tagName !== 'INPUT'){ e.preventDefault(); isPlaying ? stop() : start(); }
+  });
+
+  /*** === Save / Load === ***/
+  function toPlainArray(typed){ return Array.from(typed); }
+  function fromPlainArray(arr, typed){ for(let i=0;i<typed.length && i<arr.length;i++) typed[i]=arr[i]|0; }
+
+  function makeSnapshot(){
+    return {
+      version: 1,
+      app: 'Enhanced 64-Step Sequencer',
+      savedAt: new Date().toISOString(),
+      bpm,
+      steps: {
+        sample: toPlainArray(sampleSteps),
+        synth:  toPlainArray(synthSteps)
+      },
+      sample: sampleSource, // {type:'none'|'url'|'data', ...}
+      synthModule: synthModuleUrl ? { url: synthModuleUrl } : { url: null }
+    };
+  }
+
+  async function applySnapshot(snap){
+    try{
+      // BPM
+      if (typeof snap.bpm === 'number'){
+        bpm = clamp(snap.bpm, 40, 240);
+        bpmEl.value = bpm;
+      }
+      // Steps
+      if (snap.steps){
+        if (Array.isArray(snap.steps.sample)) fromPlainArray(snap.steps.sample, sampleSteps);
+        if (Array.isArray(snap.steps.synth))  fromPlainArray(snap.steps.synth,  synthSteps);
+        renderAll();
+      }
+      // Synth
+      const wantUrl = snap.synthModule && typeof snap.synthModule.url === 'string' ? snap.synthModule.url : null;
+      synthUrlEl.value = wantUrl || '';
+      await loadSynthFromUrl(wantUrl);
+
+      // Sample
+      sampleBuf = null;
+      const s = snap.sample || {type:'none'};
+      sampleSource = { type:'none' };
+      if (s.type === 'url' && s.url){
+        sampleUrlEl.value = s.url;
+        const res = await fetch(s.url);
+        const ab = await res.arrayBuffer();
+        if (await decodeSampleFromArrayBuffer(ab)){
+          sampleSource = { type:'url', url: s.url };
+        } else {
+          log('Saved sample URL could not be loaded.');
+        }
+      } else if (s.type === 'data' && s.dataUrl){
+        sampleUrlEl.value = '';
+        const resp = await fetch(s.dataUrl);
+        const ab = await resp.arrayBuffer();
+        if (await decodeSampleFromArrayBuffer(ab)){
+          sampleSource = { type:'data', name: s.name||'sample', mime: s.mime||'audio/wav', dataUrl: s.dataUrl };
+        } else {
+          log('Saved embedded sample could not be decoded.');
+        }
+      } else {
+        sampleUrlEl.value = '';
+      }
+
+      log('Session loaded.');
+    }catch(err){
+      console.error(err);
+      log('Failed to load session JSON.');
+    }
+  }
+
+  function downloadJSON(obj, filename){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    URL.revokeObjectURL(a.href);
+    a.remove();
+  }
+
+  async function copyJSONToClipboard(obj){
+    const text = JSON.stringify(obj, null, 2);
+    try{
+      await navigator.clipboard.writeText(text);
+      log('Snapshot copied to clipboard.');
+    }catch{
+      log('Clipboard copy failed (permissions).');
+    }
+  }
+
+  function newSession(){
+    stop();
+    for(let i=0;i<STEPS;i++){ sampleSteps[i]=0; synthSteps[i]=-1; }
+    renderAll();
+    bpm = 120; bpmEl.value = 120;
+    sampleBuf = null; sampleSource = {type:'none'};
+    synth = demoSynth(ctx); synthModuleUrl = null; synthUrlEl.value='';
+    sampleUrlEl.value=''; sampleFileEl.value='';
+    log('New blank session.');
+  }
+
+  // Wire up buttons
+  saveStateBtn.addEventListener('click', ()=>{
+    const snap = makeSnapshot();
+    const title = snap.sample?.name ? snap.sample.name.replace(/\.[^/.]+$/,'') : 'sequencer';
+    downloadJSON(snap, `${title}-snapshot.json`);
+    log('Snapshot downloaded.');
+  });
+
+  copyStateBtn.addEventListener('click', ()=> copyJSONToClipboard(makeSnapshot()));
+
+  loadStateFile.addEventListener('change', async (e)=>{
+    const f = e.target.files[0];
+    if (!f) return;
+    try{
+      const txt = await f.text();
+      const snap = JSON.parse(txt);
+      await applySnapshot(snap);
+    }catch{ log('Invalid JSON file.'); }
+    finally{ e.target.value=''; }
+  });
+
+  newSessionBtn.addEventListener('click', newSession);
+
+  // Drag & drop to session panel
+  ;(() => {
+    const dz = sessionPanel;
+    const on = () => dz.classList.add('drag');
+    const off = () => dz.classList.remove('drag');
+    ['dragenter','dragover'].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); on(); }));
+    ['dragleave','drop'].forEach(ev=> dz.addEventListener(ev, e=>{ e.preventDefault(); off(); }));
+    dz.addEventListener('drop', async (e)=>{
+      const file = [...(e.dataTransfer?.files||[])].find(f=> f.type==='application/json' || f.name.endsWith('.json'));
+      if (!file){ log('Drop a JSON snapshot file.'); return; }
+      try{ const snap = JSON.parse(await file.text()); await applySnapshot(snap); }
+      catch{ log('Invalid JSON on drop.'); }
+    });
+  })();
+
+  /*** Boot ***/
+  renderAll();
+})();
+</script>
+</body>
+</html>
