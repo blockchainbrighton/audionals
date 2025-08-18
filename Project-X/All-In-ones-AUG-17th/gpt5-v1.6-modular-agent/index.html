@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multi-Channel 64‑Step Sequencer</title>
+  <!--
+    This single page application hosts a simple 64 step sequencer.  The
+    layout and styling are largely unchanged from the original project
+    supplied by the user.  JavaScript powering the sequencer lives in
+    the `host/engine.js` module which is imported as an ES module below.
+    All audio synthesis is performed by pluggable “headless” instrument
+    modules located in the `modules/` directory.  See host/engine.js
+    for details.
+  -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg-main:#1a1c20;--bg-surface:#25282e;--bg-inset:#111214;
+      --fg-main:#e1e3e8;--fg-muted:#8c919c;--border-color:#363a42;
+      --primary-color:#5d87ff;--primary-color-light:#83a3ff;--primary-color-dark:#4d75e6;
+      --cell-on-color:#5d87ff;--cell-note-color:#2ecf94;--cell-playhead-outline:#ffab40;
+      --danger-color: #ff5d5d; --danger-color-dark: #e64d4d;
+      --font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      --shadow-sm:0 2px 4px rgba(0,0,0,.1)
+    }
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg-main);color:var(--fg-main);font:14px/1.4 var(--font-family);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+    .container{max-width:1300px;margin:0 auto;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}
+    header{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between;padding-bottom:1.25rem;border-bottom:1px solid var(--border-color)}
+    .title{margin:0;font-size:1.25rem;font-weight:600}
+
+    .panel{background:var(--bg-surface);border-radius:12px;border:1px solid var(--border-color);padding:1rem;box-shadow:var(--shadow-sm)}
+    .panel-title{font-weight:600;color:var(--fg-main);margin:0 0 .75rem;border-bottom:1px solid var(--border-color);padding-bottom:.6rem;font-size:1rem}
+
+    .row{display:flex;gap:1rem;align-items:center;padding:.4rem 0}
+    .label{font-weight:500;color:var(--fg-muted);text-align:right;width:90px;flex-shrink:0}
+    .controls{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;width:100%}
+
+    button,.button-style{padding:8px 14px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-surface);color:var(--fg-main);font-weight:500;cursor:pointer;transition:background-color .2s,border-color .2s,transform .1s;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+    button:hover,.button-style:hover{background:#31343a;border-color:#4a4e57}
+    button:active,.button-style:active{transform:translateY(1px)}
+    button.danger{background:var(--danger-color);border-color:var(--danger-color-dark);color:#fff}
+    button.danger:hover{background:#ff7a7a}
+
+    #play{background:var(--primary-color);border-color:var(--primary-color-dark);color:#fff}
+    #play:hover{background:var(--primary-color-light);border-color:var(--primary-color)}
+    #stop{background:#363a42;border-color:#4a4e57}
+    #stop:hover{background:#4a4e57}
+    input[type="number"],input[type="text"]{padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-inset);color:var(--fg-main);font-family:var(--font-family)}
+    input[type="number"]:focus,input[type="text"]:focus{outline:2px solid var(--primary-color);outline-offset:2px;border-color:var(--primary-color)}
+    input[type="file"]{display:none}
+    .file-label{display:inline-block;padding:8px 14px;background:#363a42;border-radius:8px;cursor:pointer}
+    .pill-group{display:flex;align-items:center;gap:.5rem}
+    .pill{display:inline-flex;gap:.5rem;align-items:center;padding:8px 12px;border:1px solid var(--border-color);border-radius:999px;background:var(--bg-surface);font-size:13px}
+    .pill input[type="checkbox"]{accent-color:var(--primary-color)}
+
+    .grid-container{display:flex;flex-direction:column;gap:1rem;padding:0 .5rem}
+    .grid{display:grid;grid-template-columns:repeat(64,1fr);gap:3px}
+    .cell{aspect-ratio:1.5/1;border:1px solid var(--border-color);background:var(--bg-surface);border-radius:3px;cursor:pointer;position:relative;transition:background-color .1s,border-color .1s}
+    .cell:hover{background:#31343a}
+    .cell.on{background:var(--cell-on-color);border-color:var(--primary-color-light)}
+    .cell.note{background:var(--cell-note-color);border-color:#57d9a9}
+    .cell.playhead::after{content:"";position:absolute;inset:-3px;border:2px solid var(--cell-playhead-outline);border-radius:5px;pointer-events:none;animation:pulse 1s infinite alternate}
+    @keyframes pulse{from{opacity:.7}to{opacity:1}}
+
+    .barMarks{display:grid;grid-template-columns:120px repeat(16,1fr);margin-bottom:.5rem;padding:0 .5rem}
+    .barMarks div{text-align:left;font-size:11px;color:var(--fg-muted);border-left:1px solid var(--border-color)}
+    .barMarks div:first-child{border-left:none}
+
+    .channel-strip{display:flex;gap:1rem;align-items:flex-start;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border-color)}
+    .channel-strip:last-child{border-bottom:none;margin-bottom:0}
+    .channel-info{display:flex;flex-direction:column;gap:.5rem;width:105px;flex-shrink:0}
+    .channel-grid-wrapper{flex-grow:1}
+    .param-panel{display:flex;flex-direction:column;gap:.6rem;margin-top:0.5rem}
+    .param-row{display:flex;align-items:center;gap:.5rem}
+    .param-row label{flex:1;font-size:12px;color:var(--fg-muted)}
+    .param-row input[type="range"]{flex:1 1 auto}
+    .param-row input[type="checkbox"]{margin-right:0.4rem}
+    .param-row select{flex:1 1 auto;padding:4px 6px;border-radius:4px;border:1px solid var(--border-color);background:var(--bg-inset);color:var(--fg-main)}
+
+    #keyboard{--white-count:14;--white-w:calc(100%/var(--white-count));display:flex;width:100%;padding:1rem;background:var(--bg-inset);border-radius:8px;box-shadow:inset 0 2px 8px rgba(0,0,0,.3);margin-top:1rem;position:relative;overflow:hidden}
+    .key{position:relative;border:1px solid #222;border-radius:5px;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;font-size:11px;color:#333;user-select:none;box-shadow:inset 0 0 5px rgba(255,255,255,.1),0 2px 3px rgba(0,0,0,.4);transition:background-color .08s}
+    .key.white{height:120px;width:var(--white-w);background:linear-gradient(to bottom,#f9f9f9,#d1d1d1);z-index:1}
+    .key.black{height:75px;width:calc(var(--white-w)*.6);background:linear-gradient(to bottom,#444,#111);color:#eee;z-index:2;margin:0 calc(var(--white-w)*-.3);box-shadow:inset 0 -2px 5px rgba(255,255,255,.2),0 3px 5px rgba(0,0,0,.6)}
+    .key.active{background:var(--primary-color-light)!important;border-color:var(--primary-color-dark);transform:scale(.985)}
+
+    #status{padding:8px 12px;color:var(--fg-muted);font-size:13px;min-height:2em}
+    .hint{font-size:12px;color:var(--fg-muted);opacity:.9;text-align:right}
+
+    .dropzone{border:1px dashed var(--border-color);border-radius:10px;padding:.75rem;opacity:.85}
+    .dropzone.drag{background:rgba(131,163,255,.08);border-color:var(--primary-color)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1 class="title">Multi-Channel 64‑Step Sequencer</h1>
+      <div class="controls">
+        <button id="play">▶︎ Play</button>
+        <button id="stop">■ Stop</button>
+        <div class="pill-group">
+          <label class="pill"><input type="checkbox" id="record"> Record</label>
+          <label class="pill">BPM <input id="bpm" type="number" value="120" min="40" max="240" style="width:64px;margin-left:6px"></label>
+        </div>
+      </div>
+    </header>
+
+    <div class="panel">
+        <h2 class="panel-title">Channels</h2>
+        <div class="controls" style="padding-bottom: 1rem;">
+            <button id="addSampler">Add Sampler</button>
+            <button id="addSynth">Add Synth</button>
+        </div>
+        <div class="barMarks" aria-hidden="true"></div>
+        <div id="channelsContainer" class="grid-container"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Keyboard &amp; MIDI</h2>
+      <div class="hint" style="text-align:left;margin:-.5rem 0 1rem">MIDI: Connect a USB keyboard or use the on‑screen keyboard. Click Play/Load to unlock audio.</div>
+      <div id="keyboard"></div>
+    </div>
+
+    <div class="panel dropzone" id="sessionPanel">
+      <h2 class="panel-title">Session (Save / Load)</h2>
+      <div class="row">
+        <div class="label">Snapshot</div>
+        <div class="controls">
+          <button id="saveState">Save JSON</button>
+          <label for="loadStateFile" class="button-style">Load JSON</label>
+          <input id="loadStateFile" type="file" accept="application/json">
+          <button id="copyState">Copy JSON</button>
+          <button id="newSession">New Session</button>
+        </div>
+      </div>
+      <div class="hint" style="text-align:left">Tip: You can also drag a previously saved JSON file onto this box to load it.</div>
+    </div>
+
+    <div id="status">Ready.</div>
+  </div>
+
+  <!-- The core engine is imported as an ES module.  All UI hooks and audio
+       scheduling are handled from within host/engine.js. -->
+  <script type="module" src="./host/engine.js"></script>
+</body>
+</html>
