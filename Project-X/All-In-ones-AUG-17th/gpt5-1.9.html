@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Multi-Channel 64-Step Sequencer</title>
+  <title>Multi-Sequence 64-Step Sequencer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
@@ -36,6 +36,8 @@
     button:active,.button-style:active{transform:translateY(1px)}
     button.danger{background:var(--danger-color);border-color:var(--danger-color-dark);color:#fff}
     button.danger:hover{background:#ff7a7a}
+
+    button.active{background:var(--primary-color-light);border-color:var(--primary-color-dark);color:#fff;box-shadow:inset 0 1px 3px rgba(0,0,0,.2)}
 
     #play{background:var(--primary-color);border-color:var(--primary-color-dark);color:#fff}
     #play:hover{background:var(--primary-color-light);border-color:var(--primary-color)}
@@ -83,7 +85,7 @@
 <body>
   <div class="container">
     <header>
-      <h1 class="title">Multi-Channel 64-Step Sequencer</h1>
+      <h1 class="title">Multi-Sequence 64-Step Sequencer</h1>
       <div class="controls">
         <button id="play">▶︎ Play</button>
         <button id="stop">■ Stop</button>
@@ -93,6 +95,15 @@
         </div>
       </div>
     </header>
+
+    <div class="panel">
+        <h2 class="panel-title">Sequences</h2>
+        <div class="controls">
+            <button id="addSequence">Add New Sequence</button>
+            <label class="pill"><input type="checkbox" id="continuousPlay"> Continuous Play</label>
+        </div>
+        <div id="sequenceButtonsContainer" class="controls" style="padding-top: 1rem;"></div>
+    </div>
 
     <div class="panel">
         <h2 class="panel-title">Channels</h2>
@@ -144,8 +155,12 @@
   const LOOKAHEAD = 0.05;
   const STEP_DIV = 4;
 
-  let channels = []; // Central state for all channels
+  let channels = [];
   let channelCounter = 0;
+  let numSequences = 1;
+  let activeSequenceIndex = 0;
+  let queuedSequenceIndex = -1;
+  let continuousPlay = false;
 
   // UI refs
   const playBtn = $('#play'), stopBtn = $('#stop'), bpmEl = $('#bpm'), recEl = $('#record');
@@ -154,6 +169,8 @@
   const saveStateBtn = $('#saveState'), loadStateFile = $('#loadStateFile');
   const copyStateBtn = $('#copyState'), newSessionBtn = $('#newSession');
   const sessionPanel = $('#sessionPanel');
+  const addSequenceBtn = $('#addSequence'), continuousPlayEl = $('#continuousPlay');
+  const sequenceButtonsContainer = $('#sequenceButtonsContainer');
 
   /*** Audio ***/
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
@@ -176,33 +193,94 @@
     }
   }
 
-  /*** Channel Management ***/
+  /*** Sequence Management ***/
+  function addSequence() {
+    numSequences++;
+    for (const channel of channels) {
+        const newPattern = channel.type === 'sampler' 
+            ? new Uint8Array(STEPS) 
+            : new Int16Array(STEPS).fill(-1);
+        channel.patterns.push(newPattern);
+    }
+    buildSequenceButtonsUI();
+    switchSequence(numSequences - 1);
+    log(`Added Sequence ${numSequences}.`);
+  }
 
+  function switchSequence(index) {
+    if (index < 0 || index >= numSequences) return;
+    
+    if (isPlaying) {
+        queuedSequenceIndex = index;
+        log(`Queued Sequence ${index + 1}.`);
+    } else {
+        activeSequenceIndex = index;
+        log(`Switched to Sequence ${index + 1}.`);
+    }
+    renderAllGrids(index); 
+    updateSequenceButtonsUI(index);
+  }
+  
+  function buildSequenceButtonsUI() {
+    sequenceButtonsContainer.innerHTML = '';
+    for (let i = 0; i < numSequences; i++) {
+        const btn = el('button');
+        btn.textContent = `Seq ${i + 1}`;
+        btn.dataset.index = i;
+        btn.addEventListener('click', () => switchSequence(i));
+        sequenceButtonsContainer.appendChild(btn);
+    }
+    updateSequenceButtonsUI(activeSequenceIndex);
+  }
+
+  function updateSequenceButtonsUI(currentIdx = activeSequenceIndex) {
+    const buttons = sequenceButtonsContainer.querySelectorAll('button');
+    buttons.forEach((btn, i) => {
+        btn.classList.toggle('active', i === currentIdx);
+    });
+  }
+
+  addSequenceBtn.addEventListener('click', addSequence);
+  continuousPlayEl.addEventListener('change', () => { continuousPlay = continuousPlayEl.checked; });
+
+
+  /*** Channel Management ***/
   function addChannel(type, initialData = {}){
     const id = initialData.id || Date.now() + channelCounter++;
     const name = initialData.name || `${type} ${channelCounter}`;
 
     const channel = {
         id, type, name,
-        steps: type === 'sampler' ? new Uint8Array(STEPS) : new Int16Array(STEPS).fill(-1),
+        patterns: [],
         ui: { cells: new Array(STEPS) },
-        // Sampler-specific state
         sampleBuf: null,
         sampleSource: { type: 'none' },
-        // Synth-specific state
         synth: type === 'synth' ? demoSynth(ctx) : null,
         synthModuleUrl: null,
     };
 
-    if (initialData.steps) {
-        channel.steps.set(initialData.steps.slice(0, STEPS));
+    // Initialize patterns, supporting both new format and legacy format
+    if (initialData.patterns) { // New format
+        channel.patterns = initialData.patterns.map(p => {
+            const arr = type === 'sampler' ? new Uint8Array(STEPS) : new Int16Array(STEPS).fill(-1);
+            if (p) arr.set(p.slice(0, STEPS));
+            return arr;
+        });
+    } else if (initialData.steps) { // *** BACKWARD COMPATIBILITY ***
+        const pattern = type === 'sampler' ? new Uint8Array(STEPS) : new Int16Array(STEPS).fill(-1);
+        pattern.set(initialData.steps.slice(0, STEPS));
+        channel.patterns.push(pattern);
+    } else { // New blank channel
+        for (let i = 0; i < numSequences; i++) {
+            const pattern = type === 'sampler' ? new Uint8Array(STEPS) : new Int16Array(STEPS).fill(-1);
+            channel.patterns.push(pattern);
+        }
     }
     
     channels.push(channel);
     buildChannelUI(channel);
-    renderChannel(channel);
+    renderChannel(channel, activeSequenceIndex);
 
-    // If loading from snapshot, handle async resource loading
     if(initialData.synthModule?.url) {
       const input = channel.ui.strip.querySelector('.synth-url-input');
       input.value = initialData.synthModule.url;
@@ -216,8 +294,7 @@
   function removeChannel(id) {
     const idx = channels.findIndex(c => c.id === id);
     if (idx > -1) {
-        const channel = channels[idx];
-        channel.ui.strip.remove();
+        channels[idx].ui.strip.remove();
         channels.splice(idx, 1);
         log('Channel removed.');
     }
@@ -229,9 +306,7 @@
 
     const info = el('div', 'channel-info');
     const nameInput = el('input');
-    nameInput.type = 'text';
-    nameInput.value = channel.name;
-    nameInput.title = 'Click to rename channel';
+    nameInput.type = 'text'; nameInput.value = channel.name; nameInput.title = 'Click to rename channel';
     nameInput.addEventListener('change', () => { channel.name = nameInput.value; });
     
     const removeBtn = el('button', 'danger');
@@ -251,19 +326,16 @@
         const fileInput = el('input'); fileInput.id=fileInputId; fileInput.type='file'; fileInput.accept='audio/*';
         const loadBtn = el('button'); loadBtn.textContent='Load';
         controls.append(urlInput, fileLabel, fileInput, loadBtn);
-
         loadBtn.addEventListener('click', () => loadSampleFromUI(channel, fileInput, urlInput));
     } else { // synth
         const urlInput = el('input', 'synth-url-input'); urlInput.type='text'; urlInput.placeholder='Headless synth module URL'; urlInput.style.flex='1';
         const loadBtn = el('button'); loadBtn.textContent='Load Synth';
         controls.append(urlInput, loadBtn);
-
         loadBtn.addEventListener('click', () => loadSynthFromUrl(channel, urlInput.value.trim()));
     }
 
     const grid = el('div', 'grid');
-    grid.role = 'grid';
-    grid.ariaLabel = `${channel.name} steps`;
+    grid.role = 'grid'; grid.ariaLabel = `${channel.name} steps`;
     const frag = document.createDocumentFragment();
     for (let i=0; i<STEPS; i++) {
         const c = el('div', 'cell'); c.dataset.idx = i;
@@ -275,12 +347,13 @@
         const t = e.target;
         if (!t.classList.contains('cell')) return;
         const i = +t.dataset.idx;
+        const currentPattern = channel.patterns[activeSequenceIndex];
         if (channel.type === 'sampler') {
-            channel.steps[i] ^= 1;
+            currentPattern[i] ^= 1;
         } else {
-            if (channel.steps[i] !== -1) channel.steps[i] = -1;
+            if (currentPattern[i] !== -1) currentPattern[i] = -1;
         }
-        renderStep(channel, i);
+        renderStep(channel, i, activeSequenceIndex);
     });
 
     gridWrapper.append(controls, grid);
@@ -348,9 +421,7 @@
                 channel.sampleSource = { type: 'data', name: source.name||'sample', mime: source.mime||'audio/wav', dataUrl: source.dataUrl };
             } else { throw new Error('decode fail'); }
         }
-    } catch (e) {
-        log(`[${channel.name}] Failed to load saved sample.`);
-    }
+    } catch (e) { log(`[${channel.name}] Failed to load saved sample.`); }
   }
 
   /*** Bar marks ***/
@@ -363,18 +434,22 @@
   })();
 
   /*** Render ***/
-  function renderAll(){
-    channels.forEach(renderChannel);
+  function renderAllGrids(seqIndex) {
+    channels.forEach(ch => renderChannel(ch, seqIndex));
   }
-  function renderChannel(channel){
-    for (let i=0; i<STEPS; i++) renderStep(channel, i);
+  function renderChannel(channel, seqIndex){
+    for (let i=0; i<STEPS; i++) renderStep(channel, i, seqIndex);
   }
-  function renderStep(channel, i){
+  function renderStep(channel, i, seqIndex){
+    const pattern = channel.patterns[seqIndex];
+    if (!pattern) return; 
     const cell = channel.ui.cells[i];
     if (channel.type === 'sampler') {
-        cell.classList.toggle('on', !!channel.steps[i]);
+        cell.classList.toggle('on', !!pattern[i]);
+        cell.classList.remove('note');
     } else {
-        cell.classList.toggle('note', channel.steps[i] !== -1);
+        cell.classList.toggle('note', pattern[i] !== -1);
+        cell.classList.remove('on');
     }
   }
   function updatePlayhead(ph){
@@ -392,60 +467,86 @@
   /*** Scheduling ***/
   function scheduleStep(step, time){
     channels.forEach(ch => {
+      const pattern = ch.patterns[activeSequenceIndex];
+      if (!pattern) return;
       if (ch.type === 'sampler') {
-        if (ch.steps[step] && ch.sampleBuf) {
+        if (pattern[step] && ch.sampleBuf) {
           const src = ctx.createBufferSource(); src.buffer = ch.sampleBuf; src.connect(ctx.destination); src.start(time);
         }
       } else { // synth
-        const note = ch.steps[step];
-        if (note !== -1) ch.synth.noteOn(note, time, stepDur() * 0.95, 0.9);
+        const note = pattern[step];
+        if (note !== -1 && ch.synth) ch.synth.noteOn(note, time, stepDur() * 0.95, 0.9);
       }
     });
   }
+  
   function tick(){
-    if (!isPlaying) return;
-    const ahead = ctx.currentTime + LOOKAHEAD;
-    while (nextNoteTime < ahead){
-      scheduleStep(currentStep, nextNoteTime);
-      nextNoteTime += stepDur();
-      currentStep = (currentStep + 1) % STEPS;
+  if (!isPlaying) return;
+  const ahead = ctx.currentTime + LOOKAHEAD;
+
+  while (nextNoteTime < ahead){
+
+    // 👇 Apply any queued sequence switch right before scheduling the next step
+    if (queuedSequenceIndex !== -1) {
+      activeSequenceIndex = queuedSequenceIndex;
+      queuedSequenceIndex = -1;
+      renderAllGrids(activeSequenceIndex);
+      updateSequenceButtonsUI(activeSequenceIndex);
     }
-    const ph = (currentStep + STEPS - 1) % STEPS;
-    updatePlayhead(ph);
-    rafId = requestAnimationFrame(tick);
+
+    scheduleStep(currentStep, nextNoteTime);
+    nextNoteTime += stepDur();
+    currentStep = (currentStep + 1) % STEPS;
   }
+
+  const ph = (currentStep + STEPS - 1) % STEPS;
+  updatePlayhead(ph);
+  rafId = requestAnimationFrame(tick);
+}
+
 
   /*** Transport ***/
   function start(){
     if (isPlaying) return;
-    ctx.resume(); isPlaying = true; currentStep = 0;
-    nextNoteTime = ctx.currentTime + 0.06;
+    ctx.resume(); isPlaying = true;
+    if (currentStep === 0) {
+      nextNoteTime = ctx.currentTime + 0.06;
+    }
     log('Playing.'); playBtn.textContent = '❚❚ Pause';
     rafId = requestAnimationFrame(tick);
   }
-  function stop(){
+
+  function stop(reset = true){
     if (!isPlaying) return;
     isPlaying = false; cancelAnimationFrame(rafId);
-    updatePlayhead(-1);
-    log('Stopped.'); playBtn.textContent = '▶︎ Play';
+    if (reset) {
+      currentStep = 0;
+      queuedSequenceIndex = -1;
+      updatePlayhead(-1);
+      log('Stopped.');
+    } else {
+      log('Paused.');
+    }
+    playBtn.textContent = '▶︎ Play';
   }
-  playBtn.addEventListener('click', ()=> isPlaying ? stop() : start());
-  stopBtn.addEventListener('click', stop);
+
+  playBtn.addEventListener('click', ()=> isPlaying ? stop(false) : start());
+  stopBtn.addEventListener('click', () => { if(isPlaying) stop(true); });
   bpmEl.addEventListener('input', e=>{ bpm = clamp(+e.target.value||120, 40, 240); e.target.value = bpm; });
-  window.addEventListener('keydown', (e)=>{ if (e.code==='Space' && e.target.tagName !== 'INPUT'){ e.preventDefault(); isPlaying ? stop() : start(); }});
+  window.addEventListener('keydown', (e)=>{ if (e.code==='Space' && e.target.tagName !== 'INPUT'){ e.preventDefault(); isPlaying ? stop(false) : start(); }});
 
   /*** MIDI & Keyboard ***/
   function triggerNote(note, vel){
     const t = ctx.currentTime;
     let notePlayed = false;
     channels.forEach(ch => {
-        if (ch.type === 'synth') {
+        if (ch.type === 'synth' && ch.synth) {
             ch.synth.noteOn(note, t, 0.25, vel);
             notePlayed = true;
             if (recEl.checked && isPlaying){
                 const idx = (currentStep + STEPS - 1) % STEPS;
-                ch.steps[idx] = note;
-                renderStep(ch, idx);
+                ch.patterns[activeSequenceIndex][idx] = note;
+                renderStep(ch, idx, activeSequenceIndex);
             }
         }
     });
@@ -467,23 +568,31 @@
         id: ch.id,
         type: ch.type,
         name: ch.name,
-        steps: Array.from(ch.steps),
+        patterns: ch.patterns.map(p => Array.from(p)),
         sample: ch.type === 'sampler' ? ch.sampleSource : undefined,
         synthModule: ch.type === 'synth' ? { url: ch.synthModuleUrl } : undefined,
     }));
     return {
-      version: 2, app: 'Multi-Channel Sequencer', savedAt: new Date().toISOString(),
-      bpm, channels: plainChannels,
+      version: 3, app: 'Multi-Sequence Sequencer', savedAt: new Date().toISOString(),
+      bpm,
+      numSequences,
+      channels: plainChannels,
     };
   }
 
   async function applySnapshot(snap){
     try{
-      newSession(false); // clear state without logging
-      await new Promise(r=>setTimeout(r,50)); // allow DOM to clear
+      newSession(false); 
+      await new Promise(r=>setTimeout(r,50)); 
 
       if (typeof snap.bpm === 'number'){ bpm = clamp(snap.bpm, 40, 240); bpmEl.value = bpm; }
       
+      // *** BACKWARD COMPATIBILITY ***
+      // If numSequences is missing, it's an old file with only 1 sequence.
+      numSequences = snap.numSequences || 1;
+      
+      buildSequenceButtonsUI();
+
       if (Array.isArray(snap.channels)) {
         for(const chData of snap.channels) {
             addChannel(chData.type, chData);
@@ -491,8 +600,9 @@
       }
       log('Session loaded.');
     }catch(err){
-      console.error(err);
+      console.error("Error applying snapshot:", err);
       log('Failed to load session JSON.');
+      newSession(); // Reset to a clean state on failure
     }
   }
 
@@ -509,37 +619,44 @@
   }
 
   function newSession(doLog = true){
-    stop();
+    stop(true);
     channels.forEach(ch => ch.ui.strip.remove());
     channels = [];
     channelCounter = 0;
+    numSequences = 1;
+    activeSequenceIndex = 0;
+    queuedSequenceIndex = -1;
+    continuousPlay = false; continuousPlayEl.checked = false;
     bpm = 120; bpmEl.value = 120;
+    
+    buildSequenceButtonsUI();
+
     if(doLog) log('New blank session.');
   }
 
-  saveStateBtn.addEventListener('click', ()=>{ downloadJSON(makeSnapshot(), `sequencer-snapshot.json`); log('Snapshot downloaded.'); });
+  saveStateBtn.addEventListener('click', ()=>{ downloadJSON(makeSnapshot(), `sequencer-session.json`); log('Session downloaded.'); });
   copyStateBtn.addEventListener('click', ()=> copyJSONToClipboard(makeSnapshot()));
   loadStateFile.addEventListener('change', async (e)=>{
     const f=e.target.files[0]; if(!f)return;
     try{ const snap = JSON.parse(await f.text()); await applySnapshot(snap); }
     catch{ log('Invalid JSON file.'); } finally{ e.target.value=''; }
   });
-  newSessionBtn.addEventListener('click', () => newSession(true));
+  newSessionBtn.addEventListener('click', () => { if(confirm('Are you sure you want to start a new session?')) newSession(true); });
 
-  // Drag & drop
   ;(() => {
     const dz = sessionPanel; const on=()=>dz.classList.add('drag'),off=()=>dz.classList.remove('drag');
     ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();on();}));
     ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();off();}));
     dz.addEventListener('drop', async (e)=>{
       const file = [...(e.dataTransfer?.files||[])].find(f=>f.type==='application/json'||f.name.endsWith('.json'));
-      if (!file){ log('Drop a JSON snapshot file.'); return; }
+      if (!file){ log('Drop a JSON session file.'); return; }
       try{ const snap=JSON.parse(await file.text()); await applySnapshot(snap); }
       catch{ log('Invalid JSON on drop.'); }
     });
   })();
 
   /*** Boot ***/
+  buildSequenceButtonsUI();
   addChannel('sampler');
   addChannel('synth');
 })();
