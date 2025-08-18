@@ -1,3 +1,4 @@
+<!--  USE http://localhost:5501/Project-X/All-In-ones-AUG-17th/V1.11-gpt5-gen.html -->
 <!doctype html>
 <html lang="en">
 <head>
@@ -809,7 +810,73 @@ function rebuildSynthHead(channel){
     if (!played) log('Add a synth channel to play notes.');
   }
 
-  (async function initMIDI(){ /* Hook for future MIDI support */ })();
+  async function handleMIDIMessage(evt){
+  const [status, data1, data2] = evt.data;       // status, note/cc, velocity/value
+  const cmd = status & 0xF0;                     // high nibble = message type
+  const channel = (status & 0x0F) + 1;           // 1-16 (not used here)
+
+  // Note On (0x90) with velocity > 0
+  if (cmd === 0x90 && data2 > 0){
+    const note = data1;
+    const vel = data2 / 127;
+    ctx.resume();                                // unlock audio if needed
+    triggerNote(note, vel);
+    log(`MIDI Note On: ${note} (ch ${channel}) vel ${data2}`);
+    return;
+  }
+
+  // Note Off (0x80) or Note On with velocity 0 — ignored for now
+  if (cmd === 0x80 || (cmd === 0x90 && data2 === 0)){
+    // If you later add a sustain/hold engine, call noteOff here.
+    return;
+  }
+
+  // CC (e.g., sustain pedal CC64, modulation, etc.)
+  if (cmd === 0xB0){
+    const cc = data1, val = data2;
+    // Example: sustain pedal (CC64) — currently ignored
+    if (cc === 64) { /* sustain on val>=64 */ }
+    log(`MIDI CC${cc} = ${val} (ch ${channel})`);
+  }
+}
+
+console.log('Web MIDI supported?', 'requestMIDIAccess' in navigator, location.protocol);
+if (!('requestMIDIAccess' in navigator)) log('Web MIDI not supported in this browser.');
+
+(async function initMIDI(){
+  console.log('initMIDI() called');
+  if (!('requestMIDIAccess' in navigator)) {
+    log('Web MIDI not supported in this browser. Try Chrome/Edge or Safari 17+.');
+    return;
+  }
+  try {
+    const access = await navigator.requestMIDIAccess({ sysex: false });
+    console.log('MIDI access granted. inputs:', access.inputs.size);
+    for (const i of access.inputs.values()) console.log('input:', i.name, i.manufacturer, i.state);
+
+    const wireInputs = () => {
+      // clear then attach to ALL inputs
+      for (const input of access.inputs.values()) input.onmidimessage = null;
+
+      const inputs = [...access.inputs.values()];
+      if (!inputs.length) { log('No MIDI inputs found.'); return; }
+
+      const names = inputs.map(i => (i.manufacturer ? `${i.manufacturer} ` : '') + i.name);
+      for (const input of inputs) input.onmidimessage = handleMIDIMessage;
+
+      log(`MIDI inputs: ${names.join(' | ')}`);
+    };
+
+    wireInputs();
+
+    // handle devices being plugged/unplugged (both styles for compatibility)
+    access.addEventListener?.('statechange', wireInputs);
+    access.onstatechange = wireInputs;
+  } catch (err) {
+    log('Could not access MIDI: ' + (err && err.message ? err.message : err));
+  }
+})();
+
 
   (function createKeyboard(){
     const kbd = $('#keyboard'); let whiteCount = 0;
