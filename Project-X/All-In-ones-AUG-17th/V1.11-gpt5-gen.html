@@ -186,10 +186,17 @@
 
   /*** Constants ***/
   const STEPS = 64, BARS = 16, LOOKAHEAD = 0.05, STEP_DIV = 4;
+  
+  // Update DEFAULT_SYNTH_PARAMS to fit the new Rhodes type
   const DEFAULT_SYNTH_PARAMS = {
-    wave:'sawtooth', detune:0, cutoff:8000,
-    attack:0.01, decay:0.06, sustain:0.2, release:0.12,
-    gain:0.9
+    type: 'rhodes', // Added type identifier
+    attack: 0.015,
+    decay: 0.15,
+    sustain: 0.8,
+    release: 0.3,
+    gain: 0.6,
+    brightness: 12000, // Filter cutoff
+    harmonicMix: 0.2 // Mix of fundamental and octave harmonic
   };
 
   /*** State ***/
@@ -223,47 +230,81 @@
   const ctx = new (window.AudioContext || window.webkitAudioContext)();
   const stepDur = () => (60 / state.bpm) / STEP_DIV;
 
-  /*** Demo Synth (reads a live params ref) ***/
-  function demoSynth(context, paramsRef){
+  /*** Rhodes Synth Module (Headless) ***/
+  // This is the implementation for the Fender Rhodes-like sound
+  function createRhodesSynth(context, paramsRef){
     const master = context.createGain(); master.gain.value = 1; master.connect(context.destination);
+    
+    // Function to handle parameter updates
+    const updateParams = () => {
+      const p = paramsRef?.current || DEFAULT_SYNTH_PARAMS;
+      // Note: parameters like 'brightness' are applied to individual notes, not globally.
+    };
+
     return {
       noteOn(note, t, dur=0.22, vel=1){
         const p = paramsRef?.current || DEFAULT_SYNTH_PARAMS;
-        const o = context.createOscillator();
-        const v = context.createGain();
+        const freq = midiToHz(note);
+        
+        // 1. Oscillators: Fundamental and Harmonic
+        const o1 = context.createOscillator(); o1.type = 'sine';
+        const o2 = context.createOscillator(); o2.type = 'sine';
+        
+        o1.frequency.setValueAtTime(freq, t);
+        o2.frequency.setValueAtTime(freq * 2, t); // Octave harmonic
+
+        const g1 = context.createGain(); g1.gain.value = 1 - p.harmonicMix;
+        const g2 = context.createGain(); g2.gain.value = p.harmonicMix;
+
+        // 2. Filter (Brightness)
         const l = context.createBiquadFilter();
-
-        o.type = p.wave;
-        o.frequency.setValueAtTime(midiToHz(note), t);
-        if (o.detune) o.detune.setValueAtTime(p.detune, t);
-
         l.type = 'lowpass';
-        l.frequency.setValueAtTime(clamp(p.cutoff,50,20000), t);
+        l.frequency.setValueAtTime(p.brightness, t);
+        l.Q.setValueAtTime(1.5, t); // Boost the cutoff somewhat
 
+        // 3. Main Gain (ADSR)
+        const v = context.createGain();
         const a = Math.max(0.001, p.attack);
         const d = Math.max(0.001, p.decay);
-        const s = clamp(p.sustain,0,1);
+        const s = clamp(p.sustain, 0, 1);
         const r = Math.max(0.001, p.release);
         const peak = clamp(vel * p.gain, 0.01, 1);
 
         v.gain.cancelScheduledValues(t);
-        v.gain.setValueAtTime(0, t);
+        v.gain.setValueAtTime(0.0001, t); // Start at a near-zero gain
+
+        // Attack phase (fast)
         v.gain.linearRampToValueAtTime(peak, t + a);
+        
+        // Decay phase (settles to sustain level)
         v.gain.linearRampToValueAtTime(peak * s, t + a + d);
 
+        // Calculate release time
         const holdEnd = t + Math.max(dur, a + d);
         v.gain.setValueAtTime(peak * s, holdEnd);
         v.gain.linearRampToValueAtTime(0, holdEnd + r);
 
-        o.connect(l).connect(v).connect(master);
-        o.start(t);
-        o.stop(holdEnd + r + 0.02);
+        // Connections
+        o1.connect(g1).connect(l);
+        o2.connect(g2).connect(l);
+        l.connect(v).connect(master);
+
+        // Start and Stop
+        o1.start(t);
+        o2.start(t);
+        o1.stop(holdEnd + r + 0.02);
+        o2.stop(holdEnd + r + 0.02);
       },
-      setParams(next){ if(paramsRef) paramsRef.current = { ...(paramsRef.current||{}), ...next }; },
-      setParam(k,v){ if(paramsRef) paramsRef.current = { ...(paramsRef.current||{}), [k]: v }; }
+      setParams(next){ if(paramsRef) { paramsRef.current = { ...(paramsRef.current||{}), ...next }; updateParams(); } },
+      setParam(k,v){ if(paramsRef) { paramsRef.current = { ...(paramsRef.current||{}), [k]: v }; updateParams(); } }
     }
   }
 
+  // Define a new type that can be loaded
+  const SYNTH_MODULES = {
+      'rhodes': createRhodesSynth
+  };
+  
   /*** Sequences ***/
   function renderSequenceButtons(){
     sequenceButtonsContainer.innerHTML = '';
@@ -316,7 +357,8 @@
 
     if (channel.type==='synth'){
       channel._paramRef.current = channel.synthParams;
-      channel.synth = demoSynth(ctx, channel._paramRef);
+      // Initialize with the new Rhodes synth
+      channel.synth = createRhodesSynth(ctx, channel._paramRef);
     }
 
     // initialize patterns for all sequences
@@ -362,50 +404,78 @@
     }
   }
 
+  // --- Updated buildSynthHead to fit the Rhodes parameters ---
   function buildSynthHead(channel){
-    const wrap = h('details',{class:'synth-head'}); wrap.open = true;
-    const summary = h('summary',{}, '🔧 Synth Controls');
-    const body = h('div',{class:'body'});
-    wrap.append(summary, body);
+  const wrap = h('details',{class:'synth-head'}); wrap.open = true;
+  const summary = h('summary',{}, '🔧 Synth Controls');
+  const body = h('div',{class:'body'});
+  wrap.append(summary, body);
 
-    const addRow = (labelText, node) => {
-      body.append(h('label',{text:labelText}), node);
-    };
+  const addRow = (labelText, node) => { body.append(h('label',{text:labelText}), node); };
 
-    const bindPair = (min,max,step,val, onChange) => {
-      const r = h('input',{attrs:{type:'range',min,max,step,value:val}});
-      const n = h('input',{attrs:{type:'number',min,max,step,value:val}});
-      const sync = (src,dst) => { const v = clamp(+src.value||0, +min, +max); dst.value = v; src.value = v; onChange(v); push(); };
-      r.addEventListener('input',()=>sync(r,n));
-      n.addEventListener('input',()=>sync(n,r));
-      return h('div',{class:'inline'}, r,n);
-    };
+  const bindPair = (min,max,step,val, onChange) => {
+    const r = h('input',{attrs:{type:'range',min,max,step,value:val}});
+    const n = h('input',{attrs:{type:'number',min,max,step,value:val}});
+    const sync = (src,dst) => { const v = clamp(+src.value||0, +min, +max); dst.value = v; src.value = v; onChange(v); push(); };
+    r.addEventListener('input',()=>sync(r,n));
+    n.addEventListener('input',()=>sync(n,r));
+    return h('div',{class:'inline'}, r,n);
+  };
 
-    const push = () => {
-      channel._paramRef.current = channel.synthParams;
-      if (!channel.synth) return;
-      if (typeof channel.synth.setParams === 'function') channel.synth.setParams(channel.synthParams);
-      else if (typeof channel.synth.setParam === 'function') Object.entries(channel.synthParams).forEach(([k,v])=>channel.synth.setParam(k,v));
-    };
+  const push = () => {
+    channel._paramRef.current = channel.synthParams;
+    if (!channel.synth) return;
+    if (typeof channel.synth.setParams === 'function') channel.synth.setParams(channel.synthParams);
+    else if (typeof channel.synth.setParam === 'function') Object.entries(channel.synthParams).forEach(([k,v])=>channel.synth.setParam(k,v));
+  };
 
-    // Waveform
-    const wave = h('select',{on:{change:()=>{channel.synthParams.wave=wave.value; push();}}});
-    ['sine','square','sawtooth','triangle'].forEach(w=>wave.appendChild(h('option',{attrs:{value:w}}, w)));
-    wave.value = channel.synthParams.wave;
-    addRow('Waveform', wave);
-
-    // Cutoff, Detune, ADSR, Gain
-    addRow('Cutoff (Hz)', bindPair(50,20000,1, channel.synthParams.cutoff, v=>channel.synthParams.cutoff=v));
-    addRow('Detune (¢)',  bindPair(-1200,1200,1, channel.synthParams.detune, v=>channel.synthParams.detune=v));
-    addRow('Attack (s)',  bindPair(0.001,1,0.005, channel.synthParams.attack, v=>channel.synthParams.attack=v));
-    addRow('Decay (s)',   bindPair(0.001,1,0.005, channel.synthParams.decay, v=>channel.synthParams.decay=v));
-    addRow('Sustain',     bindPair(0,1,0.01, channel.synthParams.sustain, v=>channel.synthParams.sustain=v));
-    addRow('Release (s)', bindPair(0.001,2,0.005, channel.synthParams.release, v=>channel.synthParams.release=v));
-    addRow('Gain',        bindPair(0,1,0.01, channel.synthParams.gain, v=>channel.synthParams.gain=v));
-
+  // If the loaded synth exposes a schema, build from that; otherwise show legacy subtractive controls
+  const schema = channel.synth?.paramsSchema;
+  if (Array.isArray(schema) && schema.length){
+    // Seed params with defaults if missing
+    for (const field of schema){
+      if (channel.synthParams[field.key] === undefined){
+        // try to query synth.getParams() for defaults
+        const gp = typeof channel.synth.getParams === 'function' ? channel.synth.getParams() : {};
+        if (gp && gp[field.key] !== undefined) channel.synthParams[field.key] = gp[field.key];
+        else if (field.default !== undefined) channel.synthParams[field.key] = field.default;
+      }
+      const val = channel.synthParams[field.key] ?? field.min ?? 0;
+      if (field.type === 'range'){
+        addRow(field.label || field.key, bindPair(field.min??0, field.max??1, field.step??0.01, val, v=>channel.synthParams[field.key]=v));
+      } else if (field.type === 'select' && Array.isArray(field.options)){
+        const sel = h('select', { on:{ change:()=>{ channel.synthParams[field.key] = sel.value; push(); } } });
+        for (const opt of field.options){ sel.append(h('option',{attrs:{value:opt.value}}, opt.label ?? String(opt.value))); }
+        sel.value = String(val);
+        addRow(field.label || field.key, sel);
+      }
+    }
     push();
     return wrap;
   }
+
+  // --- Legacy fallback (your original controls) ---
+  const wave = h('select',{on:{change:()=>{channel.synthParams.wave=wave.value; push();}}});
+  ['sine','square','sawtooth','triangle'].forEach(w=>wave.appendChild(h('option',{attrs:{value:w}}, w)));
+  wave.value = channel.synthParams.wave || 'sine';
+  addRow('Waveform', wave);
+  addRow('Cutoff (Hz)', bindPair(50,20000,1, channel.synthParams.cutoff||8000, v=>channel.synthParams.cutoff=v));
+  addRow('Detune (¢)',  bindPair(-1200,1200,1, channel.synthParams.detune||0, v=>channel.synthParams.detune=v));
+  addRow('Attack (s)',  bindPair(0.001,1,0.005, channel.synthParams.attack||0.01, v=>channel.synthParams.attack=v));
+  addRow('Decay (s)',   bindPair(0.001,1,0.005, channel.synthParams.decay||0.06, v=>channel.synthParams.decay=v));
+  addRow('Sustain',     bindPair(0,1,0.01, channel.synthParams.sustain||0.2, v=>channel.synthParams.sustain=v));
+  addRow('Release (s)', bindPair(0.001,2,0.005, channel.synthParams.release||0.12, v=>channel.synthParams.release=v));
+  addRow('Gain',        bindPair(0,1,0.01, channel.synthParams.gain||0.9, v=>channel.synthParams.gain=v));
+  push();
+  return wrap;
+}
+
+function rebuildSynthHead(channel){
+  const old = channel.ui.strip.querySelector('.synth-head');
+  const head = buildSynthHead(channel);
+  if (old) old.replaceWith(head); else channel.ui.strip.querySelector('.controls').prepend(head);
+}
+  // --- End of Updated buildSynthHead ---
 
   function buildChannelUI(channel){
     const strip = h('div',{class:'channel-strip', dataset:{id:String(channel.id)}});
@@ -495,7 +565,8 @@
 
   async function loadSynthFromSource(channel, source){
     if (!source){
-      channel.synth = demoSynth(ctx, channel._paramRef);
+      // Use the default Rhodes synth
+      channel.synth = createRhodesSynth(ctx, channel._paramRef);
       channel.synthModule = { type:'none' };
       log(`[${channel.name}] Using built-in synth.`);
       return;
@@ -509,30 +580,67 @@
 
   async function loadSynthFromUrl(channel, url, sourceMeta){
     await ctx.resume();
+
+    const useFallback = (msg) => {
+      console.error(msg);
+      channel.synth = createRhodesSynth(ctx, channel._paramRef);
+      channel.synthModule = { type:'none' };
+      log(`[${channel.name}] Failed to load synth. Using demo synth.`);
+    };
+
     if (!url){
-      channel.synth = demoSynth(ctx, channel._paramRef);
+      channel.synth = createRhodesSynth(ctx, channel._paramRef);
       channel.synthModule = { type:'none' };
       log(`[${channel.name}] Using built-in synth.`);
       return;
     }
+
     try{
       const mod = await import(/* @vite-ignore */ url);
-      const factory = mod.default || mod.createSynth || mod.synth || mod;
-      const s = (typeof factory==='function') ? factory(ctx) : null;
-      if (s && typeof s.noteOn==='function'){
-        channel.synth = s;
-        channel.synthModule = sourceMeta || { type:'url', url };
-        if (typeof s.setParams==='function') s.setParams(channel.synthParams);
-        else if (typeof s.setParam==='function') Object.entries(channel.synthParams).forEach(([k,v])=>s.setParam(k,v));
-        log(`[${channel.name}] Loaded synth module.`);
-      } else {
-        throw new Error('Invalid synth module');
+      const candidate = (mod && (mod.default ?? mod.createSynth ?? mod.synth)) ?? mod;
+      let synth = null;
+
+      // Case A: already a synth object
+      if (candidate && typeof candidate === 'object' && typeof candidate.noteOn === 'function'){
+        synth = candidate;
       }
-    }catch(e){
-      console.error(e);
-      channel.synth = demoSynth(ctx, channel._paramRef);
-      channel.synthModule = { type:'none' };
-      log(`[${channel.name}] Failed to load synth. Using demo synth.`);
+      // Case B/C: function (factory) or class (needs `new`)
+      else if (typeof candidate === 'function') {
+        // Try as a plain factory first
+        try {
+          const maybe = candidate(ctx);
+          synth = (maybe && typeof maybe.then === 'function') ? await maybe : maybe;
+        } catch (err1) {
+          // If that failed (e.g., it's a class), try with `new`
+          try {
+            const maybe = new candidate(ctx);
+            synth = maybe;
+          } catch (err2) {
+            throw err2; // bubble up so we hit fallback
+          }
+        }
+      }
+
+      if (!synth || typeof synth.noteOn !== 'function') {
+        throw new Error('Invalid synth module: missing noteOn()');
+      }
+
+      channel.synth = synth;
+        channel.synthModule = sourceMeta || { type:'url', url };
+
+        // If synth advertises params, adopt them
+        if (typeof synth.getParams === 'function'){
+          channel.synthParams = { ...synth.getParams() };
+        }
+        if (typeof synth.setParams === 'function') synth.setParams(channel.synthParams);
+        else if (typeof synth.setParam === 'function') for (const [k,v] of Object.entries(channel.synthParams)) synth.setParam(k, v);
+
+        // Rebuild control panel based on schema
+        rebuildSynthHead(channel);
+
+        log(`[${channel.name}] Loaded synth module.`);
+    } catch (e) {
+      useFallback(e);
     }
   }
 
