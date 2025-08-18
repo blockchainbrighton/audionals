@@ -1,0 +1,860 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multi-Sequence 64-Step Sequencer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+  <style>
+    :root{
+      --bg-main:#1a1c20;--bg-surface:#25282e;--bg-inset:#111214;
+      --fg-main:#e1e3e8;--fg-muted:#8c919c;--border-color:#363a42;
+      --primary-color:#5d87ff;--primary-color-light:#83a3ff;--primary-color-dark:#4d75e6;
+      --cell-on-color:#5d87ff;--cell-note-color:#2ecf94;--cell-playhead-outline:#ffab40;
+      --danger-color:#ff5d5d;--danger-color-dark:#e64d4d;
+      --font-family:'Inter',system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;
+      --shadow-sm:0 2px 4px rgba(0,0,0,.1)
+    }
+    *,*::before,*::after{box-sizing:border-box}
+    html,body{margin:0;background:var(--bg-main);color:var(--fg-main);font:14px/1.4 var(--font-family);-webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale}
+
+    .container{max-width:1300px;margin:0 auto;padding:1.5rem;display:flex;flex-direction:column;gap:1.5rem}
+    header{display:flex;flex-wrap:wrap;gap:1rem;align-items:center;justify-content:space-between;padding-bottom:1.25rem;border-bottom:1px solid var(--border-color)}
+    .title{margin:0;font-size:1.25rem;font-weight:600}
+
+    .panel{background:var(--bg-surface);border-radius:12px;border:1px solid var(--border-color);padding:1rem;box-shadow:var(--shadow-sm)}
+    .panel-title{font-weight:600;color:var(--fg-main);margin:0 0 .75rem;border-bottom:1px solid var(--border-color);padding-bottom:.6rem;font-size:1rem}
+
+    .row{display:flex;gap:1rem;align-items:center;padding:.4rem 0}
+    .label{font-weight:500;color:var(--fg-muted);text-align:right;width:90px;flex-shrink:0}
+    .controls{display:flex;flex-wrap:wrap;gap:.75rem;align-items:center;width:100%}
+
+    button,.button-style{padding:8px 14px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-surface);color:var(--fg-main);font-weight:500;cursor:pointer;transition:background-color .2s,border-color .2s,transform .1s;box-shadow:0 1px 2px rgba(0,0,0,.1)}
+    button:hover,.button-style:hover{background:#31343a;border-color:#4a4e57}
+    button:active,.button-style:active{transform:translateY(1px)}
+    button.danger{background:var(--danger-color);border-color:var(--danger-color-dark);color:#fff}
+    button.danger:hover{background:#ff7a7a}
+
+    button.active{background:var(--primary-color-light);border-color:var(--primary-color-dark);color:#fff;box-shadow:inset 0 1px 3px rgba(0,0,0,.2)}
+
+    #play{background:var(--primary-color);border-color:var(--primary-color-dark);color:#fff}
+    #play:hover{background:var(--primary-color-light);border-color:var(--primary-color)}
+    #stop{background:#363a42;border-color:#4a4e57}
+    #stop:hover{background:#4a4e57}
+    input[type="number"],input[type="text"],select{padding:8px 12px;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-inset);color:var(--fg-main);font-family:var(--font-family)}
+    input[type="number"]:focus,input[type="text"]:focus,select:focus{outline:2px solid var(--primary-color);outline-offset:2px;border-color:var(--primary-color)}
+    input[type="file"]{display:none}
+    .file-label{display:inline-block;padding:8px 14px;background:#363a42;border-radius:8px;cursor:pointer}
+    .pill-group{display:flex;align-items:center;gap:.5rem}
+    .pill{display:inline-flex;gap:.5rem;align-items:center;padding:8px 12px;border:1px solid var(--border-color);border-radius:999px;background:var(--bg-surface);font-size:13px}
+    .pill input[type="checkbox"]{accent-color:var(--primary-color)}
+
+    .grid-container{display:flex;flex-direction:column;gap:1rem;padding:0 .5rem}
+    .grid{display:grid;grid-template-columns:repeat(64,1fr);gap:3px}
+    .cell{aspect-ratio:1.5/1;border:1px solid var(--border-color);background:var(--bg-surface);border-radius:3px;cursor:pointer;position:relative;transition:background-color .1s,border-color .1s}
+    .cell:hover{background:#31343a}
+    .cell.on{background:var(--cell-on-color);border-color:var(--primary-color-light)}
+    .cell.note{background:var(--cell-note-color);border-color:#57d9a9}
+    .cell.playhead::after{content:"";position:absolute;inset:-3px;border:2px solid var(--cell-playhead-outline);border-radius:5px;pointer-events:none;animation:pulse 1s infinite alternate}
+    @keyframes pulse{from{opacity:.7}to{opacity:1}}
+
+    .barMarks{display:grid;grid-template-columns:120px repeat(16,1fr);margin-bottom:.5rem;padding:0 .5rem}
+    .barMarks div{text-align:left;font-size:11px;color:var(--fg-muted);border-left:1px solid var(--border-color)}
+    .barMarks div:first-child{border-left:none}
+
+    .channel-strip{display:flex;gap:1rem;align-items:center;margin-bottom:1rem;padding-bottom:1rem;border-bottom:1px solid var(--border-color)}
+    .channel-strip:last-child{border-bottom:none;margin-bottom:0}
+    .channel-info{display:flex;flex-direction:column;gap:.5rem;width:105px;flex-shrink:0}
+    .channel-grid-wrapper{flex-grow:1}
+
+    /* === Synth Head (collapsible control strip) === */
+    .synth-head{position:relative;margin:-0.25rem 0 .5rem;padding:.5rem .75rem;border:1px solid var(--border-color);border-radius:10px;background:var(--bg-inset);box-shadow:var(--shadow-sm)}
+    .synth-head details{width:100%}
+    .synth-head summary{list-style:none;cursor:pointer;padding:.4rem .55rem;border:1px solid var(--border-color);border-radius:8px;background:var(--bg-surface);font-weight:600;user-select:none}
+    .synth-head summary::marker{display:none}
+    .synth-head .row{padding:.35rem 0}
+    .synth-head .mini{display:flex;gap:.5rem;flex-wrap:wrap;align-items:center}
+    .synth-head .mini label{font-size:12px;color:var(--fg-muted)}
+    .synth-head input[type="range"]{width:140px}
+    .synth-head select,.synth-head input[type="number"]{padding:6px 10px;font-size:12px}
+
+    #keyboard{--white-count:14;--white-w:calc(100%/var(--white-count));display:flex;width:100%;padding:1rem;background:var(--bg-inset);border-radius:8px;box-shadow:inset 0 2px 8px rgba(0,0,0,.3);margin-top:1rem;position:relative;overflow:hidden}
+    .key{position:relative;border:1px solid #222;border-radius:5px;cursor:pointer;display:flex;align-items:flex-end;justify-content:center;padding-bottom:8px;font-size:11px;color:#333;user-select:none;box-shadow:inset 0 0 5px rgba(255,255,255,.1),0 2px 3px rgba(0,0,0,.4);transition:background-color .08s}
+    .key.white{height:120px;width:var(--white-w);background:linear-gradient(to bottom,#f9f9f9,#d1d1d1);z-index:1}
+    .key.black{height:75px;width:calc(var(--white-w)*.6);background:linear-gradient(to bottom,#444,#111);color:#eee;z-index:2;margin:0 calc(var(--white-w)*-.3);box-shadow:inset 0 -2px 5px rgba(255,255,255,.2),0 3px 5px rgba(0,0,0,.6)}
+    .key.active{background:var(--primary-color-light)!important;border-color:var(--primary-color-dark);transform:scale(.985)}
+
+    #status{padding:8px 12px;color:var(--fg-muted);font-size:13px;min-height:2em}
+    .hint{font-size:12px;color:var(--fg-muted);opacity:.9;text-align:right}
+
+    .dropzone{border:1px dashed var(--border-color);border-radius:10px;padding:.75rem;opacity:.85}
+    .dropzone.drag{background:rgba(131,163,255,.08);border-color:var(--primary-color)}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1 class="title">Multi-Sequence 64-Step Sequencer</h1>
+      <div class="controls" role="group" aria-label="Transport">
+        <button id="play" aria-pressed="false">▶︎ Play</button>
+        <button id="stop">■ Stop</button>
+        <div class="pill-group">
+          <label class="pill"><input type="checkbox" id="record"> Record</label>
+          <label class="pill">BPM <input id="bpm" type="number" value="120" min="40" max="240" style="width:64px;margin-left:6px" aria-label="Beats Per Minute"></label>
+        </div>
+      </div>
+    </header>
+
+    <div class="panel">
+      <h2 class="panel-title">Sequences</h2>
+      <div class="controls">
+        <button id="addSequence">Add New Sequence</button>
+        <label class="pill"><input type="checkbox" id="continuousPlay"> Continuous Play</label>
+      </div>
+      <div id="sequenceButtonsContainer" class="controls" style="padding-top:1rem"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Channels</h2>
+      <div class="controls" style="padding-bottom:1rem">
+        <button id="addSampler">Add Sampler</button>
+        <button id="addSynth">Add Synth</button>
+      </div>
+      <div class="barMarks" aria-hidden="true"></div>
+      <div id="channelsContainer" class="grid-container" aria-live="polite"></div>
+    </div>
+
+    <div class="panel">
+      <h2 class="panel-title">Keyboard & MIDI</h2>
+      <div class="hint" style="text-align:left;margin:-.5rem 0 1rem">MIDI: Connect a USB keyboard or use the on-screen keyboard. Click Play/Load to unlock audio.</div>
+      <div id="keyboard"></div>
+    </div>
+
+    <div class="panel dropzone" id="sessionPanel">
+      <h2 class="panel-title">Session (Save / Load)</h2>
+      <div class="row">
+        <div class="label">Snapshot</div>
+        <div class="controls">
+          <button id="saveState">Save JSON</button>
+          <label for="loadStateFile" class="button-style">Load JSON</label>
+          <input id="loadStateFile" type="file" accept="application/json">
+          <button id="copyState">Copy JSON</button>
+          <button id="newSession">New Session</button>
+        </div>
+      </div>
+      <div class="hint" style="text-align:left">Tip: You can also drag a previously saved JSON file onto this box to load it.</div>
+    </div>
+
+    <div id="status" aria-live="polite">Ready.</div>
+  </div>
+
+<script>
+(() => {
+  'use strict';
+
+  /*** Helpers ***/
+  const $  = sel => document.querySelector(sel);
+  const el = (t, cls) => { const n = document.createElement(t); if (cls) n.className = cls; return n; };
+  const clamp = (v,min,max)=> v<min?min:(v>max?max:v);
+  const log = m => { $('#status').textContent = m; };
+
+  /*** Constants & Central State ***/
+  const STEPS = 64;
+  const BARS  = 16;
+  const LOOKAHEAD = 0.05;
+  const STEP_DIV = 4;
+
+  let channels = [];
+  let channelCounter = 0;
+  let numSequences = 1;
+  let activeSequenceIndex = 0;
+  let queuedSequenceIndex = -1;
+  let continuousPlay = false;
+
+  // UI refs
+  const playBtn = $('#play'), stopBtn = $('#stop'), bpmEl = $('#bpm'), recEl = $('#record');
+  const addSamplerBtn = $('#addSampler'), addSynthBtn = $('#addSynth');
+  const channelsContainer = $('#channelsContainer');
+  const saveStateBtn = $('#saveState'), loadStateFile = $('#loadStateFile');
+  const copyStateBtn = $('#copyState'), newSessionBtn = $('#newSession');
+  const sessionPanel = $('#sessionPanel');
+  const addSequenceBtn = $('#addSequence'), continuousPlayEl = $('#continuousPlay');
+  const sequenceButtonsContainer = $('#sequenceButtonsContainer');
+
+  /*** Audio ***/
+  const ctx = new (window.AudioContext || window.webkitAudioContext)();
+  let isPlaying = false, currentStep = 0, nextNoteTime = 0, rafId = 0;
+  let bpm = +bpmEl.value || 120;
+
+  const midiToHz = n => 440 * Math.pow(2, (n - 69) / 12);
+  const stepDur = () => (60 / bpm) / STEP_DIV;
+
+  /*** Synth param defaults ***/
+  const DEFAULT_SYNTH_PARAMS = {
+    wave: 'sawtooth',
+    gain: 0.9,
+    detune: 0,
+    transpose: 0,
+    cutoffMul: 3,
+    resonance: 0.5,
+    envA: 0.01,
+    envD: 0.06,
+    envS: 0.2,
+    envR: 0.10
+  };
+  const cloneSynthParams = p => Object.assign({}, DEFAULT_SYNTH_PARAMS, p || {});
+
+  /*** Built-in synth (parameterized) ***/
+  function demoSynth(context, paramsRef){
+    const master = context.createGain();
+    master.gain.value = paramsRef.gain;
+    master.connect(context.destination);
+
+    function applyMaster(){ master.gain.value = clamp(paramsRef.gain, 0, 1); }
+
+    return {
+      setParams(){
+        applyMaster(); // oscillators read params at noteOn
+      },
+      noteOn(note, t, dur=0.22, vel=1){
+        const p = paramsRef;
+        const o = context.createOscillator();
+        const v = context.createGain();
+        const l = context.createBiquadFilter();
+
+        const baseHz = midiToHz(note + (p.transpose|0));
+        o.type = p.wave;
+        o.frequency.setValueAtTime(baseHz, t);
+        o.detune.setValueAtTime(p.detune, t);
+
+        l.type = 'lowpass';
+        l.frequency.setValueAtTime(Math.min(20000, baseHz * Math.max(0.25, p.cutoffMul)), t);
+        l.Q.setValueAtTime(Math.max(0.0001, p.resonance), t);
+
+        v.gain.setValueAtTime(0, t);
+        const a=Math.max(0,p.envA), d=Math.max(0,p.envD), s=clamp(p.envS,0,1), r=Math.max(0,p.envR);
+        const peak = clamp(vel,0,1);
+        v.gain.linearRampToValueAtTime(peak, t + a);
+        v.gain.linearRampToValueAtTime(s * peak, t + a + d);
+
+        const hold = Math.max(dur, a + d);
+        v.gain.setValueAtTime(s * peak, t + hold);
+        v.gain.linearRampToValueAtTime(0, t + hold + r);
+
+        o.connect(l).connect(v).connect(master);
+        o.start(t);
+        o.stop(t + hold + r + 0.01);
+      }
+    };
+  }
+
+  /*** Sequence Management ***/
+  function addSequence() {
+    numSequences++;
+    for (const channel of channels) {
+      const newPattern = channel.type === 'sampler'
+        ? new Uint8Array(STEPS)
+        : new Int16Array(STEPS).fill(-1);
+      channel.patterns.push(newPattern);
+    }
+    buildSequenceButtonsUI();
+    switchSequence(numSequences - 1);
+    log(`Added Sequence ${numSequences}.`);
+  }
+
+  function switchSequence(index) {
+    if (index < 0 || index >= numSequences) return;
+    if (isPlaying) {
+      queuedSequenceIndex = index;
+      log(`Queued Sequence ${index + 1}.`);
+    } else {
+      activeSequenceIndex = index;
+      log(`Switched to Sequence ${index + 1}.`);
+    }
+    renderAllGrids(index);
+    updateSequenceButtonsUI(index);
+  }
+
+  function buildSequenceButtonsUI() {
+    sequenceButtonsContainer.innerHTML = '';
+    for (let i = 0; i < numSequences; i++) {
+      const btn = el('button');
+      btn.textContent = `Seq ${i + 1}`;
+      btn.dataset.index = i;
+      btn.addEventListener('click', () => switchSequence(i));
+      sequenceButtonsContainer.appendChild(btn);
+    }
+    updateSequenceButtonsUI(activeSequenceIndex);
+  }
+
+  function updateSequenceButtonsUI(currentIdx = activeSequenceIndex) {
+    sequenceButtonsContainer.querySelectorAll('button').forEach((btn, i) => {
+      btn.classList.toggle('active', i === currentIdx);
+    });
+  }
+
+  addSequenceBtn.addEventListener('click', addSequence);
+  continuousPlayEl.addEventListener('change', () => { continuousPlay = continuousPlayEl.checked; });
+
+  /*** Channel Management ***/
+  function addChannel(type, initialData = {}){
+    const id = initialData.id || (Date.now() + channelCounter++);
+    const name = initialData.name || `${type} ${channelCounter}`;
+
+    const channel = {
+      id, type, name,
+      patterns: [],
+      ui: { cells: new Array(STEPS) },
+      sampleBuf: null,
+      sampleSource: { type: 'none' },
+      synth: null,
+      synthModuleUrl: null,
+      synthParams: type === 'synth' ? cloneSynthParams(initialData.synthParams) : undefined
+    };
+
+    // initialize synth
+    if (type === 'synth'){
+      channel.synth = demoSynth(ctx, channel.synthParams);
+    }
+
+    // Initialize patterns (new + backward-compat)
+    if (initialData.patterns) {
+      channel.patterns = initialData.patterns.map(p => {
+        const arr = type === 'sampler' ? new Uint8Array(STEPS) : new Int16Array(STEPS).fill(-1);
+        if (p) arr.set(p.slice(0, STEPS));
+        return arr;
+      });
+      // If snapshot had fewer sequences than current, pad
+      while (channel.patterns.length < numSequences) {
+        channel.patterns.push(type === 'sampler' ? new Uint8Array(STEPS) : new Int16Array(STEPS).fill(-1));
+      }
+    } else if (initialData.steps) { // legacy
+      const pattern = type === 'sampler' ? new Uint8Array(STEPS) : new Int16Array(STEPS).fill(-1);
+      pattern.set(initialData.steps.slice(0, STEPS));
+      channel.patterns.push(pattern);
+      while (channel.patterns.length < numSequences) {
+        channel.patterns.push(type === 'sampler' ? new Uint8Array(STEPS) : new Int16Array(STEPS).fill(-1));
+      }
+    } else {
+      for (let i = 0; i < numSequences; i++) {
+        channel.patterns.push(type === 'sampler' ? new Uint8Array(STEPS) : new Int16Array(STEPS).fill(-1));
+      }
+    }
+
+    channels.push(channel);
+    buildChannelUI(channel);
+    renderChannel(channel, activeSequenceIndex);
+
+    // deferred loads
+    if(initialData.synthModule?.url) {
+      const input = channel.ui.strip.querySelector('.synth-url-input');
+      input.value = initialData.synthModule.url;
+      loadSynthFromUrl(channel, initialData.synthModule.url);
+    }
+    if(initialData.sample) {
+      loadSampleFromSource(channel, initialData.sample);
+    }
+  }
+
+  function removeChannel(id) {
+    const idx = channels.findIndex(c => c.id === id);
+    if (idx > -1) {
+      channels[idx].ui.strip.remove();
+      channels.splice(idx, 1);
+      log('Channel removed.');
+    }
+  }
+
+  function applySynthParams(channel){
+    // Built-in (no-arg)
+    channel.synth?.setParams?.();
+    // External (param bag)
+    if (channel.synth && typeof channel.synth.setParams === 'function' && channel.synth.setParams.length >= 1){
+      channel.synth.setParams(channel.synthParams);
+    }
+  }
+
+  function buildChannelUI(channel) {
+    const strip = el('div', 'channel-strip');
+    strip.dataset.id = channel.id;
+
+    const info = el('div', 'channel-info');
+    const nameInput = el('input');
+    nameInput.type = 'text'; nameInput.value = channel.name; nameInput.title = 'Click to rename channel';
+    nameInput.addEventListener('change', () => { channel.name = nameInput.value; });
+
+    const removeBtn = el('button', 'danger');
+    removeBtn.textContent = 'Delete';
+    removeBtn.addEventListener('click', () => removeChannel(channel.id));
+    info.append(nameInput, removeBtn);
+
+    const gridWrapper = el('div', 'channel-grid-wrapper');
+    const controls = el('div', 'controls');
+    controls.style.padding = '0 0 0.5rem 0';
+
+    // === Synth Head (only for synth channels) ===
+    if (channel.type === 'synth') {
+      const headWrap = el('div','synth-head');
+      const details = el('details'); details.open = false;
+      const summary = el('summary'); summary.textContent = '▲ Synth Controls';
+      details.appendChild(summary);
+
+      const headBody = el('div');
+      const row1 = el('div','row mini');
+      row1.innerHTML = `
+        <label>Wave
+          <select class="syn-wave">
+            <option>sine</option><option>square</option><option selected>sawtooth</option><option>triangle</option>
+          </select>
+        </label>
+        <label>Gain
+          <input class="syn-gain" type="range" min="0" max="1" step="0.01">
+        </label>
+        <label>Detune (¢)
+          <input class="syn-detune" type="number" min="-1200" max="1200" step="1" style="width:84px">
+        </label>
+        <label>Transpose (st)
+          <input class="syn-transpose" type="number" min="-24" max="24" step="1" style="width:70px">
+        </label>
+      `;
+      const row2 = el('div','row mini');
+      row2.innerHTML = `
+        <label>Cutoff ×
+          <input class="syn-cut" type="range" min="0.25" max="8" step="0.05">
+        </label>
+        <label>Res (Q)
+          <input class="syn-res" type="range" min="0" max="20" step="0.1">
+        </label>
+      `;
+      const row3 = el('div','row mini');
+      row3.innerHTML = `
+        <label>A
+          <input class="syn-a" type="range" min="0" max="1" step="0.005">
+        </label>
+        <label>D
+          <input class="syn-d" type="range" min="0" max="1" step="0.005">
+        </label>
+        <label>S
+          <input class="syn-s" type="range" min="0" max="1" step="0.01">
+        </label>
+        <label>R
+          <input class="syn-r" type="range" min="0" max="2" step="0.01">
+        </label>
+      `;
+      headBody.append(row1,row2,row3);
+      details.appendChild(headBody);
+      headWrap.appendChild(details);
+      gridWrapper.append(headWrap);
+
+      // initialize UI values
+      const P = channel.synthParams;
+      row1.querySelector('.syn-wave').value = P.wave;
+      row1.querySelector('.syn-gain').value = P.gain;
+      row1.querySelector('.syn-detune').value = P.detune;
+      row1.querySelector('.syn-transpose').value = P.transpose;
+      row2.querySelector('.syn-cut').value = P.cutoffMul;
+      row2.querySelector('.syn-res').value = P.resonance;
+      row3.querySelector('.syn-a').value = P.envA;
+      row3.querySelector('.syn-d').value = P.envD;
+      row3.querySelector('.syn-s').value = P.envS;
+      row3.querySelector('.syn-r').value = P.envR;
+
+      // bindings
+      const bind = (sel, key, map = v => v) => {
+        headWrap.querySelector(sel).addEventListener('input', e => {
+          const v = e.target.type === 'range' || e.target.type === 'number' ? +e.target.value : e.target.value;
+          channel.synthParams[key] = map(v);
+          applySynthParams(channel);
+        });
+      };
+      bind('.syn-wave','wave', v => String(v));
+      bind('.syn-gain','gain', v => clamp(v,0,1));
+      bind('.syn-detune','detune');
+      bind('.syn-transpose','transpose');
+      bind('.syn-cut','cutoffMul', v => Math.max(0.25, v));
+      bind('.syn-res','resonance', v => Math.max(0, v));
+      bind('.syn-a','envA', v => Math.max(0, v));
+      bind('.syn-d','envD', v => Math.max(0, v));
+      bind('.syn-s','envS', v => clamp(v,0,1));
+      bind('.syn-r','envR', v => Math.max(0, v));
+    }
+
+    // Channel-specific loader controls + grid
+    if (channel.type === 'sampler') {
+      const urlInput = el('input'); urlInput.type='text'; urlInput.placeholder='Sample URL'; urlInput.style.flex='1';
+      const fileInputId = `sampleFile_${channel.id}`;
+      const fileLabel = el('label', 'button-style file-label'); fileLabel.htmlFor=fileInputId; fileLabel.textContent='Choose File';
+      const fileInput = el('input'); fileInput.id=fileInputId; fileInput.type='file'; fileInput.accept='audio/*';
+      const loadBtn = el('button'); loadBtn.textContent='Load';
+      controls.append(urlInput, fileLabel, fileInput, loadBtn);
+      loadBtn.addEventListener('click', () => loadSampleFromUI(channel, fileInput, urlInput));
+    } else {
+      const urlInput = el('input','synth-url-input'); urlInput.type='text'; urlInput.placeholder='Headless synth module URL'; urlInput.style.flex='1';
+      const loadBtn = el('button'); loadBtn.textContent='Load Synth';
+      controls.append(urlInput, loadBtn);
+      loadBtn.addEventListener('click', () => loadSynthFromUrl(channel, urlInput.value.trim()));
+    }
+
+    const grid = el('div', 'grid');
+    grid.setAttribute('role','grid');
+    grid.setAttribute('aria-label', `${channel.name} steps`);
+    const frag = document.createDocumentFragment();
+    for (let i=0; i<STEPS; i++) {
+      const c = el('div', 'cell'); c.dataset.idx = i;
+      frag.appendChild(c);
+      channel.ui.cells[i] = c;
+    }
+    grid.appendChild(frag);
+    grid.addEventListener('click', (e) => {
+      const t = e.target;
+      if (!t.classList.contains('cell')) return;
+      const i = +t.dataset.idx;
+      const currentPattern = channel.patterns[activeSequenceIndex];
+      if (channel.type === 'sampler') {
+        currentPattern[i] ^= 1;
+      } else {
+        if (currentPattern[i] !== -1) currentPattern[i] = -1;
+      }
+      renderStep(channel, i, activeSequenceIndex);
+    });
+
+    gridWrapper.append(controls, grid);
+    strip.append(info, gridWrapper);
+    channel.ui.strip = strip;
+    channelsContainer.appendChild(strip);
+  }
+
+  addSamplerBtn.addEventListener('click', () => addChannel('sampler'));
+  addSynthBtn.addEventListener('click', () => addChannel('synth'));
+
+  /*** Audio Loading ***/
+  async function loadSynthFromUrl(channel, url){
+    await ctx.resume();
+    if (!url){
+      channel.synth = demoSynth(ctx, channel.synthParams);
+      channel.synthModuleUrl = null;
+      applySynthParams(channel);
+      log(`[${channel.name}] Using built-in synth.`);
+      return;
+    }
+    try{
+      const mod = await import(/* @vite-ignore */ url);
+      const factory = mod.default || mod.createSynth || mod.synth || mod;
+      const s = typeof factory === 'function' ? factory(ctx) : null;
+      if (s && typeof s.noteOn === 'function'){
+        channel.synth = s;
+        channel.synthModuleUrl = url;
+        if (typeof channel.synth.setParams === 'function'){
+          channel.synth.setParams(channel.synthParams);
+        }
+        log(`[${channel.name}] Loaded synth module.`);
+      } else {
+        channel.synth = demoSynth(ctx, channel.synthParams);
+        channel.synthModuleUrl = null;
+        applySynthParams(channel);
+        log(`[${channel.name}] Module invalid. Using demo synth.`);
+      }
+    }catch(e){
+      channel.synth = demoSynth(ctx, channel.synthParams);
+      channel.synthModuleUrl = null;
+      applySynthParams(channel);
+      log(`[${channel.name}] Failed to load synth. Using demo synth.`);
+    }
+  }
+
+  async function decodeSampleFromArrayBuffer(channel, ab) {
+    try { channel.sampleBuf = await ctx.decodeAudioData(ab); return true; } catch(e) { return false; }
+  }
+
+  async function loadSampleFromUI(channel, fileInput, urlInput) {
+    await ctx.resume();
+    const f = fileInput.files[0];
+    const url = urlInput.value.trim();
+    try {
+      if(f) {
+        const dataUrl = await new Promise((res,rej)=>{ const r=new FileReader(); r.onerror=rej; r.onload=()=>res(r.result); r.readAsDataURL(f); });
+        const ab = await f.arrayBuffer();
+        if (!(await decodeSampleFromArrayBuffer(channel, ab))) throw new Error('decode failed');
+        channel.sampleSource = { type: 'data', name: f.name, mime: f.type || 'audio/wav', dataUrl };
+        log(`[${channel.name}] Sample loaded: ${f.name}`);
+      } else if (url) {
+        const res = await fetch(url);
+        const ab = await res.arrayBuffer();
+        if (!(await decodeSampleFromArrayBuffer(channel, ab))) throw new Error('decode failed');
+        channel.sampleSource = { type: 'url', url };
+        log(`[${channel.name}] Sample loaded: ${url}`);
+      } else { log('Choose a file or paste a URL.'); }
+    } catch(e) { log(`[${channel.name}] Could not load sample.`); }
+  }
+
+  async function loadSampleFromSource(channel, source) {
+    channel.sampleBuf = null;
+    channel.sampleSource = { type: 'none' };
+    try {
+      if (source.type === 'url' && source.url) {
+        const res = await fetch(source.url);
+        const ab = await res.arrayBuffer();
+        if (await decodeSampleFromArrayBuffer(channel, ab)) {
+          channel.sampleSource = { type: 'url', url: source.url };
+        } else { throw new Error('decode fail'); }
+      } else if (source.type === 'data' && source.dataUrl) {
+        const resp = await fetch(source.dataUrl);
+        const ab = await resp.arrayBuffer();
+        if (await decodeSampleFromArrayBuffer(channel, ab)) {
+          channel.sampleSource = { type: 'data', name: source.name||'sample', mime: source.mime||'audio/wav', dataUrl: source.dataUrl };
+        } else { throw new Error('decode fail'); }
+      }
+    } catch (e) { log(`[${channel.name}] Failed to load saved sample.`); }
+  }
+
+  /*** Bar marks ***/
+  (function buildBarMarks(){
+    const bm = document.querySelector('.barMarks');
+    const frag = document.createDocumentFragment();
+    frag.appendChild(el('div','spacer'));
+    for (let i=1;i<=BARS;i++){ const d = el('div'); d.textContent = i; frag.appendChild(d); }
+    bm.appendChild(frag);
+  })();
+
+  /*** Render ***/
+  function renderAllGrids(seqIndex) {
+    channels.forEach(ch => renderChannel(ch, seqIndex));
+  }
+  function renderChannel(channel, seqIndex){
+    for (let i=0; i<STEPS; i++) renderStep(channel, i, seqIndex);
+  }
+  function renderStep(channel, i, seqIndex){
+    const pattern = channel.patterns[seqIndex];
+    if (!pattern) return;
+    const cell = channel.ui.cells[i];
+    if (channel.type === 'sampler') {
+      cell.classList.toggle('on', !!pattern[i]);
+      cell.classList.remove('note');
+    } else {
+      cell.classList.toggle('note', pattern[i] !== -1);
+      cell.classList.remove('on');
+    }
+  }
+  function updatePlayhead(ph){
+    channels.forEach(ch => {
+      for(let i=0; i<STEPS; i++) {
+        const on = (i === ph);
+        if(ch.ui.cells[i]._ph !== on) {
+          ch.ui.cells[i]._ph = on;
+          ch.ui.cells[i].classList.toggle('playhead', on);
+        }
+      }
+    });
+  }
+
+  /*** Scheduling ***/
+  function scheduleStep(step, time){
+    channels.forEach(ch => {
+      const pattern = ch.patterns[activeSequenceIndex];
+      if (!pattern) return;
+      if (ch.type === 'sampler') {
+        if (pattern[step] && ch.sampleBuf) {
+          const src = ctx.createBufferSource(); src.buffer = ch.sampleBuf; src.connect(ctx.destination); src.start(time);
+        }
+      } else { // synth
+        const note = pattern[step];
+        if (note !== -1 && ch.synth) ch.synth.noteOn(note, time, stepDur() * 0.95, 0.9);
+      }
+    });
+  }
+
+  function tick(){
+    if (!isPlaying) return;
+    const ahead = ctx.currentTime + LOOKAHEAD;
+
+    while (nextNoteTime < ahead){
+      // Apply queued sequence switch right before scheduling the next step
+      if (queuedSequenceIndex !== -1) {
+        activeSequenceIndex = queuedSequenceIndex;
+        queuedSequenceIndex = -1;
+        renderAllGrids(activeSequenceIndex);
+        updateSequenceButtonsUI(activeSequenceIndex);
+      }
+
+      scheduleStep(currentStep, nextNoteTime);
+      nextNoteTime += stepDur();
+
+      const wasLast = (currentStep === STEPS - 1);
+      currentStep = (currentStep + 1) % STEPS;
+
+      // auto-advance sequence at bar end when Continuous Play is enabled
+      if (wasLast && continuousPlay && numSequences > 1 && queuedSequenceIndex === -1) {
+        queuedSequenceIndex = (activeSequenceIndex + 1) % numSequences;
+      }
+    }
+
+    const ph = (currentStep + STEPS - 1) % STEPS;
+    updatePlayhead(ph);
+    rafId = requestAnimationFrame(tick);
+  }
+
+  /*** Transport ***/
+  function start(){
+    if (isPlaying) return;
+    ctx.resume(); isPlaying = true;
+    if (currentStep === 0) nextNoteTime = ctx.currentTime + 0.06;
+    log('Playing.'); playBtn.textContent = '❚❚ Pause'; playBtn.setAttribute('aria-pressed','true');
+    rafId = requestAnimationFrame(tick);
+  }
+
+  function stop(reset = true){
+    if (!isPlaying) return;
+    isPlaying = false; cancelAnimationFrame(rafId);
+    if (reset) {
+      currentStep = 0;
+      queuedSequenceIndex = -1;
+      updatePlayhead(-1);
+      log('Stopped.');
+    } else {
+      log('Paused.');
+    }
+    playBtn.textContent = '▶︎ Play'; playBtn.setAttribute('aria-pressed','false');
+  }
+
+  playBtn.addEventListener('click', ()=> isPlaying ? stop(false) : start());
+  stopBtn.addEventListener('click', () => { if(isPlaying) stop(true); });
+  bpmEl.addEventListener('input', e=>{ bpm = clamp(+e.target.value||120, 40, 240); e.target.value = bpm; });
+  window.addEventListener('keydown', (e)=>{ if (e.code==='Space' && e.target.tagName !== 'INPUT'){ e.preventDefault(); isPlaying ? stop(false) : start(); }});
+
+  /*** MIDI & Keyboard ***/
+  function triggerNote(note, vel){
+    const t = ctx.currentTime;
+    let notePlayed = false;
+    channels.forEach(ch => {
+      if (ch.type === 'synth' && ch.synth) {
+        ch.synth.noteOn(note, t, 0.25, vel);
+        notePlayed = true;
+        if (recEl.checked && isPlaying){
+          const idx = (currentStep + STEPS - 1) % STEPS;
+          ch.patterns[activeSequenceIndex][idx] = note;
+          renderStep(ch, idx, activeSequenceIndex);
+        }
+      }
+    });
+    if (!notePlayed) log('Add a synth channel to play notes.');
+  }
+
+  (async function initMIDI(){
+    // MIDI init could go here (Web MIDI API), mapping NoteOn/Off to triggerNote.
+  })();
+
+  (function createKeyboard(){
+    const kbd=$('#keyboard');let w=0;for(let i=36;i<=84;i++)if(!([1,3,6,8,10].includes(i%12)))w++;kbd.style.setProperty('--white-count',String(w));
+    const f=document.createDocumentFragment();
+    for(let n=36;n<=84;n++){
+      const isBlack=[1,3,6,8,10].includes(n%12);
+      const k=el('div','key '+(isBlack?'black':'white')); k.dataset.note=n;
+      if(!isBlack && (n%12)===0){ k.textContent=`C${Math.floor(n/12)-1}`; }
+      f.appendChild(k);
+    }
+    kbd.appendChild(f);
+    const press=(e,a)=>{const t=e.target;if(!t.classList.contains('key'))return;e.preventDefault();ctx.resume();t.classList.toggle('active',a);if(a){t.setPointerCapture?.(e.pointerId);triggerNote(+t.dataset.note,1);}};
+    kbd.addEventListener('pointerdown',e=>press(e,true));
+    kbd.addEventListener('pointerup',e=>press(e,false));
+    kbd.addEventListener('pointerleave',e=>press(e,false));
+  })();
+
+  /*** === Save / Load === ***/
+  function makeSnapshot(){
+    const plainChannels = channels.map(ch => ({
+      id: ch.id,
+      type: ch.type,
+      name: ch.name,
+      patterns: ch.patterns.map(p => Array.from(p)),
+      sample: ch.type === 'sampler' ? ch.sampleSource : undefined,
+      synthModule: ch.type === 'synth' ? { url: ch.synthModuleUrl } : undefined,
+      synthParams: ch.type === 'synth' ? ch.synthParams : undefined
+    }));
+    return {
+      version: 4, app: 'Multi-Sequence Sequencer', savedAt: new Date().toISOString(),
+      bpm,
+      numSequences,
+      channels: plainChannels
+    };
+  }
+
+  async function applySnapshot(snap){
+    try{
+      newSession(false);
+      await new Promise(r=>setTimeout(r,0)); // allow DOM to settle
+
+      if (typeof snap.bpm === 'number'){ bpm = clamp(snap.bpm, 40, 240); bpmEl.value = bpm; }
+      numSequences = snap.numSequences || 1;
+      buildSequenceButtonsUI();
+
+      if (Array.isArray(snap.channels)) {
+        for(const chData of snap.channels) addChannel(chData.type, chData);
+      }
+      log('Session loaded.');
+    }catch(err){
+      console.error("Error applying snapshot:", err);
+      log('Failed to load session JSON.');
+      newSession(); // reset
+    }
+  }
+
+  function downloadJSON(obj, filename){
+    const blob = new Blob([JSON.stringify(obj, null, 2)], {type:'application/json'});
+    const a = el('a'); a.href = URL.createObjectURL(blob); a.download = filename;
+    document.body.appendChild(a); a.click();
+    URL.revokeObjectURL(a.href); a.remove();
+  }
+
+  async function copyJSONToClipboard(obj){
+    try { await navigator.clipboard.writeText(JSON.stringify(obj, null, 2)); log('Snapshot copied.'); }
+    catch { log('Clipboard copy failed.'); }
+  }
+
+  function newSession(doLog = true){
+    stop(true);
+    channels.forEach(ch => ch.ui.strip.remove());
+    channels = [];
+    channelCounter = 0;
+    numSequences = 1;
+    activeSequenceIndex = 0;
+    queuedSequenceIndex = -1;
+    continuousPlay = false; continuousPlayEl.checked = false;
+    bpm = 120; bpmEl.value = 120;
+
+    buildSequenceButtonsUI();
+
+    if(doLog) log('New blank session.');
+  }
+
+  saveStateBtn.addEventListener('click', ()=>{ downloadJSON(makeSnapshot(), `sequencer-session.json`); log('Session downloaded.'); });
+  copyStateBtn.addEventListener('click', ()=> copyJSONToClipboard(makeSnapshot()));
+  loadStateFile.addEventListener('change', async (e)=>{
+    const f=e.target.files[0]; if(!f)return;
+    try{ const snap = JSON.parse(await f.text()); await applySnapshot(snap); }
+    catch{ log('Invalid JSON file.'); } finally{ e.target.value=''; }
+  });
+  newSessionBtn.addEventListener('click', () => { if(confirm('Are you sure you want to start a new session?')) newSession(true); });
+
+  ;(() => {
+    const dz = sessionPanel; const on=()=>dz.classList.add('drag'),off=()=>dz.classList.remove('drag');
+    ['dragenter','dragover'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();on();}));
+    ['dragleave','drop'].forEach(ev=>dz.addEventListener(ev,e=>{e.preventDefault();off();}));
+    dz.addEventListener('drop', async (e)=>{
+      const file = [...(e.dataTransfer?.files||[])].find(f=>f.type==='application/json'||f.name.endsWith('.json'));
+      if (!file){ log('Drop a JSON session file.'); return; }
+      try{ const snap=JSON.parse(await file.text()); await applySnapshot(snap); }
+      catch{ log('Invalid JSON on drop.'); }
+    });
+  })();
+
+  /*** Boot ***/
+  buildSequenceButtonsUI();
+  addChannel('sampler');
+  addChannel('synth');
+})();
+</script>
+</body>
+</html>
+
