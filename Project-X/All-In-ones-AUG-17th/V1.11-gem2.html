@@ -1,3 +1,5 @@
+<!--  USE http://localhost:5501/Project-X/All-In-ones-AUG-17th/V1.11-gem2.html -->
+
 <!doctype html>
 <html lang="en">
 <head>
@@ -100,6 +102,21 @@
     background:var(--bg-surface); border:1px solid var(--border-color); border-radius:8px; color:var(--fg-main); padding:.35rem .5rem;
   }
 
+  .rec-arm-btn {
+    background-color: #4a4e57;
+    border-color: #363a42;
+    color: #fff;
+    width: 36px;
+  }
+  .rec-arm-btn:hover {
+    background-color: #5f636e;
+  }
+  .rec-arm-btn.active {
+    background-color: var(--danger) !important;
+    border-color: var(--danger-dark) !important;
+    box-shadow: inset 0 1px 3px rgba(0,0,0,.3) !important;
+  }
+
   .w-64{ width:64px }
 </style>
 </head>
@@ -157,7 +174,7 @@
       <div class="hint hint-left">Tip: You can also drag a previously saved JSON file onto this box to load it.</div>
     </div>
 
-    <div id="status" role="status" aria-live="polite">Ready. Chords are now supported!</div>
+    <div id="status" role="status" aria-live="polite">Ready. Add a Sampler or Synth to begin.</div>
   </div>
 
 <script>
@@ -315,12 +332,10 @@
   }
 
   /*** Channels ***/
-  // UPDATED: Synth patterns now store an array of notes for each step.
   function makeBlankPattern(type){
     if (type === 'sampler') {
       return new Uint8Array(STEPS);
     } else {
-      // Each step is an array that can hold multiple notes
       return Array.from({ length: STEPS }, () => []);
     }
   }
@@ -331,6 +346,7 @@
 
     const channel = {
       id, type, name,
+      isArmed: initialData.isArmed || false,
       patterns: [],
       ui: { cells: new Array(STEPS) },
       sampleBuf: null,
@@ -347,29 +363,53 @@
     }
 
     if (initialData.patterns){
-      // ENHANCED: Handle both old (monophonic) and new (polyphonic) data formats
-      if (type === 'sampler') {
-        channel.patterns = initialData.patterns.map(p => {
-          const arr = makeBlankPattern(type);
-          if (p) arr.set(p.slice(0, STEPS));
-          return arr;
-        });
-      } else { // Synth channel - handle migration from old format
-        channel.patterns = initialData.patterns.map(p => {
-          if (!p) return makeBlankPattern(type);
-          // If p[0] is a number, it's the old format (-1 for off, note number for on). Convert it.
-          if (p.length > 0 && typeof p[0] === 'number') {
-            log('Old session format detected, converting to polyphonic.');
-            return p.map(note => (note === -1 ? [] : [note]));
-          }
-          // Otherwise, assume it's the new format (array of arrays)
-          return p.slice(0, STEPS).map(step => Array.isArray(step) ? step : []);
-        });
-      }
-      while (channel.patterns.length < state.numSequences) channel.patterns.push(makeBlankPattern(type));
-    } else {
-      for (let i=0;i<state.numSequences;i++) channel.patterns.push(makeBlankPattern(type));
-    }
+        if (type === 'sampler') {
+            // Handle arrays, typed arrays that were JSON-ified into objects, etc.
+            channel.patterns = initialData.patterns.map(p => {
+            const arr = makeBlankPattern(type); // Uint8Array(STEPS)
+            if (!p) return arr;
+
+            let src;
+            if (Array.isArray(p)) {
+                src = p;
+            } else if (p && typeof p === 'object') {
+                // Likely {"0":1,"1":0,...} from JSON of a typed array
+                src = Array.from({ length: STEPS }, (_, i) => Number(p[i]) || 0);
+            } else if (typeof p?.length === 'number' && typeof p?.slice === 'function') {
+                // Array-like
+                src = Array.from(p.slice(0, STEPS));
+            } else {
+                src = [];
+            }
+
+            for (let i = 0; i < Math.min(STEPS, src.length); i++) {
+                arr[i] = src[i] ? 1 : 0;
+            }
+            return arr;
+            });
+        } else {
+            // Synth patterns: tolerate weird shapes and old mono format
+            channel.patterns = initialData.patterns.map(p => {
+            if (!p) return makeBlankPattern(type);
+
+            // Old mono: array of numbers (or -1) → poly
+            if (Array.isArray(p) && p.length > 0 && typeof p[0] === 'number') {
+                log('Old session format detected, converting to polyphonic.');
+                return p.map(note => (note === -1 ? [] : [note]));
+            }
+
+            // General normalization: arrays are fine; objectified arrays → values
+            const steps = Array.isArray(p) ? p : Object.values(p || {});
+            return steps.slice(0, STEPS).map(step => Array.isArray(step) ? step : []);
+            });
+        }
+
+        while (channel.patterns.length < state.numSequences) {
+            channel.patterns.push(makeBlankPattern(type));
+        }
+        } else {
+        for (let i = 0; i < state.numSequences; i++) channel.patterns.push(makeBlankPattern(type));
+        }
 
     buildChannelUI(channel);
     state.channels.push(channel);
@@ -464,7 +504,32 @@
 
     const nameInput = h('input',{attrs:{type:'text',value:channel.name,title:'Click to rename channel'}, on:{change:()=>channel.name=nameInput.value}});
     const removeBtn = h('button',{class:'btn-danger', on:{click:()=>removeChannel(channel.id)}}, 'Delete');
-    const info = h('div',{class:'channel-info'}, nameInput, removeBtn);
+    
+    let recArmBtn = null;
+    if (channel.type === 'synth') {
+      recArmBtn = h('button', {
+        class: `rec-arm-btn ${channel.isArmed ? 'active' : ''}`,
+        attrs: { title: 'Arm for Recording' },
+        on: {
+          click: () => {
+            channel.isArmed = !channel.isArmed;
+            recArmBtn.classList.toggle('active', channel.isArmed);
+            if (channel.isArmed) {
+              state.channels.forEach(ch => {
+                if (ch.type === 'synth' && ch.id !== channel.id && ch.isArmed) {
+                  ch.isArmed = false;
+                  ch.ui.strip.querySelector('.rec-arm-btn')?.classList.remove('active');
+                }
+              });
+            }
+            log(`Synth '${channel.name}' ${channel.isArmed ? 'armed' : 'disarmed'}.`);
+          }
+        }
+      }, 'R');
+    }
+
+    // FIXED: Added recArmBtn to the info div
+    const info = h('div',{class:'channel-info'}, nameInput, recArmBtn, removeBtn);
 
     const controls = h('div',{class:'controls pad-b'});
     if (channel.type==='sampler'){
@@ -510,7 +575,6 @@
     if (ch.type==='sampler'){
       pattern[i] ^= 1;
     } else {
-      // UPDATED: Clear all notes (the chord) from the step on click
       pattern[i] = [];
     }
     renderStep(ch,i,state.activeSeq);
@@ -672,16 +736,14 @@
       cell.style.opacity = 1;
       cell.title = '';
     } else {
-      // ENHANCED: Render based on whether the notes array has content
       const notes = pattern[i];
       const hasNotes = Array.isArray(notes) && notes.length > 0;
       cell.classList.toggle('note', hasNotes);
       cell.classList.remove('on');
       
-      // Visual feedback for chords: more notes = more opaque
       if(hasNotes) {
-        cell.style.opacity = 0.65 + Math.min(notes.length * 0.1, 0.35); // More notes = more opaque
-        cell.title = `Notes: ${notes.map(n=>`C${Math.floor(n/12)-1}+${n%12}`).join(', ')} (${notes.join(', ')})`; // Show notes on hover
+        cell.style.opacity = 0.65 + Math.min(notes.length * 0.1, 0.35);
+        cell.title = `Notes: ${notes.join(', ')}`;
       } else {
         cell.style.opacity = 1;
         cell.title = '';
@@ -715,7 +777,6 @@
           const src = ctx.createBufferSource(); src.buffer = ch.sampleBuf; src.connect(ctx.destination); src.start(time);
         }
       } else {
-        // UPDATED: Loop through the array of notes and play all of them.
         const notes = pattern[step];
         if (Array.isArray(notes) && notes.length > 0 && ch.synth) {
             notes.forEach(note => {
@@ -788,14 +849,14 @@
     state.channels.forEach(ch => {
       if (ch.type==='synth' && ch.synth){
         ch.synth.noteOn(note, t, 0.25, vel); played = true;
-        if (recEl.checked && state.isPlaying){
+        
+        if (recEl.checked && state.isPlaying && ch.isArmed){ 
           const idx = (state.currentStep + STEPS - 1) % STEPS;
           const pattern = ch.patterns[state.activeSeq];
           const stepNotes = pattern[idx];
-          // UPDATED: Add note to the step's array instead of overwriting.
+
           if (!stepNotes.includes(note)) {
             stepNotes.push(note);
-            // Optional: keep the chord's notes sorted for consistency
             pattern[idx] = stepNotes.sort((a, b) => a - b);
           }
           renderStep(ch, idx, state.activeSeq);
@@ -870,25 +931,41 @@
   })();
 
   /*** Save / Load ***/
-  function makeSnapshot(){
-    return {
-      version: 6, // New version for polyphonic data
-      app: 'Polyphonic Sequencer',
-      savedAt: new Date().toISOString(),
-      bpm: state.bpm,
-      numSequences: state.numSequences,
-      channels: state.channels.map(ch => ({
-        id: ch.id,
-        type: ch.type,
-        name: ch.name,
-        // The pattern data is now an array of arrays for synths, this serializes correctly.
-        patterns: ch.patterns.map(p => Array.from(p)),
-        sample: ch.type==='sampler' ? ch.sampleSource : undefined,
-        synthModule: ch.type==='synth' ? (ch.synthModule && ch.synthModule.type!=='none' ? ch.synthModule : undefined) : undefined,
-        synthParams: ch.type==='synth' ? ch.synthParams : undefined
-      }))
-    };
-  }
+function makeSnapshot(){
+  return {
+    version: 7,
+    app: 'Polyphonic Sequencer',
+    savedAt: new Date().toISOString(),
+    bpm: state.bpm,
+    numSequences: state.numSequences,
+    channels: state.channels.map(ch => ({
+      id: ch.id,
+      type: ch.type,
+      name: ch.name,
+      isArmed: ch.isArmed,
+      // JSON-safe serialization for both sampler and synth patterns
+      patterns: ch.patterns.map(p => {
+        // Typed arrays (e.g., Uint8Array) → plain arrays
+        if (p && ArrayBuffer.isView?.(p)) return Array.from(p);
+
+        // Synth patterns: deep-copy array-of-arrays
+        if (Array.isArray(p)) {
+          return p.map(step => Array.isArray(step) ? [...step] : []);
+        }
+
+        // Fallback
+        return [];
+      }),
+      sample: ch.type === 'sampler' ? ch.sampleSource : undefined,
+      synthModule: ch.type === 'synth'
+        ? (ch.synthModule && ch.synthModule.type !== 'none' ? ch.synthModule : undefined)
+        : undefined,
+      synthParams: ch.type === 'synth' ? ch.synthParams : undefined
+    }))
+  };
+}
+
+
   async function applySnapshot(snap){
     try{
       newSession(false);
@@ -948,14 +1025,18 @@
     });
   })();
 
-  /*** Transport & Sequence controls ***/
+  /*** App Controls ***/
   addSequenceBtn.addEventListener('click', addSequence);
   continuousPlayEl.addEventListener('change', ()=>{ state.continuous = continuousPlayEl.checked; });
+  
+  // FIXED: Added event listeners for the channel buttons
+  addSamplerBtn.addEventListener('click', () => addChannel('sampler'));
+  addSynthBtn.addEventListener('click', () => addChannel('synth'));
+
 
   /*** Boot ***/
   renderSequenceButtons();
-  addChannel('sampler');
-  addChannel('synth');
+  // REMOVED: Initial channels are no longer added by default
 })();
 </script>
 </body>
