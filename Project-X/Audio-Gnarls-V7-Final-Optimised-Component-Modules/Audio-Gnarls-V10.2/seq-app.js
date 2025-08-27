@@ -31,7 +31,7 @@ class SeqApp extends HTMLElement {
     this._stepTimeInput?.addEventListener('change', this.handleStepTimeChange);
 
     // Global listeners
-    window.addEventListener('keydown', this._onWindowKeyDown);
+    // window.addEventListener('keydown', this._onWindowKeyDown); duplicated line in osc-app.js
     window.addEventListener('pointerup', this._onPointerUpGlobal);
   }
 
