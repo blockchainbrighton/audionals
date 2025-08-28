@@ -502,6 +502,9 @@ class OscApp2 extends HTMLElement {
     this._updateControls();
   }
 
+
+  // AUDIO SIGNATURE GENERATION ------------------------------------------------
+
   _onAudioSignature() {
     const s = this.state;
     
@@ -511,110 +514,485 @@ class OscApp2 extends HTMLElement {
     // Stop any existing sequence
     if (s.sequencePlaying) this.stopSequence();
     
-    // Generate deterministic 32-step sequence
-    const audioSignatureSequence = this.generateAudioSignature(s.seed);
+    // Deterministically assign unique algorithms to shapes (1-10)
+    const algorithmMap = this._getUniqueAlgorithmMapping(s.seed);
+    
+    // Get algorithm for current shape
+    const algorithm = algorithmMap[s.current] || 1;
+    
+    // Generate deterministic sequence using selected algorithm
+    const audioSignatureSequence = this.generateAudioSignature(s.seed, algorithm);
     
     // Start playback
-    this.playAudioSignature(audioSignatureSequence);
+    this.playAudioSignature(audioSignatureSequence, algorithm);
     
     this._loader.textContent = 'Playing Audio Signature...';
   }
 
-  generateAudioSignature(seed, {
-  steps = 32,
-  paletteSize = 6,          // 1..9 usable shapes
-  pRepeat = 0.35,           // chance to repeat last non-hum shape
-  pHum = 0.15,              // chance to drop to hum
-  pSilence = 0.2,           // chance to insert a silence
-  avoidBackAndForth = true  // reduce A-B-A-B ping-pong
-} = {}) {
-  const rng = this._rng(`${seed}_audio_signature_v3`);
-  const sequence = [];
-  const paletteCount = Math.max(1, Math.min(9, paletteSize));
-
-  let last = null;
-  let prevNonHum = null;
-
-  for (let i = 0; i < steps; i++) {
-    if (rng() < pSilence) {
-      sequence.push(null);
-      continue;
+  _getUniqueAlgorithmMapping(seed) {
+    // Create deterministic unique mapping from shapes to algorithms (1-10)
+    const rng = this._rng(`${seed}_unique_algo_mapping`);
+    
+    // All shape keys
+    const shapeKeys = [this.humKey, ...this.shapes]; // 10 shapes total
+    
+    // Create array of algorithms 1-10
+    const algorithms = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    
+    // Shuffle algorithms deterministically based on seed
+    for (let i = algorithms.length - 1; i > 0; i--) {
+      const j = Math.floor(rng() * (i + 1));
+      [algorithms[i], algorithms[j]] = [algorithms[j], algorithms[i]];
     }
+    
+    // Create mapping
+    const algorithmMap = {};
+    shapeKeys.forEach((shapeKey, index) => {
+      algorithmMap[shapeKey] = algorithms[index];
+    });
+    
+    return algorithmMap;
+  }
 
-    const roll = rng();
-    let next;
-
-    if (roll < pHum) {
-      next = 0;
-    } else if (roll < pHum + pRepeat && prevNonHum !== null) {
-      next = prevNonHum;
-    } else {
-      // pick a new non-hum shape
-      do {
-        next = 1 + Math.floor(rng() * paletteCount);
-        if (avoidBackAndForth && last !== null && last >= 1 && next >= 1) {
-          // avoid immediate A-B-A by rejecting the one we just came from
-          if (sequence.length >= 2 && sequence[sequence.length - 2] === next) {
-            next = null; // force repick
-          }
+  generateAudioSignature(seed, algorithm = 1) {
+    const rng = this._rng(`${seed}_audio_signature_v${algorithm}`);
+    
+    switch(algorithm) {
+      case 1:
+        // Original random selection
+        const sequence1 = [];
+        for (let i = 0; i < 32; i++) {
+          const shapeIndex = Math.floor(rng() * 10);
+          sequence1.push(shapeIndex);
         }
-      } while (next === null);
-    }
-
-    sequence.push(next);
-    if (next !== null) {
-      if (next >= 1) prevNonHum = next;
-      last = next;
+        return sequence1;
+        
+      case 2:
+        // Palette-based with repetition avoidance
+        return this._generateSignatureWithConstraints(seed, {
+          steps: 32,
+          paletteSize: 6,
+          pRepeat: 0.35,
+          pHum: 0.15,
+          pSilence: 0.2,
+          avoidBackAndForth: true
+        });
+        
+      case 3:
+        // Rhythmic pattern generator
+        const sequence3 = [];
+        const patternLength = 8;
+        const pattern = [];
+        for (let i = 0; i < patternLength; i++) {
+          pattern.push(Math.floor(rng() * 10));
+        }
+        for (let i = 0; i < 32; i++) {
+          sequence3.push(pattern[i % patternLength]);
+        }
+        return sequence3;
+        
+      case 4:
+        // Ascending/descending sequences
+        const sequence4 = [0];
+        let current = 0;
+        for (let i = 1; i < 32; i++) {
+          const direction = rng() > 0.5 ? 1 : -1;
+          const step = Math.floor(rng() * 3) + 1;
+          current = Math.max(0, Math.min(9, current + (direction * step)));
+          sequence4.push(current);
+        }
+        return sequence4;
+        
+      case 5:
+        // Cluster-based with longer notes
+        const sequence5 = [];
+        let clusterValue = Math.floor(rng() * 10);
+        for (let i = 0; i < 32; ) {
+          const clusterLength = Math.min(Math.floor(rng() * 6) + 2, 32 - i);
+          for (let j = 0; j < clusterLength; j++) {
+            sequence5.push(clusterValue);
+            i++;
+          }
+          clusterValue = Math.floor(rng() * 10);
+        }
+        return sequence5;
+        
+      case 6:
+        // Binary rhythm (sparse activation)
+        const sequence6 = [];
+        for (let i = 0; i < 32; i++) {
+          sequence6.push(rng() > 0.7 ? Math.floor(rng() * 9) + 1 : 0);
+        }
+        return sequence6;
+        
+      case 7:
+        // Fibonacci-inspired spacing
+        const sequence7 = new Array(32).fill(0);
+        let pos = 0;
+        let a = 1, b = 1;
+        while (pos < 32) {
+          sequence7[pos] = Math.floor(rng() * 9) + 1;
+          const next = a + b;
+          a = b;
+          b = next;
+          pos += next;
+        }
+        return sequence7;
+        
+      case 8:
+        // Ping-pong between two values
+        const sequence8 = [];
+        const valA = Math.floor(rng() * 10);
+        const valB = Math.floor(rng() * 10);
+        for (let i = 0; i < 32; i++) {
+          sequence8.push(i % 2 === 0 ? valA : valB);
+        }
+        return sequence8;
+        
+      case 9:
+        // Exponential decay pattern
+        const sequence9 = [];
+        let startValue = Math.floor(rng() * 9) + 1;
+        for (let i = 0; i < 32; i++) {
+          if (rng() < 0.2 || startValue === 0) {
+            startValue = Math.floor(rng() * 10);
+          }
+          sequence9.push(startValue);
+          if (rng() > 0.7) startValue = Math.max(0, startValue - 1);
+        }
+        return sequence9;
+        
+      case 10:
+        // Chaos with periodic reset
+        const sequence10 = [];
+        let chaosValue = Math.floor(rng() * 10);
+        for (let i = 0; i < 32; i++) {
+          if (i % 8 === 0) {
+            chaosValue = Math.floor(rng() * 10);
+          } else {
+            if (rng() > 0.6) {
+              chaosValue = Math.floor(rng() * 10);
+            }
+          }
+          sequence10.push(chaosValue);
+        }
+        return sequence10;
+        
+      default:
+        return this._generateSignatureWithConstraints(seed);
     }
   }
 
-  return sequence;
-}
+  _generateSignatureWithConstraints(seed, {
+    steps = 32,
+    paletteSize = 6,
+    pRepeat = 0.35,
+    pHum = 0.15,
+    pSilence = 0.2,
+    avoidBackAndForth = true
+  } = {}) {
+    const rng = this._rng(`${seed}_audio_signature_constrained`);
+    const sequence = [];
+    const paletteCount = Math.max(1, Math.min(9, paletteSize));
 
-playAudioSignature(sequence, {
-  bpm = 120,
-  stepDivision = 4,     // 4 = 16ths, 3 = 8th triplets, 2 = 8ths
-  humanizeMs = 4,
-} = {}) {
-  const s = this.state;
-  s.audioSignaturePlaying = true;
-  s.audioSignatureStepIndex = 0;
+    let last = null;
+    let prevNonHum = null;
 
-  const stepMs = (60000 / bpm) / stepDivision;
+    for (let i = 0; i < steps; i++) {
+      if (rng() < pSilence) {
+        sequence.push(null);
+        continue;
+      }
 
-  const playStep = () => {
-    if (!s.audioSignaturePlaying) return;
+      const roll = rng();
+      let next;
 
-    const i = s.audioSignatureStepIndex;
-    const val = sequence[i];
+      if (roll < pHum) {
+        next = 0;
+      } else if (roll < pHum + pRepeat && prevNonHum !== null) {
+        next = prevNonHum;
+      } else {
+        do {
+          next = 1 + Math.floor(rng() * paletteCount);
+          if (avoidBackAndForth && last !== null && last >= 1 && next >= 1) {
+            if (sequence.length >= 2 && sequence[sequence.length - 2] === next) {
+              next = null;
+            }
+          }
+        } while (next === null);
+      }
 
-    if (val !== null) {
-      const shapeKey = (val === 0) ? this.humKey : this.shapes[val - 1];
-      if (shapeKey) {
-        this._updateControls({ shapeKey });
-        this._onShapeChange({ detail: { shapeKey } });
+      sequence.push(next);
+      if (next !== null) {
+        if (next >= 1) prevNonHum = next;
+        last = next;
       }
     }
 
-    s.audioSignatureStepIndex++;
+    return sequence;
+  }
 
-    if (s.audioSignatureStepIndex >= sequence.length) {
-      this._updateControls({ shapeKey: this.humKey });
-      this._onShapeChange({ detail: { shapeKey: this.humKey } });
-      s.audioSignatureTimer = setTimeout(() => {
-        s.audioSignaturePlaying = false;
-        s.audioSignatureTimer = null;
-        this._loader.textContent = 'Audio Signature complete.';
-      }, stepMs);
-      return;
+  playAudioSignature(sequence, algorithm = 1) {
+    const s = this.state;
+    s.audioSignaturePlaying = true;
+    s.audioSignatureStepIndex = 0;
+    
+    // Algorithm-specific timing
+    let stepTime;
+    switch(algorithm) {
+      case 3:
+      case 7:
+        stepTime = 100; // Faster for rhythmic patterns
+        break;
+      case 5:
+        stepTime = 150; // Slower for clusters
+        break;
+      case 10:
+        stepTime = 200; // Very slow for chaos
+        break;
+      default:
+        stepTime = 125; // Default 16th notes at 120 BPM
     }
+    
+    const playStep = () => {
+      if (!s.audioSignaturePlaying) return;
+      
+      const stepIndex = s.audioSignatureStepIndex;
+      const shapeIndex = sequence[stepIndex];
+      
+      // Handle null values (silence)
+      if (shapeIndex !== null) {
+        let shapeKey;
+        if (shapeIndex === 0) {
+          shapeKey = this.humKey;
+        } else {
+          shapeKey = this.shapes[shapeIndex - 1];
+        }
+        
+        if (shapeKey) {
+          this._updateControls({ shapeKey });
+          this._onShapeChange({ detail: { shapeKey } });
+        }
+      }
+      
+      s.audioSignatureStepIndex++;
+      
+      if (s.audioSignatureStepIndex >= sequence.length) {
+        this._updateControls({ shapeKey: this.humKey });
+        this._onShapeChange({ detail: { shapeKey: this.humKey } });
+        
+        s.audioSignatureTimer = setTimeout(() => {
+          s.audioSignaturePlaying = false;
+          s.audioSignatureTimer = null;
+          this._loader.textContent = 'Audio Signature complete.';
+        }, stepTime);
+        return;
+      }
+      
+      s.audioSignatureTimer = setTimeout(playStep, stepTime);
+    };
+    
+    playStep();
+  }
 
-    const jitter = humanizeMs ? (Math.floor((this._rng('humanize3'+i)() * 2 - 1) * humanizeMs)) : 0;
-    s.audioSignatureTimer = setTimeout(playStep, Math.max(0, stepMs + jitter));
-  };
+// End AUDIO SIGNATURE GENERATION ------------------------------------------------
 
-  playStep();
-}
+// End AUDIO SIGNATURE GENERATION ------------------------------------------------
+
+//   // AUDIO SIGNATURE GENERATION ------------------------------------------------
+
+
+//   _onAudioSignature() {
+//     const s = this.state;
+    
+//     // Don't start if audio isn't ready or already playing a signature
+//     if (!s.contextUnlocked || !s.initialShapeBuffered || s.audioSignaturePlaying) return;
+    
+//     // Stop any existing sequence
+//     if (s.sequencePlaying) this.stopSequence();
+    
+//     // Generate deterministic 32-step sequence
+//     const audioSignatureSequence = this.generateAudioSignature(s.seed);
+    
+//     // Start playback
+//     this.playAudioSignature(audioSignatureSequence);
+    
+//     this._loader.textContent = 'Playing Audio Signature...';
+//   }
+
+
+
+
+// // OG AUDIO SIGNATURE GENERATION Snippet 
+// generateAudioSignature(seed) {
+//     // Use seed + "audio_signature" for deterministic generation
+//     const rng = this._rng(`${seed}_audio_signature`);
+//     const sequence = [];
+    
+//     // Generate 32 steps (32 16th notes)
+//     for (let i = 0; i < 32; i++) {
+//       // Choose from 0 (hum) + 9 shapes = 10 total options
+//       const shapeIndex = Math.floor(rng() * 10);
+//       sequence.push(shapeIndex);
+//     }
+    
+//     return sequence;
+//   }
+
+//   playAudioSignature(sequence) {
+//     const s = this.state;
+//     s.audioSignaturePlaying = true;
+//     s.audioSignatureStepIndex = 0;
+    
+//     // 120 BPM = 500ms per quarter note, 125ms per 16th note
+//     const stepTime = 125;
+    
+//     const playStep = () => {
+//       if (!s.audioSignaturePlaying) return;
+      
+//       const stepIndex = s.audioSignatureStepIndex;
+//       const shapeIndex = sequence[stepIndex];
+      
+//       // Map shape index to shape key
+//       let shapeKey;
+//       if (shapeIndex === 0) {
+//         shapeKey = this.humKey;
+//       } else {
+//         shapeKey = this.shapes[shapeIndex - 1];
+//       }
+      
+//       // Switch to the shape for this step
+//       if (shapeKey) {
+//         this._updateControls({ shapeKey });
+//         this._onShapeChange({ detail: { shapeKey } });
+//       }
+      
+//       // Advance to next step
+//       s.audioSignatureStepIndex++;
+      
+//       // Check if we've completed all 32 steps
+//     if (s.audioSignatureStepIndex >= sequence.length) {
+//       // Add final step to return to hum (zero) for clean ending
+//       this._updateControls({ shapeKey: this.humKey });
+//       this._onShapeChange({ detail: { shapeKey: this.humKey } });
+      
+//       // End the signature after the final hum step
+//       s.audioSignatureTimer = setTimeout(() => {
+//         s.audioSignaturePlaying = false;
+//         s.audioSignatureTimer = null;
+//         this._loader.textContent = 'Audio Signature complete.';
+//       }, stepTime);
+//       return;
+//     }
+      
+//       // Schedule next step
+//       s.audioSignatureTimer = setTimeout(playStep, stepTime);
+//     };
+    
+//     // Start the sequence
+//     playStep();
+//   }
+
+//   // V2 Snippet
+
+// //   generateAudioSignature(seed, {
+// //   steps = 32,
+// //   paletteSize = 6,          // 1..9 usable shapes
+// //   pRepeat = 0.35,           // chance to repeat last non-hum shape
+// //   pHum = 0.15,              // chance to drop to hum
+// //   pSilence = 0.2,           // chance to insert a silence
+// //   avoidBackAndForth = true  // reduce A-B-A-B ping-pong
+// // } = {}) {
+// //   const rng = this._rng(`${seed}_audio_signature_v3`);
+// //   const sequence = [];
+// //   const paletteCount = Math.max(1, Math.min(9, paletteSize));
+
+// //   let last = null;
+// //   let prevNonHum = null;
+
+// //   for (let i = 0; i < steps; i++) {
+// //     if (rng() < pSilence) {
+// //       sequence.push(null);
+// //       continue;
+// //     }
+
+// //     const roll = rng();
+// //     let next;
+
+// //     if (roll < pHum) {
+// //       next = 0;
+// //     } else if (roll < pHum + pRepeat && prevNonHum !== null) {
+// //       next = prevNonHum;
+// //     } else {
+// //       // pick a new non-hum shape
+// //       do {
+// //         next = 1 + Math.floor(rng() * paletteCount);
+// //         if (avoidBackAndForth && last !== null && last >= 1 && next >= 1) {
+// //           // avoid immediate A-B-A by rejecting the one we just came from
+// //           if (sequence.length >= 2 && sequence[sequence.length - 2] === next) {
+// //             next = null; // force repick
+// //           }
+// //         }
+// //       } while (next === null);
+// //     }
+
+// //     sequence.push(next);
+// //     if (next !== null) {
+// //       if (next >= 1) prevNonHum = next;
+// //       last = next;
+// //     }
+// //   }
+
+// //   return sequence;
+// // }
+
+// // playAudioSignature(sequence, {
+// //   bpm = 120,
+// //   stepDivision = 4,     // 4 = 16ths, 3 = 8th triplets, 2 = 8ths
+// //   humanizeMs = 4,
+// // } = {}) {
+// //   const s = this.state;
+// //   s.audioSignaturePlaying = true;
+// //   s.audioSignatureStepIndex = 0;
+
+// //   const stepMs = (60000 / bpm) / stepDivision;
+
+// //   const playStep = () => {
+// //     if (!s.audioSignaturePlaying) return;
+
+// //     const i = s.audioSignatureStepIndex;
+// //     const val = sequence[i];
+
+// //     if (val !== null) {
+// //       const shapeKey = (val === 0) ? this.humKey : this.shapes[val - 1];
+// //       if (shapeKey) {
+// //         this._updateControls({ shapeKey });
+// //         this._onShapeChange({ detail: { shapeKey } });
+// //       }
+// //     }
+
+// //     s.audioSignatureStepIndex++;
+
+// //     if (s.audioSignatureStepIndex >= sequence.length) {
+// //       this._updateControls({ shapeKey: this.humKey });
+// //       this._onShapeChange({ detail: { shapeKey: this.humKey } });
+// //       s.audioSignatureTimer = setTimeout(() => {
+// //         s.audioSignaturePlaying = false;
+// //         s.audioSignatureTimer = null;
+// //         this._loader.textContent = 'Audio Signature complete.';
+// //       }, stepMs);
+// //       return;
+// //     }
+
+// //     const jitter = humanizeMs ? (Math.floor((this._rng('humanize3'+i)() * 2 - 1) * humanizeMs)) : 0;
+// //     s.audioSignatureTimer = setTimeout(playStep, Math.max(0, stepMs + jitter));
+// //   };
+
+// //   playStep();
+// // }
+
+
+// // End AUDIO SIGNATURE GENERATION ------------------------------------------------
 
   stopAudioSignature() {
     const s = this.state;
