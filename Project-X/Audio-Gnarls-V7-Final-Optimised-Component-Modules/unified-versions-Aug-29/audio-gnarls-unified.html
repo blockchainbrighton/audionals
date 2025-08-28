@@ -1,0 +1,1769 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Audio Gnarls - Unified</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <style>
+    /* Base styles from original index.html */
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      background: #000;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+    }
+    body {
+      min-width: 480px;
+      min-height: 400px;
+    }
+  </style>
+</head>
+<body>
+  <osc-app></osc-app>
+
+  <script>
+    // ToneLoader Component
+    class ToneLoader extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+        this.shadowRoot.innerHTML = '';
+        this._loaded = false;
+      }
+      connectedCallback() {
+        if (this._loaded) return;
+        this._loaded = true;
+        const toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+        import(toneUrl).then(mod => {
+          if (!window.Tone && (mod?.default || mod?.Tone)) {
+            window.Tone = mod.default ?? mod.Tone;
+          }
+          this.dispatchEvent(new CustomEvent('tone-ready', {
+            bubbles: true,
+            composed: true
+          }));
+        }).catch(err => {
+          console.error('Failed to load Tone.js:', err);
+        });
+      }
+    }
+    customElements.define('tone-loader', ToneLoader);
+
+    // ScopeCanvas Component
+    class ScopeCanvas2 extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+        this._canvas = document.createElement('canvas');
+        this._canvas.width = 600;
+        this._canvas.height = 600;
+        this._ctx = this._canvas.getContext('2d');
+        this.shadowRoot.appendChild(this._canvas);
+        
+        // State properties
+        this.analyser = null;
+        this.preset = null;
+        this.shapeKey = 'circle';
+        this.mode = 'seed';
+        this.isAudioStarted = false;
+        this.isPlaying = false;
+        this.onIndicatorUpdate = null;
+        this._dummyData = null;
+        this._liveBuffer = null;
+        this._animId = null;
+        
+        // Bind animation method
+        this._animate = this._animate.bind(this);
+        
+        // Set up drawing functions
+        this.drawFuncs = {
+          // Power Hum: Soft, glowing, minimal radial sine pulse
+          hum: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const c = cw / 2;
+            const ctx = this._ctx;
+            const baseRadius = 0.33 * cw + Math.sin(t * 0.0002) * 5;
+            ctx.save();
+            ctx.globalAlpha = 0.23 + 0.14 * Math.abs(Math.sin(t * 0.0004));
+            ctx.beginPath();
+            ctx.arc(c, c, baseRadius, 0, 2 * Math.PI);
+            ctx.stroke();
+            ctx.strokeStyle = `hsl(195, 80%, 62%)`;
+
+            ctx.globalAlpha = 0.36;
+            ctx.beginPath();
+            const segs = 128;
+            for (let i = 0; i < segs; ++i) {
+              const theta = (i / segs) * 2 * Math.PI;
+              const ripple = 12 * Math.sin(theta * 3 + t * 0.00045) + 6 * Math.sin(theta * 6 - t * 0.00032);
+              let amp = 0;
+              if (data && data.length === segs) amp = data[i] * 7;
+              else if (data) amp = (data[i % data.length] || 0) * 7;
+              const r = baseRadius + ripple + amp;
+              const x = c + Math.cos(theta) * r;
+              const y = c + Math.sin(theta) * r;
+              if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+            ctx.restore();
+          },
+          circle: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const S = 0.8 * cw / 2;
+            const c = cw / 2;
+            const ctx = this._ctx;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; ++i) {
+              const a = (i / data.length) * 2 * Math.PI + t * 0.001;
+              const amp = (data[i] + 1) / 2;
+              const r = S * amp;
+              const x = c + Math.cos(a) * r;
+              const y = c + Math.sin(a) * r;
+              if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          },
+          square: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const S = 0.8 * cw / Math.SQRT2;
+            const c = cw / 2;
+            const o = (cw - S) / 2;
+            const ctx = this._ctx;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; ++i) {
+              const p = i / data.length;
+              const amp = (data[i] + 1) / 2;
+              let x, y;
+              if (p < 0.25) [x, y] = [o + S * (p / 0.25), o];
+              else if (p < 0.5) [x, y] = [o + S, o + S * ((p - 0.25) / 0.25)];
+              else if (p < 0.75) [x, y] = [o + S - S * ((p - 0.5) / 0.25), o + S];
+              else [x, y] = [o, o + S - S * ((p - 0.75) / 0.25)];
+              const dx = x - c;
+              const dy = y - c;
+              const fx = c + dx * (0.8 + 0.2 * amp) + Math.sin(t * 0.0005) * 10;
+              const fy = c + dy * (0.8 + 0.2 * amp) + Math.cos(t * 0.0006) * 10;
+              if (i) ctx.lineTo(fx, fy); else ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          },
+          butterfly: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const S = 0.4 * cw;
+            const c = cw / 2;
+            const ctx = this._ctx;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; ++i) {
+              const th = (i / data.length) * Math.PI * 24 + t * 0.0003;
+              const amp = (data[i] + 1) / 2;
+              const scale = Math.exp(Math.cos(th)) - 2 * Math.cos(4 * th) + Math.pow(Math.sin(th / 12), 5);
+              const x = Math.sin(th) * scale * S * (0.5 + 0.5 * amp) + c;
+              const y = Math.cos(th) * scale * S * (0.5 + 0.5 * amp) + c;
+              if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          },
+          lissajous: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const S = 0.8 * cw / 3;
+            const c = cw / 2;
+            const avg = data.reduce((a, b) => a + Math.abs(b), 0) / data.length;
+            const freqX = 3 + Math.sin(t * 0.0003) * 1.5;
+            const freqY = 2 + Math.cos(t * 0.0004) * 1.5;
+            const phase = t * 0.0005;
+            const ctx = this._ctx;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; i++) {
+              const theta = (i / data.length) * 2 * Math.PI;
+              const r = avg * (0.5 + 0.5 * data[i]);
+              const x = c + Math.sin(freqX * theta + phase) * S * r;
+              const y = c + Math.sin(freqY * theta) * S * r;
+              if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.stroke();
+          },
+          spiro: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const S = 0.6 * cw / 3;
+            const c = cw / 2;
+            const inner = 0.3 + Math.sin(t * 0.0002) * 0.2;
+            const outer = 0.7;
+            const ratio = 0.21 + 0.02 * Math.sin(t * 0.0001);
+            const ctx = this._ctx;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; i++) {
+              const theta = (i / data.length) * 2 * Math.PI;
+              const waveAmp = (data[i] + 1) / 2;
+              const x = c + (S * (outer - inner) * Math.cos(theta) + S * inner * Math.cos((outer - inner) / inner * theta + t * ratio)) * (0.8 + 0.2 * waveAmp);
+              const y = c + (S * (outer - inner) * Math.sin(theta) - S * inner * Math.sin((outer - inner) / inner * theta + t * ratio)) * (0.8 + 0.2 * waveAmp);
+              if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.stroke();
+          },
+          harmonograph: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const S = 0.7 * cw / 4;
+            const c = cw / 2;
+            const decay = Math.exp(-t * 0.0002);
+            const avg = (data.reduce((a, b) => a + b, 0) / data.length + 1) * 0.5;
+            const ctx = this._ctx;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; i++) {
+              const theta = (i / data.length) * 2 * Math.PI;
+              const x = c +  S * ((Math.sin(3 * theta + t * 0.0003) * 0.7 + Math.sin(5 * theta + t * 0.0004) * 0.3)) * (0.5 + 0.5 * data[i]);
+              const y = c +  S * ((Math.sin(4 * theta + t * 0.00035) * 0.6 + Math.sin(6 * theta + t * 0.00025) * 0.4)) * (0.5 + 0.5 * data[i]);
+              if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.stroke();
+          },
+          rose: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const S = 0.42 * cw;
+            const c = cw / 2;
+            const k = 3 + Math.round(Math.abs(Math.sin(t * 0.00025)) * 4);
+            const ctx = this._ctx;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; ++i) {
+              const theta = (i / data.length) * 2 * Math.PI + t * 0.00035;
+              const amp = (data[i] + 1) / 2;
+              const r = S * Math.cos(k * theta) * (0.65 + 0.35 * amp);
+              const x = c + Math.cos(theta) * r;
+              const y = c + Math.sin(theta) * r;
+              if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          },
+          hypocycloid: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const S = 0.39 * cw;
+            const c = cw / 2;
+            const n = 3 + Math.round(3 * Math.abs(Math.cos(t * 0.00023)));
+            const ctx = this._ctx;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; ++i) {
+              const theta = (i / data.length) * 2 * Math.PI + t * 0.0004;
+              const R = 1, r = 1 / n;
+              const amp = (data[i] + 1) / 2;
+              const x = c + S * ((R - r) * Math.cos(theta) + r * Math.cos((R - r) / r * theta)) * (0.7 + 0.3 * amp);
+              const y = c + S * ((R - r) * Math.sin(theta) - r * Math.sin((R - r) / r * theta)) * (0.7 + 0.3 * amp);
+              if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          },
+          epicycloid: (data, t, pr) => {
+            const cw = this._canvas.width;
+            const S = 0.36 * cw;
+            const c = cw / 2;
+            const n = 4 + Math.round(3 * Math.abs(Math.sin(t * 0.00021 + 0.5)));
+            const ctx = this._ctx;
+            ctx.beginPath();
+            for (let i = 0; i < data.length; ++i) {
+              const theta = (i / data.length) * 2 * Math.PI + t * 0.00038;
+              const R = 1, r = 1 / n;
+              const amp = (data[i] + 1) / 2;
+              const x = c + S * ((R + r) * Math.cos(theta) - r * Math.cos((R + r) / r * theta)) * (0.7 + 0.3 * amp);
+              const y = c + S * ((R + r) * Math.sin(theta) - r * Math.sin((R + r) / r * theta)) * (0.7 + 0.3 * amp);
+              if (i) ctx.lineTo(x, y); else ctx.moveTo(x, y);
+            }
+            ctx.closePath();
+            ctx.stroke();
+          }
+        };
+      }
+
+      connectedCallback() {
+        if (!this._animId) this._animate();
+      }
+
+      disconnectedCallback() {
+        if (this._animId) {
+          cancelAnimationFrame(this._animId);
+          this._animId = null;
+        }
+      }
+
+      _makeSeedBuffer(shape, seed, len = 2048) {
+        const mulberry32 = (a) => {
+          return () => {
+            a |= 0;
+            a = a + 0x6D2B79F5 | 0;
+            let t = Math.imul(a ^ a >>> 15, 1 | a);
+            t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
+            return ((t ^ t >>> 14) >>> 0) / 4294967296;
+          };
+        };
+        const h = seed + '_' + shape;
+        let a = 0;
+        for (let i = 0; i < h.length; i++) a = (a << 5) - a + h.charCodeAt(i);
+        const rng = mulberry32(a);
+        const arr = new Float32Array(len);
+        for (let i = 0; i < len; ++i) {
+          const t = i / len;
+          const base = Math.sin(2 * Math.PI * t + rng() * 6.28);
+          const harm2 = 0.5 * Math.sin(4 * Math.PI * t + rng() * 6.28);
+          const harm3 = 0.25 * Math.sin(6 * Math.PI * t + rng() * 6.28);
+          arr[i] = 0.6 * base + 0.3 * harm2 + 0.15 * harm3;
+        }
+        return arr;
+      }
+
+      _animate() {
+        const ctx = this._ctx;
+        const now = performance.now();
+        let data;
+        if (this.isAudioStarted && this.isPlaying && this.analyser) {
+          if (!this._liveBuffer || this._liveBuffer.length !== this.analyser.fftSize) {
+            this._liveBuffer = new Float32Array(this.analyser.fftSize);
+          }
+          this.analyser.getFloatTimeDomainData(this._liveBuffer);
+          data = this._liveBuffer;
+        } else {
+          if (this.preset && this.mode === 'seed' && this.preset._seedBuffer) {
+            data = this.preset._seedBuffer;
+          } else if (this.preset && this.mode === 'seed') {
+            const seed = this.preset?.seed || 'default';
+            const buf = this._makeSeedBuffer(this.shapeKey || 'circle', seed);
+            this.preset._seedBuffer = buf;
+            data = buf;
+          } else {
+            if (!this._dummyData) {
+              const len = 2048;
+              const arr = new Float32Array(len);
+              for (let i = 0; i < len; i++) {
+                const t = i / len;
+                arr[i] = 0.5 * Math.sin(2 * Math.PI * t) + 0.3 * Math.sin(4 * Math.PI * t + Math.PI / 3);
+              }
+              this._dummyData = arr;
+            }
+            data = this._dummyData;
+          }
+        }
+        
+        const pr = this.preset || {};
+        const colorSpeed = pr.colorSpeed || 0.06;
+        const hue = (now * colorSpeed) % 360;
+        const sat = 70 + 15;
+        const light = 50 + 10;
+        ctx.clearRect(0, 0, this._canvas.width, this._canvas.height);
+        ctx.strokeStyle = `hsl(${hue},${sat}%,${light}%)`;
+        ctx.lineWidth = 2;
+        ctx.lineJoin = ctx.lineCap = 'round';
+        
+        const draw = this.drawFuncs[this.shapeKey] || this.drawFuncs.circle;
+        draw(data, now, pr);
+        
+        if (typeof this.onIndicatorUpdate === 'function') {
+          let text;
+          let audioActive;
+          if (this.isAudioStarted) {
+            text = this.isPlaying ? 'Audio Live' : 'Muted';
+            audioActive = this.isPlaying;
+          } else {
+            text = 'Silent Mode';
+            audioActive = false;
+          }
+          this.onIndicatorUpdate(text, audioActive);
+        }
+        this._animId = requestAnimationFrame(this._animate);
+      }
+    }
+    customElements.define('scope-canvas', ScopeCanvas2);
+
+
+
+    // OscControls Component
+    class OscControls2 extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+
+        const container = document.createElement('div');
+        container.id = 'controls';
+
+        this._startBtn = document.createElement('button');
+        this._startBtn.id = 'startBtn';
+        this._startBtn.textContent = 'POWER ON';
+
+        this._muteBtn = document.createElement('button');
+        this._muteBtn.id = 'muteBtn';
+        this._muteBtn.textContent = 'Mute';
+
+        this._shapeSelect = document.createElement('select');
+        this._shapeSelect.id = 'shapeSelect';
+
+        this._seqBtn = document.createElement('button');
+        this._seqBtn.id = 'seqBtn';
+        this._seqBtn.textContent = 'Create Sequence';
+
+        this._audioSigBtn = document.createElement('button');
+        this._audioSigBtn.id = 'audioSigBtn';
+        this._audioSigBtn.textContent = 'Audio Signature';
+
+        container.append(
+          this._startBtn,
+          this._muteBtn,
+          this._shapeSelect,
+          this._seqBtn,
+          this._audioSigBtn
+        );
+
+        const style = document.createElement('style');
+        style.textContent = `
+          :host {
+            display: block;
+          }
+          #controls {
+            display: flex;
+            gap: 1.1rem;
+            align-items: center;
+            flex-wrap: wrap;
+            justify-content: center;
+            padding: 0.7rem 1.2rem;
+            background: rgba(255, 255, 255, 0.07);
+            border-radius: 9px;
+            width: 95%;
+            max-width: 880px;
+            margin: 1.1rem auto 0 auto;
+            box-sizing: border-box;
+          }
+          button, select {
+            padding: 0.53em 1.17em;
+            border-radius: 6px;
+            border: 1px solid #555;
+            background: #242;
+            color: #fff;
+            font-size: 1rem;
+            cursor: pointer;
+            font-family: inherit;
+            font-weight: 500;
+            transition: background 0.19s, color 0.19s, box-shadow 0.19s;
+            box-shadow: 0 0 0px #0000;
+          }
+          button:focus {
+            outline: 2px solid #7af6ff;
+            outline-offset: 1px;
+          }
+          button:hover {
+            background: #454;
+          }
+          #startBtn.power-off {
+            background: #451015;
+            color: #e97c90;
+            border-color: #89232a;
+            box-shadow: 0 0 4px #ff505011, 0 0 0px #0000;
+            text-shadow: none;
+            filter: brightness(0.95);
+          }
+          #startBtn.power-on {
+            background: #ff2a39;
+            color: #fff;
+            border-color: #ff4e6a;
+            box-shadow: 0 0 18px 5px #ff2a3999, 0 0 4px #ff748499;
+            text-shadow: 0 1px 3px #8d2025cc, 0 0 10px #fff7;
+            filter: brightness(1.10) saturate(1.2);
+          }
+          #muteBtn.muted {
+            background: #a51427;
+            color: #fff;
+            border-color: #ff506e;
+            box-shadow: 0 0 12px #ff506e66;
+            text-shadow: 0 1px 2px #320a0b;
+          }
+          #audioSigBtn {
+            background: #2a4d3a;
+            color: #7af6ff;
+            border-color: #4a7c59;
+            box-shadow: 0 0 8px #7af6ff33;
+          }
+          #audioSigBtn:hover {
+            background: #3a5d4a;
+            box-shadow: 0 0 12px #7af6ff55;
+          }
+          #audioSigBtn:disabled {
+            background: #1a2d2a;
+            color: #4a6c59;
+            box-shadow: none;
+          }
+          button:disabled, select:disabled {
+            opacity: 0.5;
+            pointer-events: none;
+          }
+        `;
+        this.shadowRoot.append(style, container);
+
+        this._startBtn.addEventListener('click', () => {
+          this.dispatchEvent(new CustomEvent('start-request', { bubbles: true, composed: true }));
+        });
+        this._muteBtn.addEventListener('click', () => {
+          this.dispatchEvent(new CustomEvent('mute-toggle', { bubbles: true, composed: true }));
+        });
+        this._shapeSelect.addEventListener('change', () => {
+          const value = this._shapeSelect.value;
+          this.dispatchEvent(new CustomEvent('shape-change', { detail: { shapeKey: value }, bubbles: true, composed: true }));
+        });
+        this._seqBtn.addEventListener('click', () => {
+          this.dispatchEvent(new CustomEvent('toggle-sequencer', { bubbles: true, composed: true }));
+        });
+        this._audioSigBtn.addEventListener('click', () => {
+          this.dispatchEvent(new CustomEvent('audio-signature', { bubbles: true, composed: true }));
+        });
+      }
+
+      setShapes(shapes) {
+        this._shapeSelect.innerHTML = '';
+        shapes.forEach(({ value, label }) => {
+          const opt = document.createElement('option');
+          opt.value = value;
+          opt.textContent = label;
+          this._shapeSelect.appendChild(opt);
+        });
+      }
+
+      disableAll(disabled) {
+        [this._startBtn, this._muteBtn, this._shapeSelect, this._seqBtn, this._audioSigBtn].forEach(el => {
+          el.disabled = disabled;
+        });
+      }
+
+      updateState({ isAudioStarted, isPlaying, isMuted, shapeKey, sequencerVisible }) {
+        this._startBtn.disabled = !isAudioStarted;
+        this._muteBtn.disabled = !isAudioStarted;
+        this._audioSigBtn.disabled = !isAudioStarted;
+        this._startBtn.textContent = isPlaying ? 'POWER OFF' : 'POWER ON';
+        this._muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
+        this._startBtn.classList.toggle('power-on', !!isPlaying);
+        this._startBtn.classList.toggle('power-off', !isPlaying);
+        this._muteBtn.classList.toggle('muted', !!isMuted);
+        if (shapeKey) this._shapeSelect.value = shapeKey;
+        this._seqBtn.textContent = sequencerVisible ? 'Hide Sequencer' : 'Create Sequence';
+      }
+    }
+    customElements.define('osc-controls', OscControls2);
+
+
+    // SeqApp Component
+    class SeqApp extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+
+        this.state = {
+          isRecording: false,
+          currentRecordSlot: -1,
+          sequence: Array(8).fill(null),
+          velocities: Array(8).fill(1),
+          sequencePlaying: false,
+          sequenceStepIndex: 0,
+          stepTime: 400
+        };
+
+        // Bind methods once
+        [
+          'updateState','updateSequenceUI','recordStep','playSequence','stopSequence',
+          'handleStepClick','handleStepRightClick','handlePlayClick','handleStepTimeChange',
+          '_onWindowKeyDown','_onPointerUpGlobal'
+        ].forEach(fn => this[fn] = this[fn].bind(this));
+      }
+
+      connectedCallback() {
+        this.render();
+        this.updateSequenceUI();
+
+        // Controls
+        this._playBtn?.addEventListener('click', this.handlePlayClick);
+        this._stepTimeInput?.addEventListener('change', this.handleStepTimeChange);
+
+        // Global listeners
+        window.addEventListener('pointerup', this._onPointerUpGlobal);
+      }
+
+      disconnectedCallback() {
+        // Remove global listeners
+        window.removeEventListener('keydown', this._onWindowKeyDown);
+        window.removeEventListener('pointerup', this._onPointerUpGlobal);
+      }
+
+      // --- Render --------------------------------------------------------------
+      render() {
+        this.shadowRoot.innerHTML = `
+          <style>
+            :host { display:block; text-align:center; width:95%; margin:.8em auto 0 auto; }
+            #stepSlots { display:flex; justify-content:center; gap:.55em; margin:.6em 0 .7em 0; }
+            .step-slot {
+              position: relative;
+              width:37px; height:37px; border:1px solid #555; border-radius:6px;
+              background:#232325; display:grid; place-items:center; cursor:pointer;
+              font-weight:bold; font-size:1.12rem; user-select:none;
+              transition:background .15s, box-shadow .16s;
+            }
+            .step-slot.record-mode { background:#343; box-shadow:0 0 7px #f7c46988; }
+            .step-slot.record-mode.active { background:#575; box-shadow:0 0 12px #f7c469d6; }
+            .digit { position:relative; z-index:2; }
+            .vel-bar {
+              position:absolute; bottom:0; left:0; width:100%; height:0%;
+              background:#7af6ff55; border-bottom-left-radius:6px; border-bottom-right-radius:6px;
+              pointer-events:none; transition:height .05s linear; z-index:1;
+            }
+            #sequenceControls {
+              display:flex; flex-direction:row; align-items:center; justify-content:center;
+              gap:1.1rem; margin:1.1em 0 0 0; width:100%;
+            }
+            #playBtn {
+              min-width:150px; font-size:1.09rem; padding:0.44em 1.4em; border-radius:7px;
+              margin:0; background:#181818; color:#fff; border:2px solid #7af6ff;
+              transition:background .19s, color .19s; box-shadow:0 2px 10px #7af6ff22;
+            }
+            #playBtn:hover { background:#212d3d; color:#fff; border-color:#fff; }
+            #stepTimeInput { width:60px; margin-left:0.7em; }
+          </style>
+
+          <div id="sequencer">
+            <div id="stepSlots"></div>
+            <div id="sequenceControls">
+              <button id="playBtn">Play Sequence</button>
+              <label for="stepTimeInput" style="margin-left:1.2em;">Step Time (ms):</label>
+              <input type="number" id="stepTimeInput" min="50" max="2000" value="400" />
+            </div>
+          </div>
+        `;
+
+        // Cache refs
+        this._stepSlotsDiv = this.shadowRoot.getElementById('stepSlots');
+        this._playBtn = this.shadowRoot.getElementById('playBtn');
+        this._stepTimeInput = this.shadowRoot.getElementById('stepTimeInput');
+
+        // Build slots
+        this.createSequenceUI();
+      }
+
+      createSequenceUI() {
+        this._stepSlotsDiv.innerHTML = '';
+
+        // Drag state
+        this._dragState = { painting:false, mode:null, setTo:null, baseVel:1, startY:0, lastIndex:-1 };
+
+        for (let i = 0; i < 8; i++) {
+          const slot = document.createElement('div');
+          slot.classList.add('step-slot');
+          slot.dataset.index = i;
+
+          // Velocity bar
+          const bar = document.createElement('div');
+          bar.className = 'vel-bar';
+          slot.appendChild(bar);
+
+          // Digit layer (so we don't blow away children when updating text)
+          const digit = document.createElement('div');
+          digit.className = 'digit';
+          slot.appendChild(digit);
+
+          // Click: start record at this index
+          slot.addEventListener('click', () => this.handleStepClick(i));
+          // Right‑click: clear
+          slot.addEventListener('contextmenu', (e) => this.handleStepRightClick(e, i));
+
+          // Pointer interactions
+          slot.addEventListener('pointerdown', (e) => {
+            const idx = i;
+            if (e.altKey) {
+              // Velocity mode
+              this._dragState.painting = true;
+              this._dragState.mode = 'velocity';
+              this._dragState.baseVel = this.state.velocities[idx] ?? 1;
+              this._dragState.startY = e.clientY;
+              this._dragState.lastIndex = idx;
+              slot.setPointerCapture(e.pointerId);
+            } else {
+              // Paint on/off mode
+              const current = this.state.sequence[idx];
+              const setTo = (current == null) ? 1 : null;
+              this._dragState.painting = true;
+              this._dragState.mode = 'paint';
+              this._dragState.setTo = setTo;
+              this._dragState.lastIndex = -1;
+
+              if (setTo === null) {
+                this.state.sequence[idx] = null;
+                this.dispatchEvent(new CustomEvent('seq-step-cleared', { detail: { slotIndex: idx }, bubbles: true, composed: true }));
+              } else {
+                this.state.sequence[idx] = 1; // default
+                this.dispatchEvent(new CustomEvent('seq-step-recorded', { detail: { slotIndex: idx, value: 1, nextSlot: (idx + 1) % 8, isRecording: false }, bubbles: true, composed: true }));
+              }
+              this.updateSequenceUI();
+              slot.setPointerCapture(e.pointerId);
+            }
+          });
+
+          slot.addEventListener('pointerenter', () => {
+            if (!this._dragState.painting) return;
+            const idx = i;
+            if (this._dragState.mode === 'paint') {
+              if (this._dragState.lastIndex === idx) return;
+              this._dragState.lastIndex = idx;
+              const setTo = this._dragState.setTo;
+              if (setTo === null) {
+                this.state.sequence[idx] = null;
+                this.dispatchEvent(new CustomEvent('seq-step-cleared', { detail: { slotIndex: idx }, bubbles: true, composed: true }));
+              } else {
+                this.state.sequence[idx] = 1;
+                this.dispatchEvent(new CustomEvent('seq-step-recorded', { detail: { slotIndex: idx, value: 1, nextSlot: (idx + 1) % 8, isRecording: false }, bubbles: true, composed: true }));
+              }
+              this.updateSequenceUI();
+            }
+          });
+
+          slot.addEventListener('pointermove', (e) => {
+            if (!this._dragState.painting || this._dragState.mode !== 'velocity') return;
+            const idx = i;
+            const dy = (this._dragState.startY - e.clientY);
+            const scale = e.shiftKey ? 0.25 : 1.0;
+            let vel = this._dragState.baseVel + (dy / 150) * scale;
+            vel = Math.max(0, Math.min(1, vel));
+            this.state.velocities[idx] = vel;
+            slot.title = `Velocity: ${Math.round(vel * 100)}% (Alt‑drag${e.shiftKey ? ' + Shift' : ''})`;
+            bar.style.height = Math.round(vel * 100) + '%';
+          });
+
+          this._stepSlotsDiv.appendChild(slot);
+        }
+      }
+
+      // --- Public API ----------------------------------------------------------
+      updateState(newState) {
+        Object.assign(this.state, newState);
+        this.updateSequenceUI();
+      }
+
+      updateSequenceUI() {
+        if (!this._stepSlotsDiv) return;
+        this._stepSlotsDiv.querySelectorAll('.step-slot').forEach((slot) => {
+          const idx = parseInt(slot.dataset.index, 10);
+          const val = this.state.sequence[idx];
+
+          // Display digit or blank in the dedicated layer
+          const digitEl = slot.querySelector('.digit');
+          if (digitEl) digitEl.textContent = (val === 0) ? '0' : (val != null ? String(val) : '');
+
+          // Highlight state
+          slot.classList.toggle('record-mode', this.state.isRecording && this.state.currentRecordSlot === idx);
+          slot.classList.toggle('active', this.state.sequencePlaying && this.state.sequenceStepIndex === idx);
+
+          // Velocity bar height
+          const vel = (this.state.velocities && this.state.velocities[idx] != null) ? this.state.velocities[idx] : 1;
+          const barEl = slot.querySelector('.vel-bar');
+          if (barEl) barEl.style.height = Math.round(vel * 100) + '%';
+
+          // Tooltip
+          if (!slot.title || !slot.title.startsWith('Velocity:')) {
+            slot.title = `Velocity: ${Math.round(vel * 100)}% (Alt‑drag to edit)`;
+          }
+        });
+
+        // Button text
+        if (this._playBtn) this._playBtn.textContent = this.state.sequencePlaying ? 'Stop Sequence' : 'Play Sequence';
+
+        // Step time input reflects state when not running
+        if (this._stepTimeInput && !this.state.sequencePlaying) this._stepTimeInput.value = this.state.stepTime;
+      }
+
+      // --- Interaction handlers -----------------------------------------------
+      handleStepClick(index) {
+        // Start recording at this index; number keys will set the value (1‑9, 0)
+        this.state.isRecording = true;
+        this.state.currentRecordSlot = index;
+        this.updateSequenceUI();
+        this.dispatchEvent(new CustomEvent('seq-record-start', { detail: { slotIndex: index }, bubbles: true, composed: true }));
+      }
+
+      handleStepRightClick(event, index) {
+        event.preventDefault();
+        this.state.sequence[index] = null;
+
+        if (this.state.isRecording && this.state.currentRecordSlot === index) {
+          this.state.currentRecordSlot = (index + 1) % 8;
+          if (this.state.currentRecordSlot === 0) this.state.isRecording = false;
+        }
+
+        this.updateSequenceUI();
+        this.dispatchEvent(new CustomEvent('seq-step-cleared', { detail: { slotIndex: index }, bubbles: true, composed: true }));
+      }
+
+      handlePlayClick() {
+        if (this.state.sequencePlaying) this.stopSequence(); else this.playSequence();
+      }
+
+      handleStepTimeChange() {
+        if (!this._stepTimeInput) return;
+        const val = parseInt(this._stepTimeInput.value, 10);
+        if (Number.isFinite(val) && val >= 50 && val <= 2000) {
+          this.state.stepTime = val;
+          this.dispatchEvent(new CustomEvent('seq-step-time-changed', { detail: { stepTime: val }, bubbles: true, composed: true }));
+        }
+      }
+
+      _onWindowKeyDown(e) {
+        if (!this.state.isRecording) return;
+        if (!/^[0-9]$/.test(e.key)) return;
+        const num = parseInt(e.key, 10);
+        const idx = this.state.currentRecordSlot;
+        if (idx < 0 || idx >= this.state.sequence.length) return;
+
+        this.state.sequence[idx] = num;
+        this.state.currentRecordSlot = (idx + 1) % this.state.sequence.length;
+        if (this.state.currentRecordSlot === 0) this.state.isRecording = false;
+
+        this.updateSequenceUI();
+        this.dispatchEvent(new CustomEvent('seq-step-recorded', {
+          detail: { slotIndex: idx, value: num, nextSlot: this.state.currentRecordSlot, isRecording: this.state.isRecording },
+          bubbles: true, composed: true
+        }));
+      }
+
+      _onPointerUpGlobal() {
+        // End any drag‑paint / velocity gestures
+        if (!this._dragState) return;
+        this._dragState.painting = false;
+        this._dragState.mode = null;
+        this._dragState.lastIndex = -1;
+      }
+
+      // --- Sequencing ----------------------------------------------------------
+      recordStep(number) {
+        const idx = this.state.currentRecordSlot;
+        if (!this.state.isRecording || idx < 0 || idx >= this.state.sequence.length) return;
+
+        this.state.sequence[idx] = number;
+        this.state.currentRecordSlot = (idx + 1) % this.state.sequence.length;
+        if (this.state.currentRecordSlot === 0) this.state.isRecording = false;
+
+        this.updateSequenceUI();
+        this.dispatchEvent(new CustomEvent('seq-step-recorded', {
+          detail: { slotIndex: idx, value: number, nextSlot: this.state.currentRecordSlot, isRecording: this.state.isRecording },
+          bubbles: true, composed: true
+        }));
+      }
+
+      playSequence() {
+        if (this.state.sequencePlaying) return;
+        this.state.sequencePlaying = true;
+        this.state.sequenceStepIndex = 0;
+        this.updateSequenceUI();
+
+        // Notify parent with current timing
+        this.dispatchEvent(new CustomEvent('seq-play-started', { detail: { stepTime: this.state.stepTime }, bubbles: true, composed: true }));
+
+        const stepFn = () => {
+          if (!this.state.sequencePlaying) return;
+          const idx = this.state.sequenceStepIndex;
+          const value = this.state.sequence[idx];
+          const velocity = (this.state.velocities && this.state.velocities[idx] != null) ? this.state.velocities[idx] : 1;
+          const isLastStep = ((idx + 1) % this.state.sequence.length) === 0;
+
+          // Provide both `stepIndex` and `index` for compatibility
+          this.dispatchEvent(new CustomEvent('seq-step-advance', {
+            detail: { stepIndex: idx, index: idx, value, velocity, isLastStep },
+            bubbles: true, composed: true
+          }));
+
+          // Advance and schedule next tick
+          this.state.sequenceStepIndex = (idx + 1) % this.state.sequence.length;
+          this.updateSequenceUI();
+          this._seqTimer = setTimeout(stepFn, this.state.stepTime);
+        };
+
+        stepFn();
+      }
+
+      stopSequence() {
+        this.state.sequencePlaying = false;
+        if (this._seqTimer) { clearTimeout(this._seqTimer); this._seqTimer = null; }
+        this.updateSequenceUI();
+        this.dispatchEvent(new CustomEvent('seq-play-stopped', { bubbles: true, composed: true }));
+      }
+    }
+    customElements.define('seq-app', SeqApp);
+
+
+    // Main OscApp Component
+    class OscApp2 extends HTMLElement {
+      constructor() {
+        super();
+        this.attachShadow({ mode: 'open' });
+
+        // --- Constants ---------------------------------------------------------
+        this.humKey = 'hum';
+        this.humLabel = 'Power Hum';
+        this.shapes = [
+          'circle','square','butterfly','lissajous','spiro',
+          'harmonograph','rose','hypocycloid','epicycloid'
+        ];
+        this.shapeLabels = Object.fromEntries(
+          this.shapes.map(k => [k, k.charAt(0).toUpperCase() + k.slice(1)])
+        );
+
+        // --- State -------------------------------------------------------------
+        this.state = this.defaultState('5s567g67');
+
+        // --- Bind handlers once ------------------------------------------------
+        [
+          '_onToneReady','_onStartRequest','_onMuteToggle','_onShapeChange',
+          '_onToggleSequencer','_onAudioSignature','_handleSeedSubmit','_handleKeyDown','_handleKeyUp','_handleBlur',
+          '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded','_onSeqPlayStarted',
+          '_onSeqPlayStopped','_onSeqStepAdvance','_onSeqStepTimeChanged'
+        ].forEach(fn => this[fn] = this[fn].bind(this));
+      }
+
+      // Creates a fresh state object (used for construction and resets)
+      defaultState(seed = 'default') {
+        return {
+          // UI / flow
+          isPlaying: false,
+          contextUnlocked: false,
+          initialBufferingStarted: false,
+          initialShapeBuffered: false,
+
+          // Audio / synth graph
+          Tone: null,
+          chains: {}, // keyed by shapeKey (and hum)
+          current: null, // current active shapeKey
+
+          // Sequencer
+          isSequencerMode: false,
+          isRecording: false,
+          currentRecordSlot: -1,
+          sequence: Array(8).fill(null),
+          sequencePlaying: false,
+          sequenceIntervalId: null, // (legacy, unused but kept for drop‑in)
+          sequenceStepIndex: 0,
+          stepTime: 400,
+
+          // Audio Signature
+          audioSignaturePlaying: false,
+          audioSignatureTimer: null,
+          audioSignatureStepIndex: 0,
+
+          // Seed / presets
+          seed,
+          presets: {}
+        };
+      }
+
+      // Lifecycle ---------------------------------------------------------------
+      connectedCallback() {
+        const $ = (tag, opts) => Object.assign(document.createElement(tag), opts);
+
+        // Layout: [aside | main]
+        const wrapper = $('div', { id: 'appWrapper' });
+
+        // LEFT: Instructions / seed
+        const aside = $('aside', { id: 'instructions' });
+        aside.innerHTML = `
+          <div>
+            <h2>How to Use</h2>
+            <ol>
+              <li><b>Numbers 1-9:</b><br/> Switch instantly between unique sound + visual shapes.</li>
+              <li><b>Step Sequencer:</b>
+                <ul style="margin:0 0 0 1em; padding:0; font-size:.98em;">
+                  <li>Click <b>Create Sequence</b> to open.</li>
+                  <li>Click a box to record steps (then press 1–9 or 0).</li>
+                  <li>Right‑click a box to clear.</li>
+                  <li>Set <b>Step Time</b> for speed.</li>
+                  <li>Press <b>Play Sequence</b> to loop.</li>
+                </ul>
+              </li>
+              <li><b>Mix Sounds:</b> Change shapes while audio is on to layer effects.</li>
+              <li><b>Toggle Audio:</b> Click the image or use <b>Start Audio</b>.</li>
+            </ol>
+          </div>
+          <form id="seedForm" autocomplete="off" style="margin-top:auto;background:#1c1c1c;padding:1.1em 1em 0.9em 0.9em;border-radius:8px;border:1px solid #292929;">
+            <label for="seedInput" style="font-size:0.97em;color:#ffecb3;margin-bottom:0.1em;font-weight:600;">Seed (deterministic):</label>
+            <input id="seedInput" name="seedInput" maxlength="32" spellcheck="false"
+              style="font-family:inherit;padding:0.35em 0.5em;border-radius:4px;border:1px solid #444;background:#232325;color:#ffecb3;font-size:1em;width:100%;margin-bottom:0.2em;letter-spacing:.05em;" />
+            <button id="seedSetBtn" type="submit" style="padding:0.3em 1em;border-radius:4px;border:1px solid #666;background:#212;color:#ffe0a3;cursor:pointer;font-family:inherit;font-size:0.97em;transition:background .18s;">Set Seed</button>
+          </form>
+        `;
+
+        // RIGHT: Main interactive area
+        const main = $('div', { id: 'main' });
+        this._main = main;
+        const canvasContainer = $('div', { id: 'canvasContainer' });
+        this._canvasContainer = canvasContainer;
+        this._canvas = $('scope-canvas');
+        canvasContainer.appendChild(this._canvas);
+
+        this._controls = $('osc-controls');
+
+        // Sequencer component (hidden by default)
+        this._sequencerComponent = $('seq-app');
+        this._sequencerComponent.style.display = 'none';
+
+        // Loader / status line
+        this._loader = $('div', { id: 'loader', textContent: 'Initializing...' });
+
+        // Compose DOM
+        main.append(canvasContainer, this._controls, this._sequencerComponent, this._loader);
+        wrapper.append(aside, main);
+        this.shadowRoot.append(
+          $('style', { textContent: this._style() }),
+          $('tone-loader'),
+          wrapper
+        );
+
+        // Initial styles
+        this._main.style.overflow = 'hidden';
+
+        // --- Wire events -------------------------------------------------------
+        this.shadowRoot.getElementById('seedInput').value = this.state.seed;
+        this.shadowRoot.querySelector('tone-loader')
+          .addEventListener('tone-ready', this._onToneReady);
+
+        this._controls.addEventListener('start-request', this._onStartRequest);
+        this._controls.addEventListener('mute-toggle', this._onMuteToggle);
+        this._controls.addEventListener('shape-change', this._onShapeChange);
+        this._controls.addEventListener('toggle-sequencer', this._onToggleSequencer);
+        this._controls.addEventListener('audio-signature', this._onAudioSignature);
+
+        this._canvas.onIndicatorUpdate = (text) => {
+          this._loader.textContent = (!this.state.isPlaying && !this.state.contextUnlocked)
+            ? 'Initializing...'
+            : text;
+        };
+
+        this.shadowRoot.getElementById('seedForm')
+          .addEventListener('submit', this._handleSeedSubmit);
+
+        window.addEventListener('keydown', this._handleKeyDown);
+        window.addEventListener('keyup', this._handleKeyUp);
+        window.addEventListener('blur', this._handleBlur);
+
+        // Sequencer bridge events
+        this._sequencerComponent.addEventListener('seq-record-start', this._onSeqRecordStart);
+        this._sequencerComponent.addEventListener('seq-step-cleared', this._onSeqStepCleared);
+        this._sequencerComponent.addEventListener('seq-step-recorded', this._onSeqStepRecorded);
+        this._sequencerComponent.addEventListener('seq-play-started', this._onSeqPlayStarted);
+        this._sequencerComponent.addEventListener('seq-play-stopped', this._onSeqPlayStopped);
+        this._sequencerComponent.addEventListener('seq-step-advance', this._onSeqStepAdvance);
+        this._sequencerComponent.addEventListener('seq-step-time-changed', this._onSeqStepTimeChanged);
+
+        // Populate shape selector
+        const shapeOptions = [{ value: this.humKey, label: this.humLabel }]
+          .concat(this.shapes.map(key => ({ value: key, label: this.shapeLabels[key] })));
+        this._controls.setShapes(shapeOptions);
+      }
+
+      disconnectedCallback() {
+        window.removeEventListener('keydown', this._handleKeyDown);
+        window.removeEventListener('keyup', this._handleKeyUp);
+        window.removeEventListener('blur', this._handleBlur);
+
+        this._sequencerComponent.removeEventListener('seq-record-start', this._onSeqRecordStart);
+        this._sequencerComponent.removeEventListener('seq-step-cleared', this._onSeqStepCleared);
+        this._sequencerComponent.removeEventListener('seq-step-recorded', this._onSeqStepRecorded);
+        this._sequencerComponent.removeEventListener('seq-play-started', this._onSeqPlayStarted);
+        this._sequencerComponent.removeEventListener('seq-play-stopped', this._onSeqPlayStopped);
+        this._sequencerComponent.removeEventListener('seq-step-advance', this._onSeqStepAdvance);
+        this._sequencerComponent.removeEventListener('seq-step-time-changed', this._onSeqStepTimeChanged);
+      }
+
+      // Styles -----------------------------------------------------------------
+      _style() {
+        return `
+          :host { display:block;width:100%;height:100%; }
+          #appWrapper { display:grid;grid-template-columns:minmax(220px,340px) 1fr;grid-template-rows:100vh;gap:0;height:100%; }
+          @media (max-width:900px){ #appWrapper{grid-template-columns:1fr;}}
+          aside#instructions { background:linear-gradient(90deg,#181818 97%,#0000);color:#e1d9ce;font-size:1.07rem;min-width:210px;max-width:340px;height:100vh;border-right:2px solid #2229;line-height:1.65;box-sizing:border-box;display:flex;flex-direction:column;gap:1.4rem;padding:2.2rem 1.2rem 2.4rem 2.2rem;overflow-y:auto;}
+          aside#instructions h2 { color:#f7c469;font-size:1.22rem;margin:0 0 0.95em 0;font-weight:bold;letter-spacing:.04em;}
+          #main { width:100%;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:hidden;background:#000;}
+          #canvasContainer { flex:1 1 0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;}
+          #loader { font-size:.98rem;color:#aaa;min-height:1.3em;text-align:center;font-style:italic;margin-top:.1em;}
+        `;
+      }
+
+      // Helpers ----------------------------------------------------------------
+      _eachChain(fn) { for (const k in this.state.chains) fn(this.state.chains[k], k); }
+      _disposeChain(chain) {
+        Object.values(chain).forEach(n => {
+          try { n.stop?.(); } catch {}
+          try { n.dispose?.(); } catch {}
+        });
+      }
+      _rng(seed) {
+        let a = 0x6d2b79f5 ^ seed.length;
+        for (let i = 0; i < seed.length; ++i) a = Math.imul(a ^ seed.charCodeAt(i), 2654435761);
+        return () => (a = Math.imul(a ^ (a >>> 15), 1 | a), ((a >>> 16) & 0xffff) / 0x10000);
+      }
+
+      // Presets / synthesis -----------------------------------------------------
+      deterministicPreset(seed, shape) {
+        const rng = this._rng(`${seed}_${shape}`);
+        const types = ['sine','triangle','square','sawtooth'];
+        const notes = ['C1','C2','E2','G2','A2','C3','E3','G3','B3','D4','F#4','A4','C5'];
+        const modeRoll = rng();
+        const mode = modeRoll < .18 ? 0 : modeRoll < .56 ? 1 : modeRoll < .85 ? 2 : 3;
+        const oscCount = mode === 3 ? 2 + (rng() > .7 ? 1 : 0) : 1 + (rng() > .6 ? 1 : 0);
+        const oscs = Array.from({ length: oscCount }, () => [types[(rng() * types.length) | 0], notes[(rng() * notes.length) | 0]]);
+        let lfoRate, lfoMin, lfoMax, filterBase, env;
+        if (mode === 0) { lfoRate = .07 + rng() * .3; lfoMin = 400 + rng() * 400; lfoMax = 900 + rng() * 600; filterBase = 700 + rng() * 500; env = { attack: .005 + rng() * .03, decay: .04 + rng() * .08, sustain: .1 + rng() * .2, release: .03 + rng() * .1 }; }
+        else if (mode === 1) { lfoRate = .25 + rng() * 8; lfoMin = 120 + rng() * 700; lfoMax = 1200 + rng() * 1400; filterBase = 300 + rng() * 2400; env = { attack: .03 + rng() * .4, decay: .1 + rng() * .7, sustain: .2 + rng() * .5, release: .2 + rng() * 3 }; }
+        else if (mode === 2) { lfoRate = 6 + rng() * 20; lfoMin = 80 + rng() * 250; lfoMax = 1500 + rng() * 3500; filterBase = 300 + rng() * 2400; env = { attack: .03 + rng() * .4, decay: .1 + rng() * .7, sustain: .2 + rng() * .5, release: .2 + rng() * 3 }; }
+        else { lfoRate = 24 + rng() * 36; lfoMin = 80 + rng() * 250; lfoMax = 1500 + rng() * 3500; filterBase = 300 + rng() * 2400; env = { attack: 2 + rng() * 8, decay: 4 + rng() * 20, sustain: .7 + rng() * .2, release: 8 + rng() * 24 }; }
+        return {
+          osc1: oscs[0],
+          osc2: oscs[1] || null,
+          filter: filterBase,
+          filterQ: .6 + rng() * .7,
+          lfo: [lfoRate, lfoMin, lfoMax],
+          envelope: env,
+          reverb: { wet: mode === 3 ? .4 + rng() * .5 : .1 + rng() * .5, roomSize: mode === 3 ? .85 + rng() * .12 : .6 + rng() * .38 },
+          colorSpeed: .06 + rng() * .22,
+          shapeDrift: .0006 + rng() * .0032,
+          seed
+        };
+      }
+      loadPresets(seed) {
+        this.state.presets = Object.fromEntries(this.shapes.map(k => [k, this.deterministicPreset(seed, k)]));
+      }
+
+      async bufferHumChain() {
+        const { Tone, chains } = this.state;
+        if (!Tone) return;
+        if (chains[this.humKey]) { this._disposeChain(chains[this.humKey]); delete chains[this.humKey]; }
+        try {
+          const osc = new Tone.Oscillator('A0', 'sine').start();
+          const filter = new Tone.Filter(80, 'lowpass');
+          filter.Q.value = 0.5;
+          const volume = new Tone.Volume(-25);
+          const reverb = new Tone.Freeverb().set({ wet: 0.3, roomSize: 0.9 });
+          const analyser = Tone.context.createAnalyser();
+          analyser.fftSize = 2048;
+          osc.connect(volume); volume.connect(filter); filter.connect(reverb); filter.connect(analyser);
+          chains[this.humKey] = { osc, volume, filter, reverb, analyser };
+        } catch (e) {
+          console.error('Error buffering hum chain', e);
+          delete chains[this.humKey];
+        }
+      }
+
+      async bufferShapeChain(shape) {
+        if (shape === this.humKey) return this.bufferHumChain();
+        const { Tone, presets, chains } = this.state, pr = presets[shape];
+        if (!pr || !Tone) return;
+        if (chains[shape]) { this._disposeChain(chains[shape]); delete chains[shape]; }
+        try {
+          const osc1 = new Tone.Oscillator(pr.osc1[1], pr.osc1[0]).start();
+          const osc2 = pr.osc2 ? new Tone.Oscillator(pr.osc2[1], pr.osc2[0]).start() : null;
+          const volume = new Tone.Volume(5);
+          const filter = new Tone.Filter(pr.filter, 'lowpass');
+          filter.Q.value = pr.filterQ;
+          const lfo = new Tone.LFO(...pr.lfo).start();
+          const reverb = new Tone.Freeverb().set({ wet: pr.reverb.wet, roomSize: pr.reverb.roomSize });
+          const analyser = Tone.context.createAnalyser();
+          analyser.fftSize = 2048;
+
+          lfo.connect(filter.frequency);
+          if (osc2) lfo.connect(osc2.detune);
+
+          osc1.connect(volume);
+          if (osc2) osc2.connect(volume);
+          volume.connect(filter);
+          filter.connect(reverb);
+          filter.connect(analyser);
+
+          chains[shape] = { osc1, osc2, volume, filter, lfo, reverb, analyser };
+        } catch (e) {
+          console.error('Error buffering chain for shape', shape, e);
+          delete chains[shape];
+        }
+      }
+
+      setActiveChain(shape) {
+        // Disconnect all reverbs from destination first
+        this._eachChain(chain => chain.reverb?.disconnect());
+
+        const chain = this.state.chains[shape];
+        chain?.reverb?.toDestination();
+        this.state.current = shape;
+
+        if (chain?.analyser) {
+          Object.assign(this._canvas, { analyser: chain.analyser, isAudioStarted: true, isPlaying: this.state.isPlaying });
+        } else {
+          Object.assign(this._canvas, { isAudioStarted: true, isPlaying: this.state.isPlaying });
+        }
+
+        if (shape === this.humKey) {
+          Object.assign(this._canvas, { shapeKey: this.humKey, preset: null });
+        }
+      }
+
+      disposeAllChains() {
+        this._eachChain(chain => this._disposeChain(chain));
+        this.state.chains = {};
+        this.state.current = null;
+      }
+
+      // App state / reset -------------------------------------------------------
+      resetState() {
+        this.disposeAllChains();
+        if (this.state.sequencePlaying) this.stopSequence();
+        if (this.state.audioSignaturePlaying) this.stopAudioSignature();
+
+        const { seed, Tone } = this.state;
+        this.state = this.defaultState(seed);
+        this.state.Tone = Tone;
+
+        this.loadPresets(seed);
+        this.bufferHumChain();
+
+        const rand = this._rng(seed);
+        const firstShape = this.shapes[(rand() * this.shapes.length) | 0];
+        Object.assign(this._canvas, {
+          preset: this.state.presets[firstShape],
+          shapeKey: firstShape,
+          mode: 'seed',
+          isAudioStarted: false,
+          isPlaying: false
+        });
+        this.state.current = this.humKey;
+
+        this._updateControls({ isAudioStarted: true, isPlaying: false, isMuted: false, shapeKey: this.humKey });
+
+        this.state.isSequencerMode = false;
+        this._sequencerComponent.style.display = 'none';
+        this._main.style.overflow = 'hidden';
+
+        this.state.sequence = Array(8).fill(null);
+        this.updateSequencerState();
+      }
+
+      // Audio power: unlock / start / stop -------------------------------------
+      async unlockAudioAndBufferInitial() {
+        const s = this.state;
+
+        if (s.initialBufferingStarted && !s.initialShapeBuffered) {
+          this._loader.textContent = 'Still preparing initial synth, please wait...';
+          return;
+        }
+        if (s.isPlaying) return this.stopAudioAndDraw();
+
+        if (s.contextUnlocked) {
+          if (s.initialShapeBuffered) {
+            this.setActiveChain(this.humKey);
+            s.isPlaying = true;
+            this._updateControls({ isAudioStarted: true, isPlaying: true, isMuted: false });
+            this._loader.textContent = 'Audio Live';
+          } else {
+            this._loader.textContent = 'Preparing initial synth...';
+            this.bufferInitialShape();
+          }
+          return;
+        }
+
+        try {
+          await this.state.Tone.start();
+          s.contextUnlocked = true;
+          this._loader.textContent = 'Preparing initial synth...';
+          this.bufferInitialShape();
+        } catch (e) {
+          console.error('Failed to unlock audio context:', e);
+          this._loader.textContent = 'Audio unlock failed. Try again.';
+        }
+      }
+
+      async bufferInitialShape() {
+        const s = this.state;
+        if (s.initialBufferingStarted) return;
+        s.initialBufferingStarted = true;
+
+        try {
+          await this.bufferHumChain();
+          const rand = this._rng(s.seed);
+          const firstShape = this.shapes[(rand() * this.shapes.length) | 0];
+          await this.bufferShapeChain(firstShape);
+          s.initialShapeBuffered = true;
+          this.setActiveChain(this.humKey);
+          s.isPlaying = true;
+          this._updateControls({ isAudioStarted: true, isPlaying: true, isMuted: false });
+          this._loader.textContent = 'Audio Live';
+        } catch (e) {
+          console.error('Error during initial buffering:', e);
+          this._loader.textContent = 'Buffering failed. Try again.';
+          s.initialBufferingStarted = false;
+        }
+      }
+
+      stopAudioAndDraw() {
+        this.state.isPlaying = false;
+        this._eachChain(chain => chain.reverb?.disconnect());
+        Object.assign(this._canvas, { isPlaying: false });
+        this._updateControls({ isPlaying: false, isMuted: false });
+        this._loader.textContent = 'Muted';
+      }
+
+      _updateControls(overrides = {}) {
+        const s = this.state;
+        this._controls.updateState({
+          isAudioStarted: s.contextUnlocked && s.initialShapeBuffered,
+          isPlaying: s.isPlaying,
+          isMuted: !s.isPlaying && s.contextUnlocked,
+          shapeKey: s.current,
+          sequencerVisible: s.isSequencerMode,
+          ...overrides
+        });
+      }
+
+      // Event handlers ----------------------------------------------------------
+      _onToneReady(e) {
+        this.state.Tone = window.Tone;
+        this.loadPresets(this.state.seed);
+        this.resetState();
+        this._loader.textContent = 'Ready. Click POWER ON.';
+      }
+
+      _onStartRequest() { this.unlockAudioAndBufferInitial(); }
+      _onMuteToggle() { this.state.isPlaying ? this.stopAudioAndDraw() : this.unlockAudioAndBufferInitial(); }
+
+      async _onShapeChange(e) {
+        const shape = e.detail?.shapeKey;
+        if (!shape || !this.state.contextUnlocked) return;
+
+        if (!this.state.chains[shape]) await this.bufferShapeChain(shape);
+        this.setActiveChain(shape);
+
+        if (shape !== this.humKey) {
+          Object.assign(this._canvas, {
+            shapeKey: shape,
+            preset: this.state.presets[shape],
+            mode: this.state.isPlaying ? 'live' : 'seed'
+          });
+        }
+        this._updateControls();
+      }
+
+      _onToggleSequencer() {
+        this.state.isSequencerMode = !this.state.isSequencerMode;
+        this._sequencerComponent.style.display = this.state.isSequencerMode ? 'block' : 'none';
+        this._main.style.overflow = this.state.isSequencerMode ? 'auto' : 'hidden';
+        this._updateControls();
+      }
+
+      // AUDIO SIGNATURE GENERATION ------------------------------------------------
+      _onAudioSignature() {
+        const s = this.state;
+        
+        if (!s.contextUnlocked || !s.initialShapeBuffered || s.audioSignaturePlaying) return;
+        
+        if (s.sequencePlaying) this.stopSequence();
+        
+        const algorithmMap = this._getUniqueAlgorithmMapping(s.seed);
+        const algorithm = algorithmMap[s.current] || 1;
+        const audioSignatureSequence = this.generateAudioSignature(s.seed, algorithm);
+        
+        this.playAudioSignature(audioSignatureSequence, algorithm);
+        this._loader.textContent = 'Playing Audio Signature...';
+      }
+
+      _getUniqueAlgorithmMapping(seed) {
+        const rng = this._rng(`${seed}_unique_algo_mapping`);
+        const shapeKeys = [this.humKey, ...this.shapes];
+        const algorithms = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+        
+        for (let i = algorithms.length - 1; i > 0; i--) {
+          const j = Math.floor(rng() * (i + 1));
+          [algorithms[i], algorithms[j]] = [algorithms[j], algorithms[i]];
+        }
+        
+        const algorithmMap = {};
+        shapeKeys.forEach((shapeKey, index) => {
+          algorithmMap[shapeKey] = algorithms[index];
+        });
+        
+        return algorithmMap;
+      }
+
+      generateAudioSignature(seed, algorithm = 1) {
+        const rng = this._rng(`${seed}_audio_signature_v${algorithm}`);
+        
+        switch(algorithm) {
+          case 1:
+            const sequence1 = [];
+            for (let i = 0; i < 32; i++) {
+              const shapeIndex = Math.floor(rng() * 10);
+              sequence1.push(shapeIndex);
+            }
+            return sequence1;
+            
+          case 2:
+            return this._generateSignatureWithConstraints(seed, {
+              steps: 32,
+              paletteSize: 6,
+              pRepeat: 0.35,
+              pHum: 0.15,
+              pSilence: 0.2,
+              avoidBackAndForth: true
+            });
+            
+          case 3:
+            const sequence3 = [];
+            const patternLength = 8;
+            const pattern = [];
+            for (let i = 0; i < patternLength; i++) {
+              pattern.push(Math.floor(rng() * 10));
+            }
+            for (let i = 0; i < 32; i++) {
+              sequence3.push(pattern[i % patternLength]);
+            }
+            return sequence3;
+            
+          case 4:
+            const sequence4 = [0];
+            let current = 0;
+            for (let i = 1; i < 32; i++) {
+              const direction = rng() > 0.5 ? 1 : -1;
+              const step = Math.floor(rng() * 3) + 1;
+              current = Math.max(0, Math.min(9, current + (direction * step)));
+              sequence4.push(current);
+            }
+            return sequence4;
+            
+          case 5:
+            const sequence5 = [];
+            let clusterValue = Math.floor(rng() * 10);
+            for (let i = 0; i < 32; ) {
+              const clusterLength = Math.min(Math.floor(rng() * 6) + 2, 32 - i);
+              for (let j = 0; j < clusterLength; j++) {
+                sequence5.push(clusterValue);
+                i++;
+              }
+              clusterValue = Math.floor(rng() * 10);
+            }
+            return sequence5;
+            
+          case 6:
+            const sequence6 = [];
+            for (let i = 0; i < 32; i++) {
+              sequence6.push(rng() > 0.7 ? Math.floor(rng() * 9) + 1 : 0);
+            }
+            return sequence6;
+            
+          case 7:
+            const sequence7 = new Array(32).fill(0);
+            let pos = 0;
+            let a = 1, b = 1;
+            while (pos < 32) {
+              sequence7[pos] = Math.floor(rng() * 9) + 1;
+              const next = a + b;
+              a = b;
+              b = next;
+              pos += next;
+            }
+            return sequence7;
+            
+          case 8:
+            const sequence8 = [];
+            const valA = Math.floor(rng() * 10);
+            const valB = Math.floor(rng() * 10);
+            for (let i = 0; i < 32; i++) {
+              sequence8.push(i % 2 === 0 ? valA : valB);
+            }
+            return sequence8;
+            
+          case 9:
+            const sequence9 = [];
+            let startValue = Math.floor(rng() * 9) + 1;
+            for (let i = 0; i < 32; i++) {
+              if (rng() < 0.2 || startValue === 0) {
+                startValue = Math.floor(rng() * 10);
+              }
+              sequence9.push(startValue);
+              if (rng() > 0.7) startValue = Math.max(0, startValue - 1);
+            }
+            return sequence9;
+            
+          case 10:
+            const sequence10 = [];
+            let chaosValue = Math.floor(rng() * 10);
+            for (let i = 0; i < 32; i++) {
+              if (i % 8 === 0) {
+                chaosValue = Math.floor(rng() * 10);
+              } else {
+                if (rng() > 0.6) {
+                  chaosValue = Math.floor(rng() * 10);
+                }
+              }
+              sequence10.push(chaosValue);
+            }
+            return sequence10;
+            
+          default:
+            return this._generateSignatureWithConstraints(seed);
+        }
+      }
+
+      _generateSignatureWithConstraints(seed, {
+        steps = 32,
+        paletteSize = 6,
+        pRepeat = 0.35,
+        pHum = 0.15,
+        pSilence = 0.2,
+        avoidBackAndForth = true
+      } = {}) {
+        const rng = this._rng(`${seed}_audio_signature_constrained`);
+        const sequence = [];
+        const paletteCount = Math.max(1, Math.min(9, paletteSize));
+
+        let last = null;
+        let prevNonHum = null;
+
+        for (let i = 0; i < steps; i++) {
+          if (rng() < pSilence) {
+            sequence.push(null);
+            continue;
+          }
+
+          const roll = rng();
+          let next;
+
+          if (roll < pHum) {
+            next = 0;
+          } else if (roll < pHum + pRepeat && prevNonHum !== null) {
+            next = prevNonHum;
+          } else {
+            do {
+              next = 1 + Math.floor(rng() * paletteCount);
+              if (avoidBackAndForth && last !== null && last >= 1 && next >= 1) {
+                if (sequence.length >= 2 && sequence[sequence.length - 2] === next) {
+                  next = null;
+                }
+              }
+            } while (next === null);
+          }
+
+          sequence.push(next);
+          if (next !== null) {
+            if (next >= 1) prevNonHum = next;
+            last = next;
+          }
+        }
+
+        return sequence;
+      }
+
+      playAudioSignature(sequence, algorithm = 1) {
+        const s = this.state;
+        s.audioSignaturePlaying = true;
+        s.audioSignatureStepIndex = 0;
+        
+        let stepTime;
+        switch(algorithm) {
+          case 3:
+          case 7:
+            stepTime = 100;
+            break;
+          case 5:
+            stepTime = 150;
+            break;
+          case 10:
+            stepTime = 200;
+            break;
+          default:
+            stepTime = 125;
+        }
+        
+        const playStep = () => {
+          if (!s.audioSignaturePlaying) return;
+          
+          const stepIndex = s.audioSignatureStepIndex;
+          const shapeIndex = sequence[stepIndex];
+          
+          if (shapeIndex !== null) {
+            let shapeKey;
+            if (shapeIndex === 0) {
+              shapeKey = this.humKey;
+            } else {
+              shapeKey = this.shapes[shapeIndex - 1];
+            }
+            
+            if (shapeKey) {
+              this._updateControls({ shapeKey });
+              this._onShapeChange({ detail: { shapeKey } });
+            }
+          }
+          
+          s.audioSignatureStepIndex++;
+          
+          if (s.audioSignatureStepIndex >= sequence.length) {
+            this._updateControls({ shapeKey: this.humKey });
+            this._onShapeChange({ detail: { shapeKey: this.humKey } });
+            
+            s.audioSignatureTimer = setTimeout(() => {
+              s.audioSignaturePlaying = false;
+              s.audioSignatureTimer = null;
+              this._loader.textContent = 'Audio Signature complete.';
+            }, stepTime);
+            return;
+          }
+          
+          s.audioSignatureTimer = setTimeout(playStep, stepTime);
+        };
+        
+        playStep();
+      }
+
+      stopAudioSignature() {
+        const s = this.state;
+        if (s.audioSignatureTimer) {
+          clearTimeout(s.audioSignatureTimer);
+          s.audioSignatureTimer = null;
+        }
+        s.audioSignaturePlaying = false;
+        s.audioSignatureStepIndex = 0;
+      }
+
+      _handleSeedSubmit(e) {
+        e.preventDefault();
+        const input = this.shadowRoot.getElementById('seedInput');
+        const val = (input?.value?.trim()) || 'default';
+        if (val === this.state.seed) return;
+        this.resetToSeed(val);
+      }
+
+      resetToSeed(newSeed) {
+        this.stopAudioAndDraw();
+        this.state.seed = newSeed;
+        this.loadPresets(newSeed);
+        this.resetState();
+        this._loader.textContent = 'Seed updated. Click POWER ON.';
+      }
+
+      // Keyboard: shape switching / recording ----------------------------------
+      _handleKeyDown(e) {
+        if (/INPUT|TEXTAREA/.test(e.target.tagName)) return;
+
+        let shapeKey = null, idx = -1;
+        if (e.key === '0') {
+          shapeKey = this.humKey;
+        } else {
+          idx = e.key.charCodeAt(0) - 49; // '1' => 0
+          if (idx >= 0 && idx < this.shapes.length) shapeKey = this.shapes[idx];
+        }
+
+        if (!shapeKey) return;
+        const s = this.state;
+
+        if (s.isSequencerMode && s.isRecording) {
+          const recordValue = (idx >= 0) ? (idx + 1) : 0;
+          this.recordStep(recordValue);
+          if (s.contextUnlocked && s.initialShapeBuffered) {
+            this.setActiveChain(shapeKey);
+            if (idx >= 0) Object.assign(this._canvas, { shapeKey, preset: s.presets[shapeKey], mode: 'live' });
+            this._canvas.isPlaying = true;
+            this._updateControls({ shapeKey });
+          }
+          e.preventDefault();
+          return;
+        }
+
+        // Live shape switch
+        this._updateControls({ shapeKey });
+        this._onShapeChange({ detail: { shapeKey } });
+        e.preventDefault();
+      }
+      _handleKeyUp(_) {}
+      _handleBlur() {}
+
+      // Sequencer bridge --------------------------------------------------------
+      _onSeqRecordStart(e) {
+        const slotIndex = e?.detail?.slotIndex ?? -1;
+        this.state.isRecording = true;
+        this.state.currentRecordSlot = slotIndex;
+        this._updateControls();
+      }
+
+      _onSeqStepCleared(e) {
+        const slotIndex = e?.detail?.slotIndex;
+        if (typeof slotIndex !== 'number') return;
+
+        this.state.sequence[slotIndex] = null;
+
+        if (this.state.isRecording && this.state.currentRecordSlot === slotIndex) {
+          this.state.currentRecordSlot = (slotIndex + 1) % 8;
+          if (this.state.currentRecordSlot === 0) this.state.isRecording = false;
+        }
+      }
+
+      _onSeqStepRecorded(e) {
+        const { slotIndex, value, nextSlot, isRecording } = e?.detail ?? {};
+        if (typeof slotIndex === 'number') this.state.sequence[slotIndex] = value;
+        if (typeof nextSlot === 'number') this.state.currentRecordSlot = nextSlot;
+        if (typeof isRecording === 'boolean') this.state.isRecording = isRecording;
+      }
+
+      _onSeqPlayStarted(e) {
+        const stepTime = e?.detail?.stepTime;
+        this.state.sequencePlaying = true;
+        this.state.sequenceStepIndex = 0;
+        if (typeof stepTime === 'number') this.state.stepTime = stepTime;
+        this._updateControls();
+      }
+
+      _onSeqPlayStopped() {
+        this.state.sequencePlaying = false;
+        this.state.sequenceStepIndex = 0;
+        this._updateControls();
+      }
+
+      _onSeqStepAdvance(e) {
+        const d = e?.detail || {};
+        const stepIndex = (typeof d.stepIndex === 'number') ? d.stepIndex
+                         : (typeof d.index === 'number') ? d.index
+                         : this.state.sequenceStepIndex;
+        const value = d.value;
+
+        this.state.sequenceStepIndex = stepIndex;
+
+        let shapeKey;
+        if (value === 0) shapeKey = this.humKey;
+        else if (value >= 1 && value <= this.shapes.length) shapeKey = this.shapes[value - 1];
+        else return;
+
+        this._updateControls({ shapeKey });
+        this._onShapeChange({ detail: { shapeKey } });
+      }
+
+      _onSeqStepTimeChanged(e) {
+        const stepTime = e?.detail?.stepTime;
+        if (typeof stepTime === 'number') this.state.stepTime = stepTime;
+      }
+
+      // Sequencer control surface ----------------------------------------------
+      updateSequencerState() {
+        if (!this._sequencerComponent) return;
+        this._sequencerComponent.updateState({
+          isRecording: this.state.isRecording,
+          currentRecordSlot: this.state.currentRecordSlot,
+          sequence: [...this.state.sequence],
+          sequencePlaying: this.state.sequencePlaying,
+          sequenceStepIndex: this.state.sequenceStepIndex,
+          stepTime: this.state.stepTime
+        });
+      }
+
+      // Public proxies to child component --------------------------------------
+      recordStep(number) { this._sequencerComponent?.recordStep(number); }
+      playSequence() { this._sequencerComponent?.playSequence(); }
+      stopSequence() { this._sequencerComponent?.stopSequence(); }
+    }
+    customElements.define('osc-app', OscApp2);
+  </script>
+</body>
+</html>
+
