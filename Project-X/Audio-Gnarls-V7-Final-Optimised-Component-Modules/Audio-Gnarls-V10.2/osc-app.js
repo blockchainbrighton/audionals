@@ -21,7 +21,7 @@ class OscApp2 extends HTMLElement {
     // --- Bind handlers once ------------------------------------------------
     [
       '_onToneReady','_onStartRequest','_onMuteToggle','_onShapeChange',
-      '_onToggleSequencer','_handleSeedSubmit','_handleKeyDown','_handleKeyUp','_handleBlur',
+      '_onToggleSequencer','_onAudioSignature','_handleSeedSubmit','_handleKeyDown','_handleKeyUp','_handleBlur',
       '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded','_onSeqPlayStarted',
       '_onSeqPlayStopped','_onSeqStepAdvance','_onSeqStepTimeChanged'
     ].forEach(fn => this[fn] = this[fn].bind(this));
@@ -50,6 +50,11 @@ class OscApp2 extends HTMLElement {
       sequenceIntervalId: null, // (legacy, unused but kept for drop‑in)
       sequenceStepIndex: 0,
       stepTime: 400,
+
+      // Audio Signature
+      audioSignaturePlaying: false,
+      audioSignatureTimer: null,
+      audioSignatureStepIndex: 0,
 
       // Seed / presets
       seed,
@@ -130,6 +135,7 @@ class OscApp2 extends HTMLElement {
     this._controls.addEventListener('mute-toggle', this._onMuteToggle);
     this._controls.addEventListener('shape-change', this._onShapeChange);
     this._controls.addEventListener('toggle-sequencer', this._onToggleSequencer);
+    this._controls.addEventListener('audio-signature', this._onAudioSignature);
 
     this._canvas.onIndicatorUpdate = (text) => {
       this._loader.textContent = (!this.state.isPlaying && !this.state.contextUnlocked)
@@ -313,6 +319,7 @@ class OscApp2 extends HTMLElement {
   resetState() {
     this.disposeAllChains();
     if (this.state.sequencePlaying) this.stopSequence();
+    if (this.state.audioSignaturePlaying) this.stopAudioSignature();
 
     const { seed, Tone } = this.state;
     this.state = this.defaultState(seed);
@@ -417,6 +424,7 @@ class OscApp2 extends HTMLElement {
 
     this.disposeAllChains();
     if (s.sequencePlaying) this.stopSequence();
+    if (s.audioSignaturePlaying) this.stopAudioSignature();
 
     this._canvas.isPlaying = false;
     this._canvas.isAudioStarted = false;
@@ -492,6 +500,130 @@ class OscApp2 extends HTMLElement {
     }
 
     this._updateControls();
+  }
+
+  _onAudioSignature() {
+    const s = this.state;
+    
+    // Don't start if audio isn't ready or already playing a signature
+    if (!s.contextUnlocked || !s.initialShapeBuffered || s.audioSignaturePlaying) return;
+    
+    // Stop any existing sequence
+    if (s.sequencePlaying) this.stopSequence();
+    
+    // Generate deterministic 32-step sequence
+    const audioSignatureSequence = this.generateAudioSignature(s.seed);
+    
+    // Start playback
+    this.playAudioSignature(audioSignatureSequence);
+    
+    this._loader.textContent = 'Playing Audio Signature...';
+  }
+
+  generateAudioSignature(seed, {
+  steps = 32,
+  paletteSize = 6,          // 1..9 usable shapes
+  pRepeat = 0.35,           // chance to repeat last non-hum shape
+  pHum = 0.15,              // chance to drop to hum
+  pSilence = 0.2,           // chance to insert a silence
+  avoidBackAndForth = true  // reduce A-B-A-B ping-pong
+} = {}) {
+  const rng = this._rng(`${seed}_audio_signature_v3`);
+  const sequence = [];
+  const paletteCount = Math.max(1, Math.min(9, paletteSize));
+
+  let last = null;
+  let prevNonHum = null;
+
+  for (let i = 0; i < steps; i++) {
+    if (rng() < pSilence) {
+      sequence.push(null);
+      continue;
+    }
+
+    const roll = rng();
+    let next;
+
+    if (roll < pHum) {
+      next = 0;
+    } else if (roll < pHum + pRepeat && prevNonHum !== null) {
+      next = prevNonHum;
+    } else {
+      // pick a new non-hum shape
+      do {
+        next = 1 + Math.floor(rng() * paletteCount);
+        if (avoidBackAndForth && last !== null && last >= 1 && next >= 1) {
+          // avoid immediate A-B-A by rejecting the one we just came from
+          if (sequence.length >= 2 && sequence[sequence.length - 2] === next) {
+            next = null; // force repick
+          }
+        }
+      } while (next === null);
+    }
+
+    sequence.push(next);
+    if (next !== null) {
+      if (next >= 1) prevNonHum = next;
+      last = next;
+    }
+  }
+
+  return sequence;
+}
+
+playAudioSignature(sequence, {
+  bpm = 120,
+  stepDivision = 4,     // 4 = 16ths, 3 = 8th triplets, 2 = 8ths
+  humanizeMs = 4,
+} = {}) {
+  const s = this.state;
+  s.audioSignaturePlaying = true;
+  s.audioSignatureStepIndex = 0;
+
+  const stepMs = (60000 / bpm) / stepDivision;
+
+  const playStep = () => {
+    if (!s.audioSignaturePlaying) return;
+
+    const i = s.audioSignatureStepIndex;
+    const val = sequence[i];
+
+    if (val !== null) {
+      const shapeKey = (val === 0) ? this.humKey : this.shapes[val - 1];
+      if (shapeKey) {
+        this._updateControls({ shapeKey });
+        this._onShapeChange({ detail: { shapeKey } });
+      }
+    }
+
+    s.audioSignatureStepIndex++;
+
+    if (s.audioSignatureStepIndex >= sequence.length) {
+      this._updateControls({ shapeKey: this.humKey });
+      this._onShapeChange({ detail: { shapeKey: this.humKey } });
+      s.audioSignatureTimer = setTimeout(() => {
+        s.audioSignaturePlaying = false;
+        s.audioSignatureTimer = null;
+        this._loader.textContent = 'Audio Signature complete.';
+      }, stepMs);
+      return;
+    }
+
+    const jitter = humanizeMs ? (Math.floor((this._rng('humanize3'+i)() * 2 - 1) * humanizeMs)) : 0;
+    s.audioSignatureTimer = setTimeout(playStep, Math.max(0, stepMs + jitter));
+  };
+
+  playStep();
+}
+
+  stopAudioSignature() {
+    const s = this.state;
+    if (s.audioSignatureTimer) {
+      clearTimeout(s.audioSignatureTimer);
+      s.audioSignatureTimer = null;
+    }
+    s.audioSignaturePlaying = false;
+    s.audioSignatureStepIndex = 0;
   }
 
   _handleSeedSubmit(e) {

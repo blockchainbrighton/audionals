@@ -21,11 +21,16 @@ class OscControls2 extends HTMLElement {
     this._seqBtn.id = 'seqBtn';
     this._seqBtn.textContent = 'Create Sequence';
 
+    this._audioSigBtn = document.createElement('button');
+    this._audioSigBtn.id = 'audioSigBtn';
+    this._audioSigBtn.textContent = 'Audio Signature';
+
     container.append(
       this._startBtn,
       this._muteBtn,
       this._shapeSelect,
-      this._seqBtn
+      this._seqBtn,
+      this._audioSigBtn
     );
 
     const style = document.createElement('style');
@@ -90,6 +95,21 @@ class OscControls2 extends HTMLElement {
         box-shadow: 0 0 12px #ff506e66;
         text-shadow: 0 1px 2px #320a0b;
       }
+      #audioSigBtn {
+        background: #2a4d3a;
+        color: #7af6ff;
+        border-color: #4a7c59;
+        box-shadow: 0 0 8px #7af6ff33;
+      }
+      #audioSigBtn:hover {
+        background: #3a5d4a;
+        box-shadow: 0 0 12px #7af6ff55;
+      }
+      #audioSigBtn:disabled {
+        background: #1a2d2a;
+        color: #4a6c59;
+        box-shadow: none;
+      }
       button:disabled, select:disabled {
         opacity: 0.5;
         pointer-events: none;
@@ -110,6 +130,9 @@ class OscControls2 extends HTMLElement {
     this._seqBtn.addEventListener('click', () => {
       this.dispatchEvent(new CustomEvent('toggle-sequencer', { bubbles: true, composed: true }));
     });
+    this._audioSigBtn.addEventListener('click', () => {
+      this.dispatchEvent(new CustomEvent('audio-signature', { bubbles: true, composed: true }));
+    });
   }
 
   setShapes(shapes) {
@@ -123,7 +146,7 @@ class OscControls2 extends HTMLElement {
   }
 
   disableAll(disabled) {
-    [this._startBtn, this._muteBtn, this._shapeSelect, this._seqBtn].forEach(el => {
+    [this._startBtn, this._muteBtn, this._shapeSelect, this._seqBtn, this._audioSigBtn].forEach(el => {
       el.disabled = disabled;
     });
   }
@@ -131,6 +154,7 @@ class OscControls2 extends HTMLElement {
   updateState({ isAudioStarted, isPlaying, isMuted, shapeKey, sequencerVisible }) {
     this._startBtn.disabled = !isAudioStarted;
     this._muteBtn.disabled = !isAudioStarted;
+    this._audioSigBtn.disabled = !isAudioStarted;
     this._startBtn.textContent = isPlaying ? 'POWER OFF' : 'POWER ON';
     this._muteBtn.textContent = isMuted ? 'Unmute' : 'Mute';
     this._startBtn.classList.toggle('power-on', !!isPlaying);
