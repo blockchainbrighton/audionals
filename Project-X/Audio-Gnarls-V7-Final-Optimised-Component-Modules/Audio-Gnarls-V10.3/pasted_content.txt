@@ -1,0 +1,239 @@
+Absolutely — here’s a single, unified, copy-paste prompt that’s tailored to the **actual code in your zip** (`AUDIO-GNARLS-V10.1-6-fixed`) and optimized for speed and clarity. Send this **together with the zip** to your code assistant:
+
+---
+
+# 📦 Request: Package my Web Components synth into one drop-in component (seed-based 10 options + oscilloscope)
+
+You’ll receive a zip with these ES modules and a demo HTML:
+
+* `index.html` (demo)
+* `osc-app.js` (orchestrator, defines `customElements.define('osc-app', OscApp2)`)
+* `osc-controls.js` (controls, defines `osc-controls`)
+* `scope-canvas.js` (oscilloscope, defines `scope-canvas`)
+* `seq-app.js` (8-step shape sequencer, defines `seq-app`)
+* `tone-loader.js` (loads Tone.js dynamically, defines `tone-loader`)
+* (plus a few backups like `seq-app.js.bak`)
+
+The app provides deterministic **10 options per seed** (the **9 shapes**: `circle, square, butterfly, lissajous, spiro, harmonograph, rose, hypocycloid, epicycloid` **+** a **“hum”** chain), a live **oscilloscope**, and a **shape-index sequencer**. Current default seed is `'5s567g67'`. Audio uses **Tone.js** via `tone-loader`. There is **no single bundled artifact** yet.
+
+---
+
+## 🎯 Goal
+
+Produce a **single importable component** that “just works” inside a host sequencer app, preserving the current sound, visuals, and deterministic behavior.
+
+* Primary output: **one ES module** that registers a single custom element **`<seed-synth>`** (a façade over today’s `<osc-app>`), bundling the other components internally (no extra script tags).
+* Zero external runtime deps beyond Web APIs and Tone.js (load Tone.js internally by default; allow host injection for advanced use).
+* Provide a clean **public API** (seed/preset control, start/stop/mute, optional host `AudioContext`, state save/restore) and keep the existing **shape sequencer** available (toggleable UI).
+* Include a **tiny React wrapper** (optional) re-exporting the same API.
+
+---
+
+## 📦 Deliverables
+
+1. **Dist build (framework-agnostic)**
+
+   * `dist/seed-synth.js` (ESM; registers `<seed-synth>`)
+   * `dist/seed-synth.css` (only if you split styles)
+   * No globals. No additional script tags required beyond this file in the host.
+
+2. **(Optional) React wrapper**
+
+   * `react/SeedSynth.tsx` — thin wrapper around the custom element.
+
+3. **Examples**
+
+   * `examples/vanilla/index.html` using only:
+
+     ```html
+     <script type="module" src="../dist/seed-synth.js"></script>
+     <seed-synth seed="5s567g67"></seed-synth>
+     ```
+   * `examples/react/App.tsx` (if wrapper provided) with Vite.
+
+4. **README.md**
+
+   * Install & import
+   * Public API (props/attrs, methods, events)
+   * How determinism works (seed → 10 options)
+   * Host AudioContext / Tone injection
+   * Known limitations / browser notes
+   * Changelog
+
+5. **Build scripts**
+
+   * `npm run build` → outputs `dist/seed-synth.js`
+   * `npm run dev` → serves examples
+
+> Use any light bundler (e.g., esbuild/Rollup/Vite library mode). Keep source ESM.
+
+---
+
+## 🧩 What to KEEP (source of truth)
+
+* **10 deterministic options per seed** = **9 shapes + “hum”** exactly as today.
+* **Oscilloscope visuals and behavior** as in `scope-canvas.js`.
+* **Sequencer behavior** (8 steps; records/plays **shape indices 1–9**, not MIDI notes).
+* **Default seed** `'5s567g67'`.
+* Existing PRNG/preset plumbing in `osc-app.js` (e.g., `deterministicPreset(seed, shape)`) — preserve mapping and parameter names.
+
+---
+
+## 🔧 Refactors to perform
+
+### 1) Single façade element
+
+Create `<seed-synth>` that composes today’s elements internally:
+
+* Internally instantiate **controls**, **scope**, **sequencer**, and **tone-loader** inside a **shadow DOM**.
+* Do **not** require separate `<script>` tags for `osc-controls`, `scope-canvas`, `seq-app`, or `tone-loader`. Bundle them.
+
+### 2) Tone.js handling
+
+* Keep the current dynamic import as default (same URL/strategy used in `tone-loader.js`).
+* Support **host injection**:
+
+  * If `el.tone` is set (or `el.audioContext`), use that instead of loading your own.
+  * Ensure no cross-context issues; prefer a single shared `AudioContext`.
+
+### 3) Public API (on the element instance)
+
+```ts
+interface SeedSynthOptions {
+  seed?: string;              // default '5s567g67'
+  showSequencer?: boolean;    // default false (UI hidden)
+  toneModuleUrl?: string;     // override the loader URL
+  audioContext?: AudioContext; // use host context if provided
+}
+
+type OptionKey = 'hum' | 'circle' | 'square' | 'butterfly' |
+                 'lissajous' | 'spiro' | 'harmonograph' |
+                 'rose' | 'hypocycloid' | 'epicycloid';
+
+declare class SeedSynthElement extends HTMLElement {
+  // lifecycle / setup
+  setOptions(opts: Partial<SeedSynthOptions>): void;
+
+  // seed & options (presets)
+  get seed(): string;
+  set seed(v: string);
+  get options(): ReadonlyArray<{ key: OptionKey; label: string }>;
+  get currentKey(): OptionKey;
+  setCurrent(key: OptionKey): void;   // switch among the 10 options
+
+  // transport
+  start(): Promise<void>;             // respects user-gesture rules
+  stop(): void;
+  mute(v?: boolean): void;
+  get muted(): boolean;
+
+  // sequencer (shape indices 1–9)
+  recordStep(indexOrNumber: number): void; // mirrors existing `recordStep`
+  playSequence(): void;
+  stopSequence(): void;
+  setStepTime(ms: number): void;
+
+  // analysis
+  getAnalyser(): AnalyserNode | null;
+
+  // state
+  getState(): any;                    // { seed, currentKey, seq: [...], stepTime, muted, ... }
+  setState(state: any): void;
+
+  // advanced injection
+  audioContext?: AudioContext;
+  tone?: any;                         // when host provides Tone.js
+
+  // cleanup
+  dispose(): void;
+}
+```
+
+### 4) Attributes & properties
+
+* **Attributes:** `seed`, `show-sequencer`
+* **Properties:** mirror `SeedSynthOptions` & methods above
+* Keep styles themable via CSS custom properties (e.g., `--seed-synth-accent`).
+
+### 5) Events (dispatch on `<seed-synth>`)
+
+* `ready` — Tone loaded and initial chain prepared
+* `optionchange` — `{ key, label }`
+* `statechange` — `{ state }`
+* `scopeframe` — (optional) oscilloscope buffer tick for host visualizers
+
+### 6) Minimal host usage (vanilla)
+
+```html
+<script type="module" src="./dist/seed-synth.js"></script>
+<seed-synth id="synth" seed="5s567g67"></seed-synth>
+<script type="module">
+  const el = document.getElementById('synth');
+  await el.start();                 // user gesture gate still applies
+  el.setCurrent('spiro');
+  el.playSequence();
+  // Access analyser if needed:
+  const analyser = el.getAnalyser();
+</script>
+```
+
+### 7) Internal mapping
+
+* Wire `<seed-synth>` to the current `OscApp2` internals in `osc-app.js`.
+* Keep the **labels** for shapes exactly.
+* Respect current keybindings (1–9 to select shapes) when the component has focus.
+* Maintain current oscilloscope drawing pipeline and “POWER ON/Mute/Sequencer” controls (exposed via the façade).
+
+---
+
+## ✅ Acceptance Criteria
+
+* Importing **only** `dist/seed-synth.js` and rendering `<seed-synth seed="5s567g67">` reproduces current behavior:
+
+  * 10 options (hum + 9 shapes), deterministic per seed, working oscilloscope, audio OK.
+* **No extra script tags** are required beyond `dist/seed-synth.js`.
+* The **sequencer UI** is present but can be toggled with `show-sequencer` (default **hidden**); when enabled, behavior matches `seq-app.js`.
+* Works with a **host-provided AudioContext** **or** loads Tone.js internally (configurable via `toneModuleUrl`).
+* Provides imperative `start()/stop()/mute()` and `setCurrent()` for host control.
+* `getState()` → `setState(state)` restores seed, current option, sequencer contents, step time, and mute.
+* Examples run via `npm run dev`; build produces `dist/seed-synth.js` via `npm run build`.
+* No global pollution; no console errors in latest Chrome/Firefox/Safari.
+
+---
+
+## 📁 Suggested structure
+
+```
+/src
+  /core                // (optional) extracted non-DOM logic
+  /element             // <seed-synth> source: wraps OscApp2 + inlined deps
+  /internal            // osc-controls, scope-canvas, seq-app, tone-loader
+/examples
+  /vanilla
+  /react
+/dist
+```
+
+---
+
+## ⚠️ Notes from the current code (for implementer)
+
+* Orchestrator lives in `osc-app.js` as **`class OscApp2`** and registers **`osc-app`**.
+* Other custom elements defined: **`osc-controls`**, **`scope-canvas`**, **`seq-app`**, **`tone-loader`**.
+* The sequencer records **shape indices 1–9**; keep as-is (this is **not** MIDI notes).
+* Default seed in UI is `'5s567g67'`; keep it unless host overrides.
+* Keep the **visual and timing feel** of the oscilloscope; do not regress performance.
+* Implement `noteOn/noteOff` **stubs** only if trivial; they can be no-ops for now (future-proofing).
+
+---
+
+## ⚙️ Implementation Hints (for speed)
+
+* Use **Rollup** or **esbuild** to bundle all modules into one ESM, registering only `<seed-synth>`.
+* Inline small CSS strings; export themeable CSS variables.
+* Gate `start()` behind a user gesture unless a host `AudioContext` is provided and already resumed.
+* When host provides `audioContext` or `tone`, skip the loader and bind to the host’s context.
+
+---
+
+If any ambiguity arises, prefer standards (Web Components, ESM, AudioWorklet/Tone.js) and document choices briefly in the README.
