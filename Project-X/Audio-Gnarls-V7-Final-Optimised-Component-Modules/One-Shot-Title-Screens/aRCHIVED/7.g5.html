@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audio GNARLS Title Display - Enhanced</title>
+<style>
+  /* Base Styles - Mostly unchanged, kept for brevity */
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    color: #fff;
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    overflow: hidden;
+    position: relative;
+  }
+  .container { text-align: center; padding: 2rem; max-width: 1200px; z-index: 10; }
+  h1 {
+    font-size: 4.5rem; font-weight: 800; margin-bottom: 1.5rem;
+    text-transform: uppercase; letter-spacing: 3px;
+    text-shadow: 0 0 10px rgba(255, 0, 100, 0.7);
+    position: relative; display: inline-block;
+  }
+  .subtitle {
+    font-size: 1.2rem; margin-bottom: 3rem; color: #e0e0ff;
+    max-width: 600px; margin-left: auto; margin-right: auto; line-height: 1.6;
+  }
+  .title-container {
+    position: relative; width: 100%; height: 300px; margin: 2rem 0;
+    display: flex; align-items: center; justify-content: center;
+    perspective: 1000px; /* For 3D transforms */
+  }
+  .audio-gnarls-title {
+    font-family: 'Arial Black', sans-serif; font-size: 6rem; font-weight: 900;
+    text-transform: uppercase; position: absolute;
+    top: 50%; left: 50%; transform: translate(-50%, -50%);
+    text-align: center; letter-spacing: 4px; white-space: nowrap;
+    transition: all 0.5s ease-out; /* Smooth transitions for non-animated changes */
+  }
+  .controls { display: flex; gap: 1rem; margin-top: 2rem; flex-wrap: wrap; justify-content: center; }
+  button {
+    background: rgba(255, 255, 255, 0.15); border: 1px solid rgba(255, 255, 255, 0.3);
+    color: white; padding: 0.8rem 1.5rem; border-radius: 30px; cursor: pointer;
+    font-size: 1rem; font-weight: 600; transition: all 0.3s ease; backdrop-filter: blur(5px);
+  }
+  button:hover { background: rgba(255, 255, 255, 0.25); transform: translateY(-2px); box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3); }
+  .effect-name {
+    position: absolute; bottom: 20px; left: 0; right: 0;
+    text-align: center; font-size: 1.2rem; color: #a0a0ff;
+    text-transform: uppercase; letter-spacing: 2px;
+  }
+  .particles {
+    position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+    pointer-events: none; z-index: 1;
+  }
+  .particle {
+    position: absolute; width: 4px; height: 4px;
+    background: rgba(255, 100, 200, 0.7); border-radius: 50%;
+    box-shadow: 0 0 10px rgba(255, 100, 200, 0.8);
+  }
+  .footer { margin-top: 3rem; color: rgba(255, 255, 255, 0.6); font-size: 0.9rem; text-align: center; }
+
+  /* Particle Float Animation */
+  @keyframes float {
+    0%, 100% { transform: translate(0, 0); }
+    25% { transform: translate(calc(var(--rand-x-1) * 1px), calc(var(--rand-y-1) * 1px)); }
+    50% { transform: translate(calc(var(--rand-x-2) * 1px), calc(var(--rand-y-2) * 1px)); }
+    75% { transform: translate(calc(var(--rand-x-3) * 1px), calc(var(--rand-y-3) * 1px)); }
+  }
+
+  /* --- NEW & IMPROVED CSS ANIMATIONS --- */
+
+  /* General Text Reset for animations */
+  .audio-gnarls-title.animated {
+    animation-duration: var(--animation-duration, 1s);
+    animation-timing-function: var(--animation-timing, ease-in-out);
+    animation-iteration-count: var(--animation-iteration, infinite);
+    animation-fill-mode: forwards;
+  }
+
+  /* Existing Animations Improved */
+  @keyframes glitch {
+    0% { transform: translate(-50%, -50%); } /* Reset to center */
+    20% { transform: translate(calc(-50% - 3px), calc(-50% + 3px)); }
+    40% { transform: translate(calc(-50% - 3px), calc(-50% - 3px)); }
+    60% { transform: translate(calc(-50% + 3px), calc(-50% + 3px)); }
+    80% { transform: translate(calc(-50% + 3px), calc(-50% - 3px)); }
+    100% { transform: translate(-50%, -50%); }
+  }
+  @keyframes pulse {
+    0%, 100% { text-shadow: 0 0 10px #00ffff, 0 0 20px #00ffff, 0 0 30px #00ffff; }
+    50% { text-shadow: 0 0 15px #00ffff, 0 0 25px #00ffff, 0 0 35px #00ffff; }
+  }
+  @keyframes hologram {
+    0%, 100% { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00, 0 0 15px #00ff00, 0 0 20px #00ff00; opacity: 1; }
+    25% { text-shadow: 0 0 5px #0000ff, 0 0 10px #0000ff, 0 0 15px #0000ff, 0 0 20px #0000ff; opacity: 0.8; }
+    50% { text-shadow: 0 0 5px #ff00ff, 0 0 10px #ff00ff, 0 0 15px #ff00ff, 0 0 20px #ff00ff; opacity: 1; }
+    75% { text-shadow: 0 0 5px #ffff00, 0 0 10px #ffff00, 0 0 15px #ffff00, 0 0 20px #ffff00; opacity: 0.8; }
+  }
+  @keyframes fire {
+    0%, 100% { text-shadow: 0 0 10px #ff5500, 0 0 20px #ff5500, 0 0 30px #ff0000; color: #ff5500; }
+    25% { text-shadow: 0 0 15px #ff5500, 0 0 25px #ff5500, 0 0 35px #ff0000; color: #ffaa00; }
+    75% { text-shadow: 0 0 5px #ff5500, 0 0 15px #ff5500, 0 0 25px #ff0000; color: #ffaa00; }
+  }
+  @keyframes digital {
+    0%, 100% { text-shadow: 0 0 5px #00ff00, 0 0 10px #00ff00; opacity: 1; }
+    50% { text-shadow: 0 0 2px #00ff00, 0 0 5px #00ff00; opacity: 0.7; }
+  }
+  @keyframes electric {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); text-shadow: 0 0 5px #ffff00, 0 0 10px #ffff00, 0 0 15px #ffff00; }
+    50% { transform: translate(-50%, -50%) scale(1.05); text-shadow: 0 0 10px #ffff00, 0 0 20px #ffff00, 0 0 30px #ffff00; }
+  }
+
+  /* NEW DYNAMIC EFFECTS */
+
+  /* Zoom In/Out */
+  @keyframes zoomInOut {
+    0%, 100% { transform: translate(-50%, -50%) scale(1); }
+    50% { transform: translate(-50%, -50%) scale(1.2); }
+  }
+  /* Zoom Out */
+  @keyframes zoomOutBounce {
+    0% { transform: translate(-50%, -50%) scale(2); opacity: 0; }
+    60% { transform: translate(-50%, -50%) scale(0.9); opacity: 1; }
+    80% { transform: translate(-50%, -50%) scale(1.05); }
+    100% { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  }
+
+  /* Slide In from Left */
+  @keyframes slideInLeft {
+    0% { transform: translate(-150%, -50%); opacity: 0; }
+    100% { transform: translate(-50%, -50%); opacity: 1; }
+  }
+  /* Slide In from Right */
+  @keyframes slideInRight {
+    0% { transform: translate(50%, -50%); opacity: 0; }
+    100% { transform: translate(-50%, -50%); opacity: 1; }
+  }
+
+  /* Spin In */
+  @keyframes spinIn {
+    0% { transform: translate(-50%, -50%) scale(0) rotateY(360deg); opacity: 0; }
+    100% { transform: translate(-50%, -50%) scale(1) rotateY(0deg); opacity: 1; }
+  }
+  /* Spin Cycle */
+  @keyframes spinCycle {
+    0%, 100% { transform: translate(-50%, -50%) rotate(0deg); }
+    25% { transform: translate(-50%, -50%) rotate(5deg); }
+    50% { transform: translate(-50%, -50%) rotate(-5deg); }
+    75% { transform: translate(-50%, -50%) rotate(5deg); }
+  }
+
+  /* Wave effect for individual characters */
+  .char-wave {
+    display: inline-block;
+    animation-name: wave;
+    animation-duration: 1.5s;
+    animation-timing-function: ease-in-out;
+    animation-iteration-count: infinite;
+    animation-delay: var(--char-delay);
+  }
+  @keyframes wave {
+    0%, 100% { transform: translateY(0); }
+    50% { transform: translateY(-15px); }
+  }
+
+  /* Jumble / Scramble effect */
+  .char-jumble {
+    display: inline-block;
+    animation-name: jumble;
+    animation-duration: 0.8s;
+    animation-timing-function: ease-out;
+    animation-fill-mode: forwards;
+    animation-delay: var(--char-delay);
+    opacity: 0;
+  }
+  @keyframes jumble {
+    0% {
+      transform: translateY(-20px) rotateX(90deg) scale(0.5);
+      opacity: 0;
+      filter: blur(5px);
+    }
+    100% {
+      transform: translateY(0) rotateX(0deg) scale(1);
+      opacity: 1;
+      filter: blur(0);
+    }
+  }
+
+  /* Matrix Rain - individual characters */
+  .char-matrix {
+    display: inline-block;
+    animation: matrixDrop 2s infinite forwards ease-in-out;
+    animation-delay: var(--char-delay);
+    color: #00ff00;
+    text-shadow: 0 0 5px #00ff00;
+  }
+  @keyframes matrixDrop {
+    0% { transform: translateY(-100px) scaleY(0.5); opacity: 0; filter: blur(3px); }
+    20% { transform: translateY(0px) scaleY(1); opacity: 1; filter: blur(0px); }
+    80% { transform: translateY(0px) scaleY(1); opacity: 1; filter: blur(0px); }
+    100% { transform: translateY(100px) scaleY(0.5); opacity: 0; filter: blur(3px); }
+  }
+
+  /* Flicker */
+  @keyframes flicker {
+    0%, 19.9%, 22%, 42%, 44%, 58%, 60%, 80%, 82%, 100% { opacity: 1; }
+    20%, 21.9%, 43%, 43.9%, 59%, 59.9%, 81%, 81.9% { opacity: 0.2; }
+  }
+
+  /* Typewriter Effect - needs JS to manage visibility */
+  .char-typewriter {
+    overflow: hidden; /* Hide characters initially */
+    white-space: pre; /* Preserve spaces */
+    display: inline-block;
+    animation: typing-char 0.1s steps(1, end) forwards;
+    animation-delay: var(--char-delay);
+    opacity: 0; /* Hidden by default */
+  }
+  @keyframes typing-char {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+
+
+  @media (max-width: 768px) {
+    h1 { font-size: 2.5rem; }
+    .audio-gnarls-title { font-size: 3.5rem; }
+    .subtitle { font-size: 1rem; padding: 0 1rem; }
+    .title-container { height: 200px; }
+  }
+</style>
+</head>
+<body>
+  <div class="particles" id="particles"></div>
+
+  <div class="container">
+    <h1>Audio GNARLS Title Display</h1>
+    <p class="subtitle">Experience the dynamic visual treatment of the "Audio GNARLS" title with various effects that showcase the brand in motion.</p>
+
+    <div class="title-container">
+      <div class="audio-gnarls-title" id="title">Audio GNARLS</div>
+      <div class="effect-name" id="effect-name">Glitch Reveal</div>
+    </div>
+
+    <div class="controls">
+      <button id="prev-btn">Previous Effect</button>
+      <button id="next-btn">Next Effect</button>
+      <button id="random-btn">Random Effect</button>
+      <button id="pause-btn">Pause Animation</button>
+    </div>
+
+    <div class="footer">
+      Audio GNARLS Title Display | Dynamic Visual Treatment System
+    </div>
+  </div>
+
+<script>
+// Title effects system
+const titleElement = document.getElementById('title');
+const effectNameElement = document.getElementById('effect-name');
+const prevBtn = document.getElementById('prev-btn');
+const nextBtn = document.getElementById('next-btn');
+const randomBtn = document.getElementById('random-btn');
+const pauseBtn = document.getElementById('pause-btn');
+
+// --- Particle Background Initialization ---
+const particlesContainer = document.getElementById('particles');
+for (let i = 0; i < 100; i++) {
+  const particle = document.createElement('div');
+  particle.classList.add('particle');
+  particle.style.left = `${Math.random() * 100}%`;
+  particle.style.top = `${Math.random() * 100}%`;
+  // Using CSS variables for random values in animation
+  particle.style.setProperty('--rand-x-1', (Math.random() * 20 - 10).toFixed(0));
+  particle.style.setProperty('--rand-y-1', (Math.random() * 20 - 10).toFixed(0));
+  particle.style.setProperty('--rand-x-2', (Math.random() * 30 - 15).toFixed(0));
+  particle.style.setProperty('--rand-y-2', (Math.random() * 30 - 15).toFixed(0));
+  particle.style.setProperty('--rand-x-3', (Math.random() * 20 - 10).toFixed(0));
+  particle.style.setProperty('--rand-y-3', (Math.random() * 20 - 10).toFixed(0));
+
+  particle.style.animation = `float ${15 + Math.random() * 10}s infinite ease-in-out`;
+  particle.style.animationDelay = `${Math.random() * 5}s`;
+  particlesContainer.appendChild(particle);
+}
+
+// Store original title HTML
+const originalTitleHTML = titleElement.innerHTML;
+
+// --- Title Effects Definitions ---
+const effects = [
+  {
+    name: "Glitch Reveal",
+    apply: () => {
+      titleElement.style.color = "#ff0064";
+      titleElement.style.textShadow = "0 0 10px #ff0064, 0 0 20px #ff0064";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "glitch";
+      titleElement.style.setProperty('--animation-duration', '0.5s');
+      titleElement.style.setProperty('--animation-timing', 'steps(2, end)');
+    }
+  },
+  {
+    name: "Neon Glow",
+    apply: () => {
+      titleElement.style.color = "#00ffff";
+      titleElement.style.textShadow = "0 0 10px #00ffff, 0 0 20px #00ffff, 0 0 30px #00ffff";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "pulse";
+      titleElement.style.setProperty('--animation-duration', '2s');
+    }
+  },
+  {
+    name: "Hologram",
+    apply: () => {
+      titleElement.style.color = "#ffffff";
+      titleElement.style.textShadow = "0 0 5px #00ff00, 0 0 10px #00ff00, 0 0 15px #00ff00, 0 0 20px #00ff00";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "hologram";
+      titleElement.style.setProperty('--animation-duration', '3s');
+    }
+  },
+  {
+    name: "Fire Effect",
+    apply: () => {
+      titleElement.style.color = "#ff5500";
+      titleElement.style.textShadow = "0 0 10px #ff5500, 0 0 20px #ff5500, 0 0 30px #ff0000";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "fire";
+      titleElement.style.setProperty('--animation-duration', '1s');
+    }
+  },
+  {
+    name: "Digital Rain",
+    apply: () => {
+      titleElement.style.color = "#00ff00";
+      titleElement.style.textShadow = "0 0 5px #00ff00, 0 0 10px #00ff00";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "digital";
+      titleElement.style.setProperty('--animation-duration', '1.5s');
+    }
+  },
+  {
+    name: "Electric Pulse",
+    apply: () => {
+      titleElement.style.color = "#ffff00";
+      titleElement.style.textShadow = "0 0 5px #ffff00, 0 0 10px #ffff00, 0 0 15px #ffff00";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "electric";
+      titleElement.style.setProperty('--animation-duration', '0.8s');
+    }
+  },
+  {
+    name: "Zoom In/Out",
+    apply: () => {
+      titleElement.style.color = "#ffffff";
+      titleElement.style.textShadow = "none";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "zoomInOut";
+      titleElement.style.setProperty('--animation-duration', '3s');
+      titleElement.style.setProperty('--animation-timing', 'ease-in-out');
+    }
+  },
+  {
+    name: "Slide In from Left",
+    apply: () => {
+      titleElement.style.color = "#add8e6";
+      titleElement.style.textShadow = "0 0 10px #add8e6";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "slideInLeft";
+      titleElement.style.setProperty('--animation-duration', '1s');
+      titleElement.style.setProperty('--animation-iteration', '1');
+      titleElement.style.setProperty('--animation-timing', 'cubic-bezier(0.23, 1, 0.32, 1)'); // Ease out
+    }
+  },
+  {
+    name: "Spin In",
+    apply: () => {
+      titleElement.style.color = "#a0a0ff";
+      titleElement.style.textShadow = "0 0 10px #a0a0ff";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "spinIn";
+      titleElement.style.setProperty('--animation-duration', '1.2s');
+      titleElement.style.setProperty('--animation-iteration', '1');
+      titleElement.style.setProperty('--animation-timing', 'cubic-bezier(0.6, -0.28, 0.735, 0.045)'); // Bounce
+    }
+  },
+  {
+    name: "Jumble Reveal",
+    apply: () => {
+      titleElement.style.color = "#ff99ff";
+      titleElement.style.textShadow = "0 0 5px #ff99ff";
+      titleElement.innerHTML = titleElement.textContent.split('').map((char, i) =>
+        `<span class="char-jumble" style="--char-delay: ${i * 0.05}s;">${char === ' ' ? '&nbsp;' : char}</span>`
+      ).join('');
+      titleElement.style.setProperty('--animation-iteration', '1'); // Ensures it happens once
+      titleElement.classList.remove('animated'); // Remove main animation class
+    }
+  },
+  {
+    name: "Wave Text",
+    apply: () => {
+      titleElement.style.color = "#8aff8a";
+      titleElement.style.textShadow = "0 0 8px #8aff8a";
+      titleElement.innerHTML = titleElement.textContent.split('').map((char, i) =>
+        `<span class="char-wave" style="--char-delay: ${i * 0.1}s;">${char === ' ' ? '&nbsp;' : char}</span>`
+      ).join('');
+      titleElement.classList.remove('animated'); // Remove main animation class
+    }
+  },
+  {
+    name: "Matrix Rain",
+    apply: () => {
+      titleElement.style.color = "#00ff00"; // overridden by char-matrix
+      titleElement.style.textShadow = "none"; // overridden by char-matrix
+      titleElement.innerHTML = titleElement.textContent.split('').map((char, i) =>
+        `<span class="char-matrix" style="--char-delay: ${i * 0.1}s;">${char === ' ' ? '&nbsp;' : char}</span>`
+      ).join('');
+      titleElement.classList.remove('animated');
+    }
+  },
+  {
+    name: "Flicker",
+    apply: () => {
+      titleElement.style.color = "#ffffff";
+      titleElement.style.textShadow = "0 0 10px #fff, 0 0 20px #fff";
+      titleElement.classList.add('animated');
+      titleElement.style.animationName = "flicker";
+      titleElement.style.setProperty('--animation-duration', '2s');
+      titleElement.style.setProperty('--animation-timing', 'ease-in-out');
+    }
+  },
+  {
+    name: "Typewriter",
+    apply: () => {
+      titleElement.style.color = "#e0e0e0";
+      titleElement.style.textShadow = "none";
+      titleElement.innerHTML = titleElement.textContent.split('').map((char, i) =>
+        `<span class="char-typewriter" style="--char-delay: ${i * 0.1}s;">${char === ' ' ? '&nbsp;' : char}</span>`
+      ).join('');
+      // Set the total animation duration for the last character
+      const totalDuration = (titleElement.textContent.length * 0.1) + 0.1; // Char delay + char anim duration
+      titleElement.style.setProperty('--animation-duration', `${totalDuration}s`);
+      titleElement.classList.remove('animated');
+      titleElement.style.animationIterationCount = '1'; // Ensures it runs once
+      titleElement.style.animationFillMode = 'forwards';
+    }
+  },
+];
+
+let currentEffect = 0;
+let animationPaused = false;
+let currentAnimationTimeout; // To store timeout for single-run animations
+
+// --- Helper to reset all styles and inner HTML ---
+function resetEffects() {
+  clearTimeout(currentAnimationTimeout); // Clear any pending timeouts
+  titleElement.style.animation = "none"; // Remove all animations
+  titleElement.className = 'audio-gnarls-title'; // Reset classes
+  titleElement.style.cssText = ''; // Clear all inline styles
+  titleElement.innerHTML = originalTitleHTML; // Restore original HTML (important for char-level effects)
+
+  // Reset CSS variables
+  titleElement.style.setProperty('--animation-duration', '');
+  titleElement.style.setProperty('--animation-timing', '');
+  titleElement.style.setProperty('--animation-iteration', '');
+  titleElement.style.setProperty('--animation-fill', '');
+}
+
+// --- Apply Effect Function ---
+function applyEffect(index) {
+  resetEffects(); // Always reset before applying a new effect
+
+  // Apply new effect
+  const effect = effects[index];
+  effect.apply();
+  effectNameElement.textContent = effect.name;
+
+  // For single-run animations, restart auto-cycle after it finishes
+  if (effect.name === "Slide In from Left" || effect.name === "Spin In" || effect.name === "Jumble Reveal" || effect.name === "Typewriter" || effect.name === "Zoom Out Bounce") {
+    const duration = parseFloat(titleElement.style.getPropertyValue('--animation-duration')) || 1;
+    currentAnimationTimeout = setTimeout(() => {
+      if (!animationPaused) {
+        nextEffect(); // Auto-cycle to next effect after this one finishes
+      }
+    }, duration * 1000 + 500); // Small buffer
+  }
+}
+
+// --- Navigation Functions ---
+function nextEffect() {
+  if (animationPaused) return;
+  currentEffect = (currentEffect + 1) % effects.length;
+  applyEffect(currentEffect);
+}
+
+function prevEffect() {
+  if (animationPaused) return;
+  currentEffect = (currentEffect - 1 + effects.length) % effects.length;
+  applyEffect(currentEffect);
+}
+
+function randomEffect() {
+  if (animationPaused) return;
+  let newIndex;
+  do {
+    newIndex = Math.floor(Math.random() * effects.length);
+  } while (newIndex === currentEffect); // Ensure it's not the same effect
+  currentEffect = newIndex;
+  applyEffect(currentEffect);
+}
+
+function togglePause() {
+  animationPaused = !animationPaused;
+  pauseBtn.textContent = animationPaused ? "Resume Animation" : "Pause Animation";
+
+  const allAnimatableElements = [titleElement, ...titleElement.querySelectorAll('span[class^="char-"]')];
+
+  allAnimatableElements.forEach(el => {
+    if (animationPaused) {
+      el.style.animationPlayState = "paused";
+    } else {
+      el.style.animationPlayState = "running";
+    }
+  });
+
+  // Manage auto-cycle interval
+  if (animationPaused) {
+    clearInterval(autoCycleInterval);
+    clearTimeout(currentAnimationTimeout);
+  } else {
+    autoCycleInterval = setInterval(() => {
+      if (!animationPaused) {
+        nextEffect();
+      }
+    }, 4000); // Restart auto-cycle
+    // If a single-run animation was paused, its timeout needs to be re-evaluated
+    // For simplicity, we just let the next auto-cycle trigger it.
+  }
+}
+
+// --- Event Listeners ---
+nextBtn.addEventListener('click', nextEffect);
+prevBtn.addEventListener('click', prevEffect);
+randomBtn.addEventListener('click', randomEffect);
+pauseBtn.addEventListener('click', togglePause);
+
+// Initialize with first effect
+applyEffect(currentEffect);
+
+// Auto-cycle effects (now managed with a variable for pausing)
+let autoCycleInterval = setInterval(() => {
+  if (!animationPaused) {
+    nextEffect();
+  }
+}, 4000); // Cycle every 4 seconds
+</script>
+</body>
+</html>

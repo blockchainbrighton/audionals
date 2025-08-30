@@ -1,0 +1,465 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Audio GNARLS Title Display — Optimised + Word Strobe</title>
+<style>
+  :root{
+    --pink:#ff0064;--cyan:#00ffff;--yellow:#ffff00;--orange:#ff5500;--green:#00ff00;--blue:#00aaff;
+    --glow-strong:0 0 10px var(--pink);--blur-bg:rgba(255,255,255,.15)
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  body{
+    background:linear-gradient(135deg,#0f0c29,#302b63,#24243e);
+    font-family:system-ui,-apple-system,"Segoe UI",Roboto,Ubuntu,"Helvetica Neue",Arial,"Noto Sans","Apple Color Emoji","Segoe UI Emoji";
+    color:#fff;min-height:100vh;display:flex;align-items:center;justify-content:center;overflow:hidden;position:relative
+  }
+  .container{z-index:1;text-align:center;padding:2rem;max-width:1200px}
+  h1{font-size:clamp(2rem,6vw,4.5rem);font-weight:800;margin:0 0 1.25rem;letter-spacing:3px;text-transform:uppercase;
+      background:linear-gradient(45deg,#ff0064,#00ffff,#ffff00);-webkit-background-clip:text;background-clip:text;color:transparent;
+      text-shadow:0 0 10px rgba(255,0,100,.7);animation:hueShift 10s linear infinite}
+  .subtitle{font-size:1.05rem;max-width:680px;margin-inline:auto;color:#e0e0ff;line-height:1.6;margin-bottom:2.5rem}
+  .title-wrap{position:relative;width:100%;height:clamp(160px,35vw,300px);display:grid;place-items:center;perspective:1000px;margin:2rem 0}
+  .audio-title{font-family:"Arial Black",sans-serif;font-size:clamp(2.25rem,10vw,6rem);font-weight:900;text-transform:uppercase;letter-spacing:4px;white-space:nowrap;
+               color:var(--pink);text-shadow:0 0 10px var(--pink);transform-style:preserve-3d}
+  .char{display:inline-block;transform-origin:center}
+  .effect-name{position:absolute;inset:auto 0 20px; text-align:center;font-size:1.1rem;color:#a0a0ff;letter-spacing:2px;text-transform:uppercase;
+               text-shadow:0 0 10px rgba(160,160,255,.7);animation:pulse 2s infinite}
+  .controls{display:flex;flex-wrap:wrap;gap:.8rem;justify-content:center;margin-top:1.5rem}
+  button, .control-chip{background:var(--blur-bg);border:1px solid rgba(255,255,255,.3);color:#fff;font-weight:600;font-size:1rem;padding:.6rem 1rem;border-radius:30px;cursor:pointer;
+         transition:transform .25s ease,box-shadow .25s ease,background .25s ease;backdrop-filter:blur(6px);position:relative;overflow:hidden}
+  button:hover, .control-chip:hover{background:rgba(255,255,255,.25);transform:translateY(-2px);box-shadow:0 5px 15px rgba(0,0,0,.3)}
+  button::before, .control-chip::before{content:"";position:absolute;inset:0;left:-100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.22),transparent);transition:left .5s}
+  button:hover::before, .control-chip:hover::before{left:100%}
+  .particles{position:absolute;inset:0;pointer-events:none}
+  .particle{position:absolute;width:4px;height:4px;border-radius:50%;box-shadow:0 0 10px currentColor}
+  .footer{margin-top:2.5rem;color:rgba(255,255,255,.65);font-size:.9rem}
+
+  /* Word Strobe panel */
+  .panel{margin-top:1.25rem;background:rgba(255,255,255,.08);border:1px solid rgba(255,255,255,.15);border-radius:16px;padding:1rem 1.25rem;backdrop-filter:blur(6px)}
+  .panel h2{font-size:1.05rem;letter-spacing:1px;text-transform:uppercase;color:#cfe7ff;margin-bottom:.75rem}
+  .panel-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.75rem;align-items:center}
+  .panel label{display:flex;flex-direction:column;gap:.35rem;text-align:left;font-size:.9rem;color:#dfdfff}
+  .panel input[type="text"], .panel input[type="number"], .panel input[type="range"]{width:100%;padding:.55rem .7rem;border-radius:10px;border:1px solid rgba(255,255,255,.25);background:rgba(0,0,0,.25);color:#fff}
+  .inline{display:flex;gap:.5rem;align-items:center}
+
+  /* --- Core keyframes (used by effects) --- */
+  @keyframes float{0%,100%{transform:translate(0) rotate(0)}25%{transform:translate(15px,15px) rotate(90deg)}50%{transform:translate(20px,-20px) rotate(180deg)}75%{transform:translate(-15px,15px) rotate(270deg)}}
+  @keyframes hueShift{to{filter:hue-rotate(360deg)}}
+  @keyframes pulse{0%{opacity:.7;transform:scale(1)}50%{opacity:1;transform:scale(1.05)}100%{opacity:.7;transform:scale(1)}}
+  @keyframes glitchChar{0%{transform:translate(0)}20%{transform:translate(-5px,2px);filter:blur(.5px)}40%{transform:translate(5px,-2px)}60%{transform:translate(-2px,5px)}80%{transform:translate(2px,-5px);filter:blur(.3px)}100%{transform:translate(0)}}
+  @keyframes glitch{0%{transform:translate(0)}20%{transform:translate(-3px,3px)}40%{transform:translate(-3px,-3px)}60%{transform:translate(3px,3px)}80%{transform:translate(3px,-3px)}100%{transform:translate(0)}}
+  @keyframes rainbow{0%{color:#f00}16%{color:#f80}33%{color:#ff0}50%{color:#0f0}66%{color:#08f}83%{color:#80f}100%{color:#f00}}
+  @keyframes neon{0%,100%{text-shadow:0 0 5px #fff,0 0 10px #fff,0 0 15px #fff,0 0 20px #ff00de,0 0 35px #ff00de,0 0 40px #ff00de}50%{text-shadow:0 0 2px #fff,0 0 5px #fff,0 0 7px #fff,0 0 10px #ff00de,0 0 17px #ff00de,0 0 20px #ff00de}}
+  @keyframes hologram{0%,100%{text-shadow:0 0 5px #0ff,0 0 10px #0ff,0 0 15px #0ff,0 0 20px #0ff;color:#0ff}25%{text-shadow:0 0 5px #f0f,0 0 10px #f0f,0 0 15px #f0f,0 0 20px #f0f;color:#f0f}50%{text-shadow:0 0 5px #ff0,0 0 10px #ff0,0 0 15px #ff0,0 0 20px #ff0;color:#ff0}75%{text-shadow:0 0 5px #0f0,0 0 10px #0f0,0 0 15px #0f0,0 0 20px #0f0;color:#0f0}}
+  @keyframes fire{0%,100%{text-shadow:0 0 5px #f00,0 0 10px #f50,0 0 15px #fa0,0 0 20px #fa0;color:#f50}25%{text-shadow:0 0 5px #f50,0 0 10px #fa0,0 0 15px #ff0,0 0 20px #ff0;color:#fa0}50%{text-shadow:0 0 5px #fa0,0 0 10px #ff0,0 0 15px #ff5,0 0 20px #ff5;color:#ff0}}
+  @keyframes matrix{0%{text-shadow:0 0 5px #0f0,0 0 10px #0f0,0 0 15px #0f0,0 0 20px #0f0;color:#0f0}50%{text-shadow:0 0 2px #0a0,0 0 5px #0a0,0 0 7px #0a0,0 0 10px #0a0;color:#0a0}100%{text-shadow:0 0 5px #0f0,0 0 10px #0f0,0 0 15px #0f0,0 0 20px #0f0;color:#0f0}}
+  @keyframes levitate{0%,100%{transform:translateY(0)}50%{transform:translateY(-20px)}}
+  @keyframes spin{to{transform:rotate(360deg)}}
+  @keyframes bounce{0%,100%{transform:translateY(0)}50%{transform:translateY(-30px)}}
+  @keyframes stretch{0%,100%{transform:scaleX(1)}50%{transform:scaleX(1.2)}}
+  @keyframes swing{0%,100%{transform:rotate(0)}25%{transform:rotate(5deg)}75%{transform:rotate(-5deg)}}
+  @keyframes twirl{0%{transform:rotate(0) scale(1)}50%{transform:rotate(180deg) scale(1.2)}100%{transform:rotate(360deg) scale(1)}}
+  @keyframes implode{0%{transform:scale(0);opacity:0}70%{transform:scale(1.1);opacity:1}100%{transform:scale(1);opacity:1}}
+  @keyframes explode{0%{transform:scale(1);opacity:1}30%{transform:scale(1.5);opacity:.7}100%{transform:scale(0);opacity:0}}
+  @keyframes morph{0%{font-family:"Arial Black",sans-serif;letter-spacing:4px}25%{font-family:"Courier New",monospace;letter-spacing:2px}50%{font-family:Impact,sans-serif;letter-spacing:6px}75%{font-family:Georgia,serif;letter-spacing:1px}100%{font-family:"Arial Black",sans-serif;letter-spacing:4px}}
+  @keyframes dissolve{from{opacity:1}to{opacity:0}} @keyframes appear{from{opacity:0;transform:scale(.5)}to{opacity:1;transform:scale(1)}}
+  @keyframes slideIn{from{transform:translateX(-100%);opacity:0}to{transform:translateX(0);opacity:1}}
+  @keyframes slideOut{from{transform:translateX(0);opacity:1}to{transform:translateX(100%);opacity:0}}
+  @keyframes flipIn{from{transform:rotateY(90deg);opacity:0}to{transform:rotateY(0);opacity:1}} @keyframes flipOut{from{opacity:1}to{transform:rotateY(-90deg);opacity:0}}
+  @keyframes rollIn{from{opacity:0;transform:rotate(-360deg) scale(0)}to{opacity:1;transform:rotate(0) scale(1)}}
+  @keyframes rollOut{from{opacity:1}to{opacity:0;transform:rotate(360deg) scale(0)}}
+  @keyframes blurIn{from{filter:blur(10px);opacity:0}to{filter:blur(0);opacity:1}} @keyframes blurOut{from{filter:blur(0);opacity:1}to{filter:blur(10px);opacity:0}}
+  @keyframes flash{50%{opacity:.1}} @keyframes wobble{0%,100%{transform:translateX(0)}15%{transform:translateX(-25px) rotate(-5deg)}30%{transform:translateX(20px) rotate(3deg)}45%{transform:translateX(-15px) rotate(-3deg)}60%{transform:translateX(10px) rotate(2deg)}75%{transform:translateX(-5px) rotate(-1deg)}}
+  @keyframes tada{0%{transform:scale(1)}10%,20%{transform:scale(.9) rotate(-3deg)}30%,50%,70%,90%{transform:scale(1.1) rotate(3deg)}40%,60%,80%{transform:scale(1.1) rotate(-3deg)}100%{transform:scale(1) rotate(0)}}
+  @keyframes jello{0%,100%{transform:scale(1,1)}30%{transform:scale(1.25,.75)}40%{transform:scale(.75,1.25)}50%{transform:scale(1.15,.85)}65%{transform:scale(.95,1.05)}75%{transform:scale(1.05,.95)}}
+  @keyframes heartBeat{0%{transform:scale(1)}14%{transform:scale(1.3)}28%{transform:scale(1)}42%{transform:scale(1.3)}70%{transform:scale(1)}}
+  @keyframes hinge{0%{transform-origin:top left}20%,60%{transform:rotate(80deg)}40%,80%{transform:rotate(60deg);opacity:1}100%{transform:translateY(700px);opacity:0}}
+  @keyframes jackInTheBox{0%{opacity:0;transform:scale(.1) rotate(30deg);transform-origin:center bottom}50%{transform:rotate(-10deg)}70%{transform:rotate(3deg)}100%{opacity:1;transform:scale(1)}}
+  @keyframes lightSpeedIn{0%{transform:translateX(100%) skewX(-30deg);opacity:0}60%{transform:skewX(20deg);opacity:1}80%{transform:skewX(-5deg);opacity:1}100%{transform:translateX(0);opacity:1}}
+  @keyframes lightSpeedOut{from{opacity:1}to{transform:translateX(100%) skewX(30deg);opacity:0}}
+  @keyframes rotateIn{from{transform:rotate(-200deg);opacity:0}to{transform:rotate(0);opacity:1}}
+  @keyframes rotateOut{from{opacity:1}to{transform:rotate(200deg);opacity:0}}
+  @keyframes rotateInDownLeft{from{transform-origin:left bottom;transform:rotate(45deg);opacity:0}to{transform-origin:left bottom;transform:rotate(0);opacity:1}}
+  @keyframes rotateInDownRight{from{transform-origin:right bottom;transform:rotate(-45deg);opacity:0}to{transform-origin:right bottom;transform:rotate(0);opacity:1}}
+  @keyframes rotateInUpLeft{from{transform-origin:left bottom;transform:rotate(45deg);opacity:0}to{transform-origin:left bottom;transform:rotate(0);opacity:1}}
+  @keyframes rotateInUpRight{from{transform-origin:right bottom;transform:rotate(-90deg);opacity:0}to{transform-origin:right bottom;transform:rotate(0);opacity:1}}
+  @keyframes rotateOutDownLeft{from{transform-origin:left bottom;opacity:1}to{transform-origin:left bottom;transform:rotate(45deg);opacity:0}}
+  @keyframes rotateOutDownRight{from{transform-origin:right bottom;opacity:1}to{transform-origin:right bottom;transform:rotate(-45deg);opacity:0}}
+  @keyframes rotateOutUpLeft{from{opacity:1}to{transform-origin:left bottom;transform:rotate(45deg);opacity:0}}
+  @keyframes rotateOutUpRight{from{opacity:1}to{transform-origin:right bottom;transform:rotate(90deg);opacity:0}}
+  @keyframes zoomIn{0%{opacity:0;transform:scale3d(.3,.3,.3)}50%{opacity:1}}
+  @keyframes zoomOut{0%{opacity:1}50%{opacity:0;transform:scale3d(.3,.3,.3)}100%{opacity:0}}
+  @keyframes bounceIn{0%,20%,40%,60%,80%,100%{animation-timing-function:cubic-bezier(.215,.61,.355,1)}0%{opacity:0;transform:scale3d(.3,.3,.3)}20%{transform:scale3d(1.1,1.1,1.1)}40%{transform:scale3d(.9,.9,.9)}60%{opacity:1;transform:scale3d(1.03,1.03,1.03)}80%{transform:scale3d(.97,.97,.97)}100%{opacity:1;transform:scale3d(1,1,1)}}
+  @keyframes bounceOut{20%{transform:scale3d(.9,.9,.9)}50%,55%{opacity:1;transform:scale3d(1.1,1.1,1.1)}100%{opacity:0;transform:scale3d(.3,.3,.3)}}
+  @keyframes fadeIn{from{opacity:0}to{opacity:1}} @keyframes fadeOut{from{opacity:1}to{opacity:0}}
+  @keyframes fadeInDown{from{opacity:0;transform:translate3d(0,-100%,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+  @keyframes fadeOutDown{from{opacity:1}to{opacity:0;transform:translate3d(0,100%,0)}}
+  @keyframes fadeInUp{from{opacity:0;transform:translate3d(0,100%,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+  @keyframes fadeOutUp{from{opacity:1}to{opacity:0;transform:translate3d(0,-100%,0)}}
+  @keyframes fadeInLeft{from{opacity:0;transform:translate3d(-100%,0,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+  @keyframes fadeOutLeft{from{opacity:1}to{opacity:0;transform:translate3d(-100%,0,0)}}
+  @keyframes fadeInRight{from{opacity:0;transform:translate3d(100%,0,0)}to{opacity:1;transform:translate3d(0,0,0)}}
+  @keyframes fadeOutRight{from{opacity:1}to{opacity:0;transform:translate3d(100%,0,0)}}
+  @keyframes slideInDown{from{transform:translate3d(0,-100%,0);visibility:visible}to{transform:translate3d(0,0,0)}}
+  @keyframes slideInLeft{from{transform:translate3d(-100%,0,0);visibility:visible}to{transform:translate3d(0,0,0)}}
+  @keyframes slideInRight{from{transform:translate3d(100%,0,0);visibility:visible}to{transform:translate3d(0,0,0)}}
+  @keyframes slideInUp{from{transform:translate3d(0,100%,0);visibility:visible}to{transform:translate3d(0,0,0)}}
+  @keyframes slideOutDown{from{transform:translate3d(0,0,0)}to{visibility:hidden;transform:translate3d(0,100%,0)}}
+  @keyframes slideOutLeft{from{transform:translate3d(0,0,0)}to{visibility:hidden;transform:translate3d(-100%,0,0)}}
+  @keyframes slideOutRight{from{transform:translate3d(0,0,0)}to{visibility:hidden;transform:translate3d(100%,0,0)}}
+  @keyframes slideOutUp{from{transform:translate3d(0,0,0)}to{visibility:hidden;transform:translate3d(0,-100%,0)}}
+  @keyframes zoomInDown{0%{opacity:0;transform:scale3d(.1,.1,.1) translate3d(0,-1000px,0);animation-timing-function:cubic-bezier(.55,.055,.675,.19)}60%{opacity:1;transform:scale3d(.475,.475,.475) translate3d(0,60px,0);animation-timing-function:cubic-bezier(.175,.885,.32,1)}}
+  @keyframes zoomInLeft{0%{opacity:0;transform:scale3d(.1,.1,.1) translate3d(-1000px,0,0);animation-timing-function:cubic-bezier(.55,.055,.675,.19)}60%{opacity:1;transform:scale3d(.475,.475,.475) translate3d(10px,0,0);animation-timing-function:cubic-bezier(.175,.885,.32,1)}}
+  @keyframes zoomInRight{0%{opacity:0;transform:scale3d(.1,.1,.1) translate3d(1000px,0,0);animation-timing-function:cubic-bezier(.55,.055,.675,.19)}60%{opacity:1;transform:scale3d(.475,.475,.475) translate3d(-10px,0,0);animation-timing-function:cubic-bezier(.175,.885,.32,1)}}
+  @keyframes zoomInUp{0%{opacity:0;transform:scale3d(.1,.1,.1) translate3d(0,1000px,0);animation-timing-function:cubic-bezier(.55,.055,.675,.19)}60%{opacity:1;transform:scale3d(.475,.475,.475) translate3d(0,-60px,0);animation-timing-function:cubic-bezier(.175,.885,.32,1)}}
+  @keyframes zoomOutDown{40%{opacity:1;transform:scale3d(.475,.475,.475) translate3d(0,-60px,0);animation-timing-function:cubic-bezier(.55,.055,.675,.19)}100%{opacity:0;transform:scale3d(.1,.1,.1) translate3d(0,2000px,0);transform-origin:center bottom;animation-timing-function:cubic-bezier(.175,.885,.32,1)}}
+  @keyframes zoomOutLeft{40%{opacity:1;transform:scale3d(.475,.475,.475) translate3d(42px,0,0)}100%{opacity:0;transform:scale(.1) translate3d(-2000px,0,0);transform-origin:left center}}
+  @keyframes zoomOutRight{40%{opacity:1;transform:scale3d(.475,.475,.475) translate3d(-42px,0,0)}100%{opacity:0;transform:scale(.1) translate3d(2000px,0,0);transform-origin:right center}}
+  @keyframes zoomOutUp{40%{opacity:1;transform:scale3d(.475,.475,.475) translate3d(0,60px,0);animation-timing-function:cubic-bezier(.55,.055,.675,.19)}100%{opacity:0;transform:scale3d(.1,.1,.1) translate3d(0,-2000px,0);transform-origin:center bottom;animation-timing-function:cubic-bezier(.175,.885,.32,1)}}
+</style>
+</head>
+<body>
+  <div class="particles" id="particles"></div>
+  <div class="container">
+    <h1>Audio GNARLS Title Display</h1>
+    <p class="subtitle">Experience the dynamic visual treatment of the "Audio GNARLS" title with various effects that showcase the brand in motion.</p>
+
+    <div class="title-wrap">
+      <div class="audio-title" id="title">Audio GNARLS</div>
+      <div class="effect-name" id="effect-name">Zoom Crash</div>
+    </div>
+
+    <div class="controls" aria-label="Effect controls">
+      <button id="prev-btn" aria-label="Previous Effect">Previous Effect</button>
+      <button id="next-btn" aria-label="Next Effect">Next Effect</button>
+      <button id="random-btn" aria-label="Random Effect">Random Effect</button>
+      <button id="pause-btn" aria-label="Pause or resume">Pause Animation</button>
+      <button id="font-btn" aria-label="Change font">Change Font</button>
+    </div>
+
+    <!-- Word Strobe / One-word-after-the-other settings -->
+    <div class="panel" id="strobe-panel" aria-label="Word strobe settings">
+      <h2>Word Strobe</h2>
+      <div class="panel-grid">
+        <label>Words (comma-separated)
+          <input id="ws-words" type="text" value="Audio,GNARLS" />
+        </label>
+        <label class="inline">Include blanks between words
+          <input id="ws-blanks" type="checkbox" checked />
+        </label>
+        <label>Speed (ms between items)
+          <input id="ws-interval" type="number" min="50" step="50" value="500" />
+        </label>
+        <label>Repeat cycles (0 = infinite)
+          <input id="ws-cycles" type="number" min="0" step="1" value="6" />
+        </label>
+        <label>Effect Mode
+          <select id="ws-mode">
+            <option value="current" selected>Use current effect</option>
+            <option value="two">Alternate two effects</option>
+            <option value="random">Random per word</option>
+          </select>
+        </label>
+        <label>Effect A
+          <select id="ws-eff-a"></select>
+        </label>
+        <label>Effect B
+          <select id="ws-eff-b" disabled></select>
+        </label>
+        <div class="inline" style="gap:.75rem;">
+          <button id="ws-start" class="control-chip">Start Word Strobe</button>
+          <button id="ws-stop" class="control-chip">Stop</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="footer">>Audio GNARLS Title Display | Dynamic Visual Treatment System</div>
+  </div>
+
+<script>
+(()=>{
+  const DEFAULT_TEXT = "Audio GNARLS";
+  // DOM helpers
+  const $ = (id)=>document.getElementById(id);
+  const titleEl = $('title');
+  const effectNameEl = $('effect-name');
+  const prevBtn=$('prev-btn'), nextBtn=$('next-btn'), randBtn=$('random-btn'), pauseBtn=$('pause-btn'), fontBtn=$('font-btn');
+  const particlesEl = $('particles');
+
+  // Word strobe inputs
+  const wsWords=$('ws-words'), wsBlanks=$('ws-blanks'), wsInterval=$('ws-interval'), wsCycles=$('ws-cycles');
+  const wsMode=$('ws-mode'), wsEffA=$('ws-eff-a'), wsEffB=$('ws-eff-b');
+  const wsStart=$('ws-start'), wsStop=$('ws-stop');
+
+  /* ---------- Utilities ---------- */
+  const fonts=[
+    "'Arial Black', sans-serif","'Courier New', monospace","'Impact', sans-serif","'Georgia', serif",
+    "'Trebuchet MS', sans-serif","'Comic Sans MS', cursive","'Lucida Console', monospace",
+    "'Palatino Linotype', serif","'Times New Roman', serif","'Verdana', sans-serif"
+  ];
+  let fontIdx=0;
+
+  const setTitleHTML=(text)=>{
+    titleEl.innerHTML = [...(text||'')].map(ch=> ch===' ' ? '<span class="char">&nbsp;</span>' : `<span class="char">${ch}</span>`).join('');
+    return titleEl.querySelectorAll('.char');
+  };
+  const setStyle=(color,shadow)=>{ titleEl.style.color=color; titleEl.style.textShadow=shadow; };
+  const applyKeyframeAll=(name,{duration='1s',iter='forwards',easing='',perCharDelay=.05,applyOnTitle=true}={})=>{
+    titleEl.style.animation = applyOnTitle? `${name} ${duration} ${easing} ${iter}`.trim() : 'none';
+    titleEl.querySelectorAll('.char').forEach((ch,i)=>{
+      ch.style.transition='none';
+      ch.style.animation=`${name} ${duration} ${easing} ${iter} ${i*perCharDelay}s`.replace(/\s+/g,' ').trim();
+    });
+  };
+  const revealFrom=(chars,{from,to='translate(0,0) scale(1) rotate(0)',dur=.8,delayStep=.08,easing='cubic-bezier(0.68,-0.55,0.265,1.55)',extra}={})=>{
+    titleEl.style.animation='none';
+    chars.forEach((ch,i)=>{
+      ch.style.opacity=0; ch.style.transform= typeof from==='function'? from(i): from; ch.style.transition=`transform ${dur}s ${i*delayStep}s ${easing}, opacity ${dur}s ${i*delayStep}s ${easing}`;
+      if(extra) extra(ch,i);
+      requestAnimationFrame(()=>{ requestAnimationFrame(()=>{ ch.style.opacity=1; ch.style.transform=to; }); });
+    });
+  };
+
+  /* ---------- Particles (batch DOM writes) ---------- */
+  { const frag=document.createDocumentFragment();
+    for(let i=0;i<100;i++){
+      const p=document.createElement('div');
+      const size=Math.random()*6+2;
+      p.className='particle';
+      p.style.width=p.style.height=`${size}px`;
+      p.style.left=`${Math.random()*100}%`;
+      p.style.top=`${Math.random()*100}%`;
+      p.style.opacity=(Math.random()*0.8+0.2).toFixed(2);
+      p.style.animation=`float ${15+Math.random()*10}s ease-in-out ${Math.random()*5}s infinite`;
+      p.style.color=`hsl(${(Math.random()*360)|0} 100% 70%)`;
+      frag.appendChild(p);
+    }
+    particlesEl.appendChild(frag);
+  }
+
+  /* ---------- Effects: now text-aware ---------- */
+  const effects=[];
+  const addCssEffect=(name,key,color,shadow,opt={})=>effects.push({name,render(text=DEFAULT_TEXT){ setTitleHTML(text); applyKeyframeAll(key,opt); setStyle(color,shadow); }});
+
+  // helpers to register JS effects that use revealFrom, but accept custom text
+  const addJsEffect=(name,fn)=> effects.push({name, render:(text=DEFAULT_TEXT)=> fn(String(text))});
+
+  // 1. Zoom Crash (JS reveal)
+  addJsEffect('Zoom Crash',(text)=>{ const chars=setTitleHTML(text); setStyle('var(--pink)','0 0 10px var(--pink),0 0 20px var(--pink)');
+    revealFrom(chars,{from:'scale(0) translateY(-100px)',dur:.8,delayStep:.08}); });
+  // 2. Slide From Right
+  addJsEffect('Slide From Right',(text)=>{ const c=setTitleHTML(text); setStyle('var(--cyan)','0 0 10px var(--cyan),0 0 20px var(--cyan)');
+    revealFrom(c,{from:'translateX(200px) rotateY(-90deg)',dur:.7,delayStep:.06,easing:'ease-out'}); });
+  // 3. Jumbled Scramble
+  addJsEffect('Jumbled Scramble',(text)=>{ const chars=setTitleHTML(text); setStyle('#ff5500','0 0 15px #ff5500'); const original=[...text];
+    chars.forEach((ch,i)=>{ ch.textContent=''; ch.style.opacity=0; ch.style.transform='rotateX(90deg) translateY(50px)'; ch.style.transition=`all .5s ${i*.07}s ease-in`;
+      const pool='ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%'; let n=0; const run=()=>{ if(n<10){ ch.textContent=pool[(Math.random()*pool.length)|0]; n++; setTimeout(run,40);} else { ch.textContent=original[i]||''; ch.style.opacity=1; ch.style.transform='rotateX(0) translateY(0)'; } }; setTimeout(run,150+i*60);
+    }); });
+  // 4. 3D Spin In
+  addJsEffect('3D Spin In',(text)=>{ const c=setTitleHTML(text); setStyle('#fff','0 0 10px var(--green),0 0 20px var(--green)');
+    revealFrom(c,{from:'rotateY(-180deg) scale(.2)',dur:.9,delayStep:.08,easing:'cubic-bezier(.175,.885,.32,1.275)'}); });
+  // 5. Bounce Fall
+  addJsEffect('Bounce Fall',(text)=>{ const c=setTitleHTML(text); setStyle('#ff00ff','0 0 15px #ff00ff,0 0 30px #ff00ff');
+    revealFrom(c,{from:'translateY(-200px) rotate(-30deg)',dur:1,delayStep:.05,easing:'cubic-bezier(.47,2.02,.31,1)'}); });
+  // 6. Elastic Pop
+  addJsEffect('Elastic Pop',(text)=>{ const c=setTitleHTML(text); setStyle('var(--yellow)','0 0 10px var(--yellow),0 0 20px var(--yellow)');
+    revealFrom(c,{from:'scale(0)',dur:.6,delayStep:.06}); c.forEach(ch=>setTimeout(()=>ch.style.transform='scale(1)',120)); });
+  // 7. Spin & Zoom
+  addJsEffect('Spin & Zoom',(text)=>{ const c=setTitleHTML(text); setStyle('var(--green)','0 0 10px var(--green),0 0 20px var(--green)');
+    revealFrom(c,{from:(i)=>`rotate(${(Math.random()*360)|0}deg) scale(0)`,dur:1,delayStep:.07,easing:'ease-out'}); });
+  // 8. Slide Up
+  addJsEffect('Slide Up',(text)=>{ const c=setTitleHTML(text); setStyle('var(--blue)','0 0 10px var(--blue),0 0 20px var(--blue)');
+    revealFrom(c,{from:'translateY(100px) skewX(20deg)',dur:.7,delayStep:.05,easing:'ease-in-out'}); });
+  // 9. Glitch Flash
+  addJsEffect('Glitch Flash',(text)=>{ setTitleHTML(text); setStyle('var(--pink)','var(--glow-strong)'); applyKeyframeAll('glitchChar',{duration:'.6s',iter:'infinite',perCharDelay:.05}); });
+  // 10. Explode In
+  addJsEffect('Explode In',(text)=>{ const c=setTitleHTML(text); setStyle('#ff5500','0 0 15px #f00');
+    revealFrom(c,{from:()=>`translate(${(Math.random()-.5)*200}px, ${(Math.random()-.5)*100}px) scale(0)`,dur:1.2,delayStep:.06,easing:'ease-out'}); });
+  // 11. Wave Motion
+  addJsEffect('Wave Motion',(text)=>{ const c=setTitleHTML(text); setStyle('var(--cyan)','0 0 10px var(--cyan)');
+    revealFrom(c,{from:'translateY(50px)',dur:.8,delayStep:.07,easing:'ease-in-out',extra:(ch,i)=>{ch.style.transitionDelay = `${i*.07 + 0.1*Math.sin(i*.5)}s`;}}); });
+  // 12. Chaos Mode
+  addJsEffect('Chaos Mode',(text)=>{
+    const chars=setTitleHTML(text); setStyle('#ff00ff','0 0 22px #ff00ff'); titleEl.style.animation='none';
+    const r=(a,b)=>a+Math.random()*(b-a);
+    chars.forEach((ch,i)=>{
+      const rx=r(-180,180), ry=r(-180,180), rz=r(-180,180);
+      const tx=r(-320,320), ty=r(-220,220), tz=r(-200,200);
+      const kx=r(-30,30), ky=r(-30,30);
+      const sc=(0.2+Math.random()*0.6).toFixed(2);
+      const dur=(0.7+Math.random()*1.2).toFixed(2);
+      const delay=(i*0.06+Math.random()*0.2).toFixed(2);
+      ch.style.opacity=0; ch.style.filter='blur(8px)';
+      ch.style.transform=`translate3d(${tx}px,${ty}px,${tz}px) rotateX(${rx}deg) rotateY(${ry}deg) rotate(${rz}deg) skew(${kx}deg,${ky}deg) scale(${sc})`;
+      ch.style.transition=`transform ${dur}s ${delay}s cubic-bezier(.2,.8,.2,1), opacity ${dur}s ${delay}s ease-out, filter ${dur}s ${delay}s ease-out`;
+    });
+    requestAnimationFrame(()=>{ requestAnimationFrame(()=>{
+      chars.forEach(ch=>{ ch.style.opacity=1; ch.style.filter='blur(0)'; ch.style.transform='translate3d(0,0,0) rotateX(0) rotateY(0) rotate(0) skew(0,0) scale(1)'; });
+    }); });
+  });
+
+  // CSS-only effects (DRY)
+  addCssEffect('Rainbow Text','rainbow','var(--pink)','0 0 10px var(--pink)',{duration:'2s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Neon Glow','neon','#ff00de','0 0 5px #fff,0 0 10px #fff,0 0 15px #fff,0 0 20px #ff00de,0 0 35px #ff00de,0 0 40px #ff00de',{duration:'2s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Hologram','hologram','#0ff','0 0 5px #0ff',{duration:'3s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Fire Text','fire','#ff5500','0 0 5px #f00,0 0 10px #f50,0 0 15px #fa0,0 0 20px #fa0',{duration:'2s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Matrix Code','matrix','#0f0','0 0 5px #0f0',{duration:'1.5s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Digital Glitch','glitch','#f0f','0 0 10px #f0f',{duration:'.5s',iter:'infinite',perCharDelay:.05});
+  addCssEffect('Levitate','levitate','var(--yellow)','0 0 10px var(--yellow)',{duration:'3s',iter:'infinite',easing:'ease-in-out',perCharDelay:.1});
+  addCssEffect('Spin Text','spin','var(--cyan)','0 0 10px var(--cyan)',{duration:'5s',iter:'infinite',easing:'linear',perCharDelay:.1});
+  addCssEffect('Bounce Text','bounce','var(--pink)','0 0 10px var(--pink)',{duration:'2s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Stretch Text','stretch','var(--green)','0 0 10px var(--green)',{duration:'2s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Swing Text','swing','#ff5500','0 0 10px #ff5500',{duration:'2s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Twirl Text','twirl','var(--blue)','0 0 10px var(--blue)',{duration:'3s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Implode','implode','#f0f','0 0 10px #f0f',{duration:'1s'});
+  addCssEffect('Explode','explode','var(--yellow)','0 0 10px var(--yellow)',{duration:'1s'});
+  addCssEffect('Morph Text','morph','var(--cyan)','0 0 10px var(--cyan)',{duration:'4s',iter:'infinite',perCharDelay:.1});
+  addCssEffect('Dissolve','dissolve','var(--pink)','0 0 10px var(--pink)',{duration:'2s'});
+  addCssEffect('Appear','appear','var(--green)','0 0 10px var(--green)',{duration:'1s'});
+  addCssEffect('Slide In','slideIn','#ff5500','0 0 10px #ff5500');
+  addCssEffect('Slide Out','slideOut','var(--blue)','0 0 10px var(--blue)');
+  addCssEffect('Flip In','flipIn','#f0f','0 0 10px #f0f');
+  addCssEffect('Flip Out','flipOut','var(--yellow)','0 0 10px var(--yellow)');
+  addCssEffect('Roll In','rollIn','var(--cyan)','0 0 10px var(--cyan)');
+  addCssEffect('Roll Out','rollOut','var(--pink)','0 0 10px var(--pink)');
+  addCssEffect('Blur In','blurIn','var(--green)','0 0 10px var(--green)');
+  addCssEffect('Blur Out','blurOut','#ff5500','0 0 10px #ff5500');
+  addCssEffect('Flash','flash','var(--blue)','0 0 10px var(--blue)',{duration:'1s',iter:'infinite'});
+  addCssEffect('Wobble','wobble','#f0f','0 0 10px #f0f',{duration:'1s',iter:'infinite'});
+  addCssEffect('Tada','tada','var(--yellow)','0 0 10px var(--yellow)',{duration:'1s',iter:'infinite'});
+  addCssEffect('Jello','jello','var(--cyan)','0 0 10px var(--cyan)',{duration:'1s',iter:'infinite'});
+  addCssEffect('Heart Beat','heartBeat','var(--pink)','0 0 10px var(--pink)',{duration:'1.5s',iter:'infinite'});
+  addCssEffect('Hinge','hinge','var(--green)','0 0 10px var(--green)',{duration:'2s', applyOnTitle:false});
+  addCssEffect('Jack In The Box','jackInTheBox','#ff5500','0 0 10px #ff5500');
+  addCssEffect('Light Speed In','lightSpeedIn','var(--blue)','0 0 10px var(--blue)');
+  addCssEffect('Light Speed Out','lightSpeedOut','#f0f','0 0 10px #f0f');
+  addCssEffect('Rotate In','rotateIn','var(--yellow)','0 0 10px var(--yellow)');
+  addCssEffect('Rotate Out','rotateOut','var(--cyan)','0 0 10px var(--cyan)');
+  addCssEffect('Rotate In Down Left','rotateInDownLeft','var(--pink)','0 0 10px var(--pink)');
+  addCssEffect('Rotate In Down Right','rotateInDownRight','var(--green)','0 0 10px var(--green)');
+  addCssEffect('Rotate In Up Left','rotateInUpLeft','#ff5500','0 0 10px #ff5500');
+  addCssEffect('Rotate In Up Right','rotateInUpRight','var(--blue)','0 0 10px var(--blue)');
+  addCssEffect('Rotate Out Down Left','rotateOutDownLeft','#f0f','0 0 10px #f0f');
+  addCssEffect('Rotate Out Down Right','rotateOutDownRight','var(--yellow)','0 0 10px var(--yellow)');
+  addCssEffect('Rotate Out Up Left','rotateOutUpLeft','var(--cyan)','0 0 10px var(--cyan)');
+  addCssEffect('Rotate Out Up Right','rotateOutUpRight','var(--pink)','0 0 10px var(--pink)');
+  addCssEffect('Zoom In','zoomIn','var(--pink)','0 0 10px var(--pink)');
+  addCssEffect('Zoom Out','zoomOut','var(--green)','0 0 10px var(--green)');
+  addCssEffect('Bounce In','bounceIn','#ff5500','0 0 10px #ff5500');
+  addCssEffect('Bounce Out','bounceOut','var(--blue)','0 0 10px var(--blue)');
+  addCssEffect('Fade In','fadeIn','#f0f','0 0 10px #f0f');
+  addCssEffect('Fade Out','fadeOut','var(--yellow)','0 0 10px var(--yellow)');
+  addCssEffect('Fade In Down','fadeInDown','var(--cyan)','0 0 10px var(--cyan)');
+  addCssEffect('Fade Out Down','fadeOutDown','var(--pink)','0 0 10px var(--pink)');
+  addCssEffect('Fade In Up','fadeInUp','var(--green)','0 0 10px var(--green)');
+  addCssEffect('Fade Out Up','fadeOutUp','#ff5500','0 0 10px #ff5500');
+  addCssEffect('Fade In Left','fadeInLeft','var(--blue)','0 0 10px var(--blue)');
+  addCssEffect('Fade Out Left','fadeOutLeft','#f0f','0 0 10px #f0f');
+  addCssEffect('Fade In Right','fadeInRight','var(--yellow)','0 0 10px var(--yellow)');
+  addCssEffect('Fade Out Right','fadeOutRight','var(--cyan)','0 0 10px var(--cyan)');
+  addCssEffect('Slide In Down','slideInDown','var(--green)','0 0 10px var(--green)');
+  addCssEffect('Slide In Left','slideInLeft','#ff5500','0 0 10px #ff5500');
+  addCssEffect('Slide In Right','slideInRight','var(--blue)','0 0 10px var(--blue)');
+  addCssEffect('Slide In Up','slideInUp','#f0f','0 0 10px #f0f');
+  addCssEffect('Slide Out Down','slideOutDown','var(--yellow)','0 0 10px var(--yellow)');
+  addCssEffect('Slide Out Left','slideOutLeft','var(--cyan)','0 0 10px var(--cyan)');
+  addCssEffect('Slide Out Right','slideOutRight','var(--pink)','0 0 10px var(--pink)');
+  addCssEffect('Slide Out Up','slideOutUp','var(--green)','0 0 10px var(--green)');
+  addCssEffect('Zoom In Down','zoomInDown','#ff5500','0 0 10px #ff5500');
+  addCssEffect('Zoom In Left','zoomInLeft','var(--yellow)','0 0 10px var(--yellow)');
+  addCssEffect('Zoom In Right','zoomInRight','var(--cyan)','0 0 10px var(--cyan)');
+  addCssEffect('Zoom In Up','zoomInUp','var(--pink)','0 0 10px var(--pink)');
+  addCssEffect('Zoom Out Down','zoomOutDown','var(--green)','0 0 10px var(--green)');
+  addCssEffect('Zoom Out Left','zoomOutLeft','#ff5500','0 0 10px #ff5500');
+  addCssEffect('Zoom Out Right','zoomOutRight','var(--blue)','0 0 10px #ff0000');
+  addCssEffect('Zoom Out Up','zoomOutUp','#f0f','0 0 10px #f0f');
+
+  /* ---------- State & Controls ---------- */
+  let idx=0, paused=false; const total=effects.length;
+  let autoCycleId=null; // effect auto-advance
+  let strobeTimer=null; // word strobe interval
+  let strobeActive=false;
+
+  const runEffectByIndex=(i, text)=>{ const eff = effects[i%effects.length]; effectNameEl.textContent = eff.name; eff.render(text); };
+  const applyEffect=(eff)=>{ effectNameEl.textContent=eff.name; eff.render(DEFAULT_TEXT); };
+  const next=()=>{ if(paused || strobeActive) return; idx=(idx+1)%total; applyEffect(effects[idx]); };
+  const prev=()=>{ if(paused || strobeActive) return; idx=(idx-1+total)%total; applyEffect(effects[idx]); };
+  const random=()=>{ if(paused || strobeActive) return; let n; do{ n=(Math.random()*total)|0 } while(n===idx && total>1); idx=n; applyEffect(effects[idx]); };
+  const togglePause=()=>{ paused=!paused; pauseBtn.textContent = paused? 'Resume Animation':'Pause Animation'; };
+  const changeFont=()=>{ fontIdx=(fontIdx+1)%fonts.length; titleEl.style.fontFamily=fonts[fontIdx]; };
+
+  function startAutoCycle(){ stopAutoCycle(); autoCycleId=setInterval(()=>{ if(!paused && !strobeActive) next(); }, 5000); }
+  function stopAutoCycle(){ if(autoCycleId){ clearInterval(autoCycleId); autoCycleId=null; } }
+
+  /** Word Strobe: effect-aware */
+  function playWordStrobe({words=['Audio','GNARLS'], includeBlanks=true, intervalMs=500, cycles=6, mode='current', effA=0, effB=1}){
+    words = words.map(w=>String(w).trim());
+    const seq = includeBlanks ? words.flatMap(w=>[w,null]) : [...words];
+    let index=0; let completedCycles=0; strobeActive=true; paused=true; pauseBtn.textContent='Resume Animation';
+    stopAutoCycle();
+
+    function pickEffect(i){
+      if(mode==='current') return idx;
+      if(mode==='two') return (i%2===0? effA: effB) % effects.length;
+      // random
+      return (Math.random()*effects.length)|0;
+    }
+
+    function tick(){
+      const item = seq[index];
+      const effIndex = pickEffect(index);
+      runEffectByIndex(effIndex, item==null? '': item);
+      index = (index+1) % seq.length;
+      if(index===0){
+        completedCycles++;
+        if(cycles>0 && completedCycles>=cycles){ stopWordStrobe(true); }
+      }
+    }
+
+    tick();
+    strobeTimer = setInterval(tick, Math.max(50, intervalMs|0));
+  }
+
+  function stopWordStrobe(resumeCarousel=false){
+    if(strobeTimer){ clearInterval(strobeTimer); strobeTimer=null; }
+    strobeActive=false;
+    if(resumeCarousel){ paused=false; pauseBtn.textContent='Pause Animation'; startAutoCycle(); applyEffect(effects[idx]); }
+  }
+
+  // Populate effect selects
+  function populateEffectSelects(){
+    const opts = effects.map((e,i)=>`<option value="${i}">${i.toString().padStart(2,'0')} — ${e.name}</option>`).join('');
+    wsEffA.innerHTML = opts; wsEffB.innerHTML = opts; wsEffA.value = '0'; wsEffB.value = '1';
+  }
+
+  // Bind UI
+  nextBtn.addEventListener('click',next);
+  prevBtn.addEventListener('click',prev);
+  randBtn.addEventListener('click',random);
+  pauseBtn.addEventListener('click',togglePause);
+  fontBtn.addEventListener('click',changeFont);
+
+  wsMode.addEventListener('change',()=>{ const two = wsMode.value==='two'; wsEffB.disabled = !two; });
+  wsStart.addEventListener('click',()=>{
+    const words = wsWords.value.split(',').map(s=>s.trim()).filter(Boolean);
+    const includeBlanks = wsBlanks.checked;
+    const intervalMs = parseInt(wsInterval.value,10)||500;
+    const cycles = Math.max(0, parseInt(wsCycles.value,10)||0);
+    const mode = wsMode.value;
+    const effA = parseInt(wsEffA.value,10)||0;
+    const effB = parseInt(wsEffB.value,10)||0;
+    if(strobeActive) stopWordStrobe(false);
+    playWordStrobe({words: words.length? words: ['Audio','GNARLS'], includeBlanks, intervalMs, cycles, mode, effA, effB});
+  });
+  wsStop.addEventListener('click',()=> stopWordStrobe(true));
+
+  // init
+  populateEffectSelects();
+  applyEffect(effects[idx]);
+  startAutoCycle();
+})();
+</script>
+</body>
+</html>

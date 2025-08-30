@@ -24,7 +24,7 @@ class OscApp2 extends HTMLElement {
     Object.assign(this, Utils(this), Presets(this), Audio(this), SignatureSequencer(this));
 
     // --- State -------------------------------------------------------------
-    this.state = this.defaultState('a');
+    this.state = this.defaultState('afsdyg');
 
     // --- Bind handlers once ------------------------------------------------
     [

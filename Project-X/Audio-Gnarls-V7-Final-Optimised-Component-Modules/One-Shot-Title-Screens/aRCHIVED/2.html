@@ -1,0 +1,1247 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Gnarls Title Overlay</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            background: #111;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #overlay-container {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #title-canvas {
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: monospace;
+            z-index: 1001;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #skip-button {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: inherit;
+            z-index: 1001;
+            backdrop-filter: blur(4px);
+            transition: all 0.2s ease;
+        }
+        
+        #skip-button:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        #dev-backdrop {
+            position: absolute;
+            width: 1024px;
+            height: 1024px;
+            background: #000;
+            z-index: -1;
+        }
+        
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="overlay-container">
+        <div id="dev-backdrop"></div>
+        <canvas id="title-canvas" width="1024" height="1024"></canvas>
+        <div id="hud">Audio Gnarls • Preset 000/200 • Treatment: FadeScale • Reveal: Iris • Seed: 12345</div>
+        <button id="skip-button">Skip Intro</button>
+    </div>
+
+    <script>
+        (() => {
+            // Configuration
+            const CONFIG = {
+                SEED: 12345,
+                CANVAS_SIZE: 1024,
+                START_PRESET_INDEX: 0,
+                AUTO_START: true,
+                AUTO_REMOVE: true,
+                AUTO_PLAY_RAIL: false,
+                RAIL_ADVANCE_MS: 1500,
+                LOW_POWER: false,
+                DEV_PREVIEW_BACKDROP: true,
+                PRESET_COUNT: 200
+            };
+
+            // Global references
+            const canvas = document.getElementById('title-canvas');
+            const ctx = canvas.getContext('2d');
+            const hud = document.getElementById('hud');
+            const skipButton = document.getElementById('skip-button');
+            const devBackdrop = document.getElementById('dev-backdrop');
+            
+            if (!CONFIG.DEV_PREVIEW_BACKDROP) {
+                devBackdrop.classList.add('hidden');
+            }
+
+            // State management
+            let state = {
+                phase: 'INTRO', // INTRO, HOLD, REVEAL, DONE
+                presetIndex: CONFIG.START_PRESET_INDEX,
+                preset: null,
+                time: 0,
+                lastTime: 0,
+                paused: false,
+                railMode: CONFIG.AUTO_PLAY_RAIL,
+                railTimer: null,
+                reducedMotion: window.matchMedia('(prefers-reduced-motion: reduce)').matches
+            };
+
+            // Event system
+            const events = {};
+            function on(event, handler) {
+                if (!events[event]) events[event] = [];
+                events[event].push(handler);
+            }
+            
+            function emit(event, data) {
+                if (events[event]) {
+                    events[event].forEach(handler => handler(data));
+                }
+            }
+
+            // Deterministic RNG
+            class RNG {
+                constructor(seed) {
+                    this.seed = seed;
+                }
+                
+                next() {
+                    this.seed = (this.seed * 9301 + 49297) % 233280;
+                    return this.seed / 233280;
+                }
+                
+                range(min, max) {
+                    return min + this.next() * (max - min);
+                }
+                
+                int(min, max) {
+                    return Math.floor(this.range(min, max + 1));
+                }
+                
+                choice(array) {
+                    return array[this.int(0, array.length - 1)];
+                }
+                
+                bool(chance = 0.5) {
+                    return this.next() < chance;
+                }
+            }
+
+            // Plugin registries
+            const treatments = {};
+            const modifiers = {};
+            const reveals = {};
+            const palettes = {};
+
+            // Register a treatment
+            function registerTreatment(name, impl) {
+                treatments[name] = impl;
+            }
+
+            // Register a modifier
+            function registerModifier(name, impl) {
+                modifiers[name] = impl;
+            }
+
+            // Register a reveal
+            function registerReveal(name, impl) {
+                reveals[name] = impl;
+            }
+
+            // Register a palette
+            function registerPalette(name, colors) {
+                palettes[name] = colors;
+            }
+
+            // Preset generation
+            function generatePreset(seed, index) {
+                const rng = new RNG(seed + index * 1000);
+                
+                // Treatment selection
+                const treatmentNames = Object.keys(treatments);
+                const treatmentName = rng.choice(treatmentNames);
+                
+                // Modifier selection
+                const modifierNames = Object.keys(modifiers);
+                const modifierCount = rng.int(1, 3);
+                const selectedModifiers = [];
+                for (let i = 0; i < modifierCount; i++) {
+                    selectedModifiers.push({
+                        name: rng.choice(modifierNames),
+                        params: {}
+                    });
+                }
+                
+                // Palette selection
+                const paletteNames = Object.keys(palettes);
+                const paletteName = rng.choice(paletteNames);
+                
+                // Timing
+                const timing = {
+                    in: rng.range(0.8, 2.0),
+                    hold: rng.range(0.5, 1.5),
+                    out: rng.range(0.8, 2.0),
+                    easing: rng.choice(['cubic', 'expo', 'back', 'elastic', 'steps'])
+                };
+                
+                // PostFX
+                const postfx = {
+                    bloom: rng.range(0.1, 0.8),
+                    vignette: rng.range(0.2, 0.7),
+                    grain: rng.range(0.05, 0.3)
+                };
+                
+                // Reveal selection
+                const revealNames = Object.keys(reveals);
+                const revealName = rng.choice(revealNames);
+                
+                return {
+                    id: index,
+                    seed: seed + index * 1000,
+                    treatment: { name: treatmentName, params: {} },
+                    modifiers: selectedModifiers,
+                    palette: { name: paletteName, colors: palettes[paletteName] },
+                    timing,
+                    postfx,
+                    reveal: { name: revealName, params: {} }
+                };
+            }
+
+            // Generate all presets
+            const presets = [];
+            for (let i = 0; i < CONFIG.PRESET_COUNT; i++) {
+                presets.push(generatePreset(CONFIG.SEED, i));
+            }
+
+            // Easing functions
+            const easings = {
+                linear: t => t,
+                cubic: t => t * t * t,
+                expo: t => t === 0 ? 0 : Math.pow(2, 10 * (t - 1)),
+                back: t => {
+                    const s = 1.70158;
+                    return (t = t - 1) * t * ((s + 1) * t + s) + 1;
+                },
+                elastic: t => {
+                    if (t === 0 || t === 1) return t;
+                    return -Math.pow(2, 10 * (t - 1)) * Math.sin((t - 1.1) * 5 * Math.PI);
+                },
+                steps: t => Math.floor(t * 5) / 5
+            };
+
+            // Apply easing to a value
+            function applyEasing(value, easingType) {
+                const fn = easings[easingType] || easings.linear;
+                return fn(value);
+            }
+
+            // Treatment implementations
+            registerTreatment('FadeScale', {
+                enter: (state, preset) => {
+                    state.scale = 0;
+                    state.alpha = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.in);
+                    const eased = applyEasing(progress, preset.timing.easing);
+                    state.scale = eased;
+                    state.alpha = eased;
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.save();
+                    ctx.globalAlpha = state.alpha;
+                    ctx.scale(state.scale, state.scale);
+                    ctx.translate(CONFIG.CANVAS_SIZE/2, CONFIG.CANVAS_SIZE/2);
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('Audio Gnarls', 0, 0);
+                    ctx.restore();
+                }
+            });
+
+            registerTreatment('Assemble', {
+                enter: (state, preset) => {
+                    state.letters = 'Audio Gnarls'.split('').map((char, i) => ({
+                        char,
+                        x: Math.random() * CONFIG.CANVAS_SIZE,
+                        y: Math.random() * CONFIG.CANVAS_SIZE,
+                        targetX: CONFIG.CANVAS_SIZE/2 - 300 + i * 60,
+                        targetY: CONFIG.CANVAS_SIZE/2,
+                        scale: 0.1 + Math.random() * 0.5
+                    }));
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.in);
+                    const eased = applyEasing(progress, preset.timing.easing);
+                    
+                    state.letters.forEach(letter => {
+                        letter.x = letter.x + (letter.targetX - letter.x) * 0.1;
+                        letter.y = letter.y + (letter.targetY - letter.y) * 0.1;
+                        letter.scale = 0.1 + eased * 0.9;
+                    });
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    state.letters.forEach(letter => {
+                        ctx.save();
+                        ctx.translate(letter.x, letter.y);
+                        ctx.scale(letter.scale, letter.scale);
+                        ctx.fillText(letter.char, 0, 0);
+                        ctx.restore();
+                    });
+                }
+            });
+
+            registerTreatment('WaveWarp', {
+                enter: (state, preset) => {
+                    state.waveOffset = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    state.waveOffset = t * 5;
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    const text = 'Audio Gnarls';
+                    const textWidth = ctx.measureText(text).width;
+                    const startX = CONFIG.CANVAS_SIZE/2 - textWidth/2;
+                    const y = CONFIG.CANVAS_SIZE/2;
+                    
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const x = startX + ctx.measureText(text.substring(0, i)).width + ctx.measureText(char).width/2;
+                        const wave = Math.sin(state.waveOffset + i * 0.5) * 30;
+                        
+                        ctx.save();
+                        ctx.translate(x, y + wave);
+                        ctx.fillText(char, 0, 0);
+                        ctx.restore();
+                    }
+                }
+            });
+
+            registerTreatment('Glitch', {
+                enter: (state, preset) => {
+                    state.glitchIntensity = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    state.glitchIntensity = Math.min(1, t / preset.timing.in);
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    const text = 'Audio Gnarls';
+                    const y = CONFIG.CANVAS_SIZE/2;
+                    
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const x = CONFIG.CANVAS_SIZE/2 - 300 + i * 60;
+                        
+                        // Apply glitch effect
+                        if (Math.random() < state.glitchIntensity * 0.1) {
+                            ctx.save();
+                            ctx.translate(x + (Math.random() - 0.5) * 50, y + (Math.random() - 0.5) * 20);
+                            ctx.fillStyle = preset.palette.colors[1] || '#ff0000';
+                            ctx.fillText(char, 0, 0);
+                            ctx.restore();
+                        } else {
+                            ctx.fillText(char, x, y);
+                        }
+                    }
+                }
+            });
+
+            registerTreatment('GravityPile', {
+                enter: (state, preset) => {
+                    state.letters = 'Audio Gnarls'.split('').map((char, i) => ({
+                        char,
+                        x: CONFIG.CANVAS_SIZE/2,
+                        y: -100 - i * 30,
+                        vx: (Math.random() - 0.5) * 2,
+                        vy: 0,
+                        scale: 1
+                    }));
+                },
+                update: (state, preset, t, dt) => {
+                    const gravity = 0.5;
+                    const damping = 0.8;
+                    
+                    state.letters.forEach(letter => {
+                        letter.vy += gravity;
+                        letter.x += letter.vx;
+                        letter.y += letter.vy;
+                        
+                        // Floor collision
+                        if (letter.y > CONFIG.CANVAS_SIZE/2 + 50) {
+                            letter.y = CONFIG.CANVAS_SIZE/2 + 50;
+                            letter.vy *= -damping;
+                            letter.vx *= damping;
+                        }
+                    });
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    state.letters.forEach(letter => {
+                        ctx.save();
+                        ctx.translate(letter.x, letter.y);
+                        ctx.scale(letter.scale, letter.scale);
+                        ctx.fillText(letter.char, 0, 0);
+                        ctx.restore();
+                    });
+                }
+            });
+
+            registerTreatment('Pixelate', {
+                enter: (state, preset) => {
+                    state.pixelSize = 50;
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.in);
+                    state.pixelSize = 50 * (1 - progress) + 1 * progress;
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillText('Audio Gnarls', CONFIG.CANVAS_SIZE/2, CONFIG.CANVAS_SIZE/2);
+                    
+                    // Pixelate effect
+                    if (state.pixelSize > 1) {
+                        const w = CONFIG.CANVAS_SIZE;
+                        const h = CONFIG.CANVAS_SIZE;
+                        const imageData = ctx.getImageData(0, 0, w, h);
+                        const data = imageData.data;
+                        
+                        for (let y = 0; y < h; y += state.pixelSize) {
+                            for (let x = 0; x < w; x += state.pixelSize) {
+                                const idx = (y * w + x) * 4;
+                                const r = data[idx];
+                                const g = data[idx + 1];
+                                const b = data[idx + 2];
+                                
+                                for (let py = y; py < y + state.pixelSize && py < h; py++) {
+                                    for (let px = x; px < x + state.pixelSize && px < w; px++) {
+                                        const pIdx = (py * w + px) * 4;
+                                        data[pIdx] = r;
+                                        data[pIdx + 1] = g;
+                                        data[pIdx + 2] = b;
+                                    }
+                                }
+                            }
+                        }
+                        
+                        ctx.putImageData(imageData, 0, 0);
+                    }
+                }
+            });
+
+            registerTreatment('ChromaticAberration', {
+                enter: (state, preset) => {
+                    state.aberration = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.in);
+                    state.aberration = 30 * (1 - progress);
+                },
+                draw: (ctx, state, preset) => {
+                    const text = 'Audio Gnarls';
+                    const x = CONFIG.CANVAS_SIZE/2;
+                    const y = CONFIG.CANVAS_SIZE/2;
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // Red channel
+                    ctx.save();
+                    ctx.translate(x - state.aberration, y);
+                    ctx.fillStyle = '#ff0000';
+                    ctx.fillText(text, 0, 0);
+                    ctx.restore();
+                    
+                    // Blue channel
+                    ctx.save();
+                    ctx.translate(x + state.aberration, y);
+                    ctx.fillStyle = '#0000ff';
+                    ctx.fillText(text, 0, 0);
+                    ctx.restore();
+                    
+                    // Green channel (main)
+                    ctx.fillStyle = '#00ff00';
+                    ctx.fillText(text, x, y);
+                }
+            });
+
+            registerTreatment('DepthParallax', {
+                enter: (state, preset) => {
+                    state.layers = 'Audio Gnarls'.split('').map((char, i) => ({
+                        char,
+                        z: i * 0.1,
+                        x: CONFIG.CANVAS_SIZE/2 - 300 + i * 60,
+                        y: CONFIG.CANVAS_SIZE/2
+                    }));
+                },
+                update: (state, preset, t, dt) => {
+                    // Update based on time
+                },
+                draw: (ctx, state, preset) => {
+                    const mouseX = CONFIG.CANVAS_SIZE/2;
+                    const mouseY = CONFIG.CANVAS_SIZE/2;
+                    
+                    state.layers.forEach(layer => {
+                        const parallaxX = (mouseX - CONFIG.CANVAS_SIZE/2) * layer.z * 0.1;
+                        const parallaxY = (mouseY - CONFIG.CANVAS_SIZE/2) * layer.z * 0.1;
+                        
+                        ctx.save();
+                        ctx.translate(layer.x + parallaxX, layer.y + parallaxY);
+                        ctx.scale(1 - layer.z * 0.5, 1 - layer.z * 0.5);
+                        ctx.fillStyle = preset.palette.colors[0];
+                        ctx.font = 'bold 120px sans-serif';
+                        ctx.textAlign = 'center';
+                        ctx.textBaseline = 'middle';
+                        ctx.fillText(layer.char, 0, 0);
+                        ctx.restore();
+                    });
+                }
+            });
+
+            registerTreatment('MoiréSlice', {
+                enter: (state, preset) => {
+                    state.offset = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    state.offset = t * 10;
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    const text = 'Audio Gnarls';
+                    const y = CONFIG.CANVAS_SIZE/2;
+                    
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const x = CONFIG.CANVAS_SIZE/2 - 300 + i * 60;
+                        const sliceOffset = Math.sin(state.offset + i * 0.5) * 20;
+                        
+                        ctx.save();
+                        ctx.translate(x + sliceOffset, y);
+                        ctx.fillText(char, 0, 0);
+                        ctx.restore();
+                    }
+                }
+            });
+
+            registerTreatment('InkBleed', {
+                enter: (state, preset) => {
+                    state.bleed = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.in);
+                    state.bleed = 20 * (1 - progress);
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    const text = 'Audio Gnarls';
+                    const x = CONFIG.CANVAS_SIZE/2;
+                    const y = CONFIG.CANVAS_SIZE/2;
+                    
+                    // Draw with bleed effect
+                    ctx.shadowColor = preset.palette.colors[0];
+                    ctx.shadowBlur = state.bleed;
+                    ctx.fillText(text, x, y);
+                    
+                    // Reset shadow
+                    ctx.shadowBlur = 0;
+                }
+            });
+
+            registerTreatment('KernDrift', {
+                enter: (state, preset) => {
+                    state.drift = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    state.drift = Math.sin(t * 5) * 10;
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    const text = 'Audio Gnarls';
+                    const y = CONFIG.CANVAS_SIZE/2;
+                    
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const x = CONFIG.CANVAS_SIZE/2 - 300 + i * 60 + state.drift * (i / text.length);
+                        ctx.fillText(char, x, y);
+                    }
+                }
+            });
+
+            registerTreatment('SplineFlow', {
+                enter: (state, preset) => {
+                    state.points = [];
+                    for (let i = 0; i < 5; i++) {
+                        state.points.push({
+                            x: Math.random() * CONFIG.CANVAS_SIZE,
+                            y: Math.random() * CONFIG.CANVAS_SIZE
+                        });
+                    }
+                },
+                update: (state, preset, t, dt) => {
+                    // Update spline points
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    const text = 'Audio Gnarls';
+                    const y = CONFIG.CANVAS_SIZE/2;
+                    
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const t = i / (text.length - 1);
+                        
+                        // Simple linear interpolation for demo
+                        const x = CONFIG.CANVAS_SIZE/2 - 300 + i * 60;
+                        ctx.fillText(char, x, y);
+                    }
+                }
+            });
+
+            registerTreatment('MaskType', {
+                enter: (state, preset) => {
+                    state.maskProgress = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.in);
+                    state.maskProgress = progress;
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.fillStyle = preset.palette.colors[0];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    const text = 'Audio Gnarls';
+                    const x = CONFIG.CANVAS_SIZE/2;
+                    const y = CONFIG.CANVAS_SIZE/2;
+                    
+                    // Draw mask
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(0, 0, CONFIG.CANVAS_SIZE * state.maskProgress, CONFIG.CANVAS_SIZE);
+                    ctx.clip();
+                    ctx.fillText(text, x, y);
+                    ctx.restore();
+                }
+            });
+
+            // Modifier implementations
+            registerModifier('TemporalEasing', {
+                apply: (preset, state, t) => {
+                    // Applied in treatment update
+                    return state;
+                }
+            });
+
+            registerModifier('Jitter', {
+                apply: (preset, state, t) => {
+                    // Applied in treatment draw
+                    return state;
+                }
+            });
+
+            registerModifier('LensFX', {
+                apply: (preset, state, t) => {
+                    // Applied in post-processing
+                    return state;
+                }
+            });
+
+            registerModifier('TextureFX', {
+                apply: (preset, state, t) => {
+                    // Applied in post-processing
+                    return state;
+                }
+            });
+
+            registerModifier('ColorGrade', {
+                apply: (preset, state, t) => {
+                    // Applied in treatment draw
+                    return state;
+                }
+            });
+
+            registerModifier('AfterImage', {
+                apply: (preset, state, t) => {
+                    // Applied in post-processing
+                    return state;
+                }
+            });
+
+            // Reveal implementations
+            registerReveal('Iris', {
+                enter: (state, preset) => {
+                    state.irisRadius = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.out);
+                    state.irisRadius = Math.sqrt(CONFIG.CANVAS_SIZE * CONFIG.CANVAS_SIZE / 2) * progress;
+                },
+                draw: (ctx, state, preset) => {
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.beginPath();
+                    ctx.arc(CONFIG.CANVAS_SIZE/2, CONFIG.CANVAS_SIZE/2, state.irisRadius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            });
+
+            registerReveal('NoiseDissolve', {
+                enter: (state, preset) => {
+                    state.noiseThreshold = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.out);
+                    state.noiseThreshold = progress;
+                },
+                draw: (ctx, state, preset) => {
+                    const imageData = ctx.getImageData(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
+                    const data = imageData.data;
+                    const rng = new RNG(state.preset.seed);
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        if (rng.next() < state.noiseThreshold) {
+                            data[i + 3] = 0; // Set alpha to 0
+                        }
+                    }
+                    
+                    ctx.putImageData(imageData, 0, 0);
+                }
+            });
+
+            registerReveal('VenetianBlinds', {
+                enter: (state, preset) => {
+                    state.blindProgress = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.out);
+                    state.blindProgress = progress;
+                },
+                draw: (ctx, state, preset) => {
+                    const blindHeight = 20;
+                    const blindCount = Math.ceil(CONFIG.CANVAS_SIZE / blindHeight);
+                    
+                    ctx.save();
+                    for (let i = 0; i < blindCount; i++) {
+                        const y = i * blindHeight;
+                        const height = blindHeight * state.blindProgress;
+                        
+                        ctx.save();
+                        ctx.beginPath();
+                        ctx.rect(0, y, CONFIG.CANVAS_SIZE, height);
+                        ctx.clip();
+                        // The content is already drawn, so we just clip
+                        ctx.restore();
+                    }
+                    ctx.restore();
+                }
+            });
+
+            registerReveal('DirectionalSmear', {
+                enter: (state, preset) => {
+                    state.smearProgress = 0;
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.out);
+                    state.smearProgress = progress;
+                },
+                draw: (ctx, state, preset) => {
+                    // Simple directional fade
+                    const gradient = ctx.createLinearGradient(0, 0, CONFIG.CANVAS_SIZE, 0);
+                    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                    gradient.addColorStop(state.smearProgress, 'rgba(0,0,0,1)');
+                    
+                    ctx.save();
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
+                    ctx.restore();
+                }
+            });
+
+            registerReveal('PixelRain', {
+                enter: (state, preset) => {
+                    state.pixelRain = [];
+                    const tileSize = 20;
+                    const cols = Math.ceil(CONFIG.CANVAS_SIZE / tileSize);
+                    const rows = Math.ceil(CONFIG.CANVAS_SIZE / tileSize);
+                    
+                    for (let y = 0; y < rows; y++) {
+                        for (let x = 0; x < cols; x++) {
+                            state.pixelRain.push({
+                                x: x * tileSize,
+                                y: y * tileSize,
+                                width: tileSize,
+                                height: tileSize,
+                                alpha: 1
+                            });
+                        }
+                    }
+                },
+                update: (state, preset, t, dt) => {
+                    const progress = Math.min(1, t / preset.timing.out);
+                    const rng = new RNG(state.preset.seed);
+                    
+                    state.pixelRain.forEach(tile => {
+                        if (rng.next() < progress * 0.1) {
+                            tile.alpha = Math.max(0, tile.alpha - 0.05);
+                        }
+                    });
+                },
+                draw: (ctx, state, preset) => {
+                    state.pixelRain.forEach(tile => {
+                        if (tile.alpha < 1) {
+                            ctx.save();
+                            ctx.globalAlpha = tile.alpha;
+                            ctx.clearRect(tile.x, tile.y, tile.width, tile.height);
+                            ctx.restore();
+                        }
+                    });
+                }
+            });
+
+            // Palette definitions
+            registerPalette('mono noir', ['#ffffff', '#000000']);
+            registerPalette('tungsten', ['#f5f5f5', '#222222']);
+            registerPalette('cyber teal/purple', ['#00ffff', '#8000ff']);
+            registerPalette('sepia', ['#f4ecd8', '#7c6354']);
+            registerPalette('acid neon', ['#39ff14', '#ff00ff']);
+            registerPalette('duotone blue', ['#001f3f', '#0074d9']);
+            registerPalette('warm sunset', ['#ff851b', '#ff4136']);
+            registerPalette('cold glacier', ['#7fdbff', '#001f3f']);
+
+            // Update HUD
+            function updateHUD() {
+                const preset = state.preset;
+                if (!preset) return;
+                
+                hud.textContent = `Audio Gnarls • Preset ${String(preset.id).padStart(3, '0')}/${CONFIG.PRESET_COUNT} • Treatment: ${preset.treatment.name} • Reveal: ${preset.reveal.name} • Seed: ${preset.seed}`;
+            }
+
+            // Skip to reveal
+            function skipToReveal() {
+                state.phase = 'REVEAL';
+                state.time = 0;
+                emit('revealchange', state.preset.reveal.name);
+            }
+
+            // Set preset
+            function setPreset(index) {
+                state.presetIndex = index % CONFIG.PRESET_COUNT;
+                if (state.presetIndex < 0) state.presetIndex += CONFIG.PRESET_COUNT;
+                state.preset = presets[state.presetIndex];
+                state.phase = 'INTRO';
+                state.time = 0;
+                
+                // Initialize treatment
+                const treatment = treatments[state.preset.treatment.name];
+                if (treatment && treatment.enter) {
+                    treatment.enter(state, state.preset);
+                }
+                
+                // Initialize reveal
+                const reveal = reveals[state.preset.reveal.name];
+                if (reveal && reveal.enter) {
+                    reveal.enter(state, state.preset);
+                }
+                
+                updateHUD();
+                emit('presetchange', state.presetIndex);
+                emit('treatmentchange', state.preset.treatment.name);
+                emit('revealchange', state.preset.reveal.name);
+            }
+
+            // Next/previous preset
+            function nextPreset(step = 1) {
+                setPreset(state.presetIndex + step);
+            }
+            
+            function prevPreset(step = 1) {
+                setPreset(state.presetIndex - step);
+            }
+
+            // Replay current preset
+            function replay() {
+                state.phase = 'INTRO';
+                state.time = 0;
+                
+                // Reinitialize treatment
+                const treatment = treatments[state.preset.treatment.name];
+                if (treatment && treatment.enter) {
+                    treatment.enter(state, state.preset);
+                }
+                
+                // Reinitialize reveal
+                const reveal = reveals[state.preset.reveal.name];
+                if (reveal && reveal.enter) {
+                    reveal.enter(state, state.preset);
+                }
+                
+                emit('started');
+            }
+
+            // Animation loop
+            function animate(timestamp) {
+                if (!state.lastTime) state.lastTime = timestamp;
+                const dt = Math.min(100, timestamp - state.lastTime) / 1000;
+                state.lastTime = timestamp;
+                
+                if (state.paused) {
+                    requestAnimationFrame(animate);
+                    return;
+                }
+                
+                // Update time based on phase
+                if (state.phase === 'INTRO') {
+                    state.time += dt;
+                    if (state.time >= state.preset.timing.in) {
+                        state.phase = 'HOLD';
+                        state.time = 0;
+                    }
+                } else if (state.phase === 'HOLD') {
+                    state.time += dt;
+                    if (state.time >= state.preset.timing.hold) {
+                        state.phase = 'REVEAL';
+                        state.time = 0;
+                    }
+                } else if (state.phase === 'REVEAL') {
+                    state.time += dt;
+                    if (state.time >= state.preset.timing.out) {
+                        state.phase = 'DONE';
+                        emit('complete');
+                        
+                        // Fade out and remove
+                        canvas.style.transition = 'opacity 1s ease';
+                        canvas.style.opacity = '0';
+                        
+                        setTimeout(() => {
+                            if (CONFIG.AUTO_REMOVE) {
+                                document.getElementById('overlay-container').style.display = 'none';
+                            } else {
+                                canvas.style.pointerEvents = 'none';
+                            }
+                            
+                            // Dispatch custom event
+                            window.dispatchEvent(new CustomEvent('AudioGnarlsTitle:complete'));
+                        }, 1000);
+                        
+                        return;
+                    }
+                }
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
+                
+                // Apply treatment
+                const treatment = treatments[state.preset.treatment.name];
+                if (treatment) {
+                    if (state.phase === 'INTRO' && treatment.update) {
+                        treatment.update(state, state.preset, state.time, dt);
+                    }
+                    
+                    if (treatment.draw) {
+                        treatment.draw(ctx, state, state.preset);
+                    }
+                }
+                
+                // Apply reveal if in reveal phase
+                if (state.phase === 'REVEAL') {
+                    const reveal = reveals[state.preset.reveal.name];
+                    if (reveal) {
+                        if (reveal.update) {
+                            reveal.update(state, state.preset, state.time, dt);
+                        }
+                        
+                        if (reveal.draw) {
+                            reveal.draw(ctx, state, state.preset);
+                        }
+                    }
+                }
+                
+                // Apply modifiers
+                state.preset.modifiers.forEach(mod => {
+                    const modifier = modifiers[mod.name];
+                    if (modifier && modifier.apply) {
+                        modifier.apply(state.preset, state, state.time);
+                    }
+                });
+                
+                // Apply post-processing effects
+                if (state.preset.postfx.vignette > 0) {
+                    const gradient = ctx.createRadialGradient(
+                        CONFIG.CANVAS_SIZE/2, CONFIG.CANVAS_SIZE/2, 0,
+                        CONFIG.CANVAS_SIZE/2, CONFIG.CANVAS_SIZE/2, CONFIG.CANVAS_SIZE/2
+                    );
+                    gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                    gradient.addColorStop(1, `rgba(0,0,0,${state.preset.postfx.vignette})`);
+                    
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'multiply';
+                    ctx.fillStyle = gradient;
+                    ctx.fillRect(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
+                    ctx.restore();
+                }
+                
+                // Apply grain
+                if (state.preset.postfx.grain > 0) {
+                    const imageData = ctx.getImageData(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
+                    const data = imageData.data;
+                    const rng = new RNG(state.preset.seed);
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        if (rng.next() < state.preset.postfx.grain) {
+                            const noise = (rng.next() - 0.5) * 50;
+                            data[i] = Math.min(255, Math.max(0, data[i] + noise));
+                            data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+                            data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+                        }
+                    }
+                    
+                    ctx.putImageData(imageData, 0, 0);
+                }
+                
+                requestAnimationFrame(animate);
+            }
+
+            // Keyboard controls
+            function handleKeyDown(e) {
+                if (e.key === ' ') {
+                    state.paused = !state.paused;
+                    e.preventDefault();
+                } else if (e.key === 'ArrowRight') {
+                    if (e.shiftKey) {
+                        nextPreset(50);
+                    } else if (e.ctrlKey || e.metaKey) {
+                        nextPreset(10);
+                    } else {
+                        nextPreset(1);
+                    }
+                    e.preventDefault();
+                } else if (e.key === 'ArrowLeft') {
+                    if (e.shiftKey) {
+                        prevPreset(50);
+                    } else if (e.ctrlKey || e.metaKey) {
+                        prevPreset(10);
+                    } else {
+                        prevPreset(1);
+                    }
+                    e.preventDefault();
+                } else if (e.key === 'ArrowUp') {
+                    nextPreset(10);
+                    e.preventDefault();
+                } else if (e.key === 'ArrowDown') {
+                    prevPreset(10);
+                    e.preventDefault();
+                } else if (e.key === 'Enter') {
+                    replay();
+                    e.preventDefault();
+                } else if (e.key === 'Escape') {
+                    skipToReveal();
+                    e.preventDefault();
+                } else if (e.key === 'r' || e.key === 'R') {
+                    // Cycle reveal
+                    const revealNames = Object.keys(reveals);
+                    const currentIndex = revealNames.indexOf(state.preset.reveal.name);
+                    const nextIndex = (currentIndex + 1) % revealNames.length;
+                    state.preset.reveal.name = revealNames[nextIndex];
+                    updateHUD();
+                    emit('revealchange', state.preset.reveal.name);
+                    e.preventDefault();
+                } else if (e.key === 't' || e.key === 'T') {
+                    // Cycle treatment
+                    const treatmentNames = Object.keys(treatments);
+                    const currentIndex = treatmentNames.indexOf(state.preset.treatment.name);
+                    const nextIndex = (currentIndex + 1) % treatmentNames.length;
+                    state.preset.treatment.name = treatmentNames[nextIndex];
+                    updateHUD();
+                    emit('treatmentchange', state.preset.treatment.name);
+                    e.preventDefault();
+                } else if (e.key === 'd' || e.key === 'D') {
+                    // Re-roll preset
+                    state.preset = generatePreset(CONFIG.SEED, state.presetIndex);
+                    updateHUD();
+                    replay();
+                    e.preventDefault();
+                } else if (e.key === 's' || e.key === 'S') {
+                    // Save snapshot
+                    const link = document.createElement('a');
+                    link.download = `audio-gnarls-${state.presetIndex}.png`;
+                    link.href = canvas.toDataURL();
+                    link.click();
+                    e.preventDefault();
+                }
+            }
+
+            // Public API
+            window.AudioGnarlsTitle = {
+                start: () => {
+                    state.paused = false;
+                    emit('started');
+                },
+                pause: () => {
+                    state.paused = true;
+                },
+                resume: () => {
+                    state.paused = false;
+                },
+                replay: () => {
+                    replay();
+                },
+                setSeed: (seed) => {
+                    CONFIG.SEED = seed;
+                    // Regenerate presets
+                    for (let i = 0; i < CONFIG.PRESET_COUNT; i++) {
+                        presets[i] = generatePreset(CONFIG.SEED, i);
+                    }
+                    setPreset(state.presetIndex);
+                },
+                randomizeSeed: () => {
+                    const newSeed = Math.floor(Math.random() * 1000000);
+                    window.AudioGnarlsTitle.setSeed(newSeed);
+                },
+                setPreset: (index) => {
+                    setPreset(index);
+                },
+                nextPreset: (step = 1) => {
+                    nextPreset(step);
+                },
+                prevPreset: (step = 1) => {
+                    prevPreset(step);
+                },
+                setTitleTreatment: (name, params = {}) => {
+                    if (treatments[name]) {
+                        state.preset.treatment.name = name;
+                        state.preset.treatment.params = params;
+                        updateHUD();
+                        emit('treatmentchange', name);
+                    }
+                },
+                setReveal: (name, params = {}) => {
+                    if (reveals[name]) {
+                        state.preset.reveal.name = name;
+                        state.preset.reveal.params = params;
+                        updateHUD();
+                        emit('revealchange', name);
+                    }
+                },
+                skipToReveal: () => {
+                    skipToReveal();
+                },
+                on: (event, handler) => {
+                    on(event, handler);
+                }
+            };
+
+            // Event listeners
+            window.addEventListener('keydown', handleKeyDown);
+            skipButton.addEventListener('click', skipToReveal);
+
+            // Initialize
+            setPreset(CONFIG.START_PRESET_INDEX);
+            updateHUD();
+            
+            if (CONFIG.AUTO_START) {
+                requestAnimationFrame(animate);
+            }
+            
+            // Rail mode
+            if (CONFIG.AUTO_PLAY_RAIL) {
+                state.railTimer = setInterval(() => {
+                    if (!state.paused && state.phase === 'DONE') {
+                        nextPreset(1);
+                        replay();
+                    }
+                }, CONFIG.RAIL_ADVANCE_MS);
+            }
+        })();
+    </script>
+</body>
+</html>

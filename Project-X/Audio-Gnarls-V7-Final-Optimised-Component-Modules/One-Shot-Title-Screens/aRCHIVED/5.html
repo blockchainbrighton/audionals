@@ -1,0 +1,970 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Audio Gnarls — Title Overlay</title>
+<style>
+  :root{
+    --hud-bg: rgba(0,0,0,0.55);
+    --hud-fg: #e7e7e7;
+    --hud-accent: #9ae1ff;
+  }
+  html,body{ height:100%; margin:0; background:#000; color:#fff; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Noto Sans,sans-serif; }
+  /* Overlay root */
+  #ag-overlay{ position:fixed; inset:0; z-index:999999; display:grid; place-items:center; opacity:1; transition:opacity 360ms ease; pointer-events:auto; }
+  #ag-overlay.fade-out{ opacity:0; pointer-events:none; }
+  /* Square stage wrapper keeps aspect */
+  #ag-stage-wrap{ position:relative; width:min(100vmin, 1024px); height:min(100vmin, 1024px); }
+  canvas{ display:block; width:100%; height:100%; image-rendering:crisp-edges; }
+  /* HUD */
+  #ag-hud{ position:fixed; top:10px; left:12px; background:var(--hud-bg); color:var(--hud-fg); padding:8px 10px; border-radius:10px; font-size:12px; line-height:1.35; letter-spacing:0.2px; backdrop-filter:blur(4px); user-select:none; pointer-events:none; }
+  #ag-hud .line strong{ color:var(--hud-accent); font-weight:600; }
+  #ag-hud .kbd{ display:inline-block; padding:0 5px; margin:0 2px; border-radius:6px; background:rgba(255,255,255,0.06); border:1px solid rgba(255,255,255,0.12); font-family:ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; font-size:11px; }
+  /* Skip button */
+  #ag-skip{ position:fixed; top:10px; right:12px; background:rgba(255,255,255,0.07); color:#f2f2f2; border:1px solid rgba(255,255,255,0.16); border-radius:999px; padding:7px 12px; font-size:12px; cursor:pointer; backdrop-filter:blur(4px); transition:transform 0.12s ease, background 0.2s; }
+  #ag-skip:hover{ transform:translateY(-1px); background:rgba(255,255,255,0.11); }
+  #ag-dev-backdrop{ position:fixed; inset:0; display:grid; place-items:center; z-index:0; background:#000; }
+  #ag-dev-backdrop::before{ content:""; width:min(100vmin, 1024px); height:min(100vmin, 1024px); background:#000; border:2px solid rgba(255,255,255,0.06); box-shadow:0 0 0 100vmax #000; }
+  /* Reduced motion tweaks */
+  @media (prefers-reduced-motion: reduce){
+    #ag-overlay{ transition:opacity 120ms linear; }
+  }
+</style>
+</head>
+<body>
+<!-- The overlay is fully self-contained. If there's no app underneath,
+     a dev backdrop square is shown so the overlay can be previewed standalone. -->
+<div id="ag-overlay" aria-label="Audio Gnarls Title Overlay" role="dialog" aria-modal="true">
+  <div id="ag-stage-wrap">
+    <canvas id="ag-stage" width="1024" height="1024"></canvas>
+  </div>
+</div>
+<div id="ag-hud" aria-live="polite"></div>
+<button id="ag-skip" type="button">Skip</button>
+<div id="ag-dev-backdrop" hidden></div>
+
+<script>
+/* global window, document */
+(() => {
+  'use strict';
+
+  // =========================
+  // Config & Globals
+  // =========================
+  const CONFIG = {
+    SEED: 1785676586891,            // base seed
+    CANVAS_SIZE: 1024,      // square stage
+    START_PRESET_INDEX: 0,
+    AUTO_START: true,       // run intro on load (or user gesture)
+    AUTO_REMOVE: true,      // remove after reveal completes
+    AUTO_PLAY_RAIL: false,  // auto-advance through presets
+    RAIL_ADVANCE_MS: 1500,  // time per preset in rail mode
+    RAIL_JITTER_MS: 500,    // +/- jitter for rail mode
+    LOW_POWER: false,       // cheaper paths (particles, blur)
+    DEV_PREVIEW_BACKDROP: true, // black square beneath if no app
+    PRESET_COUNT: 200,      // generate this many unique presets
+    FONT_SCALE: 0.72,       // relative font size in square
+    TITLE: 'A G'
+  };
+
+  const REDUCED_MOTION = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if(REDUCED_MOTION){ CONFIG.RAIL_ADVANCE_MS = Math.max(900, CONFIG.RAIL_ADVANCE_MS - 400); }
+
+  // =========================
+  // DOM + Canvas Setup
+  // =========================
+  const overlay = document.getElementById('ag-overlay');
+  const hud = document.getElementById('ag-hud');
+  const skipBtn = document.getElementById('ag-skip');
+  const stageWrap = document.getElementById('ag-stage-wrap');
+  const canvas = document.getElementById('ag-stage');
+  const ctx = canvas.getContext('2d', { alpha:true, desynchronized:true });
+
+  // Offscreen canvases (stage buffer, mask, fx)
+  const stageBuffer = document.createElement('canvas');
+  const stageCtx = stageBuffer.getContext('2d', { alpha:true });
+  const fxCanvas = document.createElement('canvas');
+  const fxCtx = fxCanvas.getContext('2d', { alpha:true });
+  const maskCanvas = document.createElement('canvas');
+  const maskCtx = maskCanvas.getContext('2d', { alpha:true });
+
+  function resizeCanvases(){
+    const S = Math.min(window.innerWidth, window.innerHeight, CONFIG.CANVAS_SIZE);
+    canvas.width = canvas.height = S * devicePixelRatio;
+    stageBuffer.width = stageBuffer.height = S * devicePixelRatio;
+    fxCanvas.width = fxCanvas.height = S * devicePixelRatio;
+    maskCanvas.width = maskCanvas.height = S * devicePixelRatio;
+  }
+  resizeCanvases();
+  window.addEventListener('resize', resizeCanvases);
+
+  // Dev Backdrop (if there's no obvious app below)
+  const devBackdrop = document.getElementById('ag-dev-backdrop');
+  if(CONFIG.DEV_PREVIEW_BACKDROP){
+    // If body only contains our overlay elements, show the preview backdrop.
+    const children = [...document.body.children].filter(el => el.id !== 'ag-dev-backdrop');
+    const onlyUs = children.every(el => ['ag-overlay','ag-hud','ag-skip'].includes(el.id));
+    if(onlyUs){ devBackdrop.hidden = false; }
+  }
+
+  // =========================
+  // Utilities: RNG, Easing, Color, Math
+  // =========================
+  function splitmix32(a){
+    return function(){
+      a |= 0; a = (a + 0x9e3779b9) | 0; let t = a ^ (a >>> 16);
+      t = Math.imul(t, 0x21f0aaad); t ^= t >>> 15; t = Math.imul(t, 0x735a2d97);
+      return ((t ^= t >>> 15) >>> 0) / 4294967296;
+    };
+  }
+  function mulberry32(a){
+    return function(){
+      let t = a += 0x6D2B79F5;
+      t = Math.imul(t ^ (t >>> 15), t | 1);
+      t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+  function lcg(seed){ let a = seed>>>0; return () => ((a = (1664525*a + 1013904223)>>>0) / 4294967296); }
+  function hashCombine(a,b){ // 32-bit mix
+    let x = (a ^ (b + 0x9e3779b9 + ((a<<6)>>>0) + (a>>>2)))>>>0; return x>>>0;
+  }
+  function rngFrom(seed, salt){ return mulberry32(hashCombine(seed>>>0, salt>>>0)); }
+  function randRange(rng, a, b){ return a + (b-a)*rng(); }
+  function randInt(rng, a, b){ return Math.floor(randRange(rng, a, b+1)); }
+  function pick(rng, arr){ return arr[Math.floor(rng()*arr.length)]; }
+
+  const Ease = {
+    linear:t=>t,
+    cubicIn:t=>t*t*t,
+    cubicOut:t=>1-((1-t)**3),
+    cubicInOut:t=>t<0.5?4*t*t*t:1-(-2*t+2)**3/2,
+    expoIn:t=>t===0?0:Math.pow(2,10*(t-1)),
+    expoOut:t=>t===1?1:1-Math.pow(2,-10*t),
+    expoInOut:t=>t===0?0:t===1?1:t<0.5?Math.pow(2,20*t-10)/2:(2-Math.pow(2,-20*t+10))/2,
+    backOut:t=>{ const c1=1.70158; const c3=c1+1; return 1+c3*Math.pow(t-1,3)+c1*Math.pow(t-1,2); },
+    elasticOut:t=>{ const c4=(2*Math.PI)/3; return t===0?0:t===1?1:Math.pow(2,-10*t)*Math.sin((t*10-0.75)*c4)+1; },
+    steps4:t=> (Math.floor(t*4))/4,
+  };
+
+  function clamp(x, a, b){ return Math.max(a, Math.min(b, x)); }
+  function lerp(a,b,t){ return a+(b-a)*t; }
+  function remap(x, a,b, c,d){ return c + (x-a)*(d-c)/(b-a); }
+
+  // Tiny HSV convert for palettes
+  function hsl(h,s,l){ return `hsl(${h}, ${s}%, ${l}%)`; }
+
+  // =========================
+  // Palettes (8+)
+  // =========================
+  const PALETTES = [
+    { name:'Mono Noir', colors:['#FFFFFF','#BDBDBD','#7A7A7A','#000000'] },
+    { name:'Tungsten', colors:['#FFC78A','#FF9D5B','#5B3A2E','#0B0B0B'] },
+    { name:'Cyber Teal/Purple', colors:['#64FFF9','#B15CFF','#22223B','#0c0c12'] },
+    { name:'Sepia', colors:['#F2E3C6','#C9B48E','#7C6A4D','#0B0A09'] },
+    { name:'Acid Neon', colors:['#D7FF00','#00F0FF','#111','#000'] },
+    { name:'Duotone Magenta/Blue', colors:['#FF4ECC','#4E7BFF','#111','#000'] },
+    { name:'Warm Sunset', colors:['#FFD1A3','#FF7A59','#B23A48','#0C0A0A'] },
+    { name:'Cold Glacier', colors:['#C7E6FF','#6BD1FF','#0F2D3F','#00070B'] },
+    { name:'Emerald Gold', colors:['#CBF7E9','#28D89A','#D7B35A','#0A0D0C'] },
+  ];
+
+  // =========================
+  // Plugin Registries
+  // =========================
+  const Treatments = new Map();
+  const Modifiers = new Map();
+  const Reveals = new Map();
+  function registerTreatment(name, impl){ Treatments.set(name, impl); }
+  function registerModifier(name, impl){ Modifiers.set(name, impl); }
+  function registerReveal(name, impl){ Reveals.set(name, impl); }
+
+  // =========================
+  // Shared Text Layout Helpers
+  // =========================
+  function buildLetters(ctx2d, title, opts){
+    const S = stageBuffer.width; // device pixels
+    const fontPx = Math.floor(S * (opts.fontScale || CONFIG.FONT_SCALE));
+    ctx2d.save();
+    ctx2d.font = `${opts.fontWeight||700} ${fontPx}px ${opts.fontFamily||'system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif'}`;
+    ctx2d.textBaseline = 'middle';
+    ctx2d.textAlign = 'left';
+    const spacing = opts.letterSpacingPx || 0;
+
+    // Measure each glyph
+    const letters = [];
+    let totalW = 0;
+    for(let i=0;i<title.length;i++){
+      const ch = title[i];
+      const w = ctx2d.measureText(ch).width;
+      letters.push({ ch, w });
+      totalW += w + spacing;
+    }
+    totalW -= spacing;
+    const cx = S/2; const cy = S/2;
+    let x = cx - totalW/2;
+    for(let i=0;i<letters.length;i++){
+      letters[i].x = x; letters[i].y = cy; letters[i].ix = i; letters[i].baseX=x; letters[i].baseY=cy;
+      x += letters[i].w + spacing;
+    }
+    ctx2d.restore();
+    return { letters, fontPx };
+  }
+
+  // =========================
+  // Modifiers (≥6)
+  // =========================
+  // 1) Temporal Easing Set (changes global easing by name)
+  registerModifier('Temporal Easing', {
+    apply(state){ state.easingFn = Ease[state.preset.timing.easing] || Ease.cubicOut; }
+  });
+  // 2) Jitter Model (per-letter noise)
+  registerModifier('Jitter', {
+    apply(state){
+      const { rng, t, letters } = state;
+      const mag = (state.preset.modParam?.jitterMag ?? 0.75) * (REDUCED_MOTION?0.3:1);
+      for(const L of letters){
+        const n1 = Math.sin( (t*3 + L.ix*1.11 + rng()*100) )*mag;
+        const n2 = Math.cos( (t*2.3 + L.ix*0.77 + rng()*200) )*mag;
+        L.jx = n1; L.jy = n2;
+      }
+    }
+  });
+  // 3) Lens FX (bloom, vignette)
+  registerModifier('Lens FX', {
+    post(stageCtx, fxCtx, state){
+      const { bloom=0.0, vignette=0.2 } = state.preset.postfx || {};
+      const S = stageBuffer.width;
+      if(bloom>0.01 && !CONFIG.LOW_POWER){
+        fxCtx.clearRect(0,0,S,S);
+        fxCtx.filter = `blur(${Math.round(lerp(2, 10, clamp(bloom,0,1)))}px)`;
+        fxCtx.globalCompositeOperation = 'source-over';
+        fxCtx.drawImage(stageBuffer,0,0);
+        fxCtx.filter = 'none';
+        stageCtx.save();
+        stageCtx.globalCompositeOperation = 'lighter';
+        stageCtx.globalAlpha = clamp(bloom*0.9,0,1);
+        stageCtx.drawImage(fxCanvas,0,0);
+        stageCtx.restore();
+      }
+      if(vignette>0.01){
+        const grd = stageCtx.createRadialGradient(S/2,S/2, S*0.35, S/2,S/2,S*0.75);
+        grd.addColorStop(0, 'rgba(0,0,0,0)');
+        grd.addColorStop(1, `rgba(0,0,0,${clamp(vignette*0.9,0,0.85)})`);
+        stageCtx.fillStyle = grd;
+        stageCtx.fillRect(0,0,S,S);
+      }
+    }
+  });
+  // 4) Texture FX (grain + scanlines)
+  registerModifier('Texture', {
+    post(stageCtx, fxCtx, state){
+      const { grain=0.2 } = state.preset.postfx||{};
+      const scan = state.preset.modParam?.scan || 0.0;
+      const S = stageBuffer.width; const step = 2; // coarse for perf
+      if(grain>0.01){
+        const gA = clamp(grain*0.22,0,0.25);
+        stageCtx.save();
+        stageCtx.globalAlpha = gA;
+        const noiseSize = 128;
+        fxCanvas.width = fxCanvas.height = noiseSize;
+        const id = fxCtx.createImageData(noiseSize, noiseSize);
+        const data = id.data; const rng = state.rng;
+        for(let i=0;i<data.length;i+=4){
+          const v = 160 + Math.floor(rng()*95);
+          data[i]=data[i+1]=data[i+2]=v; data[i+3]=255;
+        }
+        fxCtx.putImageData(id,0,0);
+        stageCtx.imageSmoothingEnabled = false;
+        stageCtx.globalCompositeOperation = 'overlay';
+        stageCtx.drawImage(fxCanvas,0,0,S,S);
+        stageCtx.restore();
+      }
+      if(scan>0.001){
+        stageCtx.save();
+        stageCtx.globalAlpha = clamp(scan*0.45,0,0.45);
+        stageCtx.globalCompositeOperation = 'multiply';
+        stageCtx.fillStyle = 'rgba(255,255,255,0.06)';
+        for(let y=0;y<S;y+=3){ stageCtx.fillRect(0,y,S,1); }
+        stageCtx.restore();
+      }
+    }
+  });
+  // 5) Color Grade (tint & contrast)
+  registerModifier('Color Grade', {
+    post(stageCtx, fxCtx, state){
+      const pal = state.preset.palette.colors;
+      const tint = pal[1] || '#fff';
+      stageCtx.save();
+      stageCtx.globalCompositeOperation='soft-light';
+      stageCtx.fillStyle=tint; stageCtx.globalAlpha=0.18;
+      stageCtx.fillRect(0,0,stageBuffer.width,stageBuffer.height);
+      stageCtx.restore();
+    }
+  });
+  // 6) After-Image / Feedback
+  registerModifier('Feedback', {
+    beforeFrame(stageCtx, state){
+      if(state.phase==='INTRO' || state.phase==='HOLD'){
+        const decay = clamp(state.preset.modParam?.feedback ?? 0.0, 0, 0.95);
+        if(decay>0.01){
+          stageCtx.save();
+          stageCtx.globalAlpha = decay*0.7;
+          stageCtx.globalCompositeOperation = 'source-over';
+          stageCtx.drawImage(stageBuffer, 0.25,0.25, stageBuffer.width-0.5, stageBuffer.height-0.5);
+          stageCtx.restore();
+        }
+      }
+    }
+  });
+
+  // =========================
+  // Treatments (≥12)
+  // Each impl: { enter(state), update(dt,state), draw(ctx,state), exit(state) }
+  // Helpers
+  function drawLettersBaseline(ctx2d, state, perLetter){
+    const { letters, fontPx, colorText } = state;
+    ctx2d.save();
+    ctx2d.fillStyle = colorText;
+    ctx2d.textBaseline='middle';
+    ctx2d.textAlign='left';
+    ctx2d.font = `${state.fontWeight||800} ${fontPx}px ${state.fontFamily}`;
+    for(const L of letters){
+      ctx2d.save();
+      perLetter && perLetter(ctx2d, L);
+      ctx2d.fillText(L.ch, L.x, L.y);
+      ctx2d.restore();
+    }
+    ctx2d.restore();
+  }
+
+  // 1) FadeScale (baseline)
+  registerTreatment('FadeScale', {
+    enter(state){},
+    update(dt, state){},
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1); const e = state.easingFn(t);
+      const s = lerp(0.85, 1.0, e);
+      const a = lerp(0.0, 1.0, e);
+      const cx = stageBuffer.width/2, cy = stageBuffer.height/2;
+      ctx2d.save(); ctx2d.translate(cx,cy); ctx2d.scale(s,s); ctx2d.translate(-cx,-cy); ctx2d.globalAlpha = a;
+      drawLettersBaseline(ctx2d, state);
+      ctx2d.restore();
+    },
+    exit(){},
+  });
+
+  // 2) Assemble/Disassemble (explode/implode)
+  registerTreatment('Assemble', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1); const e = state.easingFn(t);
+      drawLettersBaseline(ctx2d, state, (c,L)=>{
+        const angle = (L.ix/ (state.letters.length-1) - 0.5)*Math.PI*2;
+        const r = lerp(stageBuffer.width*0.4, 0, e);
+        const ox = Math.cos(angle)*r; const oy = Math.sin(angle)*r;
+        c.translate(ox, oy);
+      });
+    }
+  });
+
+  // 3) Kern-Drift (elastic spacing)
+  registerTreatment('KernDrift', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1); const e = state.easingFn(t);
+      const span = lerp(220*devicePixelRatio, 0, e)*(REDUCED_MOTION?0.5:1);
+      const mid = (state.letters.length-1)/2;
+      drawLettersBaseline(ctx2d, state, (c,L)=>{
+        const k = (L.ix-mid)/(mid||1);
+        c.translate(k*span, 0);
+      });
+    }
+  });
+
+  // 4) Glitch/Scramble (glyph swaps + scanlines)
+  registerTreatment('Glitch', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1);
+      const gAmt = (1-t)*0.9;
+      drawLettersBaseline(ctx2d, state, (c,L)=>{
+        const jitterX = (Math.random()-0.5)*gAmt*8*devicePixelRatio;
+        const slice = (L.ix%3-1)*gAmt*2;
+        c.translate(jitterX, 0);
+        if(Math.random()<0.2*gAmt){
+          // temporary swap glyph
+          const tmp = String.fromCharCode(33 + (L.ix*37)%60);
+          c.save(); c.globalAlpha=0.6*gAmt; c.fillText(tmp, L.x, L.y - slice);
+          c.restore();
+        }
+      });
+      // scanline flashes
+      ctx2d.save();
+      ctx2d.globalAlpha = gAmt*0.35;
+      ctx2d.globalCompositeOperation = 'lighter';
+      ctx2d.fillStyle = state.colorAccent;
+      for(let y=0;y<stageBuffer.height;y+=7){ ctx2d.fillRect(0,y,stageBuffer.width,1); }
+      ctx2d.restore();
+    }
+  });
+
+  // 5) Spline-Flow (letters along bezier)
+  registerTreatment('SplineFlow', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1); const e = state.easingFn(t);
+      const amp = stageBuffer.height*0.12*(REDUCED_MOTION?0.4:1);
+      drawLettersBaseline(ctx2d, state, (c,L)=>{
+        const u = L.ix/(state.letters.length-1 || 1);
+        const yOff = Math.sin((u*2+e*2)*Math.PI)*amp*(1-e*0.5);
+        c.translate(0, yOff);
+        c.rotate( (yOff/amp)*0.15 );
+      });
+    }
+  });
+
+  // 6) Gravity Pile (drop + settle)
+  registerTreatment('Gravity', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1); const e = Ease.backOut(t);
+      const drop = lerp(-stageBuffer.height*0.6, 0, e);
+      const wobble = (1-t)*0.5;
+      drawLettersBaseline(ctx2d, state, (c,L)=>{
+        const phase = (L.ix%3)*0.3;
+        c.translate(0, drop + Math.sin((t+phase)*10)*wobble*10);
+      });
+    }
+  });
+
+  // 7) Mask-Type (invert within glyphs)
+  registerTreatment('MaskType', {
+    draw(ctx2d, state){
+      // Fill background with palette dark
+      ctx2d.save();
+      ctx2d.fillStyle = state.colorBg;
+      ctx2d.fillRect(0,0,stageBuffer.width, stageBuffer.height);
+      // Draw inverted text by using destination-out then overlay accent
+      ctx2d.globalCompositeOperation='destination-out';
+      drawLettersBaseline(ctx2d, state);
+      ctx2d.globalCompositeOperation='lighter';
+      ctx2d.globalAlpha=0.35; ctx2d.fillStyle=state.colorAccent;
+      drawLettersBaseline(ctx2d, state, (c)=>{ c.translate(2,2); });
+      ctx2d.restore();
+    }
+  });
+
+  // 8) Wave-Warp
+  registerTreatment('WaveWarp', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1);
+      drawLettersBaseline(ctx2d, state, (c,L)=>{
+        const f = 8; const amp = 10*devicePixelRatio*(REDUCED_MOTION?0.5:1);
+        const s = Math.sin((L.x*0.01 + t*6));
+        c.translate(0, s*amp*(1-t*0.2));
+        c.transform(1, 0.06*Math.sin(t*3 + L.ix), 0, 1, 0, 0);
+      });
+    }
+  });
+
+  // 9) Pixelate → Sharpen
+  registerTreatment('Pixelate', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1); const s = lerp(12, 1, Ease.cubicOut(t));
+      // Draw sharp text to fxCanvas small, then scale up
+      const S = stageBuffer.width;
+      fxCanvas.width = fxCanvas.height = Math.max(64, Math.floor(S / s));
+      const fctx = fxCtx; fctx.clearRect(0,0,fxCanvas.width,fxCanvas.height);
+      fctx.imageSmoothingEnabled=false;
+      fctx.save();
+      const scale = fxCanvas.width/S;
+      fctx.scale(scale, scale);
+      drawLettersBaseline(fctx, state);
+      fctx.restore();
+      ctx2d.imageSmoothingEnabled=false;
+      ctx2d.drawImage(fxCanvas, 0,0, fxCanvas.width,fxCanvas.height, 0,0,S,S);
+    }
+  });
+
+  // 10) Chromatic Aberration Sweep
+  registerTreatment('ChromaSweep', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1);
+      // Draw three passes with color offsets and drift converge
+      const drift = (1-t)*6*devicePixelRatio;
+      const passes = [
+        { color:'#ff3b3b', off:[ drift,0] },
+        { color:'#3b9bff', off:[-drift,0] },
+        { color: state.colorText, off:[0,0] },
+      ];
+      for(const p of passes){
+        ctx2d.save(); ctx2d.fillStyle=p.color;
+        drawLettersBaseline(ctx2d, state, (c)=>{ c.translate(p.off[0], p.off[1]); });
+        ctx2d.restore();
+      }
+    }
+  });
+
+  // 11) Moiré Slice
+  registerTreatment('MoireSlice', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1);
+      drawLettersBaseline(ctx2d, state);
+      ctx2d.save();
+      const band = Math.floor(lerp(30, 6, t));
+      ctx2d.globalCompositeOperation='source-atop';
+      for(let y=0;y<stageBuffer.height;y+=band){
+        const off = Math.sin((y*0.02 + t*6))*8*devicePixelRatio*(1-t*0.6);
+        ctx2d.drawImage(stageBuffer, 0,y, stageBuffer.width, band/2, off, y, stageBuffer.width, band/2);
+      }
+      ctx2d.restore();
+    }
+  });
+
+  // 12) Depth Parallax
+  registerTreatment('DepthParallax', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1);
+      const layers = 5;
+      for(let i=layers-1;i>=0;i--){
+        const z = i/(layers-1);
+        const off = (1-t)* (z*20) * devicePixelRatio;
+        ctx2d.save();
+        ctx2d.globalAlpha = lerp(0.15, 0.6, 1-z);
+        ctx2d.fillStyle = i%2?state.colorAccent:state.colorText;
+        drawLettersBaseline(ctx2d, state, (c)=>{ c.translate(off*(i%2?1:-1), off*0.5); });
+        ctx2d.restore();
+      }
+    }
+  });
+
+  // 13) Ink Bleed (noise-dilated edges → crisp)
+  registerTreatment('InkBleed', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1);
+      const passes = 4;
+      for(let p=passes; p>=1; p--){
+        const s = (p/passes);
+        const j = (1-t) * 2 * s * devicePixelRatio * (REDUCED_MOTION?0.5:1);
+        ctx2d.save();
+        ctx2d.globalAlpha = 0.12 + 0.2*s;
+        drawLettersBaseline(ctx2d, state, (c)=>{ c.translate(j*Math.sin(p*1.7), j*Math.cos(p*1.3)); });
+        ctx2d.restore();
+      }
+      ctx2d.save(); drawLettersBaseline(ctx2d, state); ctx2d.restore();
+    }
+  });
+
+  // 14) Neon Tube Flicker (nice-to-have)
+  registerTreatment('NeonFlicker', {
+    draw(ctx2d, state){
+      const t = clamp(state.localT,0,1); const e = Ease.cubicOut(t);
+      const glow = (1.2 - e) * 8 * devicePixelRatio * (CONFIG.LOW_POWER?0.5:1);
+      // glow
+      ctx2d.save();
+      if(!CONFIG.LOW_POWER){ ctx2d.shadowBlur = glow; ctx2d.shadowColor = state.colorAccent; }
+      ctx2d.globalAlpha = 0.8;
+      drawLettersBaseline(ctx2d, state);
+      ctx2d.restore();
+      // flicker overlay
+      ctx2d.save();
+      const f = (Math.sin(state.time*50)+1)/2*0.15;
+      ctx2d.globalAlpha = 0.2 + f*(1-e);
+      drawLettersBaseline(ctx2d, state);
+      ctx2d.restore();
+    }
+  });
+
+  const TREATMENT_NAMES = [...Treatments.keys()];
+
+  // =========================
+  // Reveal Modes (≥5)
+  // Each impl: { enter(state), update(dt,state), apply(canvasCtx, stageCanvas, state) }
+  // apply() should draw stageCanvas into canvasCtx with progressive removal (destination-out)
+
+  // Common helper: clear and draw stage, then subtract mask
+  function drawStageToScreen(){
+    ctx.clearRect(0,0,canvas.width,canvas.height);
+    ctx.globalCompositeOperation='source-over';
+    ctx.drawImage(stageBuffer, 0,0);
+  }
+
+  // A) Iris / Radial wipe
+  registerReveal('Iris', {
+    enter(){},
+    apply(canvasCtx, state){
+      drawStageToScreen();
+      const S = canvas.width; const cx=S/2, cy=S/2;
+      const prog = clamp(state.revealT,0,1);
+      const r = lerp(0, Math.hypot(S,S), Ease.cubicOut(prog));
+      canvasCtx.save();
+      canvasCtx.globalCompositeOperation='destination-out';
+      const g = canvasCtx.createRadialGradient(cx,cy, r*0.7, cx,cy, r);
+      g.addColorStop(0,'rgba(255,255,255,0.95)'); g.addColorStop(1,'rgba(255,255,255,0)');
+      canvasCtx.fillStyle = g;
+      canvasCtx.beginPath(); canvasCtx.arc(cx,cy, r, 0, Math.PI*2); canvasCtx.fill();
+      canvasCtx.restore();
+      return prog>=1;
+    }
+  });
+
+  // B) Noise-Threshold Dissolve
+  registerReveal('NoiseDissolve', {
+    enter(state){
+      // Precompute a low-res noise tile for performance
+      const N = 256; maskCanvas.width=maskCanvas.height=N; const id = maskCtx.createImageData(N,N); const data=id.data; const rng = state.rng;
+      for(let i=0;i<N*N;i++){
+        const v = Math.floor(rng()*255); const o=i*4; data[o]=data[o+1]=data[o+2]=255; data[o+3]=v; // alpha holds noise
+      }
+      maskCtx.putImageData(id,0,0);
+    },
+    apply(canvasCtx, state){
+      drawStageToScreen();
+      const prog = clamp(state.revealT,0,1);
+      canvasCtx.save();
+      canvasCtx.globalCompositeOperation='destination-out';
+      canvasCtx.globalAlpha = 1.0;
+      canvasCtx.imageSmoothingEnabled=false;
+      const S = canvas.width;
+      // Draw noise as mask where alpha < threshold => remove
+      const scale = S / maskCanvas.width;
+      canvasCtx.drawImage(maskCanvas, 0,0, maskCanvas.width,maskCanvas.height, 0,0, S,S);
+      // overlay a white rect with globalAlpha depending on threshold
+      // Then composite using 'destination-out' again to boost removal
+      canvasCtx.globalAlpha = clamp(prog*1.2, 0, 1);
+      canvasCtx.fillStyle='white';
+      canvasCtx.fillRect(0,0,S,S);
+      canvasCtx.restore();
+      return prog>=1;
+    }
+  });
+
+  // C) Venetian Blinds / Scanline Decode
+  registerReveal('Blinds', {
+    apply(canvasCtx, state){
+      drawStageToScreen();
+      const prog = clamp(state.revealT,0,1);
+      const S = canvas.width; const bands = 32; const open = Math.floor(lerp(0, bands, Ease.cubicOut(prog)));
+      canvasCtx.save(); canvasCtx.globalCompositeOperation='destination-out';
+      const h = Math.ceil(S / bands);
+      for(let i=0;i<open;i++){
+        const y = i*h; canvasCtx.fillStyle='rgba(255,255,255,0.95)'; canvasCtx.fillRect(0,y, S,h-1);
+      }
+      canvasCtx.restore();
+      return prog>=1;
+    }
+  });
+
+  // D) Directional Smear
+  registerReveal('Smear', {
+    apply(canvasCtx, state){
+      drawStageToScreen();
+      const prog = clamp(state.revealT,0,1);
+      const S = canvas.width; const w = Math.floor(lerp(0, S*1.2, Ease.expoOut(prog)));
+      canvasCtx.save(); canvasCtx.globalCompositeOperation='destination-out';
+      const grd = canvasCtx.createLinearGradient(0,0,w,0);
+      grd.addColorStop(0,'rgba(255,255,255,0.75)'); grd.addColorStop(1,'rgba(255,255,255,0)');
+      canvasCtx.fillStyle = grd; canvasCtx.fillRect(0,0,w,S);
+      canvasCtx.restore();
+      return prog>=1;
+    }
+  });
+
+  // E) Pixel Rain
+  registerReveal('PixelRain', {
+    apply(canvasCtx, state){
+      drawStageToScreen();
+      const prog = clamp(state.revealT,0,1);
+      const S = canvas.width; const tile = 24*devicePixelRatio; const cols = Math.ceil(S/tile); const rows = Math.ceil(S/tile);
+      canvasCtx.save(); canvasCtx.globalCompositeOperation='destination-out';
+      for(let y=0;y<rows;y++){
+        for(let x=0;x<cols;x++){
+          const seed = (x*73856093 ^ y*19349663 ^ (state.seed|0))>>>0;
+          const r = (seed%100)/100;
+          if(r < prog){ canvasCtx.fillStyle='rgba(255,255,255,0.95)'; canvasCtx.fillRect(x*tile, y*tile, tile, tile); }
+        }
+      }
+      canvasCtx.restore();
+      return prog>=1;
+    }
+  });
+
+  const REVEAL_NAMES = [...Reveals.keys()];
+
+  // =========================
+  // Preset Generator (deterministic)
+  // =========================
+  function makePresetList(seed, count){
+    const rng = rngFrom(seed, 0xA11CE);
+    const presets = [];
+    for(let id=0; id<count; id++){
+      const prng = rngFrom(seed, id*2654435761 >>> 0);
+      const treatment = pick(prng, TREATMENT_NAMES);
+      const reveal = pick(prng, REVEAL_NAMES);
+      const pal = pick(prng, PALETTES);
+      const easingNames = Object.keys(Ease);
+      const easing = pick(prng, ['cubicOut','expoOut','elasticOut','backOut','cubicInOut','steps4']);
+      const timingBase = REDUCED_MOTION? {in:0.5, hold:0.5, out:0.5} : { in: randRange(prng,0.6,1.2), hold: randRange(prng,0.3,0.8), out: randRange(prng,0.5,1.1) };
+      const postfx = { bloom: clamp(randRange(prng, 0, 0.9),0,0.9), vignette: clamp(randRange(prng, 0.1, 0.55),0,0.7), grain: clamp(randRange(prng, 0.05, 0.5),0,0.7) };
+      const modPool = ['Temporal Easing','Jitter','Lens FX','Texture','Color Grade','Feedback'];
+      const modCount = 3 + Math.floor(prng()*3); // 3-5 mods
+      const picked = new Set();
+      const modifiers = [];
+      for(let m=0;m<modCount;m++){
+        const name = pick(prng, modPool);
+        if(picked.has(name)) continue;
+        picked.add(name);
+        // per-mod params
+        const params = {};
+        if(name==='Jitter'){ params.jitterMag = randRange(prng, 0.3, 1.2); }
+        if(name==='Texture'){ params.scan = randRange(prng, 0.0, 0.6); }
+        if(name==='Feedback'){ params.feedback = randRange(prng, 0.02, 0.25); }
+        modifiers.push({ name, params });
+      }
+      const preset = {
+        id,
+        seed: hashCombine(seed, id),
+        treatment: { name: treatment, params:{} },
+        modifiers,
+        palette: { name: pal.name, colors: pal.colors.slice(0) },
+        timing: { in: timingBase.in, hold: timingBase.hold, out: timingBase.out, easing },
+        postfx,
+        reveal: { name: reveal, params:{} },
+      };
+      presets.push(preset);
+    }
+    return presets;
+  }
+
+  // =========================
+  // State & Engine
+  // =========================
+  const State = {
+    seed: CONFIG.SEED,
+    presets: [],
+    index: CONFIG.START_PRESET_INDEX|0,
+    phase: 'INTRO', // INTRO -> HOLD -> REVEAL -> DONE
+    time: 0, // seconds since start
+    tIntro: 0, tHold: 0, tReveal: 0,
+    localT: 0, revealT: 0,
+    paused: false,
+    easingFn: Ease.cubicOut,
+    handlers: { started:[], presetchange:[], treatmentchange:[], revealchange:[], complete:[] },
+  };
+
+  function emit(name, payload){ for(const fn of State.handlers[name]||[]) try{ fn(payload); }catch(e){ console.error(e);} }
+
+  function setPreset(index, replay=true){
+    const N = State.presets.length;
+    State.index = ( (index%N)+N ) % N;
+    State.preset = State.presets[State.index];
+    // seed-specific RNG
+    State.rng = rngFrom(State.preset.seed, 0xB00B);
+    // Colors
+    const [cPrimary,cAccent,cMid,cBg] = State.preset.palette.colors;
+    State.colorText = cPrimary; State.colorAccent=cAccent; State.colorMid=cMid||'#888'; State.colorBg=cBg||'#000';
+    // Typography baseline
+    const layout = buildLetters(stageCtx, CONFIG.TITLE, { fontScale: CONFIG.FONT_SCALE, fontWeight:800 });
+    State.letters = layout.letters; State.fontPx = layout.fontPx; State.fontFamily = 'system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, sans-serif';
+    State.fontWeight = 800;
+    // Timing
+    State.tIntro = Math.max(0.12, State.preset.timing.in * (REDUCED_MOTION?0.6:1));
+    State.tHold = State.preset.timing.hold * (REDUCED_MOTION?0.6:1);
+    State.tReveal = Math.max(0.18, State.preset.timing.out * (REDUCED_MOTION?0.6:1));
+    State.localT = 0; State.revealT = 0; State.time = 0; State.phase='INTRO';
+    State.easingFn = Ease[State.preset.timing.easing] || Ease.cubicOut;
+    // Treatment & Reveal
+    State.treatment = Treatments.get(State.preset.treatment.name) || Treatments.get('FadeScale');
+    State.reveal = Reveals.get(State.preset.reveal.name) || Reveals.get('Iris');
+    if(State.treatment.enter) State.treatment.enter(State);
+    if(State.reveal.enter) State.reveal.enter(State);
+    emit('presetchange', { index:State.index, preset:State.preset });
+    if(replay) replayIntro();
+    updateHUD();
+  }
+
+  function replayIntro(){ State.time = 0; State.localT=0; State.revealT=0; State.phase='INTRO'; }
+
+  function nextPreset(step=1){ setPreset(State.index + step); }
+  function prevPreset(step=1){ setPreset(State.index - step); }
+
+  function cycleTreatment(){
+    const idx = (TREATMENT_NAMES.indexOf(State.preset.treatment.name)+1) % TREATMENT_NAMES.length;
+    State.preset.treatment.name = TREATMENT_NAMES[idx];
+    setPreset(State.index, true);
+    emit('treatmentchange', { name:State.preset.treatment.name });
+  }
+  function cycleReveal(){
+    const idx = (REVEAL_NAMES.indexOf(State.preset.reveal.name)+1) % REVEAL_NAMES.length;
+    State.preset.reveal.name = REVEAL_NAMES[idx];
+    setPreset(State.index, true);
+    emit('revealchange', { name:State.preset.reveal.name });
+  }
+
+  function randomizeSeed(){ State.seed = (State.seed + Math.floor(Math.random()*0xFFFFFF))>>>0; rebuildPresets(); }
+  function setSeed(n){ State.seed = (n>>>0); rebuildPresets(); }
+  function rebuildPresets(){ State.presets = makePresetList(State.seed, CONFIG.PRESET_COUNT); setPreset(State.index, true); updateHUD(); }
+
+  function skipToReveal(){
+    State.phase='REVEAL'; State.revealT=0.999; drawFrame(0); // render once
+    completeOverlay();
+  }
+
+  function saveSnapshot(){
+    const link = document.createElement('a');
+    const num = String(State.index).padStart(3,'0');
+    link.download = `AudioGnarls-Preset-${num}.png`;
+    link.href = canvas.toDataURL('image/png');
+    link.click();
+  }
+
+  function updateHUD(){
+    const N = State.presets.length;
+    const num = String(State.index).padStart(3,'0');
+    hud.innerHTML = `
+      <div class="line"><strong>Audio Gnarls</strong> • Preset <strong>${num}/${String(N).padStart(3,'0')}</strong></div>
+      <div class="line">Treatment: <strong>${State.preset.treatment.name}</strong> • Reveal: <strong>${State.preset.reveal.name}</strong></div>
+      <div class="line">Palette: <strong>${State.preset.palette.name}</strong> • Seed: <strong>${State.seed}</strong></div>
+      <div class="line">Keys: <span class="kbd">←</span><span class="kbd">→</span> ±1 • <span class="kbd">↑</span><span class="kbd">↓</span> ±10 • <span class="kbd">Shift+←/→</span> ±50 • <span class="kbd">Enter</span> replay • <span class="kbd">Space</span> pause • <span class="kbd">Esc</span> skip</div>
+    `;
+  }
+
+  // =========================
+  // Main Render Loop
+  // =========================
+  let rafId = 0; let lastTs = performance.now(); let railTimer = 0; let railTarget = CONFIG.RAIL_ADVANCE_MS;
+
+  function drawFrame(ts){
+    if(State.paused){ rafId = requestAnimationFrame(drawFrame); return; }
+    const now = ts || performance.now();
+    const dt = Math.min(0.05, (now - lastTs)/1000);
+    lastTs = now; State.time += dt;
+
+    // Clear stage buffer first with background & subtle grain/vignette base
+    const S = stageBuffer.width; stageCtx.clearRect(0,0,S,S);
+    // Base black + vignette
+    stageCtx.fillStyle = State.colorBg || '#000';
+    stageCtx.fillRect(0,0,S,S);
+
+    // Modifiers pre-frame (feedback)
+    for(const m of State.preset.modifiers){ const mod = Modifiers.get(m.name); mod?.beforeFrame && mod.beforeFrame(stageCtx, State); }
+
+    // Phase machine
+    if(State.phase==='INTRO'){
+      State.localT = clamp(State.time / State.tIntro, 0, 1);
+      if(State.treatment.update) State.treatment.update(dt, State);
+      State.treatment.draw(stageCtx, State);
+      if(State.localT>=1){ State.phase='HOLD'; State.time=0; }
+    } else if(State.phase==='HOLD'){
+      State.localT = 1; if(State.treatment.update) State.treatment.update(dt, State); State.treatment.draw(stageCtx, State);
+      if(State.time>=State.tHold){ State.phase='REVEAL'; State.time=0; }
+    } else if(State.phase==='REVEAL'){
+      State.revealT = clamp(State.time / State.tReveal, 0, 1);
+      // Keep the last rendered stage
+      // PostFX & Modifiers post-draw
+      applyPostModifiers();
+      const done = State.reveal.apply(ctx, State);
+      if(done){ completeOverlay(); }
+    } else if(State.phase==='DONE'){
+      // Nothing; overlay is faded/removed
+    }
+
+    // If still not in reveal, finalize drawing on screen (no reveal yet)
+    if(State.phase==='INTRO' || State.phase==='HOLD'){
+      applyPostModifiers();
+      // Draw stage to screen directly
+      ctx.clearRect(0,0,canvas.width,canvas.height);
+      ctx.drawImage(stageBuffer,0,0);
+    }
+
+    // Autoplay rail
+    if(CONFIG.AUTO_PLAY_RAIL && (State.phase==='HOLD' || State.phase==='INTRO')){
+      railTimer += dt*1000;
+      if(railTimer >= railTarget){
+        railTimer = 0;
+        railTarget = CONFIG.RAIL_ADVANCE_MS + ((rngFrom(State.seed, State.index)() - 0.5) * CONFIG.RAIL_JITTER_MS*2);
+        nextPreset(1);
+      }
+    }
+
+    rafId = requestAnimationFrame(drawFrame);
+  }
+
+  function applyPostModifiers(){
+    // Run the modifier pipeline after treatment draw
+    for(const m of State.preset.modifiers){ const mod = Modifiers.get(m.name); mod?.apply && mod.apply(State); }
+    for(const m of State.preset.modifiers){ const mod = Modifiers.get(m.name); mod?.post && mod.post(stageCtx, fxCtx, State); }
+  }
+
+  function completeOverlay(){
+    if(State.phase==='DONE') return;
+    State.phase='DONE';
+    emit('complete', { index:State.index });
+    document.dispatchEvent(new CustomEvent('AudioGnarlsTitle:complete', { detail:{ index:State.index } }));
+    overlay.classList.add('fade-out');
+    overlay.style.pointerEvents='none';
+    hud.style.opacity='0.0'; hud.style.transition='opacity 200ms linear';
+    skipBtn.style.opacity='0.0';
+    if(CONFIG.AUTO_REMOVE){
+      const remove = () => { try{ overlay.remove(); hud.remove(); skipBtn.remove(); devBackdrop.remove(); }catch(e){} window.removeEventListener('transitionend', remove); };
+      overlay.addEventListener('transitionend', remove);
+      // fallback timer
+      setTimeout(remove, 800);
+    }
+  }
+
+  // =========================
+  // Input Handlers
+  // =========================
+  function onKey(e){
+    const k = e.key;
+    const shift = e.shiftKey;
+    if(['ArrowLeft','ArrowRight','ArrowUp','ArrowDown',' ','Enter','Escape','Esc','T','t','R','r','D','d','S','s'].includes(k)) e.preventDefault();
+
+    const jump = shift?50:1;
+    switch(k){
+      case 'ArrowRight': nextPreset(jump); break;
+      case 'ArrowLeft': prevPreset(jump); break;
+      case 'ArrowUp': prevPreset(10); break;
+      case 'ArrowDown': nextPreset(10); break;
+      case ' ': State.paused = !State.paused; break;
+      case 'Enter': replayIntro(); break;
+      case 'Escape': case 'Esc': skipToReveal(); break;
+      case 'T': case 't': cycleTreatment(); break;
+      case 'R': case 'r': cycleReveal(); break;
+      case 'D': case 'd': randomizeSeed(); break;
+      case 'S': case 's': saveSnapshot(); break;
+    }
+  }
+  window.addEventListener('keydown', onKey, { passive:false });
+  skipBtn.addEventListener('click', skipToReveal);
+
+  // =========================
+  // Public API
+  // =========================
+  const API = {
+    start(){ if(!rafId){ lastTs=performance.now(); rafId = requestAnimationFrame(drawFrame); emit('started'); } },
+    pause(){ State.paused=true; },
+    resume(){ State.paused=false; },
+    replay(){ replayIntro(); },
+    setSeed(n){ setSeed(n|0); },
+    randomizeSeed(){ randomizeSeed(); },
+    setPreset(i){ setPreset(i|0, true); },
+    nextPreset(step=1){ nextPreset(step|0); },
+    prevPreset(step=1){ prevPreset(step|0); },
+    setTitleTreatment(name, params){ if(Treatments.has(name)){ State.preset.treatment.name=name; if(params) State.preset.treatment.params=params; setPreset(State.index,true); } },
+    setReveal(name, params){ if(Reveals.has(name)){ State.preset.reveal.name=name; if(params) State.preset.reveal.params=params; setPreset(State.index,true); } },
+    skipToReveal(){ skipToReveal(); },
+    on(eventName, handler){ if(State.handlers[eventName]) State.handlers[eventName].push(handler); },
+  };
+  window.AudioGnarlsTitle = API;
+
+  // =========================
+  // Boot
+  // =========================
+  rebuildPresets();
+  setPreset(CONFIG.START_PRESET_INDEX, true);
+  updateHUD();
+  if(CONFIG.AUTO_START){ API.start(); }
+
+})();
+</script>
+</body>
+</html>

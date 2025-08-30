@@ -1,0 +1,497 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Audio Gnarls Title Overlay</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    }
+
+    #overlay-root {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 9999;
+      pointer-events: auto;
+      background-color: #000;
+    }
+
+    canvas {
+      display: block;
+    }
+
+    #hud {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      color: #fff;
+      font-size: 12px;
+      background: rgba(0, 0, 0, 0.5);
+      padding: 4px 8px;
+      border-radius: 4px;
+      z-index: 10000;
+    }
+
+    #skip-btn {
+      position: absolute;
+      bottom: 20px;
+      right: 20px;
+      padding: 8px 16px;
+      font-size: 14px;
+      background: rgba(255, 255, 255, 0.1);
+      color: white;
+      border: 1px solid white;
+      border-radius: 4px;
+      cursor: pointer;
+      z-index: 10000;
+    }
+  </style>
+</head>
+<body>
+  <div id="overlay-root">
+    <canvas id="stage"></canvas>
+    <div id="hud">Audio Gnarls • Preset 000/200 • Treatment: FadeScale • Reveal: Iris • Seed: 12345</div>
+    <button id="skip-btn">Skip</button>
+  </div>
+
+  <script>
+    (() => {
+      'use strict';
+
+      const CONFIG = {
+        SEED: 12345,
+        CANVAS_SIZE: 1024,
+        START_PRESET_INDEX: 0,
+        AUTO_START: true,
+        AUTO_REMOVE: true,
+        AUTO_PLAY_RAIL: false,
+        RAIL_ADVANCE_MS: 1500,
+        LOW_POWER: false,
+        DEV_PREVIEW_BACKDROP: true,
+        PRESET_COUNT: 200
+      };
+
+      const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+
+      // === RNG ===
+      class RNG {
+        constructor(seed) {
+          this.seed = seed % 2147483647;
+          if (this.seed <= 0) this.seed += 2147483646;
+        }
+
+        next() {
+          return this.seed = this.seed * 16807 % 2147483647;
+        }
+
+        nextFloat() {
+          return (this.next() - 1) / 2147483646;
+        }
+
+        nextRange(min, max) {
+          return min + (max - min) * this.nextFloat();
+        }
+
+        pick(arr) {
+          return arr[Math.floor(this.nextFloat() * arr.length)];
+        }
+
+        shuffle(arr) {
+          const copy = [...arr];
+          for (let i = copy.length - 1; i > 0; i--) {
+            const j = Math.floor(this.nextFloat() * (i + 1));
+            [copy[i], copy[j]] = [copy[j], copy[i]];
+          }
+          return copy;
+        }
+      }
+
+      // === PLUGIN REGISTRIES ===
+      const treatments = {};
+      const modifiers = {};
+      const reveals = {};
+      const palettes = {};
+
+      function registerTreatment(name, impl) {
+        treatments[name] = impl;
+      }
+
+      function registerModifier(name, impl) {
+        modifiers[name] = impl;
+      }
+
+      function registerReveal(name, impl) {
+        reveals[name] = impl;
+      }
+
+      function registerPalette(name, colors) {
+        palettes[name] = colors;
+      }
+
+      // === PALETTES ===
+      registerPalette('noir', ['#000', '#fff']);
+      registerPalette('tungsten', ['#1a1a1a', '#f0f0f0']);
+      registerPalette('cyber', ['#0ff', '#f0f']);
+      registerPalette('sepia', ['#704214', '#f4f1ec']);
+      registerPalette('neon', ['#0f0', '#f0f', '#00f']);
+      registerPalette('duotone', ['#222', '#eee']);
+      registerPalette('sunset', ['#ff9a00', '#ff2d55']);
+      registerPalette('glacier', ['#a0d8ef', '#005f73']);
+
+      // === BASIC TREATMENT: FadeScale ===
+      registerTreatment('FadeScale', {
+        enter: (state, preset) => {
+          state.alpha = 0;
+          state.scale = 0.5;
+        },
+        update: (state, t, preset) => {
+          const progress = Math.min(1, t / preset.timing.in);
+          state.alpha = progress;
+          state.scale = 0.5 + 0.5 * progress;
+        },
+        draw: (ctx, state, preset, text) => {
+          ctx.globalAlpha = state.alpha;
+          ctx.setTransform(state.scale, 0, 0, state.scale, CONFIG.CANVAS_SIZE / 2, CONFIG.CANVAS_SIZE / 2);
+          ctx.fillText(text, 0, 0);
+        }
+      });
+
+      // === BASIC REVEAL: Iris ===
+      registerReveal('Iris', {
+        draw: (ctx, t, preset, progress) => {
+          const radius = Math.sqrt(2) * CONFIG.CANVAS_SIZE * (1 - progress);
+          ctx.globalCompositeOperation = 'destination-out';
+          ctx.beginPath();
+          ctx.arc(CONFIG.CANVAS_SIZE / 2, CONFIG.CANVAS_SIZE / 2, radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+
+      // === PRESET GENERATOR ===
+      function generatePreset(seed, id) {
+        const rng = new RNG(seed + id * 1000);
+        const treatmentNames = Object.keys(treatments);
+        const modifierNames = Object.keys(modifiers);
+        const paletteNames = Object.keys(palettes);
+        const revealNames = Object.keys(reveals);
+
+        const timing = {
+          in: prefersReducedMotion ? 0.3 : rng.nextRange(0.5, 1.5),
+          hold: prefersReducedMotion ? 0.2 : rng.nextRange(0.5, 1.0),
+          out: prefersReducedMotion ? 0.3 : rng.nextRange(0.5, 1.0),
+          easing: rng.pick(['cubic', 'expo', 'back', 'elastic', 'steps'])
+        };
+
+        return {
+          id,
+          seed: seed + id * 1000,
+          treatment: {
+            name: rng.pick(treatmentNames),
+            params: {}
+          },
+          modifiers: Array.from({ length: rng.nextRange(0, 3) }, () => ({
+            name: rng.pick(modifierNames),
+            params: {}
+          })),
+          palette: {
+            name: rng.pick(paletteNames),
+            colors: palettes[rng.pick(paletteNames)]
+          },
+          timing,
+          postfx: {
+            bloom: rng.nextFloat(),
+            vignette: rng.nextFloat(),
+            grain: rng.nextFloat()
+          },
+          reveal: {
+            name: rng.pick(revealNames),
+            params: {}
+          }
+        };
+      }
+
+      // === STATE MACHINE ===
+      const states = {
+        INTRO: 'intro',
+        HOLD: 'hold',
+        REVEAL: 'reveal',
+        DONE: 'done'
+      };
+
+      // === MAIN SYSTEM ===
+      let presets = [];
+      let currentPresetIndex = CONFIG.START_PRESET_INDEX;
+      let currentPreset = null;
+      let currentState = states.INTRO;
+      let time = 0;
+      let paused = false;
+      let railTimer = null;
+
+      const stage = document.getElementById('stage');
+      const ctx = stage.getContext('2d');
+      const hud = document.getElementById('hud');
+      const skipBtn = document.getElementById('skip-btn');
+      const overlayRoot = document.getElementById('overlay-root');
+
+      stage.width = CONFIG.CANVAS_SIZE;
+      stage.height = CONFIG.CANVAS_SIZE;
+
+      if (CONFIG.DEV_PREVIEW_BACKDROP) {
+        overlayRoot.style.backgroundColor = '#000';
+      }
+
+      function updateHUD() {
+        hud.textContent = `Audio Gnarls • Preset ${String(currentPreset.id).padStart(3, '0')}/${CONFIG.PRESET_COUNT} • Treatment: ${currentPreset.treatment.name} • Reveal: ${currentPreset.reveal.name} • Seed: ${currentPreset.seed}`;
+      }
+
+      function setPreset(index) {
+        currentPresetIndex = index;
+        currentPreset = presets[index];
+        currentState = states.INTRO;
+        time = 0;
+        updateHUD();
+        triggerEvent('presetchange', { preset: currentPreset });
+      }
+
+      function nextPreset(step = 1) {
+        setPreset((currentPresetIndex + step + CONFIG.PRESET_COUNT) % CONFIG.PRESET_COUNT);
+      }
+
+      function prevPreset(step = 1) {
+        nextPreset(-step);
+      }
+
+      function replay() {
+        currentState = states.INTRO;
+        time = 0;
+        triggerEvent('started');
+      }
+
+      function skipToReveal() {
+        currentState = states.REVEAL;
+        time = 0;
+      }
+
+      function finish() {
+        currentState = states.DONE;
+        overlayRoot.style.opacity = '0';
+        overlayRoot.style.pointerEvents = 'none';
+        triggerEvent('complete');
+        window.dispatchEvent(new CustomEvent('AudioGnarlsTitle:complete'));
+        if (CONFIG.AUTO_REMOVE) {
+          setTimeout(() => {
+            overlayRoot.remove();
+          }, 500);
+        }
+      }
+
+      function triggerEvent(name, data = {}) {
+        window.AudioGnarlsTitle.listeners[name].forEach(cb => cb(data));
+      }
+
+      // === PUBLIC API ===
+      window.AudioGnarlsTitle = {
+        listeners: {
+          started: [],
+          presetchange: [],
+          treatmentchange: [],
+          revealchange: [],
+          complete: []
+        },
+        on(name, cb) {
+          if (this.listeners[name]) {
+            this.listeners[name].push(cb);
+          }
+        },
+        start() {
+          replay();
+        },
+        pause() {
+          paused = true;
+        },
+        resume() {
+          paused = false;
+        },
+        replay,
+        setSeed(seed) {
+          CONFIG.SEED = seed;
+          initPresets();
+          setPreset(currentPresetIndex);
+        },
+        randomizeSeed() {
+          this.setSeed(Math.floor(Math.random() * 1000000));
+        },
+        setPreset,
+        nextPreset,
+        prevPreset,
+        setTitleTreatment(name) {
+          if (treatments[name]) {
+            currentPreset.treatment.name = name;
+            updateHUD();
+            triggerEvent('treatmentchange', { name });
+          }
+        },
+        setReveal(name) {
+          if (reveals[name]) {
+            currentPreset.reveal.name = name;
+            updateHUD();
+            triggerEvent('revealchange', { name });
+          }
+        },
+        skipToReveal,
+        replay
+      };
+
+      // === INIT ===
+      function initPresets() {
+        presets = [];
+        for (let i = 0; i < CONFIG.PRESET_COUNT; i++) {
+          presets.push(generatePreset(CONFIG.SEED, i));
+        }
+      }
+
+      function init() {
+        initPresets();
+        setPreset(currentPresetIndex);
+
+        // Start animation loop
+        let lastTime = 0;
+        function loop(timestamp) {
+          if (!lastTime) lastTime = timestamp;
+          const dt = Math.min(0.1, (timestamp - lastTime) / 1000);
+          lastTime = timestamp;
+
+          if (!paused) {
+            time += dt;
+            render(dt, time);
+          }
+
+          requestAnimationFrame(loop);
+        }
+        requestAnimationFrame(loop);
+
+        // Rail mode
+        if (CONFIG.AUTO_PLAY_RAIL) {
+          railTimer = setInterval(() => {
+            nextPreset();
+          }, CONFIG.RAIL_ADVANCE_MS);
+        }
+
+        // Controls
+        document.addEventListener('keydown', e => {
+          const step = e.shiftKey ? 50 : e.ctrlKey || e.metaKey ? 10 : 1;
+          switch (e.key) {
+            case 'ArrowLeft':
+              prevPreset(step);
+              break;
+            case 'ArrowRight':
+              nextPreset(step);
+              break;
+            case 'ArrowUp':
+              prevPreset(10);
+              break;
+            case 'ArrowDown':
+              nextPreset(10);
+              break;
+            case 'Enter':
+              replay();
+              break;
+            case 'Escape':
+              skipToReveal();
+              break;
+            case 'r':
+            case 'R':
+              const revealNames = Object.keys(reveals);
+              const currentIndex = revealNames.indexOf(currentPreset.reveal.name);
+              const nextIndex = (currentIndex + 1) % revealNames.length;
+              window.AudioGnarlsTitle.setReveal(revealNames[nextIndex]);
+              break;
+            case 't':
+            case 'T':
+              const treatmentNames = Object.keys(treatments);
+              const tIndex = treatmentNames.indexOf(currentPreset.treatment.name);
+              const nextTIndex = (tIndex + 1) % treatmentNames.length;
+              window.AudioGnarlsTitle.setTitleTreatment(treatmentNames[nextTIndex]);
+              break;
+            case 'd':
+            case 'D':
+              window.AudioGnarlsTitle.randomizeSeed();
+              break;
+            case ' ':
+              paused = !paused;
+              break;
+          }
+        });
+
+        skipBtn.addEventListener('click', skipToReveal);
+
+        if (CONFIG.AUTO_START) {
+          setTimeout(() => {
+            window.AudioGnarlsTitle.start();
+          }, 100);
+        }
+      }
+
+      // === RENDER LOOP ===
+      function render(dt, t) {
+        ctx.clearRect(0, 0, CONFIG.CANVAS_SIZE, CONFIG.CANVAS_SIZE);
+        ctx.save();
+
+        // Set palette
+        ctx.fillStyle = currentPreset.palette.colors[1];
+        ctx.font = 'bold 128px sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+
+        const treatment = treatments[currentPreset.treatment.name];
+        const reveal = reveals[currentPreset.reveal.name];
+
+        let state = {};
+        if (treatment && treatment.enter) treatment.enter(state, currentPreset);
+
+        // State machine
+        if (currentState === states.INTRO) {
+          const progress = Math.min(1, t / currentPreset.timing.in);
+          if (treatment && treatment.update) treatment.update(state, t, currentPreset);
+          if (treatment && treatment.draw) treatment.draw(ctx, state, currentPreset, 'Audio Gnarls');
+          if (t >= currentPreset.timing.in) {
+            currentState = states.HOLD;
+            time = 0;
+          }
+        } else if (currentState === states.HOLD) {
+          ctx.globalAlpha = 1;
+          ctx.setTransform(1, 0, 0, 1, CONFIG.CANVAS_SIZE / 2, CONFIG.CANVAS_SIZE / 2);
+          ctx.fillText('Audio Gnarls', 0, 0);
+          if (t >= currentPreset.timing.hold) {
+            currentState = states.REVEAL;
+            time = 0;
+          }
+        } else if (currentState === states.REVEAL) {
+          const progress = Math.min(1, t / currentPreset.timing.out);
+          ctx.globalAlpha = 1;
+          ctx.setTransform(1, 0, 0, 1, CONFIG.CANVAS_SIZE / 2, CONFIG.CANVAS_SIZE / 2);
+          ctx.fillText('Audio Gnarls', 0, 0);
+          if (reveal && reveal.draw) reveal.draw(ctx, t, currentPreset, progress);
+          if (t >= currentPreset.timing.out) {
+            finish();
+          }
+        }
+
+        ctx.restore();
+      }
+
+      init();
+    })();
+  </script>
+</body>
+</html>

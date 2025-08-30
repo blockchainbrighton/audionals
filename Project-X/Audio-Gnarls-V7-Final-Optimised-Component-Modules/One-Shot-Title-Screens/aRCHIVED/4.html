@@ -1,0 +1,1442 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Gnarls Title Overlay</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+            background: #111;
+            color: #fff;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #container {
+            position: relative;
+            width: 100vmin;
+            height: 100vmin;
+            max-width: 1024px;
+            max-height: 1024px;
+        }
+        
+        #overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 1000;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        #canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            background: rgba(0, 0, 0, 0.7);
+            padding: 10px 15px;
+            border-radius: 4px;
+            font-size: 14px;
+            font-family: monospace;
+            z-index: 1001;
+            backdrop-filter: blur(4px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+        
+        #skip-btn {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 14px;
+            transition: all 0.2s ease;
+            backdrop-filter: blur(4px);
+        }
+        
+        #skip-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+        }
+        
+        #content {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+            text-align: center;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: #fff;
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 1rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        p {
+            font-size: 1.2rem;
+            max-width: 600px;
+            line-height: 1.6;
+            margin-bottom: 2rem;
+            color: #ccc;
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 0, 0.5);
+            padding: 20px;
+            border-radius: 8px;
+            max-width: 600px;
+            margin-top: 20px;
+            font-size: 0.9rem;
+            line-height: 1.6;
+        }
+        
+        .instructions h2 {
+            margin-bottom: 10px;
+            font-size: 1.2rem;
+        }
+        
+        .instructions ul {
+            text-align: left;
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+        }
+        
+        .key {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.1);
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-family: monospace;
+            margin: 0 2px;
+        }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <div id="content">
+            <h1>Audio Gnarls</h1>
+            <p>This is the content that will be revealed after the title overlay completes.</p>
+            <div class="instructions">
+                <h2>Controls</h2>
+                <ul>
+                    <li><span class="key">←</span> <span class="key">→</span> Previous/Next preset</li>
+                    <li><span class="key">↑</span> <span class="key">↓</span> Jump ±10 presets</li>
+                    <li><span class="key">Shift</span> + <span class="key">←</span> <span class="key">→</span> Jump ±50 presets</li>
+                    <li><span class="key">Enter</span> Replay current preset</li>
+                    <li><span class="key">Esc</span> or <span class="key">Space</span> Skip to reveal</li>
+                    <li><span class="key">T</span> Cycle treatment</li>
+                    <li><span class="key">R</span> Cycle reveal</li>
+                    <li><span class="key">D</span> Dice new preset</li>
+                    <li><span class="key">S</span> Save snapshot</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div id="overlay">
+            <canvas id="canvas" width="1024" height="1024"></canvas>
+            <div id="hud">Audio Gnarls • Preset 001/200 • Treatment: FadeScale • Reveal: Iris • Seed: 12345</div>
+            <button id="skip-btn">Skip Intro</button>
+        </div>
+    </div>
+
+    <script>
+        (() => {
+            // Configuration
+            const CONFIG = {
+                SEED: 12367645,
+                CANVAS_SIZE: 1024,
+                START_PRESET_INDEX: 0,
+                AUTO_START: true,
+                AUTO_REMOVE: true,
+                AUTO_PLAY_RAIL: false,
+                RAIL_ADVANCE_MS: 1500,
+                LOW_POWER: false,
+                DEV_PREVIEW_BACKDROP: true,
+                PRESET_COUNT: 200
+            };
+
+            // Global variables
+            const overlay = document.getElementById('overlay');
+            const canvas = document.getElementById('canvas');
+            const ctx = canvas.getContext('2d');
+            const hud = document.getElementById('hud');
+            const skipBtn = document.getElementById('skip-btn');
+            
+            let animationId = null;
+            let startTime = 0;
+            let currentTime = 0;
+            let presetIndex = CONFIG.START_PRESET_INDEX;
+            let presets = [];
+            let currentPreset = null;
+            let state = 'INTRO'; // INTRO, HOLD, REVEAL, DONE
+            let isPaused = false;
+            let railTimer = null;
+            
+            // Event system
+            const events = {};
+            
+            // Public API
+            window.AudioGnarlsTitle = {
+                start: () => {
+                    if (animationId) return;
+                    startTime = performance.now();
+                    currentTime = 0;
+                    isPaused = false;
+                    state = 'INTRO';
+                    animate();
+                    dispatchEvent('started');
+                },
+                
+                pause: () => {
+                    if (isPaused) return;
+                    isPaused = true;
+                    if (animationId) {
+                        cancelAnimationFrame(animationId);
+                        animationId = null;
+                    }
+                },
+                
+                resume: () => {
+                    if (!isPaused) return;
+                    isPaused = false;
+                    startTime = performance.now() - currentTime;
+                    animate();
+                },
+                
+                replay: () => {
+                    window.AudioGnarlsTitle.start();
+                },
+                
+                setSeed: (seed) => {
+                    CONFIG.SEED = seed;
+                    generatePresets();
+                    window.AudioGnarlsTitle.setPreset(presetIndex);
+                },
+                
+                randomizeSeed: () => {
+                    window.AudioGnarlsTitle.setSeed(Math.floor(Math.random() * 1000000));
+                },
+                
+                setPreset: (index) => {
+                    presetIndex = ((index % CONFIG.PRESET_COUNT) + CONFIG.PRESET_COUNT) % CONFIG.PRESET_COUNT;
+                    currentPreset = presets[presetIndex];
+                    updateHUD();
+                    window.AudioGnarlsTitle.replay();
+                    dispatchEvent('presetchange', { index: presetIndex });
+                },
+                
+                nextPreset: (step = 1) => {
+                    window.AudioGnarlsTitle.setPreset(presetIndex + step);
+                },
+                
+                prevPreset: (step = 1) => {
+                    window.AudioGnarlsTitle.setPreset(presetIndex - step);
+                },
+                
+                setTitleTreatment: (name, params = {}) => {
+                    if (!currentPreset) return;
+                    currentPreset.treatment = { name, params };
+                    updateHUD();
+                    dispatchEvent('treatmentchange', { name, params });
+                },
+                
+                setReveal: (name, params = {}) => {
+                    if (!currentPreset) return;
+                    currentPreset.reveal = { name, params };
+                    updateHUD();
+                    dispatchEvent('revealchange', { name, params });
+                },
+                
+                skipToReveal: () => {
+                    state = 'REVEAL';
+                    startTime = performance.now() - 
+                        (currentPreset.timing.in + currentPreset.timing.hold) * 1000;
+                },
+                
+                on: (eventName, handler) => {
+                    if (!events[eventName]) events[eventName] = [];
+                    events[eventName].push(handler);
+                }
+            };
+            
+            // Event dispatcher
+            function dispatchEvent(name, data = {}) {
+                if (events[name]) {
+                    events[name].forEach(handler => handler(data));
+                }
+                
+                // Also dispatch DOM event
+                const event = new CustomEvent(`AudioGnarlsTitle:${name}`, { detail: data });
+                document.dispatchEvent(event);
+            }
+            
+            // Deterministic RNG
+            class RNG {
+                constructor(seed) {
+                    this.seed = seed;
+                }
+                
+                next() {
+                    this.seed = (this.seed * 9301 + 49297) % 233280;
+                    return this.seed / 233280;
+                }
+                
+                nextInt(min, max) {
+                    return Math.floor(this.next() * (max - min + 1)) + min;
+                }
+                
+                nextFloat(min, max) {
+                    return this.next() * (max - min) + min;
+                }
+                
+                nextBool(chance = 0.5) {
+                    return this.next() < chance;
+                }
+            }
+            
+            // Treatment plugins
+            const treatments = {};
+            
+            function registerTreatment(name, impl) {
+                treatments[name] = impl;
+            }
+            
+            // Modifier plugins
+            const modifiers = {};
+            
+            function registerModifier(name, impl) {
+                modifiers[name] = impl;
+            }
+            
+            // Reveal plugins
+            const reveals = {};
+            
+            function registerReveal(name, impl) {
+                reveals[name] = impl;
+            }
+            
+            // Palettes
+            const palettes = [
+                { name: 'Mono Noir', colors: ['#000000', '#FFFFFF'] },
+                { name: 'Tungsten', colors: ['#222222', '#EEEEEE'] },
+                { name: 'Cyber Teal/Purple', colors: ['#00FFFF', '#8000FF'] },
+                { name: 'Sepia', colors: ['#704214', '#F4E4BC'] },
+                { name: 'Acid Neon', colors: ['#39FF14', '#FF00FF'] },
+                { name: 'Duotone Blue', colors: ['#001F3F', '#0074D9'] },
+                { name: 'Warm Sunset', colors: ['#FF4136', '#FF851B'] },
+                { name: 'Cold Glacier', colors: ['#7FDBFF', '#001F3F'] }
+            ];
+            
+            // Timing easings
+            const easings = {
+                linear: t => t,
+                easeInQuad: t => t * t,
+                easeOutQuad: t => t * (2 - t),
+                easeInOutQuad: t => t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t,
+                easeInCubic: t => t * t * t,
+                easeOutCubic: t => (--t) * t * t + 1,
+                easeInOutCubic: t => t < 0.5 ? 4 * t * t * t : (t - 1) * (2 * t - 2) * (2 * t - 2) + 1,
+                easeInBack: t => t * t * (2.70158 * t - 1.70158),
+                easeOutBack: t => (t - 1) * (t - 1) * (2.70158 * (t - 1) + 1.70158) + 1
+            };
+            
+            // Preset generator
+            function generatePresets() {
+                presets = [];
+                const rng = new RNG(CONFIG.SEED);
+                
+                for (let i = 0; i < CONFIG.PRESET_COUNT; i++) {
+                    const presetRng = new RNG(CONFIG.SEED + i);
+                    
+                    // Select treatment
+                    const treatmentNames = Object.keys(treatments);
+                    const treatmentName = treatmentNames[presetRng.nextInt(0, treatmentNames.length - 1)];
+                    
+                    // Select palette
+                    const palette = palettes[presetRng.nextInt(0, palettes.length - 1)];
+                    
+                    // Select timing
+                    const timing = {
+                        in: presetRng.nextFloat(0.8, 2.0),
+                        hold: presetRng.nextFloat(0.5, 1.5),
+                        out: presetRng.nextFloat(0.5, 1.5),
+                        easing: Object.keys(easings)[presetRng.nextInt(0, Object.keys(easings).length - 1)]
+                    };
+                    
+                    // Select reveal
+                    const revealNames = Object.keys(reveals);
+                    const revealName = revealNames[presetRng.nextInt(0, revealNames.length - 1)];
+                    
+                    // Select modifiers
+                    const modifierNames = Object.keys(modifiers);
+                    const modifierCount = presetRng.nextInt(0, Math.min(3, modifierNames.length));
+                    const selectedModifiers = [];
+                    
+                    for (let j = 0; j < modifierCount; j++) {
+                        const modName = modifierNames[presetRng.nextInt(0, modifierNames.length - 1)];
+                        selectedModifiers.push({ name: modName, params: {} });
+                    }
+                    
+                    // PostFX
+                    const postfx = {
+                        bloom: presetRng.nextFloat(0, 0.5),
+                        vignette: presetRng.nextFloat(0, 0.5),
+                        grain: presetRng.nextFloat(0, 0.2)
+                    };
+                    
+                    presets.push({
+                        id: i,
+                        seed: CONFIG.SEED + i,
+                        treatment: { name: treatmentName, params: {} },
+                        modifiers: selectedModifiers,
+                        palette,
+                        timing,
+                        postfx,
+                        reveal: { name: revealName, params: {} }
+                    });
+                }
+                
+                currentPreset = presets[presetIndex];
+            }
+            
+            // Basic treatment: FadeScale
+            registerTreatment('FadeScale', {
+                enter: (state) => {
+                    state.scale = 0;
+                    state.alpha = 0;
+                },
+                
+                update: (state, t, dt) => {
+                    const { in: inTime, easing } = currentPreset.timing;
+                    const progress = Math.min(1, t / inTime);
+                    const eased = easings[easing] ? easings[easing](progress) : progress;
+                    
+                    state.scale = eased;
+                    state.alpha = eased;
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    ctx.save();
+                    ctx.globalAlpha = state.alpha;
+                    ctx.translate(centerX, centerY);
+                    ctx.scale(state.scale, state.scale);
+                    ctx.fillStyle = colors[1];
+                    ctx.font = 'bold 120px sans-serif';
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // Add subtle shadow
+                    ctx.shadowColor = 'rgba(0,0,0,0.5)';
+                    ctx.shadowBlur = 10;
+                    ctx.shadowOffsetX = 2;
+                    ctx.shadowOffsetY = 2;
+                    
+                    ctx.fillText('Audio Gnarls', 0, 0);
+                    ctx.restore();
+                }
+            });
+            
+            // Wave Warp treatment
+            registerTreatment('WaveWarp', {
+                enter: (state) => {
+                    state.phase = 0;
+                },
+                
+                update: (state, t, dt) => {
+                    state.phase = t * 5;
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const text = 'Audio Gnarls';
+                    const fontSize = 100;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    const textWidth = ctx.measureText(text).width;
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    ctx.fillStyle = colors[1];
+                    
+                    // Draw each character with wave effect
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const charWidth = ctx.measureText(char).width;
+                        const x = centerX - textWidth/2 + i * (textWidth / text.length) + charWidth/2;
+                        const y = centerY + Math.sin(state.phase + i * 0.5) * 20;
+                        
+                        ctx.save();
+                        ctx.translate(x, y);
+                        ctx.fillText(char, 0, 0);
+                        ctx.restore();
+                    }
+                }
+            });
+            
+            // Assemble treatment
+            registerTreatment('Assemble', {
+                enter: (state) => {
+                    state.pieces = [];
+                    const text = 'Audio Gnarls';
+                    const fontSize = 100;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    const textWidth = ctx.measureText(text).width;
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const charWidth = ctx.measureText(char).width;
+                        const x = centerX - textWidth/2 + i * (textWidth / text.length) + charWidth/2;
+                        
+                        state.pieces.push({
+                            char,
+                            x,
+                            y: centerY + (Math.random() - 0.5) * 400,
+                            targetX: x,
+                            targetY: centerY,
+                            rotation: (Math.random() - 0.5) * Math.PI,
+                            scale: Math.random() * 0.5 + 0.5
+                        });
+                    }
+                },
+                
+                update: (state, t, dt) => {
+                    const { in: inTime } = currentPreset.timing;
+                    const progress = Math.min(1, t / inTime);
+                    
+                    state.pieces.forEach(piece => {
+                        piece.x = piece.targetX + (piece.x - piece.targetX) * (1 - progress);
+                        piece.y = piece.targetY + (piece.y - piece.targetY) * (1 - progress);
+                        piece.rotation *= 0.95;
+                        piece.scale = 0.5 + (1 - 0.5) * progress;
+                    });
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const fontSize = 100;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = colors[1];
+                    
+                    state.pieces.forEach(piece => {
+                        ctx.save();
+                        ctx.translate(piece.x, piece.y);
+                        ctx.rotate(piece.rotation);
+                        ctx.scale(piece.scale, piece.scale);
+                        ctx.fillText(piece.char, 0, 0);
+                        ctx.restore();
+                    });
+                }
+            });
+            
+            // Chromatic Aberration treatment
+            registerTreatment('ChromaticAberration', {
+                enter: (state) => {
+                    state.offset = 0;
+                },
+                
+                update: (state, t, dt) => {
+                    const { in: inTime } = currentPreset.timing;
+                    const progress = Math.min(1, t / inTime);
+                    state.offset = progress * 20;
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const text = 'Audio Gnarls';
+                    const fontSize = 120;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    // Red channel
+                    ctx.save();
+                    ctx.fillStyle = '#FF0000';
+                    ctx.translate(state.offset, 0);
+                    ctx.fillText(text, centerX, centerY);
+                    ctx.restore();
+                    
+                    // Green channel
+                    ctx.save();
+                    ctx.fillStyle = '#00FF00';
+                    ctx.fillText(text, centerX, centerY);
+                    ctx.restore();
+                    
+                    // Blue channel
+                    ctx.save();
+                    ctx.fillStyle = '#0000FF';
+                    ctx.translate(-state.offset, 0);
+                    ctx.fillText(text, centerX, centerY);
+                    ctx.restore();
+                }
+            });
+            
+            // Depth Parallax treatment
+            registerTreatment('DepthParallax', {
+                enter: (state) => {
+                    state.layers = [];
+                    const text = 'Audio Gnarls';
+                    const fontSize = 120;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    const textWidth = ctx.measureText(text).width;
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const charWidth = ctx.measureText(char).width;
+                        const x = centerX - textWidth/2 + i * (textWidth / text.length) + charWidth/2;
+                        
+                        state.layers.push({
+                            char,
+                            x,
+                            y: centerY,
+                            depth: Math.random() * 0.5 + 0.5
+                        });
+                    }
+                },
+                
+                update: (state, t, dt) => {
+                    // No update needed
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const fontSize = 120;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    
+                    // Draw background layer
+                    ctx.fillStyle = colors[0];
+                    ctx.globalAlpha = 0.3;
+                    state.layers.forEach(layer => {
+                        ctx.save();
+                        ctx.translate(layer.x, layer.y);
+                        ctx.scale(1.2, 1.2);
+                        ctx.fillText(layer.char, 0, 0);
+                        ctx.restore();
+                    });
+                    
+                    // Draw main layer
+                    ctx.globalAlpha = 1;
+                    ctx.fillStyle = colors[1];
+                    state.layers.forEach(layer => {
+                        ctx.fillText(layer.char, layer.x, layer.y);
+                    });
+                }
+            });
+            
+            // Pixelate treatment
+            registerTreatment('Pixelate', {
+                enter: (state) => {
+                    state.resolution = 1;
+                },
+                
+                update: (state, t, dt) => {
+                    const { in: inTime } = currentPreset.timing;
+                    const progress = Math.min(1, t / inTime);
+                    state.resolution = 1 + (64 - 1) * (1 - progress);
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const text = 'Audio Gnarls';
+                    const fontSize = 120;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    // Save original canvas
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    // Clear canvas
+                    ctx.clearRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Draw text at full resolution
+                    ctx.fillStyle = colors[1];
+                    ctx.fillText(text, centerX, centerY);
+                    
+                    // Get text pixels
+                    const textData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    
+                    // Restore original canvas
+                    ctx.putImageData(imageData, 0, 0);
+                    
+                    // Apply pixelation
+                    const pixelSize = Math.max(1, Math.floor(canvas.width / state.resolution));
+                    
+                    for (let y = 0; y < canvas.height; y += pixelSize) {
+                        for (let x = 0; x < canvas.width; x += pixelSize) {
+                            const idx = (y * canvas.width + x) * 4;
+                            const r = textData.data[idx];
+                            const g = textData.data[idx + 1];
+                            const b = textData.data[idx + 2];
+                            
+                            if (r > 0 || g > 0 || b > 0) {
+                                ctx.fillStyle = `rgb(${r},${g},${b})`;
+                                ctx.fillRect(x, y, pixelSize, pixelSize);
+                            }
+                        }
+                    }
+                }
+            });
+            
+            // Glitch treatment
+            registerTreatment('Glitch', {
+                enter: (state) => {
+                    state.glitchAmount = 0;
+                },
+                
+                update: (state, t, dt) => {
+                    const { in: inTime } = currentPreset.timing;
+                    const progress = Math.min(1, t / inTime);
+                    state.glitchAmount = 1 - progress;
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const text = 'Audio Gnarls';
+                    const fontSize = 120;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    ctx.fillStyle = colors[1];
+                    ctx.fillText(text, centerX, centerY);
+                    
+                    // Apply glitch effect
+                    if (state.glitchAmount > 0.1) {
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const data = imageData.data;
+                        
+                        for (let i = 0; i < data.length; i += 4) {
+                            if (Math.random() < state.glitchAmount * 0.1) {
+                                const offset = Math.floor(Math.random() * 20) * 4;
+                                data[i] = data[i + offset]; // R
+                                data[i + 1] = data[i + 1 + offset]; // G
+                                data[i + 2] = data[i + 2 + offset]; // B
+                            }
+                        }
+                        
+                        ctx.putImageData(imageData, 0, 0);
+                    }
+                }
+            });
+            
+            // Mask-Type treatment
+            registerTreatment('MaskType', {
+                enter: (state) => {
+                    state.maskProgress = 0;
+                },
+                
+                update: (state, t, dt) => {
+                    const { in: inTime } = currentPreset.timing;
+                    state.maskProgress = Math.min(1, t / inTime);
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const text = 'Audio Gnarls';
+                    const fontSize = 120;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    // Draw background
+                    ctx.fillStyle = colors[0];
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+                    
+                    // Create clipping mask
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(0, centerY - 60, canvas.width * state.maskProgress, 120);
+                    ctx.clip();
+                    
+                    // Draw text
+                    ctx.fillStyle = colors[1];
+                    ctx.fillText(text, centerX, centerY);
+                    ctx.restore();
+                }
+            });
+            
+            // Gravity Pile treatment
+            registerTreatment('GravityPile', {
+                enter: (state) => {
+                    state.pieces = [];
+                    const text = 'Audio Gnarls';
+                    const fontSize = 100;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    const textWidth = ctx.measureText(text).width;
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const charWidth = ctx.measureText(char).width;
+                        const x = centerX - textWidth/2 + i * (textWidth / text.length) + charWidth/2;
+                        
+                        state.pieces.push({
+                            char,
+                            x,
+                            y: -100,
+                            vy: 0,
+                            targetY: centerY
+                        });
+                    }
+                },
+                
+                update: (state, t, dt) => {
+                    state.pieces.forEach(piece => {
+                        piece.vy += 0.5; // gravity
+                        piece.y += piece.vy;
+                        
+                        // Bounce when hitting target
+                        if (piece.y > piece.targetY) {
+                            piece.y = piece.targetY;
+                            piece.vy *= -0.7; // bounce
+                        }
+                    });
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const fontSize = 100;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = colors[1];
+                    
+                    state.pieces.forEach(piece => {
+                        ctx.fillText(piece.char, piece.x, piece.y);
+                    });
+                }
+            });
+            
+            // Kern-Drift treatment
+            registerTreatment('KernDrift', {
+                enter: (state) => {
+                    state.offsets = [];
+                    const text = 'Audio Gnarls';
+                    for (let i = 0; i < text.length; i++) {
+                        state.offsets.push(0);
+                    }
+                },
+                
+                update: (state, t, dt) => {
+                    // Apply random drift to each character
+                    for (let i = 0; i < state.offsets.length; i++) {
+                        state.offsets[i] += (Math.random() - 0.5) * 2;
+                        state.offsets[i] *= 0.95; // damping
+                    }
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const text = 'Audio Gnarls';
+                    const fontSize = 120;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    let currentX = centerX - ctx.measureText(text).width / 2;
+                    
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const charWidth = ctx.measureText(char).width;
+                        
+                        ctx.fillStyle = colors[1];
+                        ctx.fillText(char, currentX + state.offsets[i], centerY);
+                        
+                        currentX += charWidth;
+                    }
+                }
+            });
+            
+            // Spline-Flow treatment
+            registerTreatment('SplineFlow', {
+                enter: (state) => {
+                    state.points = [];
+                    const text = 'Audio Gnarls';
+                    const fontSize = 100;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    const textWidth = ctx.measureText(text).width;
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    // Create a curved path
+                    for (let i = 0; i < text.length; i++) {
+                        const char = text[i];
+                        const charWidth = ctx.measureText(char).width;
+                        const x = centerX - textWidth/2 + i * (textWidth / text.length) + charWidth/2;
+                        
+                        state.points.push({
+                            char,
+                            x: x,
+                            y: centerY,
+                            controlX: x + (Math.random() - 0.5) * 200,
+                            controlY: centerY + (Math.random() - 0.5) * 200
+                        });
+                    }
+                },
+                
+                update: (state, t, dt) => {
+                    // No update needed
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const fontSize = 100;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    ctx.fillStyle = colors[1];
+                    
+                    state.points.forEach(point => {
+                        ctx.fillText(point.char, point.x, point.y);
+                    });
+                }
+            });
+            
+            // Ink Bleed treatment
+            registerTreatment('InkBleed', {
+                enter: (state) => {
+                    state.bleedAmount = 0;
+                },
+                
+                update: (state, t, dt) => {
+                    const { in: inTime } = currentPreset.timing;
+                    const progress = Math.min(1, t / inTime);
+                    state.bleedAmount = 1 - progress;
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const text = 'Audio Gnarls';
+                    const fontSize = 120;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    ctx.fillStyle = colors[1];
+                    ctx.fillText(text, centerX, centerY);
+                    
+                    // Apply ink bleed effect
+                    if (state.bleedAmount > 0.05) {
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const data = imageData.data;
+                        
+                        for (let i = 0; i < data.length; i += 4) {
+                            if (data[i] > 0 || data[i+1] > 0 || data[i+2] > 0) {
+                                // Spread to neighboring pixels
+                                for (let j = 0; j < state.bleedAmount * 10; j++) {
+                                    const offset = (Math.floor(Math.random() * 20) - 10) * 4;
+                                    const idx = i + offset;
+                                    if (idx >= 0 && idx < data.length) {
+                                        data[idx] = data[i];
+                                        data[idx + 1] = data[i + 1];
+                                        data[idx + 2] = data[i + 2];
+                                    }
+                                }
+                            }
+                        }
+                        
+                        ctx.putImageData(imageData, 0, 0);
+                    }
+                }
+            });
+            
+            // Moiré Slice treatment
+            registerTreatment('MoireSlice', {
+                enter: (state) => {
+                    state.sliceOffset = 0;
+                },
+                
+                update: (state, t, dt) => {
+                    state.sliceOffset = (state.sliceOffset + dt * 0.01) % 1;
+                },
+                
+                draw: (ctx, state) => {
+                    const { colors } = currentPreset.palette;
+                    const text = 'Audio Gnarls';
+                    const fontSize = 120;
+                    ctx.font = `bold ${fontSize}px sans-serif`;
+                    ctx.textAlign = 'center';
+                    ctx.textBaseline = 'middle';
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    
+                    // Draw base text
+                    ctx.fillStyle = colors[1];
+                    ctx.fillText(text, centerX, centerY);
+                    
+                    // Draw moire pattern
+                    ctx.fillStyle = colors[0];
+                    for (let i = 0; i < canvas.width; i += 10) {
+                        const offset = Math.sin(i * 0.1 + state.sliceOffset * Math.PI * 2) * 5;
+                        ctx.fillRect(i, centerY - 60 + offset, 5, 120);
+                    }
+                }
+            });
+            
+            // Reveal modes
+            registerReveal('Iris', {
+                draw: (ctx, progress) => {
+                    const { colors } = currentPreset.palette;
+                    const centerX = canvas.width / 2;
+                    const centerY = canvas.height / 2;
+                    const radius = Math.max(canvas.width, canvas.height) * (1 - progress);
+                    
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'destination-out';
+                    ctx.beginPath();
+                    ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.restore();
+                }
+            });
+            
+            registerReveal('Dissolve', {
+                draw: (ctx, progress) => {
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    const threshold = progress;
+                    
+                    for (let i = 0; i < data.length; i += 4) {
+                        // Use position-based noise for consistent dissolve
+                        const x = (i / 4) % canvas.width;
+                        const y = Math.floor((i / 4) / canvas.width);
+                        const noise = (Math.sin(x * 0.1) + Math.cos(y * 0.1)) * 0.5 + 0.5;
+                        
+                        if (noise < threshold) {
+                            data[i] = 0;
+                            data[i + 1] = 0;
+                            data[i + 2] = 0;
+                            data[i + 3] = 0;
+                        }
+                    }
+                    
+                    ctx.putImageData(imageData, 0, 0);
+                }
+            });
+            
+            registerReveal('VenetianBlinds', {
+                draw: (ctx, progress) => {
+                    const blindHeight = 20;
+                    const numBlinds = Math.ceil(canvas.height / blindHeight);
+                    const openHeight = blindHeight * progress;
+                    
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'destination-out';
+                    
+                    for (let i = 0; i < numBlinds; i++) {
+                        const y = i * blindHeight;
+                        ctx.fillRect(0, y, canvas.width, blindHeight - openHeight);
+                    }
+                    
+                    ctx.restore();
+                }
+            });
+            
+            registerReveal('DirectionalSmear', {
+                draw: (ctx, progress) => {
+                    const smearAmount = (1 - progress) * 50;
+                    
+                    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                    const data = imageData.data;
+                    
+                    for (let y = 0; y < canvas.height; y++) {
+                        for (let x = 0; x < canvas.width; x++) {
+                            const idx = (y * canvas.width + x) * 4;
+                            
+                            // Smear to the right
+                            if (x + smearAmount < canvas.width) {
+                                const smearIdx = (y * canvas.width + Math.floor(x + smearAmount)) * 4;
+                                data[idx] = data[smearIdx];
+                                data[idx + 1] = data[smearIdx + 1];
+                                data[idx + 2] = data[smearIdx + 2];
+                            }
+                        }
+                    }
+                    
+                    ctx.putImageData(imageData, 0, 0);
+                }
+            });
+            
+            registerReveal('PixelRain', {
+                draw: (ctx, progress) => {
+                    const tileWidth = 20;
+                    const tileHeight = 20;
+                    const numCols = Math.ceil(canvas.width / tileWidth);
+                    const numRows = Math.ceil(canvas.height / tileHeight);
+                    
+                    ctx.save();
+                    ctx.globalCompositeOperation = 'destination-out';
+                    
+                    for (let row = 0; row < numRows; row++) {
+                        for (let col = 0; col < numCols; col++) {
+                            // Position-based threshold
+                            const threshold = (row + col) / (numRows + numCols);
+                            
+                            if (progress > threshold) {
+                                ctx.fillRect(col * tileWidth, row * tileHeight, tileWidth, tileHeight);
+                            }
+                        }
+                    }
+                    
+                    ctx.restore();
+                }
+            });
+            
+            // Modifier plugins
+            registerModifier('TemporalEasing', {
+                apply: (timing) => {
+                    // This is handled in the treatment update
+                    return timing;
+                }
+            });
+            
+            registerModifier('Jitter', {
+                apply: (state) => {
+                    // This is handled in the treatment update
+                    return state;
+                }
+            });
+            
+            registerModifier('LensFX', {
+                apply: (ctx, state) => {
+                    // Apply vignette
+                    const vignette = currentPreset.postfx.vignette;
+                    if (vignette > 0) {
+                        const gradient = ctx.createRadialGradient(
+                            canvas.width / 2, canvas.height / 2, 0,
+                            canvas.width / 2, canvas.height / 2, Math.max(canvas.width, canvas.height) / 2
+                        );
+                        gradient.addColorStop(0, 'rgba(0,0,0,0)');
+                        gradient.addColorStop(1, `rgba(0,0,0,${vignette})`);
+                        
+                        ctx.save();
+                        ctx.globalCompositeOperation = 'multiply';
+                        ctx.fillStyle = gradient;
+                        ctx.fillRect(0, 0, canvas.width, canvas.height);
+                        ctx.restore();
+                    }
+                    
+                    // Apply bloom
+                    const bloom = currentPreset.postfx.bloom;
+                    if (bloom > 0) {
+                        ctx.save();
+                        ctx.globalCompositeOperation = 'lighter';
+                        ctx.filter = `blur(${bloom * 20}px)`;
+                        ctx.drawImage(canvas, 0, 0);
+                        ctx.restore();
+                    }
+                }
+            });
+            
+            registerModifier('TextureFX', {
+                apply: (ctx, state) => {
+                    // Apply film grain
+                    const grain = currentPreset.postfx.grain;
+                    if (grain > 0) {
+                        const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+                        const data = imageData.data;
+                        
+                        for (let i = 0; i < data.length; i += 4) {
+                            if (Math.random() < grain) {
+                                const noise = (Math.random() - 0.5) * 50;
+                                data[i] = Math.min(255, Math.max(0, data[i] + noise));
+                                data[i + 1] = Math.min(255, Math.max(0, data[i + 1] + noise));
+                                data[i + 2] = Math.min(255, Math.max(0, data[i + 2] + noise));
+                            }
+                        }
+                        
+                        ctx.putImageData(imageData, 0, 0);
+                    }
+                }
+            });
+            
+            registerModifier('ColorGrade', {
+                apply: (ctx, state) => {
+                    // This is handled by palette selection
+                    return state;
+                }
+            });
+            
+            registerModifier('AfterImage', {
+                apply: (ctx, state) => {
+                    // This would be implemented with feedback
+                    return state;
+                }
+            });
+            
+            // Animation loop
+            function animate() {
+                if (isPaused) return;
+                
+                const now = performance.now();
+                currentTime = now - startTime;
+                
+                // Clear canvas
+                ctx.clearRect(0, 0, canvas.width, canvas.height);
+                
+                // Draw background
+                ctx.fillStyle = currentPreset.palette.colors[0];
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                // Calculate timing
+                const { in: inTime, hold, out } = currentPreset.timing;
+                const totalTime = inTime + hold + out;
+                const t = currentTime / 1000;
+                
+                // State machine
+                if (t < inTime) {
+                    state = 'INTRO';
+                } else if (t < inTime + hold) {
+                    state = 'HOLD';
+                } else if (t < totalTime) {
+                    state = 'REVEAL';
+                } else {
+                    state = 'DONE';
+                }
+                
+                // Draw based on state
+                if (state === 'INTRO' || state === 'HOLD') {
+                    const treatment = treatments[currentPreset.treatment.name];
+                    if (treatment) {
+                        if (!treatment.state) {
+                            treatment.state = {};
+                            if (treatment.enter) treatment.enter(treatment.state);
+                        }
+                        
+                        if (treatment.update) {
+                            treatment.update(treatment.state, t, 1/60);
+                        }
+                        
+                        if (treatment.draw) {
+                            treatment.draw(ctx, treatment.state);
+                        }
+                    }
+                } else if (state === 'REVEAL') {
+                    const reveal = reveals[currentPreset.reveal.name];
+                    const progress = (t - inTime - hold) / out;
+                    
+                    if (reveal && reveal.draw) {
+                        reveal.draw(ctx, progress);
+                    }
+                } else if (state === 'DONE') {
+                    // Fade out completely
+                    overlay.style.opacity = '0';
+                    overlay.style.pointerEvents = 'none';
+                    
+                    if (CONFIG.AUTO_REMOVE) {
+                        overlay.remove();
+                    }
+                    
+                    dispatchEvent('complete');
+                    return;
+                }
+                
+                // Apply modifiers
+                currentPreset.modifiers.forEach(mod => {
+                    const modifier = modifiers[mod.name];
+                    if (modifier && modifier.apply) {
+                        modifier.apply(ctx, treatment ? treatment.state : {});
+                    }
+                });
+                
+                animationId = requestAnimationFrame(animate);
+                
+                // Auto-play rail mode
+                if (CONFIG.AUTO_PLAY_RAIL && !railTimer) {
+                    railTimer = setTimeout(() => {
+                        window.AudioGnarlsTitle.nextPreset();
+                        railTimer = null;
+                    }, CONFIG.RAIL_ADVANCE_MS);
+                }
+            }
+            
+            // Update HUD
+            function updateHUD() {
+                if (!currentPreset) return;
+                
+                hud.textContent = `Audio Gnarls • Preset ${String(currentPreset.id + 1).padStart(3, '0')}/${CONFIG.PRESET_COUNT} • Treatment: ${currentPreset.treatment.name} • Reveal: ${currentPreset.reveal.name} • Seed: ${currentPreset.seed}`;
+            }
+            
+            // Keyboard controls
+            function handleKeyDown(e) {
+                switch (e.key) {
+                    case 'ArrowLeft':
+                        if (e.shiftKey) {
+                            window.AudioGnarlsTitle.prevPreset(50);
+                        } else if (e.ctrlKey || e.metaKey) {
+                            window.AudioGnarlsTitle.prevPreset(10);
+                        } else {
+                            window.AudioGnarlsTitle.prevPreset();
+                        }
+                        e.preventDefault();
+                        break;
+                        
+                    case 'ArrowRight':
+                        if (e.shiftKey) {
+                            window.AudioGnarlsTitle.nextPreset(50);
+                        } else if (e.ctrlKey || e.metaKey) {
+                            window.AudioGnarlsTitle.nextPreset(10);
+                        } else {
+                            window.AudioGnarlsTitle.nextPreset();
+                        }
+                        e.preventDefault();
+                        break;
+                        
+                    case 'ArrowUp':
+                        window.AudioGnarlsTitle.nextPreset(10);
+                        e.preventDefault();
+                        break;
+                        
+                    case 'ArrowDown':
+                        window.AudioGnarlsTitle.prevPreset(10);
+                        e.preventDefault();
+                        break;
+                        
+                    case 'Enter':
+                        window.AudioGnarlsTitle.replay();
+                        e.preventDefault();
+                        break;
+                        
+                    case 'Escape':
+                    case ' ':
+                        window.AudioGnarlsTitle.skipToReveal();
+                        e.preventDefault();
+                        break;
+                        
+                    case 'T':
+                    case 't':
+                        // Cycle through treatments
+                        const treatmentNames = Object.keys(treatments);
+                        const currentIndex = treatmentNames.indexOf(currentPreset.treatment.name);
+                        const nextIndex = (currentIndex + 1) % treatmentNames.length;
+                        window.AudioGnarlsTitle.setTitleTreatment(treatmentNames[nextIndex]);
+                        e.preventDefault();
+                        break;
+                        
+                    case 'R':
+                    case 'r':
+                        // Cycle through reveals
+                        const revealNames = Object.keys(reveals);
+                        const currentRevealIndex = revealNames.indexOf(currentPreset.reveal.name);
+                        const nextRevealIndex = (currentRevealIndex + 1) % revealNames.length;
+                        window.AudioGnarlsTitle.setReveal(revealNames[nextRevealIndex]);
+                        e.preventDefault();
+                        break;
+                        
+                    case 'D':
+                    case 'd':
+                        // Dice new preset
+                        window.AudioGnarlsTitle.randomizeSeed();
+                        e.preventDefault();
+                        break;
+                        
+                    case 'S':
+                    case 's':
+                        // Save snapshot
+                        const link = document.createElement('a');
+                        link.download = 'audio-gnarls-title.png';
+                        link.href = canvas.toDataURL();
+                        link.click();
+                        e.preventDefault();
+                        break;
+                }
+            }
+            
+            // Initialize
+            function init() {
+                // Generate presets
+                generatePresets();
+                updateHUD();
+                
+                // Set up event listeners
+                document.addEventListener('keydown', handleKeyDown);
+                skipBtn.addEventListener('click', () => window.AudioGnarlsTitle.skipToReveal());
+                
+                // Start animation if auto-start enabled
+                if (CONFIG.AUTO_START) {
+                    window.AudioGnarlsTitle.start();
+                }
+                
+                // Add dev preview backdrop if needed
+                if (CONFIG.DEV_PREVIEW_BACKDROP) {
+                    const content = document.getElementById('content');
+                    if (content) {
+                        content.style.background = '#000';
+                    }
+                }
+            }
+            
+            // Start when DOM is ready
+            if (document.readyState === 'loading') {
+                document.addEventListener('DOMContentLoaded', init);
+            } else {
+                init();
+            }
+        })();
+    </script>
+</body>
+</html>
