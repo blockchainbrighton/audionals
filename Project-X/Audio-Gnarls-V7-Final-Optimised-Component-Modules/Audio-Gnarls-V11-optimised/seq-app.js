@@ -46,9 +46,9 @@ class SeqApp extends HTMLElement {
   #paint(idx, setTo) {
     if (setTo == null) this.#clearAt(idx);
     else {
-      this.#setSeq(idx, 1);
+      this.#setSeq(idx, 0);
       this.updateSequenceUI();
-      this.#dispatch('seq-step-recorded', { slotIndex: idx, value: 1, nextSlot: this.#next(idx), isRecording: false });
+      this.#dispatch('seq-step-recorded', { slotIndex: idx, value: 0, nextSlot: this.#next(idx), isRecording: false });
     }
   }
 
@@ -85,10 +85,12 @@ class SeqApp extends HTMLElement {
     window.addEventListener('pointerup', this._onPointerUpGlobal);
   }
 
-  disconnectedCallback() {
-    window.removeEventListener('keydown', this._onWindowKeyDown);
-    window.removeEventListener('pointerup', this._onPointerUpGlobal);
-  }
+disconnectedCallback() {
+  window.removeEventListener('keydown', this._onWindowKeyDown);
+  window.removeEventListener('pointerup', this._onPointerUpGlobal);
+  if (this._seqTimer) { clearTimeout(this._seqTimer); this._seqTimer = null; }
+  if (this._tailTimer) { clearTimeout(this._tailTimer); this._tailTimer = null; }
+}
 
   // --- Render --------------------------------------------------------------
   render() {
@@ -286,36 +288,61 @@ class SeqApp extends HTMLElement {
   }
 
   playSequence() {
-    if (this.state.sequencePlaying) return;
-    this.state.sequencePlaying = true;
-    this.state.sequenceStepIndex = 0;
+  if (this.state.sequencePlaying) return;
+  this.state.sequencePlaying = true;
+  this.state.sequenceStepIndex = 0;
+  this.updateSequenceUI();
+
+  this.#dispatch('seq-play-started', { stepTime: this.state.stepTime });
+
+  const stepFn = () => {
+    if (!this.state.sequencePlaying) return; // hard guard
+
+    const idx = this.state.sequenceStepIndex;
+    const value = this.state.sequence[idx];
+    const velocity = this.#velAt(idx);
+    const isLastStep = this.#next(idx) === 0;
+
+    this.#dispatch('seq-step-advance', { stepIndex: idx, index: idx, value, velocity, isLastStep });
+
+    this.state.sequenceStepIndex = this.#next(idx);
     this.updateSequenceUI();
 
-    this.#dispatch('seq-play-started', { stepTime: this.state.stepTime });
-
-    const stepFn = () => {
-      if (!this.state.sequencePlaying) return;
-      const idx = this.state.sequenceStepIndex;
-      const value = this.state.sequence[idx];
-      const velocity = this.#velAt(idx);
-      const isLastStep = this.#next(idx) === 0;
-
-      this.#dispatch('seq-step-advance', { stepIndex: idx, index: idx, value, velocity, isLastStep });
-
-      this.state.sequenceStepIndex = this.#next(idx);
-      this.updateSequenceUI();
+    // ⬇️ Only schedule next tick if we're still playing
+    if (this.state.sequencePlaying) {
       this._seqTimer = setTimeout(stepFn, this.state.stepTime);
-    };
+    } else {
+      this._seqTimer = null;
+    }
+  };
 
-    stepFn();
-  }
+  stepFn();
+}
+
 
   stopSequence() {
-    this.state.sequencePlaying = false;
-    if (this._seqTimer) { clearTimeout(this._seqTimer); this._seqTimer = null; }
-    this.updateSequenceUI();
-    this.#dispatch('seq-play-stopped', {});
-  }
+  // Stop regular scheduling
+  this.state.sequencePlaying = false;
+
+  if (this._seqTimer) { clearTimeout(this._seqTimer); this._seqTimer = null; }
+  if (this._tailTimer) { clearTimeout(this._tailTimer); this._tailTimer = null; }
+
+  // Update UI and announce stop
+  this.updateSequenceUI();
+  this.#dispatch('seq-play-stopped', {});
+
+  // Organic tail: one extra step as "0" (hum), after a short delay
+  // Use a small fraction of stepTime so it feels like the next step
+  const tailDelay = Math.max(20, Math.min(this.state.stepTime, 200)); // 20..200ms is snappy
+  this._tailTimer = setTimeout(() => {
+    // Re-emit using your existing event so downstream stays in sync
+    this.#dispatch('seq-step-advance', {
+      stepIndex: -1, index: -1, value: 0, velocity: 1, isLastStep: true
+    });
+    this._tailTimer = null;
+  }, tailDelay);
+}
+
 }
 
 customElements.define('seq-app', SeqApp);

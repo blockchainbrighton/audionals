@@ -101,7 +101,7 @@ class OscApp2 extends HTMLElement {
       sequencePlaying: false,
       sequenceIntervalId: null, // (legacy, unused but kept for drop-in)
       sequenceStepIndex: 0,
-      stepTime: 400,
+      stepTime: 200,
       _seqFirstCycleStarted: false, // to detect wrap for play-once
       // Sequencer Signature Mode
       isSequenceSignatureMode: false,
