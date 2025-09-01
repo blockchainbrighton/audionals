@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulse Shift</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: #e6e6e6;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            position: relative;
+            margin: 20px 0;
+        }
+        
+        #gameCanvas {
+            background: #0f3460;
+            border-radius: 8px;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+        
+        .ui-panel {
+            display: flex;
+            justify-content: space-between;
+            width: 500px;
+            margin: 15px 0;
+            background: rgba(0, 0, 0, 0.3);
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stats {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .stat-value {
+            font-size: 24px;
+            font-weight: bold;
+            color: #4ecca3;
+            text-shadow: 0 0 8px rgba(78, 204, 163, 0.5);
+        }
+        
+        .controls {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        
+        .key {
+            display: inline-block;
+            padding: 5px 10px;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 4px;
+            margin: 0 3px;
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+        
+        .title {
+            font-size: 42px;
+            margin: 10px 0;
+            text-align: center;
+            background: linear-gradient(to right, #4ecca3, #00b4d8);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+            letter-spacing: 2px;
+        }
+        
+        .subtitle {
+            font-size: 18px;
+            margin-bottom: 20px;
+            text-align: center;
+            max-width: 600px;
+            line-height: 1.5;
+            color: #a9a9a9;
+        }
+        
+        .screen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(15, 52, 96, 0.9);
+            border-radius: 8px;
+            z-index: 10;
+        }
+        
+        .hidden {
+            display: none;
+        }
+        
+        button {
+            background: linear-gradient(to right, #4ecca3, #00b4d8);
+            border: none;
+            padding: 12px 30px;
+            font-size: 18px;
+            color: white;
+            border-radius: 30px;
+            cursor: pointer;
+            margin: 15px 0;
+            font-weight: bold;
+            letter-spacing: 1px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.4);
+        }
+        
+        .instructions {
+            max-width: 500px;
+            text-align: center;
+            margin: 20px 0;
+            line-height: 1.6;
+        }
+        
+        .highlight {
+            color: #4ecca3;
+            font-weight: bold;
+        }
+        
+        .pulse {
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+            100% { transform: scale(1); }
+        }
+        
+        .frequency-display {
+            display: flex;
+            align-items: center;
+            margin-top: 10px;
+        }
+        
+        .freq-dot {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            margin: 0 3px;
+            background: #444;
+        }
+        
+        .freq-dot.active {
+            background: #4ecca3;
+            box-shadow: 0 0 8px #4ecca3;
+        }
+    </style>
+</head>
+<body>
+    <h1 class="title pulse">PULSE SHIFT</h1>
+    <p class="subtitle">Navigate the shifting maze by matching your pulse frequency to barriers</p>
+    
+    <div class="game-container">
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
+        
+        <div id="startScreen" class="screen">
+            <h2>Ready to Shift?</h2>
+            <div class="instructions">
+                <p>Match your <span class="highlight">pulse frequency</span> (1-5) to barriers to phase through them!</p>
+                <p>Collect energy orbs to replenish your reserves. Avoid barriers with different frequencies.</p>
+            </div>
+            <button id="startButton">START GAME</button>
+            <div class="instructions">
+                <p>CONTROLS: <span class="key">←</span> <span class="key">→</span> Change Frequency | <span class="key">↑</span> <span class="key">↓</span> Move</p>
+            </div>
+        </div>
+        
+        <div id="gameOverScreen" class="screen hidden">
+            <h2>GAME OVER</h2>
+            <p id="finalScore">Score: 0</p>
+            <button id="restartButton">PLAY AGAIN</button>
+        </div>
+    </div>
+    
+    <div class="ui-panel">
+        <div class="stats">
+            <div>ENERGY</div>
+            <div id="energyValue" class="stat-value">100%</div>
+        </div>
+        
+        <div class="stats">
+            <div>SCORE</div>
+            <div id="scoreValue" class="stat-value">0</div>
+        </div>
+        
+        <div class="stats">
+            <div>FREQUENCY</div>
+            <div id="frequencyValue" class="stat-value">3</div>
+            <div class="frequency-display">
+                <div class="freq-dot"></div>
+                <div class="freq-dot"></div>
+                <div class="freq-dot active"></div>
+                <div class="freq-dot"></div>
+                <div class="freq-dot"></div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game elements
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+        const energyValue = document.getElementById('energyValue');
+        const scoreValue = document.getElementById('scoreValue');
+        const frequencyValue = document.getElementById('frequencyValue');
+        const finalScore = document.getElementById('finalScore');
+        const freqDots = document.querySelectorAll('.freq-dot');
+        
+        // Game state
+        let gameRunning = false;
+        let player = {
+            x: 50,
+            y: 250,
+            radius: 15,
+            frequency: 3,
+            energy: 100,
+            speed: 4
+        };
+        
+        let barriers = [];
+        let energyOrbs = [];
+        let exit = { x: 450, y: 250, width: 30, height: 60 };
+        let score = 0;
+        let level = 1;
+        let frameCount = 0;
+        let keys = {};
+        
+        // Initialize game
+        function initGame() {
+            player = {
+                x: 50,
+                y: 250,
+                radius: 15,
+                frequency: 3,
+                energy: 100,
+                speed: 4
+            };
+            
+            barriers = [];
+            energyOrbs = [];
+            score = 0;
+            level = 1;
+            frameCount = 0;
+            
+            // Create barriers
+            createLevel();
+            
+            // Create energy orbs
+            for (let i = 0; i < 5 + level; i++) {
+                energyOrbs.push({
+                    x: Math.random() * 400 + 50,
+                    y: Math.random() * 400 + 50,
+                    radius: 8,
+                    collected: false
+                });
+            }
+            
+            updateUI();
+        }
+        
+        // Create level layout
+        function createLevel() {
+            barriers = [];
+            
+            // Create horizontal barriers
+            for (let i = 0; i < 4 + level; i++) {
+                barriers.push({
+                    x: 100 + i * 80,
+                    y: 100 + (i % 3) * 100,
+                    width: 60,
+                    height: 20,
+                    frequency: Math.floor(Math.random() * 5) + 1,
+                    flashTimer: 0,
+                    flashDuration: 30 + Math.floor(Math.random() * 30)
+                });
+            }
+            
+            // Create vertical barriers
+            for (let i = 0; i < 3 + level; i++) {
+                barriers.push({
+                    x: 150 + (i % 4) * 100,
+                    y: 150 + i * 80,
+                    width: 20,
+                    height: 60,
+                    frequency: Math.floor(Math.random() * 5) + 1,
+                    flashTimer: 0,
+                    flashDuration: 30 + Math.floor(Math.random() * 30)
+                });
+            }
+        }
+        
+        // Update UI elements
+        function updateUI() {
+            energyValue.textContent = `${Math.floor(player.energy)}%`;
+            scoreValue.textContent = score;
+            frequencyValue.textContent = player.frequency;
+            
+            // Update frequency dots
+            freqDots.forEach((dot, index) => {
+                if (index === player.frequency - 1) {
+                    dot.classList.add('active');
+                } else {
+                    dot.classList.remove('active');
+                }
+            });
+        }
+        
+        // Draw game elements
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid background
+            ctx.strokeStyle = 'rgba(100, 150, 200, 0.1)';
+            ctx.lineWidth = 1;
+            
+            for (let x = 0; x < canvas.width; x += 20) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let y = 0; y < canvas.height; y += 20) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            // Draw barriers
+            barriers.forEach(barrier => {
+                const isFlashing = barrier.flashTimer < barrier.flashDuration / 2;
+                
+                if (isFlashing) {
+                    // Draw glow effect when flashing
+                    ctx.shadowColor = `hsl(${barrier.frequency * 60}, 100%, 70%)`;
+                    ctx.shadowBlur = 15;
+                }
+                
+                ctx.fillStyle = isFlashing ? 
+                    `hsl(${barrier.frequency * 60}, 100%, 60%)` : 
+                    '#334466';
+                
+                ctx.fillRect(barrier.x, barrier.y, barrier.width, barrier.height);
+                
+                // Reset shadow
+                ctx.shadowBlur = 0;
+                
+                // Draw frequency indicator
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+                ctx.font = '12px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText(barrier.frequency, 
+                    barrier.x + barrier.width/2, 
+                    barrier.y + barrier.height/2 + 4);
+            });
+            
+            // Draw energy orbs
+            energyOrbs.forEach(orb => {
+                if (!orb.collected) {
+                    ctx.beginPath();
+                    ctx.arc(orb.x, orb.y, orb.radius, 0, Math.PI * 2);
+                    ctx.fillStyle = '#FFD700';
+                    ctx.fill();
+                    
+                    // Glow effect
+                    ctx.shadowColor = '#FFD700';
+                    ctx.shadowBlur = 10;
+                    ctx.fill();
+                    ctx.shadowBlur = 0;
+                }
+            });
+            
+            // Draw exit
+            ctx.fillStyle = '#4ecca3';
+            ctx.fillRect(exit.x, exit.y, exit.width, exit.height);
+            
+            // Draw exit symbol
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.5)';
+            ctx.font = '20px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText('EXIT', exit.x + exit.width/2, exit.y + exit.height/2 + 7);
+            
+            // Draw player
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            
+            // Player color based on frequency
+            const hue = player.frequency * 60;
+            ctx.fillStyle = `hsl(${hue}, 100%, 60%)`;
+            ctx.fill();
+            
+            // Pulse effect
+            const pulseSize = player.radius + Math.sin(frameCount / 5) * 3;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, pulseSize, 0, Math.PI * 2);
+            ctx.strokeStyle = `hsla(${hue}, 100%, 70%, 0.5)`;
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+        
+        // Update game state
+        function update() {
+            if (!gameRunning) return;
+            
+            frameCount++;
+            
+            // Update barriers flashing
+            barriers.forEach(barrier => {
+                barrier.flashTimer++;
+                if (barrier.flashTimer >= barrier.flashDuration) {
+                    barrier.flashTimer = 0;
+                }
+            });
+            
+            // Handle player movement
+            if (keys['ArrowUp'] && player.y > player.radius) {
+                player.y -= player.speed;
+            }
+            if (keys['ArrowDown'] && player.y < canvas.height - player.radius) {
+                player.y += player.speed;
+            }
+            if (keys['ArrowLeft'] && player.x > player.radius) {
+                player.x -= player.speed;
+            }
+            if (keys['ArrowRight'] && player.x < canvas.width - player.radius) {
+                player.x += player.speed;
+            }
+            
+            // Handle frequency changes
+            if (keys['1'] || keys['2'] || keys['3'] || keys['4'] || keys['5']) {
+                const newFreq = parseInt(Object.keys(keys).find(key => keys[key] && ['1','2','3','4','5'].includes(key)));
+                if (newFreq && newFreq !== player.frequency) {
+                    const energyCost = Math.abs(newFreq - player.frequency) * 5;
+                    if (player.energy >= energyCost) {
+                        player.frequency = newFreq;
+                        player.energy -= energyCost;
+                        updateUI();
+                    }
+                }
+            }
+            
+            // Continuous energy drain
+            player.energy -= 0.05;
+            if (player.energy < 0) player.energy = 0;
+            
+            // Check energy orb collection
+            energyOrbs.forEach(orb => {
+                if (!orb.collected) {
+                    const dx = player.x - orb.x;
+                    const dy = player.y - orb.y;
+                    const distance = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (distance < player.radius + orb.radius) {
+                        orb.collected = true;
+                        player.energy = Math.min(100, player.energy + 20);
+                        score += 10;
+                        updateUI();
+                    }
+                }
+            });
+            
+            // Check barrier collisions
+            barriers.forEach(barrier => {
+                const isFlashing = barrier.flashTimer < barrier.flashDuration / 2;
+                
+                if (isFlashing && barrier.frequency === player.frequency) {
+                    // Player can phase through
+                    return;
+                }
+                
+                // Collision detection
+                if (player.x + player.radius > barrier.x &&
+                    player.x - player.radius < barrier.x + barrier.width &&
+                    player.y + player.radius > barrier.y &&
+                    player.y - player.radius < barrier.y + barrier.height) {
+                    // Collision!
+                    gameOver();
+                }
+            });
+            
+            // Check exit collision
+            if (player.x + player.radius > exit.x &&
+                player.x - player.radius < exit.x + exit.width &&
+                player.y + player.radius > exit.y &&
+                player.y - player.radius < exit.y + exit.height) {
+                // Level complete!
+                level++;
+                score += 100;
+                initGame();
+            }
+            
+            // Check energy depletion
+            if (player.energy <= 0) {
+                gameOver();
+            }
+            
+            updateUI();
+        }
+        
+        // Game loop
+        function gameLoop() {
+            update();
+            draw();
+            if (gameRunning) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Start game
+        function startGame() {
+            gameRunning = true;
+            startScreen.classList.add('hidden');
+            initGame();
+            gameLoop();
+        }
+        
+        // Game over
+        function gameOver() {
+            gameRunning = false;
+            finalScore.textContent = `Score: ${score}`;
+            gameOverScreen.classList.remove('hidden');
+        }
+        
+        // Restart game
+        function restartGame() {
+            gameOverScreen.classList.add('hidden');
+            startGame();
+        }
+        
+        // Event listeners
+        startButton.addEventListener('click', startGame);
+        restartButton.addEventListener('click', restartGame);
+        
+        window.addEventListener('keydown', (e) => {
+            keys[e.key] = true;
+            
+            // Prevent arrow keys from scrolling the page
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+                e.preventDefault();
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            keys[e.key] = false;
+        });
+        
+        // Initialize UI
+        updateUI();
+    </script>
+</body>
+</html>

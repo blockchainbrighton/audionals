@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Color Flip</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      background: #111;
+      font-family: 'Courier New', monospace;
+      color: white;
+      text-align: center;
+      overflow: hidden;
+    }
+    #game-area {
+      font-size: 72px;
+      font-weight: bold;
+      user-select: none;
+      min-height: 100px;
+    }
+    #score {
+      margin-top: 20px;
+      font-size: 24px;
+      opacity: 0.9;
+    }
+    #start {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 18px;
+      background: #0f0;
+      color: black;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="score">Score: 0</div>
+  <div id="game-area">Click when word matches color!</div>
+  <button id="start">Start Game</button>
+
+  <script>
+    const words = ['RED', 'GREEN', 'BLUE', 'YELLOW'];
+    const colors = ['red', 'green', 'blue', 'yellow'];
+    const gameArea = document.getElementById('game-area');
+    const scoreDisplay = document.getElementById('score');
+    const startButton = document.getElementById('start');
+
+    let score = 0;
+    let gameActive = false;
+    let currentTimeout = null;
+    let interval = 1500; // ms between words (gets faster)
+
+    function getRandomColorWord() {
+      const i = Math.floor(Math.random() * words.length);
+      return { word: words[i], color: colors[i] };
+    }
+
+    function showNext() {
+      if (!gameActive) return;
+
+      clearTimeout(currentTimeout);
+      const { word, color } = getRandomColorWord();
+      const shouldMatch = Math.random() < 0.3; // 30% chance to match
+
+      let displayWord, displayColor;
+      if (shouldMatch) {
+        displayWord = word;
+        displayColor = color;
+      } else {
+        displayWord = word;
+        // pick a different color
+        displayColor = colors.find(c => c !== color) || 'red';
+      }
+
+      gameArea.textContent = displayWord;
+      gameArea.style.color = displayColor;
+
+      const isCorrectMatch = displayWord.toLowerCase() === displayColor;
+
+      currentTimeout = setTimeout(() => {
+        if (gameActive) {
+          // Timeout: if it was a match and you didn't click, you lose
+          if (isCorrectMatch) {
+            endGame();
+          } else {
+            showNext(); // safe, continue
+          }
+        }
+      }, interval);
+    }
+
+    function handleClick() {
+      if (!gameActive) return;
+
+      const word = gameArea.textContent;
+      const color = gameArea.style.color;
+      const isCorrectMatch = word.toLowerCase() === color;
+
+      if (isCorrectMatch) {
+        score++;
+        scoreDisplay.textContent = `Score: ${score}`;
+        // Speed up slightly every 5 points
+        if (score % 5 === 0 && interval > 600) {
+          interval -= 100;
+        }
+        showNext();
+      } else {
+        endGame();
+      }
+    }
+
+    function startGame() {
+      score = 0;
+      interval = 1500;
+      scoreDisplay.textContent = `Score: ${score}`;
+      gameActive = true;
+      startButton.style.display = 'none';
+      showNext();
+    }
+
+    function endGame() {
+      gameActive = false;
+      clearTimeout(currentTimeout);
+      gameArea.textContent = `Game Over! Score: ${score}`;
+      gameArea.style.color = 'white';
+      startButton.style.display = 'block';
+    }
+
+    startButton.addEventListener('click', startGame);
+    document.addEventListener('click', () => {
+      if (gameActive) handleClick();
+    });
+
+    // Initial state
+    gameArea.textContent = "Press Start to Play";
+    gameArea.style.color = "white";
+  </script>
+</body>
+</html>

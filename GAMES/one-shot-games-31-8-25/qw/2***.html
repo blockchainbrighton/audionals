@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pulse Drop</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #1a1a2e;
+            font-family: Arial, sans-serif;
+            color: white;
+            overflow: hidden;
+        }
+        #gameContainer {
+            position: relative;
+            width: 400px;
+            height: 600px;
+            background: #16213e;
+            border-radius: 10px;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+        }
+        #scoreBoard {
+            display: flex;
+            justify-content: space-between;
+            width: 400px;
+            margin-bottom: 10px;
+            font-size: 20px;
+        }
+        #ball {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            left: 180px;
+            transition: top 0.1s linear;
+        }
+        #targetBar {
+            position: absolute;
+            bottom: 50px;
+            width: 100%;
+            height: 20px;
+            background: #0f3460;
+        }
+        #pulseZone {
+            position: absolute;
+            height: 100%;
+            background: #e94560;
+            border-radius: 10px;
+        }
+        #instructions {
+            margin-top: 20px;
+            text-align: center;
+            max-width: 400px;
+            line-height: 1.5;
+        }
+        #gameOver {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+            display: none;
+        }
+        button {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            font-size: 18px;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        button:hover {
+            background: #ff6b81;
+        }
+    </style>
+</head>
+<body>
+    <div id="scoreBoard">
+        <div>Score: <span id="score">0</span></div>
+        <div>Misses: <span id="misses">0</span></div>
+    </div>
+    
+    <div id="gameContainer">
+        <div id="ball"></div>
+        <div id="targetBar">
+            <div id="pulseZone"></div>
+        </div>
+        <div id="gameOver">
+            <h2>Game Over</h2>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <button onclick="resetGame()">Play Again</button>
+        </div>
+    </div>
+    
+    <div id="instructions">
+        <p>Click when the falling ball color matches the pulsing zone on the bar!</p>
+        <p>Each successful match makes the pulse zone smaller and faster.</p>
+    </div>
+
+    <script>
+        // Game variables
+        let score = 0;
+        let misses = 0;
+        let ballPosition = 0;
+        let ballColor = '';
+        let pulsePosition = 0;
+        let pulseWidth = 120;
+        let pulseSpeed = 2;
+        let pulseDirection = 1;
+        let pulseActive = false;
+        let gameActive = true;
+        let animationId;
+        
+        // DOM elements
+        const ball = document.getElementById('ball');
+        const pulseZone = document.getElementById('pulseZone');
+        const scoreDisplay = document.getElementById('score');
+        const missesDisplay = document.getElementById('misses');
+        const gameOverScreen = document.getElementById('gameOver');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        
+        // Colors for the game
+        const colors = ['#e94560', '#4cc9f0', '#f72585', '#7209b7', '#3a0ca3', '#4361ee', '#4cc9f0'];
+        
+        // Initialize game
+        function initGame() {
+            score = 0;
+            misses = 0;
+            pulseWidth = 120;
+            pulseSpeed = 2;
+            gameActive = true;
+            
+            scoreDisplay.textContent = score;
+            missesDisplay.textContent = misses;
+            gameOverScreen.style.display = 'none';
+            
+            // Set initial ball position and color
+            ballPosition = 0;
+            ball.style.top = ballPosition + 'px';
+            ballColor = colors[Math.floor(Math.random() * colors.length)];
+            ball.style.backgroundColor = ballColor;
+            
+            // Set initial pulse position
+            pulsePosition = 100;
+            pulseDirection = 1;
+            updatePulseZone();
+            
+            // Start game loop
+            if (animationId) cancelAnimationFrame(animationId);
+            gameLoop();
+        }
+        
+        // Update pulse zone position and appearance
+        function updatePulseZone() {
+            pulseZone.style.width = pulseWidth + 'px';
+            pulseZone.style.left = pulsePosition + 'px';
+            pulseZone.style.backgroundColor = ballColor;
+            
+            // Pulsing effect
+            const pulseSize = pulseActive ? 1.2 : 1;
+            pulseZone.style.transform = `scaleX(${pulseSize})`;
+        }
+        
+        // Main game loop
+        function gameLoop() {
+            if (!gameActive) return;
+            
+            // Move ball down
+            ballPosition += 1.5;
+            ball.style.top = ballPosition + 'px';
+            
+            // Move pulse zone
+            pulsePosition += pulseSpeed * pulseDirection;
+            if (pulsePosition <= 0 || pulsePosition >= 400 - pulseWidth) {
+                pulseDirection *= -1;
+            }
+            
+            // Randomly activate pulse
+            if (Math.random() < 0.02) {
+                pulseActive = !pulseActive;
+            }
+            
+            updatePulseZone();
+            
+            // Check if ball reached bottom
+            if (ballPosition > 530) {
+                // Check if ball is within pulse zone
+                const ballCenter = 180 + 20; // ball left + half width
+                const pulseLeft = pulsePosition;
+                const pulseRight = pulsePosition + pulseWidth;
+                
+                if (ballCenter >= pulseLeft && ballCenter <= pulseRight) {
+                    // Success!
+                    score++;
+                    scoreDisplay.textContent = score;
+                    
+                    // Make game harder
+                    pulseWidth = Math.max(30, pulseWidth - 5);
+                    pulseSpeed = Math.min(8, pulseSpeed + 0.2);
+                    
+                    // Reset ball
+                    resetBall();
+                } else {
+                    // Miss
+                    misses++;
+                    missesDisplay.textContent = misses;
+                    
+                    if (misses >= 3) {
+                        endGame();
+                        return;
+                    }
+                    
+                    // Reset ball
+                    resetBall();
+                }
+            }
+            
+            animationId = requestAnimationFrame(gameLoop);
+        }
+        
+        // Reset ball position
+        function resetBall() {
+            ballPosition = 0;
+            ball.style.top = ballPosition + 'px';
+            ballColor = colors[Math.floor(Math.random() * colors.length)];
+            ball.style.backgroundColor = ballColor;
+        }
+        
+        // End the game
+        function endGame() {
+            gameActive = false;
+            finalScoreDisplay.textContent = score;
+            gameOverScreen.style.display = 'flex';
+        }
+        
+        // Reset the entire game
+        function resetGame() {
+            initGame();
+        }
+        
+        // Handle click
+        document.getElementById('gameContainer').addEventListener('click', function() {
+            if (!gameActive) return;
+            
+            // Drop the ball immediately
+            ballPosition = 530;
+            ball.style.top = ballPosition + 'px';
+        });
+        
+        // Start the game
+        window.onload = initGame;
+    </script>
+</body>
+</html>

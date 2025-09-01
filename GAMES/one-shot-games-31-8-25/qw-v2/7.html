@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Orbital Drift</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Courier New', monospace;
+      color: #fff;
+      text-align: center;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      border: 1px solid #222;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 14px;
+      opacity: 0.9;
+    }
+    #win {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 32px;
+      font-weight: bold;
+      color: #0f8;
+      text-shadow: 0 0 10px #0f8;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+    #lose {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 32px;
+      font-weight: bold;
+      color: #f80;
+      text-shadow: 0 0 10px #f80;
+      opacity: 0;
+      transition: opacity 0.5s;
+    }
+    button {
+      margin-top: 10px;
+      padding: 8px 16px;
+      background: #333;
+      color: #fff;
+      border: 1px solid #555;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #444;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="game"></canvas>
+  <div id="ui">Wells: <span id="wells">0/3</span></div>
+  <div id="win">ORBIT LOCKED!<br><button onclick="nextLevel()">Next</button></div>
+  <div id="lose">DRIFT LOST<br><button onclick="reset()">Retry</button></div>
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const wellsDisplay = document.getElementById('wells');
+    const winScreen = document.getElementById('win');
+    const loseScreen = document.getElementById('lose');
+
+    canvas.width = 800;
+    canvas.height = 600;
+
+    let level = 0;
+    let satellite, planet, wells, placed, orbitPhase, orbitCount, lastAngle, gameActive;
+
+    // Level definitions
+    const levels = [
+      { sat: { x: 200, y: 300, vx: 0, vy: 2 }, planet: { x: 400, y: 300, r: 40 }, desc: "Place 1 well to capture orbit." },
+      { sat: { x: 100, y: 100, vx: 2, vy: 1.5 }, planet: { x: 400, y: 300, r: 40 }, desc: "Two wells. Predict the pull." },
+      { sat: { x: 150, y: 200, vx: 0, vy: 2.5 }, planet: { x: 400, y: 300, r: 30, mx: 0.5 }, desc: "Planet moves. Time your wells." },
+      { sat: { x: 50, y: 50, vx: 3, vy: 2.8 }, planet: { x: 400, y: 300, r: 40 }, desc: "Fast start. Precision matters." },
+      { sat: { x: 100, y: 400, vx: 0, vy: 1.8 }, planet: { x: 400, y: 300, r: 50 }, ghost: true, desc: "Wells fade. Remember their pull." }
+    ];
+
+    // Audio
+    const chime = new (window.AudioContext || window.webkitAudioContext)();
+    function playTone(freq = 440, dur = 0.1, type = 'sine') {
+      const osc = chime.createOscillator();
+      const amp = chime.createGain();
+      osc.connect(amp);
+      amp.connect(chime.destination);
+      osc.frequency.value = freq;
+      osc.type = type;
+      amp.gain.setValueAtTime(0.3, chime.currentTime);
+      amp.gain.exponentialRampToValueAtTime(0.01, chime.currentTime + dur);
+      osc.start(chime.currentTime);
+      osc.stop(chime.currentTime + dur);
+    }
+
+    function reset() {
+      winScreen.style.opacity = 0;
+      loseScreen.style.opacity = 0;
+      initLevel(level);
+    }
+
+    function nextLevel() {
+      level = (level + 1) % levels.length;
+      reset();
+    }
+
+    function initLevel(lvl) {
+      const L = levels[lvl];
+      satellite = { x: L.sat.x, y: L.sat.y, vx: L.sat.vx, vy: L.sat.vy, trail: [] };
+      planet = { ...L.planet };
+      wells = [];
+      placed = 0;
+      orbitPhase = null;
+      orbitCount = 0;
+      lastAngle = null;
+      gameActive = true;
+    }
+
+    function drawTrail() {
+      if (satellite.trail.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(satellite.trail[0].x, satellite.trail[0].y);
+      for (let i = 1; i < satellite.trail.length; i++) {
+        const alpha = i / satellite.trail.length;
+        ctx.globalAlpha = alpha * 0.7;
+        ctx.lineTo(satellite.trail[i].x, satellite.trail[i].y);
+      }
+      ctx.strokeStyle = '#0af';
+      ctx.stroke();
+      ctx.globalAlpha = 1;
+    }
+
+    function drawPlanet() {
+      ctx.fillStyle = '#6d6';
+      ctx.beginPath();
+      ctx.arc(planet.x, planet.y, planet.r, 0, Math.PI * 2);
+      ctx.fill();
+      // Glow
+      const g = ctx.createRadialGradient(planet.x, planet.y, planet.r, planet.x, planet.y, planet.r * 1.5);
+      g.addColorStop(0, 'rgba(100, 200, 100, 0.1)');
+      g.addColorStop(1, 'transparent');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(planet.x, planet.y, planet.r * 1.5, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function drawWells() {
+      wells.forEach((w, i) => {
+        let alpha = 1;
+        if (levels[level].ghost) {
+          alpha = Math.max(0, 1 - Date.now() / 2000 % 1000 / 500); // pulse fade
+        }
+        ctx.globalAlpha = alpha * 0.3;
+        ctx.fillStyle = '#f88';
+        ctx.beginPath();
+        ctx.arc(w.x, w.y, 4, 0, Math.PI * 2);
+        ctx.fill();
+        // gravity field hint
+        for (let r = 10; r < 60; r += 10) {
+          ctx.strokeStyle = `rgba(255,128,128,${alpha * 0.1})`;
+          ctx.beginPath();
+          ctx.arc(w.x, w.y, r, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      });
+      ctx.globalAlpha = 1;
+    }
+
+    function updateSatellite() {
+      if (!gameActive) return;
+
+      // Apply gravity from each well
+      wells.forEach(w => {
+        const dx = w.x - satellite.x;
+        const dy = w.y - satellite.y;
+        const distSq = dx*dx + dy*dy;
+        const dist = Math.sqrt(distSq);
+        if (dist < 5) return;
+        const force = 5000 / distSq;
+        const ax = dx / dist * force;
+        const ay = dy / dist * force;
+        satellite.vx += ax;
+        satellite.vy += ay;
+      });
+
+      // Move satellite
+      satellite.x += satellite.vx;
+      satellite.y += satellite.vy;
+
+      // Move planet if needed
+      if (planet.mx) planet.x += planet.mx;
+
+      // Trail
+      satellite.trail.push({ x: satellite.x, y: satellite.y });
+      if (satellite.trail.length > 100) satellite.trail.shift();
+
+      // Check crash
+      const dx = satellite.x - planet.x;
+      const dy = satellite.y - planet.y;
+      const dist = Math.sqrt(dx*dx + dy*dy);
+      if (dist < planet.r) {
+        gameOver(false);
+      }
+
+      // Check escape
+      if (satellite.x < -50 || satellite.x > canvas.width+50 || satellite.y < -50 || satellite.y > canvas.height+50) {
+        gameOver(false);
+      }
+
+      // Orbit detection
+      const angle = Math.atan2(dy, dx);
+      if (lastAngle !== null) {
+        const diff = angle - lastAngle;
+        const normalizedDiff = ((diff + Math.PI) % (2 * Math.PI)) - Math.PI;
+        if (orbitPhase === null) {
+          if (normalizedDiff > 0.5) orbitPhase = 'ccw';
+          else if (normalizedDiff < -0.5) orbitPhase = 'cw';
+        } else {
+          if (orbitPhase === 'cw' && normalizedDiff > 0.5) {
+            orbitCount++;
+          } else if (orbitPhase === 'ccw' && normalizedDiff < -0.5) {
+            orbitCount++;
+          }
+          if (orbitCount >= 2) {
+            gameOver(true);
+          }
+        }
+      }
+      lastAngle = angle;
+    }
+
+    function gameOver(win) {
+      gameActive = false;
+      if (win) {
+        winScreen.style.opacity = 1;
+        playTone(880, 0.2);
+        playTone(660, 0.3, 'triangle');
+      } else {
+        loseScreen.style.opacity = 1;
+        playTone(220, 0.3, 'sawtooth');
+      }
+    }
+
+    function render() {
+      ctx.fillStyle = '#000';
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+      drawTrail();
+      drawWells();
+      drawPlanet();
+      // Draw satellite
+      ctx.fillStyle = '#fff';
+      ctx.beginPath();
+      ctx.arc(satellite.x, satellite.y, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+
+    function loop() {
+      updateSatellite();
+      render();
+      requestAnimationFrame(loop);
+    }
+
+    canvas.addEventListener('click', (e) => {
+      if (!gameActive || placed >= 3) return;
+      const rect = canvas.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
+      wells.push({ x, y });
+      placed++;
+      wellsDisplay.textContent = `${placed}/3`;
+    });
+
+    // Start
+    reset();
+    loop();
+  </script>
+</body>
+</html>

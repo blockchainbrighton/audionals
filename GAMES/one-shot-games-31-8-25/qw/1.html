@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pulse Dash</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #1a1a2e;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #gameContainer {
+            text-align: center;
+            position: relative;
+        }
+        #pulseCircle {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: #0f3460;
+            margin: 0 auto 30px;
+            transition: transform 0.1s ease-out;
+            box-shadow: 0 0 20px rgba(11, 172, 255, 0.7);
+        }
+        #score {
+            color: white;
+            font-size: 36px;
+            margin-bottom: 20px;
+            font-weight: bold;
+        }
+        #instructions {
+            color: #a9a9a9;
+            margin-bottom: 20px;
+            max-width: 300px;
+            line-height: 1.5;
+        }
+        #feedback {
+            height: 30px;
+            color: #e94560;
+            font-weight: bold;
+            margin: 10px 0;
+        }
+        button {
+            background: #e94560;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            font-size: 18px;
+            border-radius: 30px;
+            cursor: pointer;
+            margin-top: 15px;
+            display: none;
+        }
+        button:hover {
+            background: #ff6b81;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <div id="score">Score: 0</div>
+        <div id="pulseCircle"></div>
+        <div id="feedback">Tap when circle is largest!</div>
+        <div id="instructions">Click when the circle reaches its peak size. Timing gets harder as you progress!</div>
+        <button id="restartBtn">Play Again</button>
+    </div>
+
+    <script>
+        // Game elements
+        const pulseCircle = document.getElementById('pulseCircle');
+        const scoreDisplay = document.getElementById('score');
+        const feedback = document.getElementById('feedback');
+        const restartBtn = document.getElementById('restartBtn');
+        const gameContainer = document.getElementById('gameContainer');
+        
+        // Game state
+        let score = 0;
+        let pulseSpeed = 1000; // milliseconds
+        let pulseInterval;
+        let isGrowing = true;
+        let scale = 1;
+        let gameActive = true;
+        let peakWindow = 0.2; // 20% of pulse cycle for peak timing
+        
+        // Start the pulse animation
+        function startPulse() {
+            clearInterval(pulseInterval);
+            pulseInterval = setInterval(() => {
+                if (isGrowing) {
+                    scale += 0.05;
+                    if (scale >= 1.5) {
+                        isGrowing = false;
+                    }
+                } else {
+                    scale -= 0.05;
+                    if (scale <= 1) {
+                        isGrowing = true;
+                        // If we reach minimum without tap, it's a miss
+                        if (gameActive) {
+                            endGame();
+                        }
+                    }
+                }
+                pulseCircle.style.transform = `scale(${scale})`;
+            }, 30);
+        }
+        
+        // Player tap handler
+        function handleTap() {
+            if (!gameActive) return;
+            
+            // Check if tap is within peak window
+            if (scale >= 1.4) { // Peak is around 1.5, so 1.4+ is acceptable
+                // Success!
+                score++;
+                scoreDisplay.textContent = `Score: ${score}`;
+                feedback.textContent = "Perfect!";
+                feedback.style.color = "#4cc9f0";
+                
+                // Increase difficulty
+                if (pulseSpeed > 300) {
+                    pulseSpeed -= 20;
+                }
+                
+                // Reset pulse
+                scale = 1;
+                isGrowing = true;
+                
+                // Reset feedback color after delay
+                setTimeout(() => {
+                    feedback.style.color = "#a9a9a9";
+                }, 500);
+                
+                // Restart pulse with new speed
+                clearInterval(pulseInterval);
+                startPulse();
+            } else {
+                // Missed the timing
+                endGame();
+            }
+        }
+        
+        // End the game
+        function endGame() {
+            gameActive = false;
+            clearInterval(pulseInterval);
+            feedback.textContent = `Game Over! Final Score: ${score}`;
+            feedback.style.color = "#e94560";
+            restartBtn.style.display = "inline-block";
+            pulseCircle.style.background = "#e94560";
+        }
+        
+        // Reset and restart game
+        function resetGame() {
+            score = 0;
+            pulseSpeed = 1000;
+            scale = 1;
+            isGrowing = true;
+            gameActive = true;
+            
+            scoreDisplay.textContent = `Score: ${score}`;
+            feedback.textContent = "Tap when circle is largest!";
+            feedback.style.color = "#a9a9a9";
+            restartBtn.style.display = "none";
+            pulseCircle.style.background = "#0f3460";
+            
+            startPulse();
+        }
+        
+        // Event listeners
+        gameContainer.addEventListener('click', handleTap);
+        restartBtn.addEventListener('click', resetGame);
+        
+        // Initialize game
+        startPulse();
+    </script>
+</body>
+</html>

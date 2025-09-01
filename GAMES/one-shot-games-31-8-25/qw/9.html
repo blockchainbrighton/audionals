@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Color Flip</title>
+  <style>
+    body {
+      margin: 0;
+      font-family: 'Courier New', monospace;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100vh;
+      background: #111;
+      color: white;
+      user-select: none;
+      text-align: center;
+    }
+    #word {
+      font-size: 70px;
+      font-weight: bold;
+      margin: 40px;
+      height: 100px;
+    }
+    #buttons {
+      display: flex;
+      gap: 15px;
+      margin-top: 20px;
+    }
+    .btn {
+      width: 80px;
+      height: 80px;
+      border: none;
+      border-radius: 50%;
+      cursor: pointer;
+      font-weight: bold;
+      color: white;
+      text-shadow: 0 0 5px black;
+    }
+    #score {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      font-size: 24px;
+    }
+    #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.8);
+      padding: 20px 40px;
+      border-radius: 10px;
+      display: none;
+    }
+    button.restart {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: white;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="score">Score: 0</div>
+  <div id="word">READY?</div>
+  <div id="buttons">
+    <button class="btn" style="background: red" data-color="red"></button>
+    <button class="btn" style="background: blue" data-color="blue"></button>
+    <button class="btn" style="background: green" data-color="green"></button>
+    <button class="btn" style="background: yellow" data-color="yellow"></button>
+  </div>
+  <div id="game-over">
+    <p>Game Over!</p>
+    <p>Your score: <span id="final-score">0</span></p>
+    <button class="restart" onclick="restart()">Play Again</button>
+  </div>
+
+  <script>
+    const colors = ['red', 'blue', 'green', 'yellow'];
+    const words = ['RED', 'BLUE', 'GREEN', 'YELLOW'];
+    let score = 0;
+    let speed = 1200; // ms, decreases over time
+    let isActive = true;
+
+    const wordEl = document.getElementById('word');
+    const scoreEl = document.getElementById('score');
+    const gameOverEl = document.getElementById('game-over');
+    const finalScoreEl = document.getElementById('final-score');
+    const buttons = document.querySelectorAll('.btn');
+
+    function getRandomColor() {
+      return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    function getRandomWord() {
+      return words[Math.floor(Math.random() * words.length)];
+    }
+
+    function nextRound() {
+      if (!isActive) return;
+
+      const correctColor = getRandomColor();
+      let displayWord;
+      do {
+        displayWord = getRandomWord();
+      } while (words[colors.indexOf(correctColor)].toUpperCase() === displayWord);
+
+      wordEl.textContent = displayWord;
+      wordEl.style.color = correctColor;
+
+      // Speed increases slightly with each round
+      speed = Math.max(400, 1200 - score * 30);
+
+      setTimeout(() => {
+        if (isActive) nextRound();
+      }, speed);
+    }
+
+    buttons.forEach(btn => {
+      btn.addEventListener('click', () => {
+        if (!isActive) return;
+        const guessedColor = btn.dataset.color;
+        const displayedColor = getComputedStyle(wordEl).color;
+
+        // Convert RGB to closest named color
+        const tempEl = document.createElement('div');
+        tempEl.style.color = guessedColor;
+        document.body.appendChild(tempEl);
+        const guessedRGB = getComputedStyle(tempEl).color;
+        document.body.removeChild(tempEl);
+
+        if (displayedColor !== guessedRGB) {
+          gameOver();
+        } else {
+          score++;
+          scoreEl.textContent = `Score: ${score}`;
+          // Continue to next round immediately on correct click
+          setTimeout(nextRound, 100); 
+          isActive = false; // Prevent multiple inputs during transition
+          setTimeout(() => { isActive = true; }, 100);
+        }
+      });
+    });
+
+    function gameOver() {
+      isActive = false;
+      finalScoreEl.textContent = score;
+      gameOverEl.style.display = 'block';
+    }
+
+    function restart() {
+      score = 0;
+      speed = 1200;
+      isActive = true;
+      scoreEl.textContent = 'Score: 0';
+      gameOverEl.style.display = 'none';
+      wordEl.textContent = 'READY?';
+      wordEl.style.color = 'white';
+      setTimeout(nextRound, 800);
+    }
+
+    // Start game on load
+    window.onload = () => {
+      restart();
+    };
+  </script>
+</body>
+</html>

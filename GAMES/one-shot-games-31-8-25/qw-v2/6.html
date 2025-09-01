@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Orbital Echo</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #000;
+      font-family: 'Courier New', monospace;
+      color: #0f0;
+      text-align: center;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background: #000;
+    }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 0;
+      right: 0;
+      font-size: 18px;
+      pointer-events: none;
+      text-shadow: 0 0 5px #0f0;
+    }
+    #game-over {
+      position: absolute;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      font-size: 32px;
+      color: #f00;
+      background: rgba(0,0,0,0.8);
+      padding: 20px;
+      border-radius: 10px;
+      display: none;
+    }
+    button {
+      margin-top: 10px;
+      padding: 10px 20px;
+      font-size: 18px;
+      background: #0f0;
+      color: #000;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="ui">Orbs: <span id="orbs">0</span> / <span id="total-orbs">0</span> | Time: <span id="time">9</span>s</div>
+  <canvas id="game"></canvas>
+  <div id="game-over">
+    <p id="result-text">You Lost!</p>
+    <button id="restart">Try Again</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('game');
+    const ctx = canvas.getContext('2d');
+    const uiOrbs = document.getElementById('orbs');
+    const uiTotalOrbs = document.getElementById('total-orbs');
+    const uiTime = document.getElementById('time');
+    const gameOver = document.getElementById('game-over');
+    const resultText = document.getElementById('result-text');
+    const restartBtn = document.getElementById('restart');
+
+    canvas.width = window.innerWidth * 0.9;
+    canvas.height = window.innerHeight * 0.8;
+
+    let paths = []; // [{ points: [], startTime, active: bool }]
+    let currentPath = null;
+    let drawing = false;
+    let orbs = [];
+    let collected = 0;
+    let gameActive = false;
+    let timeLeft = 9;
+    let loopDuration = 3000; // ms
+    let lastTime = 0;
+    let level = 1;
+
+    function initGame() {
+      paths = [];
+      currentPath = null;
+      orbs = [];
+      collected = 0;
+      gameActive = true;
+      timeLeft = 9;
+      gameOver.style.display = 'none';
+
+      // Generate orbs based on level
+      const orbCount = Math.min(2 + level, 5);
+      uiTotalOrbs.textContent = orbCount;
+
+      for (let i = 0; i < orbCount; i++) {
+        orbs.push({
+          x: canvas.width * 0.3 + Math.random() * canvas.width * 0.4,
+          y: canvas.height * 0.3 + Math.random() * canvas.height * 0.4,
+          radius: 12,
+          life: 9000 - (i * 1000), // staggered fade
+          collected: false,
+          alpha: 1
+        });
+      }
+      uiOrbs.textContent = collected;
+    }
+
+    function drawOrbs() {
+      orbs.forEach(orb => {
+        if (orb.collected) return;
+        ctx.save();
+        ctx.globalAlpha = orb.alpha;
+        ctx.beginPath();
+        ctx.arc(orb.x, orb.y, orb.radius, 0, Math.PI * 2);
+        ctx.fillStyle = '#0f8';
+        ctx.fill();
+        ctx.strokeStyle = '#0f0';
+        ctx.lineWidth = 2;
+        ctx.stroke();
+        // Pulse effect
+        const pulse = 0.2 * Math.sin(Date.now() / 200) + 0.8;
+        ctx.shadowBlur = 10 * pulse;
+        ctx.shadowColor = '#0f0';
+        ctx.restore();
+      });
+    }
+
+    function drawPath(path, alpha = 1, glowColor = '#0ff') {
+      if (!path || path.points.length < 2) return;
+      ctx.beginPath();
+      ctx.moveTo(path.points[0].x, path.points[0].y);
+      for (let i = 1; i < path.points.length; i++) {
+        ctx.lineTo(path.points[i].x, path.points[i].y);
+      }
+      ctx.lineTo(path.points[0].x, path.points[0].y); // close loop
+      ctx.strokeStyle = glowColor;
+      ctx.lineWidth = 3;
+      ctx.globalAlpha = alpha * 0.7;
+      ctx.stroke();
+
+      // Glow trail
+      ctx.shadowBlur = 8;
+      ctx.shadowColor = glowColor;
+      ctx.globalAlpha = alpha * 0.4;
+      ctx.stroke();
+
+      ctx.globalAlpha = 1;
+      ctx.shadowBlur = 0;
+    }
+
+    function drawShip(pos, alpha = 1) {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(pos.x, pos.y);
+      ctx.rotate(pos.angle);
+      ctx.beginPath();
+      ctx.moveTo(8, 0);
+      ctx.lineTo(-4, -4);
+      ctx.lineTo(-2, 0);
+      ctx.lineTo(-4, 4);
+      ctx.closePath();
+      ctx.fillStyle = '#0ff';
+      ctx.fill();
+      ctx.strokeStyle = '#000';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    function getPointOnPath(path, t) {
+      if (!path || !path.points.length) return null;
+      const len = path.points.length;
+      const floatIndex = t * len;
+      const i0 = Math.floor(floatIndex) % len;
+      const i1 = (i0 + 1) % len;
+      const frac = floatIndex - Math.floor(floatIndex);
+
+      const p0 = path.points[i0];
+      const p1 = path.points[i1];
+      return {
+        x: p0.x + (p1.x - p0.x) * frac,
+        y: p0.y + (p1.y - p0.y) * frac,
+        angle: Math.atan2(p1.y - p0.y, p1.x - p0.x)
+      };
+    }
+
+    function checkCollision(currentPos, time) {
+      // Check against all previous paths (echoes)
+      for (let path of paths) {
+        if (path === currentPath) continue;
+        const t = ((time - path.startTime) % loopDuration) / loopDuration;
+        if (t < 0 || t > 1) continue;
+        const echoPos = getPointOnPath(path, t);
+        if (!echoPos) continue;
+        const dx = currentPos.x - echoPos.x;
+        const dy = currentPos.y - echoPos.y;
+        const dist = dx*dx + dy*dy;
+        if (dist < 36) return true; // collision radius ~6
+      }
+      return false;
+    }
+
+    function collectOrbs(pos) {
+      orbs.forEach(orb => {
+        if (orb.collected) return;
+        const dx = pos.x - orb.x;
+        const dy = pos.y - orb.y;
+        const dist = dx*dx + dy*dy;
+        if (dist < (orb.radius + 6)**2) {
+          orb.collected = true;
+          collected++;
+          uiOrbs.textContent = collected;
+          // Juicy flash
+          ctx.fillStyle = 'rgba(0, 255, 255, 0.4)';
+          ctx.beginPath();
+          ctx.arc(orb.x, orb.y, 30, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+    }
+
+    function gameLoop(timestamp) {
+      if (!lastTime) lastTime = timestamp;
+      const dt = timestamp - lastTime;
+      lastTime = timestamp;
+
+      if (gameActive) {
+        timeLeft = Math.max(0, 9 - (timestamp - paths[0]?.startTime) / 1000);
+        uiTime.textContent = timeLeft.toFixed(1);
+
+        // Update orb alpha
+        orbs.forEach(orb => {
+          if (orb.collected) return;
+          const age = (timestamp - paths[0]?.startTime);
+          orb.alpha = Math.max(0, Math.min(1, orb.life - age < 1000 ? (orb.life - age) / 1000 : 1));
+        });
+
+        // Check win/lose
+        if (timeLeft <= 0) {
+          if (collected === orbs.length) {
+            resultText.textContent = `Level ${level} Complete!`;
+            level++;
+          } else {
+            resultText.textContent = "You Lost!";
+          }
+          gameActive = false;
+          gameOver.style.display = 'block';
+        }
+      }
+
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+      // Draw grid for depth
+      ctx.strokeStyle = '#030';
+      ctx.lineWidth = 0.5;
+      for (let x = 0; x < canvas.width; x += 40) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvas.height);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvas.height; y += 40) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvas.width, y);
+        ctx.stroke();
+      }
+
+      drawOrbs();
+
+      // Draw echoes and ships
+      const now = timestamp;
+      if (paths.length > 0) {
+        const firstStart = paths[0].startTime;
+        const phase = ((now - firstStart) % loopDuration) / loopDuration;
+
+        paths.forEach((path, i) => {
+          const age = now - path.startTime;
+          if (age > 9000) return; // old echo
+
+          const alpha = Math.max(0, 1 - age / 9000);
+          const t = ((now - path.startTime) % loopDuration) / loopDuration;
+          const shipPos = getPointOnPath(path, t);
+
+          // Draw path
+          drawPath(path, alpha * 0.6, i === 0 ? '#0ff' : '#055');
+
+          // Draw ship
+          if (shipPos) {
+            drawShip(shipPos, alpha);
+            if (i === 0 && gameActive) {
+              // Check collision only for main ship
+              if (checkCollision(shipPos, now)) {
+                resultText.textContent = "Collision!";
+                gameActive = false;
+                gameOver.style.display = 'block';
+              }
+              collectOrbs(shipPos);
+            }
+          }
+        });
+      }
+
+      // Draw current drawing
+      if (drawing && currentPath) {
+        drawPath(currentPath, 1, '#0ff');
+      }
+
+      if (gameActive) {
+        requestAnimationFrame(gameLoop);
+      }
+    }
+
+    // Input
+    canvas.addEventListener('mousedown', (e) => {
+      if (!gameActive || paths.length > 0) return;
+      drawing = true;
+      currentPath = { points: [], startTime: 0 };
+      const rect = canvas.getBoundingClientRect();
+      currentPath.points.push({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      });
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!drawing) return;
+      const rect = canvas.getBoundingClientRect();
+      currentPath.points.push({
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top
+      });
+    });
+
+    canvas.addEventListener('mouseup', () => {
+      if (!drawing || !currentPath) return;
+      drawing = false;
+      if (currentPath.points.length < 10) {
+        currentPath = null;
+        return;
+      }
+      currentPath.startTime = performance.now();
+      paths.push(currentPath);
+      requestAnimationFrame(gameLoop);
+    });
+
+    restartBtn.addEventListener('click', initGame);
+
+    // Start
+    initGame();
+  </script>
+</body>
+</html>

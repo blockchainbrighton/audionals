@@ -1,0 +1,280 @@
+<!-- Good game but needs times slowed down to make it playable -->
+
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pulse Dash</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            background: #111;
+            font-family: Arial, sans-serif;
+            color: white;
+            overflow: hidden;
+        }
+        #gameCanvas {
+            background: #222;
+            border-radius: 8px;
+            box-shadow: 0 0 20px rgba(0, 150, 255, 0.3);
+        }
+        #ui {
+            margin-top: 20px;
+            text-align: center;
+        }
+        #score, #highScore {
+            font-size: 24px;
+            margin: 10px;
+        }
+        #instructions {
+            margin-top: 15px;
+            text-align: center;
+            max-width: 500px;
+            line-height: 1.5;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas" width="600" height="300"></canvas>
+    <div id="ui">
+        <div id="score">Score: 0</div>
+        <div id="highScore">High Score: 0</div>
+    </div>
+    <div id="instructions">
+        Click to jump! Only jump when your color matches the barrier color.<br>
+        Colors cycle automatically. Speed increases every 5 points!
+    </div>
+
+    <script>
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreElement = document.getElementById('score');
+        const highScoreElement = document.getElementById('highScore');
+
+        // Game state
+        let player = {
+            x: 100,
+            y: 200,
+            radius: 20,
+            isJumping: false,
+            jumpHeight: 120,
+            jumpSpeed: 0.2,
+            jumpProgress: 0,
+            colorIndex: 0 // 0: red, 1: blue, 2: green, 3: yellow
+        };
+
+        let barriers = [];
+        let score = 0;
+        let highScore = localStorage.getItem('pulseDashHighScore') || 0;
+        let gameSpeed = 3;
+        let gameOver = false;
+        let colorCycleSpeed = 0.001;
+        let lastTime = 0;
+
+        const colors = ['#FF5252', '#4285F4', '#0F9D58', '#FFBC00'];
+        const colorNames = ['Red', 'Blue', 'Green', 'Yellow'];
+
+        function resetGame() {
+            player.y = 200;
+            player.isJumping = false;
+            player.jumpProgress = 0;
+            player.colorIndex = 0;
+            barriers = [];
+            score = 0;
+            gameSpeed = 3;
+            gameOver = false;
+            updateScore();
+        }
+
+        function updateScore() {
+            scoreElement.textContent = `Score: ${score}`;
+            highScoreElement.textContent = `High Score: ${highScore}`;
+        }
+
+        function jump() {
+            if (!player.isJumping && !gameOver) {
+                player.isJumping = true;
+                player.jumpProgress = 0;
+            }
+        }
+
+        function createBarrier() {
+            const colorIndex = Math.floor(Math.random() * 4);
+            barriers.push({
+                x: canvas.width,
+                y: 200,
+                width: 30,
+                height: 80,
+                colorIndex: colorIndex
+            });
+        }
+
+        function updatePlayer(deltaTime) {
+            // Cycle player color
+            player.colorIndex = Math.floor((performance.now() * colorCycleSpeed) % 4);
+            
+            // Handle jumping
+            if (player.isJumping) {
+                player.jumpProgress += player.jumpSpeed * (deltaTime/16);
+                player.y = 200 - Math.sin(player.jumpProgress * Math.PI) * player.jumpHeight;
+                
+                if (player.jumpProgress >= 1) {
+                    player.isJumping = false;
+                    player.y = 200;
+                }
+            }
+        }
+
+        function updateBarriers() {
+            // Move barriers
+            for (let i = barriers.length - 1; i >= 0; i--) {
+                barriers[i].x -= gameSpeed;
+                
+                // Remove off-screen barriers
+                if (barriers[i].x + barriers[i].width < 0) {
+                    barriers.splice(i, 1);
+                    score++;
+                    updateScore();
+                    
+                    // Increase speed every 5 points
+                    if (score % 5 === 0) {
+                        gameSpeed += 0.5;
+                    }
+                    continue;
+                }
+                
+                // Collision detection
+                if (!gameOver && 
+                    barriers[i].x < player.x + player.radius &&
+                    barriers[i].x + barriers[i].width > player.x - player.radius &&
+                    barriers[i].y < player.y + player.radius &&
+                    barriers[i].y + barriers[i].height > player.y - player.radius) {
+                    
+                    // Check color match
+                    if (barriers[i].colorIndex !== player.colorIndex) {
+                        gameOver = true;
+                        if (score > highScore) {
+                            highScore = score;
+                            localStorage.setItem('pulseDashHighScore', highScore);
+                            highScoreElement.textContent = `High Score: ${highScore}`;
+                        }
+                    }
+                }
+                
+                // Jump restriction - if player tries to jump on wrong color
+                if (!gameOver && 
+                    !player.isJumping && 
+                    barriers[i].x < player.x + 100 && 
+                    barriers[i].x > player.x - 50 &&
+                    barriers[i].colorIndex !== player.colorIndex) {
+                    
+                    // Player jumped when they shouldn't have
+                    if (player.y < 190) { // If player is in the air
+                        gameOver = true;
+                        if (score > highScore) {
+                            highScore = score;
+                            localStorage.setItem('pulseDashHighScore', highScore);
+                            highScoreElement.textContent = `High Score: ${highScore}`;
+                        }
+                    }
+                }
+            }
+        }
+
+        function draw() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw ground
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, 280, canvas.width, 20);
+            
+            // Draw player
+            ctx.fillStyle = colors[player.colorIndex];
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, player.radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw player color indicator
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Arial';
+            ctx.textAlign = 'center';
+            ctx.fillText(colorNames[player.colorIndex], player.x, player.y + 40);
+            
+            // Draw barriers
+            barriers.forEach(barrier => {
+                ctx.fillStyle = colors[barrier.colorIndex];
+                ctx.fillRect(barrier.x, barrier.y, barrier.width, barrier.height);
+                
+                // Draw barrier color indicator
+                ctx.fillStyle = 'white';
+                ctx.font = '12px Arial';
+                ctx.fillText(colorNames[barrier.colorIndex], barrier.x + barrier.width/2, barrier.y - 10);
+            });
+            
+            // Draw game over
+            if (gameOver) {
+                ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                
+                ctx.fillStyle = 'white';
+                ctx.font = '36px Arial';
+                ctx.textAlign = 'center';
+                ctx.fillText('GAME OVER', canvas.width/2, canvas.height/2 - 30);
+                ctx.font = '24px Arial';
+                ctx.fillText(`Score: ${score}`, canvas.width/2, canvas.height/2 + 20);
+                ctx.font = '18px Arial';
+                ctx.fillText('Click to restart', canvas.width/2, canvas.height/2 + 60);
+            }
+        }
+
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            if (!gameOver) {
+                updatePlayer(deltaTime);
+                updateBarriers();
+                
+                // Create new barriers randomly
+                if (Math.random() < 0.02) {
+                    createBarrier();
+                }
+            }
+            
+            draw();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Event listeners
+        canvas.addEventListener('click', function() {
+            if (gameOver) {
+                resetGame();
+            } else {
+                jump();
+            }
+        });
+
+        // Touch support
+        canvas.addEventListener('touchstart', function(e) {
+            e.preventDefault();
+            if (gameOver) {
+                resetGame();
+            } else {
+                jump();
+            }
+        });
+
+        // Initialize
+        highScoreElement.textContent = `High Score: ${highScore}`;
+        requestAnimationFrame(gameLoop);
+    </script>
+</body>
+</html>

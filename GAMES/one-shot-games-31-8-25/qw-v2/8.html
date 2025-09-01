@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Polarity Shift</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #111;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      font-family: 'Courier New', monospace;
+      color: white;
+    }
+    #game {
+      position: relative;
+      width: 400px;
+      height: 600px;
+      background: #000;
+      border: 2px solid #333;
+      overflow: hidden;
+    }
+    .field {
+      position: absolute;
+      border-radius: 10px;
+    }
+    #player {
+      position: absolute;
+      width: 16px;
+      height: 16px;
+      background: #fff;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 10px 2px rgba(255,255,255,0.7);
+      transition: background 0.2s;
+    }
+    .plus { background: #f88; }
+    .minus { background: #88f; }
+    #ui {
+      position: absolute;
+      top: 10px;
+      left: 10px;
+      font-size: 14px;
+      z-index: 10;
+    }
+    .star {
+      position: absolute;
+      width: 10px;
+      height: 10px;
+      background: gold;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 8px 1px gold;
+    }
+    .portal {
+      position: absolute;
+      width: 20px;
+      height: 20px;
+      border: 2px solid #0f0;
+      border-radius: 50%;
+      transform: translate(-50%, -50%);
+      box-shadow: 0 0 10px 2px rgba(0,255,0,0.5);
+    }
+    .spark {
+      position: absolute;
+      width: 4px;
+      height: 4px;
+      background: #ff0;
+      border-radius: 50%;
+      opacity: 0.8;
+      transform: translate(-50%, -50%);
+    }
+    #startScreen {
+      position: absolute;
+      width: 100%;
+      height: 100%;
+      background: rgba(0,0,0,0.8);
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      z-index: 20;
+    }
+    button {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #0f0;
+      border: none;
+      border-radius: 5px;
+      cursor: pointer;
+    }
+    #stats {
+      margin-top: 10px;
+      font-size: 12px;
+      color: #aaa;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="ui">Polarity: <span id="polarity">+</span> | Shifts: <span id="shifts">0</span></div>
+    <div id="player"></div>
+    <div id="startScreen">
+      <h2>POLARITY SHIFT</h2>
+      <p>Tap to reverse your charge.<br>Avoid walls. Ride the fields.</p>
+      <button id="startBtn">START</button>
+      <div id="stats"></div>
+    </div>
+  </div>
+
+  <script>
+    const game = document.getElementById('game');
+    const player = document.getElementById('player');
+    const polarityEl = document.getElementById('polarity');
+    const shiftsEl = document.getElementById('shifts');
+    const startScreen = document.getElementById('startScreen');
+    const statsEl = document.getElementById('stats');
+
+    const W = 400, H = 600;
+    let x = W / 2, y = H - 100;
+    let vx = 0, vy = 0;
+    let polarity = 1; // 1 = +, -1 = -
+    let autoSwitchTimer = 0;
+    let maxAutoTime = 2; // seconds
+    let shifts = 0;
+    let startTime;
+    let running = false;
+
+    const fields = [
+      { x: 100, y: 500, w: 200, h: 40, charge: -1, type: 'static' }, // blue
+      { x: 50, y: 400, w: 100, h: 40, charge: 1, type: 'static' },  // red
+      { x: 200, y: 300, w: 200, h: 40, charge: -1, type: 'static' },
+      { x: 0, y: 200, w: 150, h: 40, charge: 1, type: 'static' },
+      { x: 200, y: 100, w: 100, h: 40, charge: -1, type: 'static' },
+    ];
+
+    const stars = [
+      { x: 200, y: 450, collected: false },
+      { x: 100, y: 350, collected: false },
+      { x: 300, y: 250, collected: false }
+    ];
+
+    const portal = { x: 200, y: 50 };
+
+    function init() {
+      // Reset
+      x = W / 2;
+      y = H - 100;
+      vx = vy = 0;
+      polarity = 1;
+      shifts = 0;
+      autoSwitchTimer = 0;
+      startTime = Date.now();
+      shiftsEl.textContent = '0';
+      polarityEl.textContent = '+';
+      player.className = 'plus';
+      stars.forEach(s => s.collected = false);
+
+      // Clear old elements
+      document.querySelectorAll('.field, .star, .portal, .spark').forEach(el => el.remove());
+
+      // Render fields
+      fields.forEach(f => {
+        const el = document.createElement('div');
+        el.className = 'field';
+        el.style.left = f.x + 'px';
+        el.style.top = f.y + 'px';
+        el.style.width = f.w + 'px';
+        el.style.height = f.h + 'px';
+        el.style.background = f.charge === 1 ? '#f88' : '#88f';
+        game.appendChild(el);
+      });
+
+      // Render stars
+      stars.forEach(s => {
+        const el = document.createElement('div');
+        el.className = 'star';
+        el.style.left = s.x + 'px';
+        el.style.top = s.y + 'px';
+        game.appendChild(el);
+      });
+
+      // Render portal
+      const portalEl = document.createElement('div');
+      portalEl.className = 'portal';
+      portalEl.style.left = portal.x + 'px';
+      portalEl.style.top = portal.y + 'px';
+      game.appendChild(portalEl);
+    }
+
+    function update() {
+      if (!running) return;
+
+      const dt = 0.016;
+      autoSwitchTimer += dt;
+      if (autoSwitchTimer >= maxAutoTime) {
+        switchPolarity();
+        autoSwitchTimer = 0;
+      }
+
+      // Forward motion
+      vy -= 80 * dt; // constant upward "thrust"
+      y += vy * dt;
+
+      // Apply field forces
+      fields.forEach(f => {
+        if (x + 8 > f.x && x - 8 < f.x + f.w && y + 8 > f.y && y - 8 < f.y + f.h) {
+          const force = f.charge * polarity * 300 * dt;
+          vx += (f.x + f.w/2 - x) * force * 0.01;
+          vy += (f.y + f.h/2 - y) * force * 0.01;
+        }
+      });
+
+      // Dampen velocity
+      vx *= 0.92;
+      vy *= 0.98;
+
+      // Update position
+      x += vx;
+      y += vy;
+
+      // Check wall collision
+      if (x < 0 || x > W || y < 0 || y > H) {
+        die();
+      }
+
+      // Check stars
+      stars.forEach(s => {
+        if (!s.collected && Math.hypot(s.x - x, s.y - y) < 15) {
+          s.collected = true;
+          createSpark(s.x, s.y, 5);
+          // Visual feedback
+          const starEl = document.querySelector(`.star:nth-child(${stars.indexOf(s)+1})`);
+          starEl.style.opacity = '0';
+          setTimeout(() => starEl.remove(), 500);
+        }
+      });
+
+      // Check portal
+      if (Math.hypot(portal.x - x, portal.y - y) < 15) {
+        win();
+      }
+
+      // Update player position
+      player.style.left = x + 'px';
+      player.style.top = y + 'px';
+
+      // Screen shake on near miss?
+      const minDist = Math.min(
+        x, W - x, y, H - y,
+        ...fields.map(f => distToRect(x, y, f.x, f.y, f.w, f.h))
+      );
+      if (minDist < 20) {
+        const shake = 20 - minDist;
+        game.style.transform = `translate(${Math.random() * shake - shake/2}px, ${Math.random() * shake - shake/2}px)`;
+        game.style.filter = 'brightness(1.1)';
+      } else {
+        game.style.transform = 'none';
+        game.style.filter = 'none';
+      }
+
+      requestAnimationFrame(update);
+    }
+
+    function distToRect(px, py, rx, ry, rw, rh) {
+      const cx = Math.max(rx, Math.min(px, rx + rw));
+      const cy = Math.max(ry, Math.min(py, ry + rh));
+      return Math.hypot(px - cx, py - cy);
+    }
+
+    function switchPolarity() {
+      polarity = -polarity;
+      shifts++;
+      shiftsEl.textContent = shifts;
+      polarityEl.textContent = polarity === 1 ? '+' : '−';
+      player.className = polarity === 1 ? 'plus' : 'minus';
+      createSpark(x, y, 3);
+      // Auditory feedback via pitch
+      const audio = new Audio();
+      audio.volume = 0;
+      // We fake "sound" with vibration-like visual pulse
+      player.style.transform = 'translate(-50%, -50%) scale(1.3)';
+      setTimeout(() => player.style.transform = 'translate(-50%, -50%) scale(1)', 100);
+    }
+
+    function createSpark(x, y, n) {
+      for (let i = 0; i < n; i++) {
+        const spark = document.createElement('div');
+        spark.className = 'spark';
+        spark.style.left = x + 'px';
+        spark.style.top = y + 'px';
+        const angle = Math.random() * Math.PI * 2;
+        const speed = 2 + Math.random() * 3;
+        spark.style.transition = 'top 0.5s, left 0.5s, opacity 0.5s';
+        game.appendChild(spark);
+        setTimeout(() => {
+          const dx = Math.cos(angle) * speed;
+          const dy = Math.sin(angle) * speed;
+          spark.style.left = (parseFloat(spark.style.left) + dx * 10) + 'px';
+          spark.style.top = (parseFloat(spark.style.top) + dy * 10) + 'px';
+          spark.style.opacity = '0';
+        }, 10);
+        setTimeout(() => spark.remove(), 500);
+      }
+    }
+
+    function die() {
+      running = false;
+      createSpark(x, y, 10);
+      setTimeout(() => {
+        alert('You hit a wall! Try again.');
+        startScreen.style.display = 'flex';
+        const time = (Date.now() - startTime) / 1000;
+        statsEl.textContent = `Time: ${time.toFixed(1)}s | Shifts: ${shifts}`;
+      }, 100);
+    }
+
+    function win() {
+      running = false;
+      createSpark(x, y, 20);
+      const time = (Date.now() - startTime) / 1000;
+      const collected = stars.filter(s => s.collected).length;
+      setTimeout(() => {
+        alert(`Level Complete!\nTime: ${time.toFixed(1)}s\nShifts: ${shifts}\nStars: ${collected}/3`);
+        startScreen.style.display = 'flex';
+        statsEl.textContent = `Completed in ${time.toFixed(1)}s with ${shifts} shifts. Stars: ${collected}/3`;
+      }, 100);
+    }
+
+    document.getElementById('startBtn').onclick = () => {
+      startScreen.style.display = 'none';
+      init();
+      running = true;
+      update();
+    };
+
+    game.addEventListener('click', (e) => {
+      if (running) {
+        switchPolarity();
+        autoSwitchTimer = 0; // reset auto-switch
+      }
+    });
+
+    // Initial screen
+    startScreen.style.display = 'flex';
+  </script>
+</body>
+</html>

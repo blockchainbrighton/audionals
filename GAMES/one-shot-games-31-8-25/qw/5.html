@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pulse Dash</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: #1a1a1a;
+            font-family: Arial, sans-serif;
+            overflow: hidden;
+        }
+        #gameContainer {
+            text-align: center;
+            color: white;
+        }
+        #circle {
+            width: 200px;
+            height: 200px;
+            border-radius: 50%;
+            background: #4e54c8;
+            margin: 20px auto;
+            transition: transform 0.1s;
+            box-shadow: 0 0 20px #4e54c8;
+        }
+        #score, #lives {
+            font-size: 24px;
+            margin: 10px;
+        }
+        #instructions {
+            margin: 20px;
+            color: #aaa;
+        }
+        #gameOver {
+            display: none;
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0,0,0,0.8);
+            padding: 30px;
+            border-radius: 10px;
+            text-align: center;
+        }
+        button {
+            background: #4e54c8;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            font-size: 18px;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 15px;
+        }
+        button:hover {
+            background: #6a71e6;
+        }
+        .pulse {
+            animation: pulseAnimation 1s infinite;
+        }
+        @keyframes pulseAnimation {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        .hit {
+            background: #ff416c;
+            box-shadow: 0 0 30px #ff416c;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <h1>Pulse Dash</h1>
+        <div id="score">Score: 0</div>
+        <div id="lives">Lives: 3</div>
+        <div id="circle"></div>
+        <div id="instructions">Press SPACE when the circle is largest!</div>
+        <div id="gameOver">
+            <h2>Game Over</h2>
+            <p>Final Score: <span id="finalScore">0</span></p>
+            <button onclick="restartGame()">Play Again</button>
+        </div>
+    </div>
+
+    <script>
+        let score = 0;
+        let lives = 3;
+        let speed = 1000; // milliseconds
+        let gameActive = true;
+        let pulseInterval;
+        let circle = document.getElementById('circle');
+        let scoreElement = document.getElementById('score');
+        let livesElement = document.getElementById('lives');
+        let gameOverElement = document.getElementById('gameOver');
+        let finalScoreElement = document.getElementById('finalScore');
+
+        function startGame() {
+            circle.classList.add('pulse');
+            pulseInterval = setInterval(pulse, speed);
+        }
+
+        function pulse() {
+            if (!gameActive) return;
+            
+            // Reset any previous hit effect
+            circle.classList.remove('hit');
+            
+            // Speed up slightly each pulse
+            speed = Math.max(300, speed - 5);
+            clearInterval(pulseInterval);
+            pulseInterval = setInterval(pulse, speed);
+        }
+
+        function hit() {
+            if (!gameActive) return;
+            
+            // Visual feedback
+            circle.classList.add('hit');
+            
+            // Increase score
+            score++;
+            scoreElement.textContent = `Score: ${score}`;
+            
+            // Speed up the game
+            speed = Math.max(300, speed - 20);
+            clearInterval(pulseInterval);
+            pulseInterval = setInterval(pulse, speed);
+        }
+
+        function miss() {
+            if (!gameActive) return;
+            
+            lives--;
+            livesElement.textContent = `Lives: ${lives}`;
+            
+            if (lives <= 0) {
+                endGame();
+            }
+        }
+
+        function endGame() {
+            gameActive = false;
+            clearInterval(pulseInterval);
+            circle.classList.remove('pulse');
+            finalScoreElement.textContent = score;
+            gameOverElement.style.display = 'block';
+        }
+
+        function restartGame() {
+            score = 0;
+            lives = 3;
+            speed = 1000;
+            gameActive = true;
+            
+            scoreElement.textContent = `Score: ${score}`;
+            livesElement.textContent = `Lives: ${lives}`;
+            gameOverElement.style.display = 'none';
+            
+            circle.classList.remove('hit');
+            startGame();
+        }
+
+        // Keyboard controls
+        document.addEventListener('keydown', function(e) {
+            if (e.code === 'Space') {
+                e.preventDefault();
+                if (gameActive) {
+                    // Check if we're near the peak of the pulse
+                    const scale = parseFloat(getComputedStyle(circle).transform.split(',')[3] || 1);
+                    if (scale > 1.15) {
+                        hit();
+                    } else {
+                        miss();
+                    }
+                }
+            }
+        });
+
+        // Start the game when page loads
+        window.onload = startGame;
+    </script>
+</body>
+</html>

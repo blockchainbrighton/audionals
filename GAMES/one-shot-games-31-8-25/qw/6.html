@@ -1,0 +1,154 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Color Flip</title>
+  <style>
+    body {
+      margin: 0;
+      height: 100vh;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      background: #111;
+      font-family: 'Courier New', monospace;
+      color: white;
+      text-align: center;
+      overflow: hidden;
+      user-select: none;
+    }
+    #game {
+      font-size: 72px;
+      font-weight: bold;
+      transition: color 0.1s;
+    }
+    #score {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      font-size: 24px;
+    }
+    #restart {
+      margin-top: 20px;
+      padding: 10px 20px;
+      font-size: 18px;
+      background: #333;
+      color: white;
+      border: 2px solid #555;
+      cursor: pointer;
+      display: none;
+    }
+    #restart:hover {
+      background: #444;
+    }
+  </style>
+</head>
+<body>
+  <div id="score">Score: 0</div>
+  <div id="game">CLICK TO START</div>
+  <button id="restart">Play Again</button>
+
+  <script>
+    const gameEl = document.getElementById('game');
+    const scoreEl = document.getElementById('score');
+    const restartBtn = document.getElementById('restart');
+
+    const colors = ['RED', 'GREEN', 'BLUE', 'YELLOW'];
+    const colorMap = {
+      'RED': '#FF0000',
+      'GREEN': '#00FF00',
+      'BLUE': '#0000FF',
+      'YELLOW': '#FFFF00'
+    };
+
+    let score = 0;
+    let isPlaying = false;
+    let timeoutId;
+    let minDelay = 800; // Fastest interval
+    let maxDelay = 1600; // Slowest at start
+
+    function getRandom(arr) {
+      return arr[Math.floor(Math.random() * arr.length)];
+    }
+
+    function startGame() {
+      score = 0;
+      isPlaying = true;
+      scoreEl.textContent = `Score: ${score}`;
+      restartBtn.style.display = 'none';
+      gameEl.textContent = 'READY...';
+      gameEl.style.color = 'white';
+      setTimeout(nextRound, 800);
+    }
+
+    function gameOver() {
+      isPlaying = false;
+      gameEl.textContent = `GAME OVER! Score: ${score}`;
+      restartBtn.style.display = 'block';
+      clearTimeout(timeoutId);
+    }
+
+    function nextRound() {
+      if (!isPlaying) return;
+
+      const shouldMatch = Math.random() < 0.3; // 30% chance to match
+      const word = getRandom(colors);
+      let displayColor = word;
+
+      if (!shouldMatch) {
+        // Pick a different color
+        displayColor = word;
+        while (displayColor === word) {
+          displayColor = getRandom(colors);
+        }
+      }
+
+      gameEl.textContent = word;
+      gameEl.style.color = colorMap[displayColor];
+
+      const delay = Math.max(minDelay, maxDelay - score * 15); // Speed up with score
+
+      clearTimeout(timeoutId);
+
+      if (shouldMatch) {
+        // Must click!
+        timeoutId = setTimeout(() => {
+          if (isPlaying) gameOver();
+        }, delay);
+      } else {
+        // Must NOT click!
+        timeoutId = setTimeout(nextRound, delay);
+      }
+    }
+
+    gameEl.addEventListener('click', () => {
+      if (!isPlaying) return;
+
+      const word = gameEl.textContent;
+      const colorStyle = gameEl.style.color;
+      const expectedColor = colorMap[word];
+
+      // Check if current word matches color
+      if (colorStyle === expectedColor) {
+        score++;
+        scoreEl.textContent = `Score: ${score}`;
+        clearTimeout(timeoutId);
+        setTimeout(nextRound, 100);
+      } else {
+        gameOver();
+      }
+    });
+
+    restartBtn.addEventListener('click', startGame);
+
+    // Start on first click anywhere
+    document.body.addEventListener('click', function firstClick(e) {
+      if (!isPlaying && e.target !== restartBtn) {
+        startGame();
+      }
+      document.body.removeEventListener('click', firstClick);
+    }, { once: false });
+  </script>
+</body>
+</html>

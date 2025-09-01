@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Bounce & Bond</title>
+  <style>
+    body {
+      margin: 0;
+      overflow: hidden;
+      background: #111;
+      font-family: sans-serif;
+      touch-action: manipulation;
+    }
+    #game {
+      position: absolute;
+      width: 100vw;
+      height: 100vh;
+      cursor: pointer;
+    }
+    .orb {
+      position: absolute;
+      border-radius: 50%;
+      background: #4affdc;
+      box-shadow: 0 0 10px #4affdc88;
+      transform: translate(-50%, -50%);
+      transition: box-shadow 0.1s;
+    }
+    .clone {
+      background: #a695ff;
+      box-shadow: 0 0 8px #a695ff88;
+    }
+    .collectible {
+      background: #ffdd55;
+      box-shadow: 0 0 12px #ffdd55aa;
+      animation: pulse 1s infinite alternate;
+    }
+    @keyframes pulse {
+      to { transform: translate(-50%, -50%) scale(1.1); }
+    }
+    #ui {
+      position: absolute;
+      top: 20px;
+      left: 20px;
+      color: white;
+      font-size: 18px;
+      pointer-events: none;
+      text-shadow: 1px 1px 2px black;
+    }
+    #restart {
+      position: absolute;
+      bottom: 20px;
+      left: 50%;
+      transform: translateX(-50%);
+      padding: 10px 20px;
+      background: #444;
+      color: white;
+      border: none;
+      border-radius: 20px;
+      cursor: pointer;
+    }
+  </style>
+</head>
+<body>
+  <div id="game"></div>
+  <div id="ui">Orbs: <span id="count">0</span></div>
+  <button id="restart">Restart</button>
+
+  <script>
+    const game = document.getElementById('game');
+    const uiCount = document.getElementById('count');
+    const restartBtn = document.getElementById('restart');
+
+    const W = window.innerWidth;
+    const H = window.innerHeight;
+
+    let player, clones, collectibles, platforms;
+    let gravity = 0.4;
+    let bouncePower = -10;
+    let onGround = false;
+    let gameActive = true;
+    let collected = 0;
+    let totalCollectibles = 5;
+
+    function reset() {
+      // Clear DOM
+      game.querySelectorAll('.orb, .collectible, .platform').forEach(el => el.remove());
+
+      // Reset state
+      clones = [];
+      collectibles = [];
+      collected = 0;
+      uiCount.textContent = collected;
+
+      // Create platforms
+      platforms = [
+        { x: W * 0.2, y: H * 0.7, w: W * 0.3, h: 20 },
+        { x: W * 0.6, y: H * 0.5, w: W * 0.3, h: 20 },
+        { x: W * 0.3, y: H * 0.3, w: W * 0.2, h: 20 },
+        { x: W * 0.7, y: H * 0.8, w: W * 0.25, h: 20 },
+      ];
+
+      platforms.forEach(p => {
+        const plat = document.createElement('div');
+        plat.className = 'platform';
+        plat.style.cssText = `
+          position: absolute; background: #333; border-radius: 10px;
+          width: ${p.w}px; height: ${p.h}px;
+          left: ${p.x}px; top: ${p.y}px;
+          box-shadow: 0 0 10px rgba(255,255,255,0.2);
+        `;
+        game.appendChild(plat);
+      });
+
+      // Create collectibles
+      for (let i = 0; i < totalCollectibles; i++) {
+        const x = W * 0.1 + Math.random() * W * 0.8;
+        const y = H * 0.1 + Math.random() * H * 0.6;
+        const col = { x, y, el: null, collected: false };
+        const el = document.createElement('div');
+        el.className = 'orb collectible';
+        el.style.cssText = `width: 20px; height: 20px; left: ${x}px; top: ${y}px;`;
+        game.appendChild(el);
+        col.el = el;
+        collectibles.push(col);
+      }
+
+      // Create player
+      player = {
+        x: W * 0.1,
+        y: H * 0.1,
+        vx: 0,
+        vy: 0,
+        radius: 10,
+        el: document.createElement('div'),
+        grounded: false
+      };
+      player.el.className = 'orb';
+      player.el.style.cssText = `width: 20px; height: 20px; left: ${player.x}px; top: ${player.y}px;`;
+      game.appendChild(player.el);
+
+      gameActive = true;
+      onGround = false;
+      requestAnimationFrame(update);
+    }
+
+    function checkGround(obj) {
+      for (const p of platforms) {
+        if (obj.x + obj.radius > p.x && 
+            obj.x - obj.radius < p.x + p.w &&
+            obj.y + obj.radius > p.y && 
+            obj.y - obj.radius < p.y + p.h &&
+            obj.vy >= 0) {
+          const hitTop = obj.y - obj.radius < p.y + 5;
+          if (hitTop) {
+            obj.y = p.y - obj.radius;
+            return true;
+          }
+        }
+      }
+      return false;
+    }
+
+    function createClone() {
+      const clone = {
+        x: player.x,
+        y: player.y,
+        vx: 0,
+        vy: 0,
+        radius: 10,
+        el: document.createElement('div'),
+        active: true
+      };
+      clone.el.className = 'orb clone';
+      clone.el.style.cssText = `width: 20px; height: 20px; left: ${clone.x}px; top: ${clone.y}px;`;
+      game.appendChild(clone.el);
+      clones.push(clone);
+
+      // Visual feedback
+      const ripple = document.createElement('div');
+      ripple.style.cssText = `
+        position: absolute; width: 20px; height: 20px;
+        left: ${player.x}px; top: ${player.y}px;
+        border: 2px solid #a695ff55; border-radius: 50%;
+        transform: translate(-50%, -50%) scale(0);
+        animation: expand 0.6s forwards;
+      `;
+      game.appendChild(ripple);
+      setTimeout(() => ripple.remove(), 600);
+
+      // Sound effect placeholder
+      console.log('pop'); // In real game: play sound
+    }
+
+    function collectCheck(obj) {
+      for (const c of collectibles) {
+        if (!c.collected) {
+          const dx = obj.x - c.x;
+          const dy = obj.y - c.y;
+          const d = dx*dx + dy*dy;
+          if (d < 400) {
+            c.collected = true;
+            c.el.remove();
+            collected++;
+            uiCount.textContent = collected;
+
+            // Particle burst
+            for (let i = 0; i < 8; i++) {
+              const p = document.createElement('div');
+              const a = Math.random() * Math.PI * 2;
+              const s = 2 + Math.random() * 3;
+              p.style.cssText = `
+                position: absolute; width: 4px; height: 4px; background: #ffdd55;
+                border-radius: 50%; left: ${c.x}px; top: ${c.y}px;
+                transform: translate(-50%, -50%);
+                box-shadow: 0 0 6px #ffdd55;
+                animation: fly${i%2} 0.8s forwards;
+              `;
+              game.appendChild(p);
+              p.animate([
+                { transform: `translate(-50%, -50%)`, opacity: 1 },
+                { transform: `translate(-50% + ${Math.cos(a)*s*20}px, -50% + ${Math.sin(a)*s*20}px)`, opacity: 0 }
+              ], { duration: 800, easing: 'ease-out', fill: 'forwards' });
+              setTimeout(() => p.remove(), 800);
+            }
+
+            // Check win
+            if (collected === totalCollectibles) {
+              setTimeout(() => alert('You Win!'), 100);
+              gameActive = false;
+            }
+          }
+        }
+      }
+    }
+
+    function update() {
+      if (!gameActive) return;
+
+      // Apply physics
+      player.vy += gravity;
+      player.y += player.vy;
+      player.x += player.vx;
+
+      // Ground check
+      const wasOnGround = onGround;
+      onGround = checkGround(player);
+
+      if (onGround && !wasOnGround) {
+        // Just landed
+        createClone();
+        // Screen shake
+        game.style.transform = 'translate(2px, 0)';
+        setTimeout(() => game.style.transform = 'translate(-2px, 0)', 50);
+        setTimeout(() => game.style.transform = 'none', 100);
+      }
+
+      // Update clones
+      for (let i = clones.length - 1; i >= 0; i--) {
+        const c = clones[i];
+        if (!c.active) continue;
+
+        c.vy += gravity;
+        c.y += c.vy;
+        c.x += c.vx;
+
+        const cOnGround = checkGround(c);
+        if (cOnGround && c.vy >= 0) {
+          c.y = platforms.find(p => 
+            c.x + c.radius > p.x && 
+            c.x - c.radius < p.x + p.w &&
+            c.y + c.radius > p.y && 
+            c.y - c.radius < p.y + p.h
+          ).y - c.radius;
+          c.vy = 0;
+        }
+
+        // Move clone DOM
+        c.el.style.left = `${c.x}px`;
+        c.el.style.top = `${c.y}px`;
+
+        // Collect?
+        collectCheck(c);
+
+        // Remove if off screen
+        if (c.y > H + 100) {
+          c.el.remove();
+          clones.splice(i, 1);
+        }
+      }
+
+      // Bounds
+      if (player.y > H) {
+        gameActive = false;
+        setTimeout(() => {
+          if (collected < totalCollectibles) {
+            alert('You fell! But maybe your clones can still win...');
+          }
+        }, 100);
+        // Clones may still win
+      }
+
+      // Wrap player horizontally
+      if (player.x < 0) player.x = W;
+      if (player.x > W) player.x = 0;
+
+      // Update player DOM
+      player.el.style.left = `${player.x}px`;
+      player.el.style.top = `${player.y}px`;
+
+      // Collect check for player
+      collectCheck(player);
+
+      requestAnimationFrame(update);
+    }
+
+    function jump() {
+      if (!gameActive) return;
+      if (onGround) {
+        player.vy = bouncePower;
+        player.vx = 0; // Reset horizontal drift for simplicity
+
+        // Sync clones: they will jump next time they hit ground
+        // But we don't control them directly — they react to *our* input when grounded
+        // So we just record the intent via game state
+
+        // Visual juice
+        player.el.style.boxShadow = '0 0 20px #4affdc';
+        setTimeout(() => {
+          if (player.el) player.el.style.boxShadow = '0 0 10px #4affdc88';
+        }, 100);
+      }
+    }
+
+    // Input
+    document.addEventListener('keydown', e => {
+      if (['Space', 'ArrowUp', 'KeyW'].includes(e.code)) {
+        e.preventDefault();
+        jump();
+      }
+    });
+    game.addEventListener('pointerdown', jump);
+    restartBtn.addEventListener('click', reset);
+
+    // Start
+    reset();
+  </script>
+</body>
+</html>

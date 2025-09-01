@@ -1,0 +1,694 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulse Shift</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            user-select: none;
+        }
+        
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: #fff;
+        }
+        
+        .game-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            border-radius: 50%;
+            background: rgba(10, 15, 30, 0.7);
+            box-shadow: 0 0 40px rgba(0, 100, 255, 0.3);
+            overflow: hidden;
+            border: 2px solid rgba(100, 150, 255, 0.3);
+        }
+        
+        canvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+        }
+        
+        .ui-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        .score-display {
+            position: absolute;
+            top: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.7);
+            color: #4deeea;
+        }
+        
+        .mistakes {
+            position: absolute;
+            top: 60px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 18px;
+            color: #ff7a7a;
+        }
+        
+        .pulse-indicator {
+            position: absolute;
+            top: 90px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 16px;
+            color: #7afcff;
+        }
+        
+        .start-screen, .game-over {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(10, 15, 30, 0.9);
+            z-index: 20;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .game-over {
+            display: none;
+        }
+        
+        h1 {
+            font-size: 42px;
+            margin-bottom: 20px;
+            color: #4deeea;
+            text-shadow: 0 0 15px rgba(77, 238, 234, 0.7);
+        }
+        
+        p {
+            font-size: 18px;
+            max-width: 80%;
+            line-height: 1.6;
+            margin-bottom: 25px;
+            color: #a9b7d0;
+        }
+        
+        .highlight {
+            color: #4deeea;
+            font-weight: bold;
+        }
+        
+        button {
+            background: linear-gradient(45deg, #4deeea, #74ee15);
+            border: none;
+            padding: 15px 40px;
+            font-size: 20px;
+            font-weight: bold;
+            border-radius: 50px;
+            cursor: pointer;
+            pointer-events: auto;
+            color: #0a0e21;
+            box-shadow: 0 0 20px rgba(77, 238, 234, 0.5);
+            transition: all 0.3s ease;
+        }
+        
+        button:hover {
+            transform: scale(1.05);
+            box-shadow: 0 0 30px rgba(77, 238, 234, 0.8);
+        }
+        
+        .combo-display {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 24px;
+            font-weight: bold;
+            color: #f8ff00;
+            text-shadow: 0 0 10px rgba(248, 255, 0, 0.7);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .level-display {
+            position: absolute;
+            top: 120px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 18px;
+            color: #74ee15;
+        }
+        
+        .instructions {
+            position: absolute;
+            bottom: 20px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            font-size: 14px;
+            color: #a9b7d0;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <canvas id="gameCanvas" width="500" height="500"></canvas>
+        
+        <div class="ui-overlay">
+            <div class="score-display">Score: <span id="score">0</span></div>
+            <div class="mistakes">Mistakes: <span id="mistakes">0</span>/3</div>
+            <div class="pulse-indicator">Next Pulse: <span id="next-pulse">Red</span></div>
+            <div class="level-display">Level: <span id="level">1</span></div>
+            <div class="combo-display" id="combo">COMBO x2!</div>
+            <div class="instructions">Drag the core to position it for the next pulse</div>
+        </div>
+        
+        <div class="start-screen" id="startScreen">
+            <h1>PULSE SHIFT</h1>
+            <p>Position the <span class="highlight">pulsing core</span> to match colors with nodes around the perimeter.</p>
+            <p>Each pulse leaves an <span class="highlight">echo</span> that can help you chain combos!</p>
+            <p>Avoid touching nodes with the wrong color - you only have <span class="highlight">3 mistakes</span>!</p>
+            <button id="startButton">START GAME</button>
+        </div>
+        
+        <div class="game-over" id="gameOver">
+            <h1>GAME OVER</h1>
+            <p>Your final score: <span class="highlight" id="finalScore">0</span></p>
+            <p>Level reached: <span class="highlight" id="finalLevel">1</span></p>
+            <button id="restartButton">PLAY AGAIN</button>
+        </div>
+    </div>
+
+    <script>
+        // Game constants
+        const COLORS = ['#ff2a6d', '#4deeea', '#74ee15', '#ffe700']; // Pink, Cyan, Green, Yellow
+        const COLOR_NAMES = ['Pink', 'Cyan', 'Green', 'Yellow'];
+        const PULSE_RADIUS = 80;
+        const CORE_RADIUS = 25;
+        const NODE_RADIUS = 15;
+        const ECHO_DURATION = 3000; // 3 seconds
+        const MAX_MISTAKES = 3;
+        
+        // Game state
+        let gameState = {
+            score: 0,
+            mistakes: 0,
+            level: 1,
+            combo: 0,
+            coreX: 250,
+            coreY: 250,
+            coreDragging: false,
+            pulseTimer: 0,
+            pulseInterval: 2000, // ms between pulses
+            nextPulseColor: 0,
+            nodes: [],
+            echoes: [],
+            lastPulseTime: 0,
+            gameOver: false,
+            pulseActive: false,
+            pulseProgress: 0
+        };
+        
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('score');
+        const mistakesDisplay = document.getElementById('mistakes');
+        const nextPulseDisplay = document.getElementById('next-pulse');
+        const comboDisplay = document.getElementById('combo');
+        const levelDisplay = document.getElementById('level');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOver');
+        const finalScoreDisplay = document.getElementById('finalScore');
+        const finalLevelDisplay = document.getElementById('finalLevel');
+        
+        // Event listeners
+        document.getElementById('startButton').addEventListener('click', startGame);
+        document.getElementById('restartButton').addEventListener('click', startGame);
+        
+        canvas.addEventListener('mousedown', handleMouseDown);
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseup', handleMouseUp);
+        canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
+        canvas.addEventListener('touchmove', handleTouchMove, { passive: false });
+        canvas.addEventListener('touchend', handleTouchEnd);
+        
+        // Initialize game
+        function initGame() {
+            gameState = {
+                score: 0,
+                mistakes: 0,
+                level: 1,
+                combo: 0,
+                coreX: 250,
+                coreY: 250,
+                coreDragging: false,
+                pulseTimer: 0,
+                pulseInterval: 2000,
+                nextPulseColor: Math.floor(Math.random() * 4),
+                nodes: [],
+                echoes: [],
+                lastPulseTime: 0,
+                gameOver: false,
+                pulseActive: false,
+                pulseProgress: 0
+            };
+            
+            generateNodes();
+            updateUI();
+        }
+        
+        // Start the game
+        function startGame() {
+            startScreen.style.display = 'none';
+            gameOverScreen.style.display = 'none';
+            initGame();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Generate nodes for the level
+        function generateNodes() {
+            gameState.nodes = [];
+            const nodeCount = 5 + gameState.level * 2;
+            
+            for (let i = 0; i < nodeCount; i++) {
+                // Position nodes around the perimeter
+                const angle = Math.random() * Math.PI * 2;
+                const distance = 180 + Math.random() * 50;
+                const x = 250 + Math.cos(angle) * distance;
+                const y = 250 + Math.sin(angle) * distance;
+                const color = Math.floor(Math.random() * 4);
+                
+                gameState.nodes.push({
+                    x: x,
+                    y: y,
+                    color: color,
+                    collected: false,
+                    phase: Math.random() > 0.7 ? true : false // 30% chance of phase node
+                });
+            }
+        }
+        
+        // Handle mouse down
+        function handleMouseDown(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            // Check if click is on the core
+            const dx = mouseX - gameState.coreX;
+            const dy = mouseY - gameState.coreY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance <= CORE_RADIUS) {
+                gameState.coreDragging = true;
+            }
+        }
+        
+        // Handle mouse move
+        function handleMouseMove(e) {
+            if (gameState.coreDragging) {
+                const rect = canvas.getBoundingClientRect();
+                gameState.coreX = e.clientX - rect.left;
+                gameState.coreY = e.clientY - rect.top;
+                
+                // Constrain core to game area
+                gameState.coreX = Math.max(CORE_RADIUS, Math.min(500 - CORE_RADIUS, gameState.coreX));
+                gameState.coreY = Math.max(CORE_RADIUS, Math.min(500 - CORE_RADIUS, gameState.coreY));
+            }
+        }
+        
+        // Handle mouse up
+        function handleMouseUp() {
+            gameState.coreDragging = false;
+        }
+        
+        // Handle touch start
+        function handleTouchStart(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = touch.clientX - rect.left;
+            const mouseY = touch.clientY - rect.top;
+            
+            // Check if touch is on the core
+            const dx = mouseX - gameState.coreX;
+            const dy = mouseY - gameState.coreY;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance <= CORE_RADIUS) {
+                gameState.coreDragging = true;
+            }
+        }
+        
+        // Handle touch move
+        function handleTouchMove(e) {
+            e.preventDefault();
+            if (gameState.coreDragging) {
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                gameState.coreX = touch.clientX - rect.left;
+                gameState.coreY = touch.clientY - rect.top;
+                
+                // Constrain core to game area
+                gameState.coreX = Math.max(CORE_RADIUS, Math.min(500 - CORE_RADIUS, gameState.coreX));
+                gameState.coreY = Math.max(CORE_RADIUS, Math.min(500 - CORE_RADIUS, gameState.coreY));
+            }
+        }
+        
+        // Handle touch end
+        function handleTouchEnd() {
+            gameState.coreDragging = false;
+        }
+        
+        // Update game state
+        function update(deltaTime) {
+            if (gameState.gameOver) return;
+            
+            // Update pulse timer
+            gameState.pulseTimer += deltaTime;
+            
+            // Handle active pulse
+            if (gameState.pulseActive) {
+                gameState.pulseProgress += deltaTime / 300; // 300ms for pulse animation
+                if (gameState.pulseProgress >= 1) {
+                    gameState.pulseActive = false;
+                    gameState.pulseProgress = 0;
+                }
+            }
+            
+            // Check for pulse
+            if (gameState.pulseTimer >= gameState.pulseInterval) {
+                pulse();
+                gameState.pulseTimer = 0;
+                gameState.nextPulseColor = (gameState.nextPulseColor + 1) % 4;
+                updateUI();
+            }
+            
+            // Update echoes
+            const currentTime = Date.now();
+            gameState.echoes = gameState.echoes.filter(echo => 
+                currentTime - echo.time < ECHO_DURATION
+            );
+            
+            // Check win condition
+            const uncollectedNodes = gameState.nodes.filter(node => !node.collected);
+            if (uncollectedNodes.length === 0) {
+                // Level complete
+                gameState.level++;
+                gameState.pulseInterval = Math.max(800, gameState.pulseInterval - 100);
+                generateNodes();
+                gameState.combo = 0;
+            }
+        }
+        
+        // Execute pulse
+        function pulse() {
+            gameState.pulseActive = true;
+            gameState.pulseProgress = 0;
+            gameState.lastPulseTime = Date.now();
+            
+            // Create echo
+            gameState.echoes.push({
+                x: gameState.coreX,
+                y: gameState.coreY,
+                color: gameState.nextPulseColor,
+                time: Date.now()
+            });
+            
+            // Check node interactions
+            let hits = 0;
+            let mistakes = 0;
+            
+            for (const node of gameState.nodes) {
+                if (node.collected) continue;
+                
+                // Check direct pulse hit
+                const dx = node.x - gameState.coreX;
+                const dy = node.y - gameState.coreY;
+                const distance = Math.sqrt(dx * dx + dy * dy);
+                
+                if (distance <= PULSE_RADIUS) {
+                    if (node.color === gameState.nextPulseColor) {
+                        node.collected = true;
+                        hits++;
+                    } else {
+                        mistakes++;
+                    }
+                }
+                
+                // Check echo hits
+                for (const echo of gameState.echoes) {
+                    if (echo.time === gameState.lastPulseTime) continue; // Skip current echo
+                    
+                    const edx = node.x - echo.x;
+                    const edy = node.y - echo.y;
+                    const edistance = Math.sqrt(edx * edx + edy * edy);
+                    
+                    if (edistance <= PULSE_RADIUS) {
+                        if (node.color === echo.color) {
+                            node.collected = true;
+                            hits++;
+                        } else {
+                            mistakes++;
+                        }
+                    }
+                }
+            }
+            
+            // Update score and mistakes
+            if (hits > 0) {
+                gameState.combo++;
+                const comboMultiplier = Math.min(5, Math.floor(gameState.combo / 2) + 1);
+                gameState.score += hits * 10 * comboMultiplier;
+                
+                if (comboMultiplier > 1) {
+                    showCombo(comboMultiplier);
+                }
+            } else {
+                gameState.combo = 0;
+            }
+            
+            gameState.mistakes += mistakes;
+            
+            if (gameState.mistakes >= MAX_MISTAKES) {
+                endGame();
+            }
+            
+            updateUI();
+        }
+        
+        // Show combo display
+        function showCombo(multiplier) {
+            comboDisplay.textContent = `COMBO x${multiplier}!`;
+            comboDisplay.style.opacity = 1;
+            
+            setTimeout(() => {
+                comboDisplay.style.opacity = 0;
+            }, 1000);
+        }
+        
+        // Update UI elements
+        function updateUI() {
+            scoreDisplay.textContent = gameState.score;
+            mistakesDisplay.textContent = gameState.mistakes;
+            nextPulseDisplay.textContent = COLOR_NAMES[gameState.nextPulseColor];
+            levelDisplay.textContent = gameState.level;
+        }
+        
+        // End the game
+        function endGame() {
+            gameState.gameOver = true;
+            finalScoreDisplay.textContent = gameState.score;
+            finalLevelDisplay.textContent = gameState.level;
+            gameOverScreen.style.display = 'flex';
+        }
+        
+        // Render game
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background grid
+            drawGrid();
+            
+            // Draw echoes
+            drawEchoes();
+            
+            // Draw nodes
+            drawNodes();
+            
+            // Draw pulse effect if active
+            if (gameState.pulseActive) {
+                drawPulse();
+            }
+            
+            // Draw core
+            drawCore();
+        }
+        
+        // Draw background grid
+        function drawGrid() {
+            ctx.strokeStyle = 'rgba(100, 150, 255, 0.1)';
+            ctx.lineWidth = 1;
+            
+            // Draw concentric circles
+            for (let r = 50; r < 250; r += 50) {
+                ctx.beginPath();
+                ctx.arc(250, 250, r, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            
+            // Draw radial lines
+            for (let angle = 0; angle < Math.PI * 2; angle += Math.PI / 8) {
+                const x1 = 250 + Math.cos(angle) * 50;
+                const y1 = 250 + Math.sin(angle) * 50;
+                const x2 = 250 + Math.cos(angle) * 220;
+                const y2 = 250 + Math.sin(angle) * 220;
+                
+                ctx.beginPath();
+                ctx.moveTo(x1, y1);
+                ctx.lineTo(x2, y2);
+                ctx.stroke();
+            }
+        }
+        
+        // Draw echoes
+        function drawEchoes() {
+            const currentTime = Date.now();
+            
+            for (const echo of gameState.echoes) {
+                const age = currentTime - echo.time;
+                const alpha = 1 - (age / ECHO_DURATION);
+                const radius = PULSE_RADIUS * (1 - alpha * 0.5);
+                
+                ctx.beginPath();
+                ctx.arc(echo.x, echo.y, radius, 0, Math.PI * 2);
+                ctx.fillStyle = COLORS[echo.color].replace(')', `, ${alpha * 0.3})`).replace('rgb', 'rgba');
+                ctx.fill();
+                
+                // Draw echo center
+                ctx.beginPath();
+                ctx.arc(echo.x, echo.y, 5, 0, Math.PI * 2);
+                ctx.fillStyle = COLORS[echo.color];
+                ctx.fill();
+            }
+        }
+        
+        // Draw nodes
+        function drawNodes() {
+            for (const node of gameState.nodes) {
+                if (node.collected) continue;
+                
+                // Draw node
+                ctx.beginPath();
+                ctx.arc(node.x, node.y, NODE_RADIUS, 0, Math.PI * 2);
+                ctx.fillStyle = COLORS[node.color];
+                ctx.fill();
+                
+                // Draw border
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.8)';
+                ctx.lineWidth = 2;
+                ctx.stroke();
+                
+                // Draw phase indicator if needed
+                if (node.phase) {
+                    ctx.beginPath();
+                    ctx.arc(node.x, node.y, NODE_RADIUS + 5, 0, Math.PI * 2);
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                    ctx.lineWidth = 1;
+                    ctx.stroke();
+                }
+            }
+        }
+        
+        // Draw pulse effect
+        function drawPulse() {
+            const radius = PULSE_RADIUS * gameState.pulseProgress;
+            const alpha = 1 - gameState.pulseProgress;
+            
+            ctx.beginPath();
+            ctx.arc(gameState.coreX, gameState.coreY, radius, 0, Math.PI * 2);
+            ctx.fillStyle = COLORS[gameState.nextPulseColor].replace(')', `, ${alpha * 0.5})`).replace('rgb', 'rgba');
+            ctx.fill();
+        }
+        
+        // Draw core
+        function drawCore() {
+            // Draw core glow
+            const gradient = ctx.createRadialGradient(
+                gameState.coreX, gameState.coreY, 0,
+                gameState.coreX, gameState.coreY, CORE_RADIUS * 2
+            );
+            gradient.addColorStop(0, COLORS[gameState.nextPulseColor]);
+            gradient.addColorStop(1, 'rgba(0, 0, 0, 0)');
+            
+            ctx.beginPath();
+            ctx.arc(gameState.coreX, gameState.coreY, CORE_RADIUS * 2, 0, Math.PI * 2);
+            ctx.fillStyle = gradient;
+            ctx.fill();
+            
+            // Draw core
+            ctx.beginPath();
+            ctx.arc(gameState.coreX, gameState.coreY, CORE_RADIUS, 0, Math.PI * 2);
+            ctx.fillStyle = '#ffffff';
+            ctx.fill();
+            
+            // Draw core border
+            ctx.strokeStyle = COLORS[gameState.nextPulseColor];
+            ctx.lineWidth = 3;
+            ctx.stroke();
+            
+            // Draw inner symbol
+            ctx.beginPath();
+            ctx.arc(gameState.coreX, gameState.coreY, CORE_RADIUS / 2, 0, Math.PI * 2);
+            ctx.fillStyle = COLORS[gameState.nextPulseColor];
+            ctx.fill();
+        }
+        
+        // Game loop
+        let lastTime = 0;
+        function gameLoop(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+            
+            update(deltaTime);
+            render();
+            
+            if (!gameState.gameOver) {
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Initialize but don't start yet
+        initGame();
+    </script>
+</body>
+</html>

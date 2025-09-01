@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Blink Chain</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 100vh;
+            font-family: Arial, sans-serif;
+            background-color: #f0f0f0;
+        }
+        #game-container {
+            position: relative;
+            width: 400px;
+            height: 400px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        .number {
+            position: absolute;
+            width: 80px;
+            height: 80px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 36px;
+            font-weight: bold;
+            border-radius: 10px;
+            cursor: pointer;
+            user-select: none;
+            transition: transform 0.1s;
+        }
+        .number:hover {
+            transform: scale(1.05);
+        }
+        #score {
+            margin-top: 20px;
+            font-size: 24px;
+            font-weight: bold;
+        }
+        #message {
+            margin-top: 10px;
+            font-size: 18px;
+            height: 25px;
+        }
+        #restart {
+            margin-top: 15px;
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+        }
+        #restart:hover {
+            background-color: #45a049;
+        }
+    </style>
+</head>
+<body>
+    <h1>Blink Chain</h1>
+    <div id="game-container"></div>
+    <div id="score">Score: 0</div>
+    <div id="message">Click numbers 1-9 in order!</div>
+    <button id="restart">Restart Game</button>
+
+    <script>
+        const container = document.getElementById('game-container');
+        const scoreElement = document.getElementById('score');
+        const messageElement = document.getElementById('message');
+        const restartButton = document.getElementById('restart');
+        
+        let numbers = [];
+        let currentTarget = 1;
+        let score = 0;
+        let blinkInterval = 500;
+        let gameActive = true;
+        let blinkTimers = [];
+        
+        // Initialize game
+        function initGame() {
+            container.innerHTML = '';
+            numbers = [];
+            currentTarget = 1;
+            score = 0;
+            blinkInterval = 500;
+            gameActive = true;
+            scoreElement.textContent = 'Score: 0';
+            messageElement.textContent = 'Click numbers 1-9 in order!';
+            
+            // Clear any existing timers
+            blinkTimers.forEach(timer => clearInterval(timer));
+            blinkTimers = [];
+            
+            // Create numbers 1-9 at random positions
+            for (let i = 1; i <= 9; i++) {
+                const number = document.createElement('div');
+                number.className = 'number';
+                number.textContent = i;
+                number.dataset.value = i;
+                
+                // Random position within container
+                const x = Math.random() * (320) + 20;
+                const y = Math.random() * (320) + 20;
+                number.style.left = x + 'px';
+                number.style.top = y + 'px';
+                
+                // Random color
+                const hue = Math.floor(Math.random() * 360);
+                number.style.backgroundColor = `hsl(${hue}, 70%, 80%)`;
+                
+                number.addEventListener('click', () => handleNumberClick(i));
+                container.appendChild(number);
+                numbers.push(number);
+            }
+            
+            startBlinking();
+        }
+        
+        // Make numbers blink
+        function startBlinking() {
+            numbers.forEach(num => {
+                const timer = setInterval(() => {
+                    if (!gameActive) return;
+                    num.style.visibility = num.style.visibility === 'hidden' ? 'visible' : 'hidden';
+                }, blinkInterval);
+                blinkTimers.push(timer);
+            });
+        }
+        
+        // Handle number click
+        function handleNumberClick(value) {
+            if (!gameActive) return;
+            
+            if (value === currentTarget) {
+                // Correct number clicked
+                score += 10;
+                scoreElement.textContent = `Score: ${score}`;
+                
+                // Hide the clicked number
+                const clickedElement = document.querySelector(`.number[data-value="${value}"]`);
+                clickedElement.style.visibility = 'hidden';
+                clickedElement.style.pointerEvents = 'none';
+                
+                currentTarget++;
+                
+                if (currentTarget > 9) {
+                    // Completed sequence
+                    gameActive = false;
+                    messageElement.textContent = `You win! Final score: ${score}`;
+                    blinkTimers.forEach(timer => clearInterval(timer));
+                } else {
+                    // Increase speed for next number
+                    blinkInterval = Math.max(100, blinkInterval - 30);
+                    messageElement.textContent = `Next: ${currentTarget}`;
+                    
+                    // Restart blinking with new speed
+                    blinkTimers.forEach(timer => clearInterval(timer));
+                    blinkTimers = [];
+                    startBlinking();
+                }
+            } else {
+                // Wrong number clicked
+                gameActive = false;
+                messageElement.textContent = `Game over! You clicked ${value} instead of ${currentTarget}. Score: ${score}`;
+                blinkTimers.forEach(timer => clearInterval(timer));
+            }
+        }
+        
+        // Event listeners
+        restartButton.addEventListener('click', initGame);
+        
+        // Start the game
+        initGame();
+    </script>
+</body>
+</html>

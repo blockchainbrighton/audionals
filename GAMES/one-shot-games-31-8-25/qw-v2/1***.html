@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Pulse Shift</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            overflow: hidden;
+            color: #e6e6e6;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 500px;
+            box-shadow: 0 0 30px rgba(0, 150, 255, 0.3);
+            border-radius: 10px;
+            overflow: hidden;
+        }
+        
+        #gameCanvas {
+            background: #0f3460;
+        }
+        
+        #uiOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+        }
+        
+        #scoreDisplay {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            font-size: 28px;
+            font-weight: bold;
+            text-shadow: 0 0 10px rgba(0, 200, 255, 0.7);
+        }
+        
+        #rhythmDisplay {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            font-size: 20px;
+            background: rgba(0, 0, 0, 0.5);
+            padding: 5px 15px;
+            border-radius: 20px;
+        }
+        
+        #gameOverScreen, #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(15, 52, 96, 0.85);
+            backdrop-filter: blur(5px);
+            text-align: center;
+        }
+        
+        #startScreen {
+            z-index: 10;
+        }
+        
+        #gameOverScreen {
+            z-index: 5;
+            display: none;
+        }
+        
+        h1 {
+            font-size: 60px;
+            margin-bottom: 10px;
+            color: #4ecca3;
+            text-shadow: 0 0 15px rgba(78, 204, 163, 0.7);
+        }
+        
+        h2 {
+            font-size: 36px;
+            margin-bottom: 20px;
+            color: #4ecca3;
+        }
+        
+        p {
+            font-size: 20px;
+            max-width: 80%;
+            line-height: 1.6;
+            margin: 10px 0;
+        }
+        
+        .highlight {
+            color: #4ecca3;
+            font-weight: bold;
+        }
+        
+        button {
+            background: linear-gradient(to right, #4ecca3, #00b4d8);
+            border: none;
+            padding: 15px 40px;
+            font-size: 22px;
+            border-radius: 50px;
+            margin-top: 30px;
+            cursor: pointer;
+            color: #fff;
+            font-weight: bold;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.3);
+            transition: all 0.3s ease;
+            pointer-events: auto;
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 8px 20px rgba(0, 0, 0, 0.4);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        .pulse {
+            animation: pulse 0.5s ease-out;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+        
+        .instructions {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 20px;
+            border-radius: 15px;
+            margin: 20px 0;
+            max-width: 80%;
+        }
+        
+        .key {
+            display: inline-block;
+            background: rgba(255, 255, 255, 0.2);
+            padding: 5px 15px;
+            border-radius: 8px;
+            margin: 0 5px;
+            font-family: monospace;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="500"></canvas>
+        <div id="uiOverlay">
+            <div id="scoreDisplay">Score: 0</div>
+            <div id="rhythmDisplay">Rhythm: 1.0x</div>
+            <div id="startScreen">
+                <h1>PULSE SHIFT</h1>
+                <div class="instructions">
+                    <p>Navigate through rhythmic barriers by shifting between dimensions</p>
+                    <p>Press <span class="key">SPACE</span> to shift between dimensions</p>
+                    <p>Use <span class="key">↑</span> <span class="key">↓</span> keys to move vertically</p>
+                    <p>Avoid barriers in your current dimension!</p>
+                </div>
+                <p>Match the rhythm to increase your pulse speed and score multiplier</p>
+                <button id="startButton">START GAME</button>
+            </div>
+            <div id="gameOverScreen">
+                <h2>GAME OVER</h2>
+                <p>Your Score: <span id="finalScore" class="highlight">0</span></p>
+                <p>Barriers Passed: <span id="barriersPassed" class="highlight">0</span></p>
+                <p>Max Rhythm: <span id="maxRhythm" class="highlight">1.0x</span></p>
+                <button id="restartButton">PLAY AGAIN</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Game elements
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const scoreDisplay = document.getElementById('scoreDisplay');
+        const rhythmDisplay = document.getElementById('rhythmDisplay');
+        const startScreen = document.getElementById('startScreen');
+        const gameOverScreen = document.getElementById('gameOverScreen');
+        const startButton = document.getElementById('startButton');
+        const restartButton = document.getElementById('restartButton');
+        const finalScore = document.getElementById('finalScore');
+        const barriersPassed = document.getElementById('barriersPassed');
+        const maxRhythmDisplay = document.getElementById('maxRhythm');
+        
+        // Game state
+        let gameRunning = false;
+        let score = 0;
+        let rhythm = 1.0;
+        let maxRhythm = 1.0;
+        let barriersCleared = 0;
+        
+        // Player state
+        const player = {
+            x: 100,
+            y: canvas.height / 2,
+            radius: 20,
+            dimension: 0, // 0 = A (bright), 1 = B (dim)
+            pulsePhase: 0,
+            pulseSpeed: 0.05,
+            speed: 4
+        };
+        
+        // Barriers
+        let barriers = [];
+        const barrierWidth = 15;
+        const gapHeight = 150;
+        
+        // Input handling
+        const keys = {
+            ArrowUp: false,
+            ArrowDown: false
+        };
+        
+        let spacePressed = false;
+        
+        // Initialize game
+        function initGame() {
+            gameRunning = true;
+            score = 0;
+            rhythm = 1.0;
+            maxRhythm = 1.0;
+            barriersCleared = 0;
+            player.y = canvas.height / 2;
+            player.dimension = 0;
+            player.pulsePhase = 0;
+            player.pulseSpeed = 0.05;
+            barriers = [];
+            
+            // Create initial barriers
+            for (let i = 0; i < 5; i++) {
+                createBarrier(canvas.width + i * 300);
+            }
+            
+            updateUI();
+            gameOverScreen.style.display = 'none';
+            gameLoop();
+        }
+        
+        // Create a new barrier
+        function createBarrier(x) {
+            const gapY = Math.random() * (canvas.height - gapHeight - 100) + 50;
+            const dimension = Math.random() > 0.5 ? 0 : 1;
+            
+            barriers.push({
+                x: x,
+                gapY: gapY,
+                dimension: dimension,
+                passed: false
+            });
+        }
+        
+        // Update game state
+        function update() {
+            if (!gameRunning) return;
+            
+            // Update player pulse
+            player.pulsePhase = (player.pulsePhase + player.pulseSpeed * rhythm) % (Math.PI * 2);
+            
+            // Handle input
+            if (keys.ArrowUp) player.y -= player.speed;
+            if (keys.ArrowDown) player.y += player.speed;
+            
+            // Keep player in bounds
+            player.y = Math.max(player.radius, Math.min(canvas.height - player.radius, player.y));
+            
+            // Move barriers
+            for (let i = barriers.length - 1; i >= 0; i--) {
+                barriers[i].x -= player.speed;
+                
+                // Check if barrier is off screen
+                if (barriers[i].x + barrierWidth < 0) {
+                    barriers.splice(i, 1);
+                    continue;
+                }
+                
+                // Check for collision
+                if (!barriers[i].passed && 
+                    player.x + player.radius > barriers[i].x && 
+                    player.x - player.radius < barriers[i].x + barrierWidth) {
+                    
+                    // Check if player is in the same dimension as the barrier
+                    if (player.dimension === barriers[i].dimension) {
+                        gameOver();
+                        return;
+                    }
+                    
+                    // Check if player passed through the gap
+                    if (!barriers[i].passed && 
+                        player.y > barriers[i].gapY && 
+                        player.y < barriers[i].gapY + gapHeight) {
+                        
+                        barriers[i].passed = true;
+                        score += Math.floor(10 * rhythm);
+                        barriersCleared++;
+                        
+                        // Increase rhythm every 3 barriers
+                        if (barriersCleared % 3 === 0) {
+                            rhythm = Math.min(rhythm + 0.1, 3.0);
+                            if (rhythm > maxRhythm) maxRhythm = rhythm;
+                            player.pulseSpeed = 0.05 * rhythm;
+                        }
+                        
+                        updateUI();
+                        
+                        // Add visual feedback
+                        scoreDisplay.classList.add('pulse');
+                        setTimeout(() => scoreDisplay.classList.remove('pulse'), 300);
+                    }
+                }
+                
+                // Create new barriers as needed
+                if (i === barriers.length - 1 && barriers[i].x < canvas.width - 200) {
+                    createBarrier(barriers[i].x + 300);
+                }
+            }
+        }
+        
+        // Render game
+        function render() {
+            // Clear canvas
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background grid
+            ctx.strokeStyle = 'rgba(100, 150, 200, 0.1)';
+            ctx.lineWidth = 1;
+            
+            // Vertical lines
+            for (let x = 0; x < canvas.width; x += 40) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            // Horizontal lines
+            for (let y = 0; y < canvas.height; y += 40) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            // Draw barriers
+            barriers.forEach(barrier => {
+                // Draw barrier based on dimension
+                if (barrier.dimension === 0) {
+                    ctx.fillStyle = barrier.passed ? 'rgba(0, 200, 255, 0.3)' : 'rgba(0, 200, 255, 0.7)';
+                } else {
+                    ctx.fillStyle = barrier.passed ? 'rgba(255, 100, 200, 0.3)' : 'rgba(255, 100, 200, 0.7)';
+                }
+                
+                ctx.fillRect(barrier.x, 0, barrierWidth, barrier.gapY);
+                ctx.fillRect(barrier.x, barrier.gapY + gapHeight, barrierWidth, canvas.height);
+                
+                // Draw dimension indicator
+                ctx.fillStyle = barrier.dimension === 0 ? '#00ccff' : '#ff66cc';
+                ctx.font = '12px Arial';
+                ctx.fillText(barrier.dimension === 0 ? 'A' : 'B', barrier.x + 5, barrier.gapY - 5);
+                ctx.fillText(barrier.dimension === 0 ? 'A' : 'B', barrier.x + 5, barrier.gapY + gapHeight + 15);
+            });
+            
+            // Draw player
+            const pulseSize = Math.sin(player.pulsePhase) * 5;
+            const radius = player.radius + pulseSize;
+            
+            // Draw glow
+            const gradient = ctx.createRadialGradient(
+                player.x, player.y, 0,
+                player.x, player.y, radius * 2
+            );
+            
+            if (player.dimension === 0) {
+                gradient.addColorStop(0, 'rgba(0, 255, 255, 1)');
+                gradient.addColorStop(1, 'rgba(0, 100, 255, 0)');
+            } else {
+                gradient.addColorStop(0, 'rgba(255, 100, 255, 1)');
+                gradient.addColorStop(1, 'rgba(200, 0, 255, 0)');
+            }
+            
+            ctx.fillStyle = gradient;
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, radius * 2, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw player core
+            ctx.fillStyle = player.dimension === 0 ? '#00ffff' : '#ff66ff';
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, radius, 0, Math.PI * 2);
+            ctx.fill();
+            
+            // Draw player center
+            ctx.fillStyle = '#ffffff';
+            ctx.beginPath();
+            ctx.arc(player.x, player.y, radius / 3, 0, Math.PI * 2);
+            ctx.fill();
+        }
+        
+        // Update UI elements
+        function updateUI() {
+            scoreDisplay.textContent = `Score: ${score}`;
+            rhythmDisplay.textContent = `Rhythm: ${rhythm.toFixed(1)}x`;
+        }
+        
+        // Game over
+        function gameOver() {
+            gameRunning = false;
+            finalScore.textContent = score;
+            barriersPassed.textContent = barriersCleared;
+            maxRhythmDisplay.textContent = maxRhythm.toFixed(1) + 'x';
+            gameOverScreen.style.display = 'flex';
+        }
+        
+        // Main game loop
+        function gameLoop() {
+            if (gameRunning) {
+                update();
+                render();
+                requestAnimationFrame(gameLoop);
+            }
+        }
+        
+        // Event listeners
+        window.addEventListener('keydown', (e) => {
+            if (e.key in keys) {
+                keys[e.key] = true;
+            }
+            
+            if (e.key === ' ' && !spacePressed) {
+                spacePressed = true;
+                if (gameRunning) {
+                    player.dimension = 1 - player.dimension;
+                }
+            }
+        });
+        
+        window.addEventListener('keyup', (e) => {
+            if (e.key in keys) {
+                keys[e.key] = false;
+            }
+            
+            if (e.key === ' ') {
+                spacePressed = false;
+            }
+        });
+        
+        startButton.addEventListener('click', () => {
+            startScreen.style.display = 'none';
+            initGame();
+        });
+        
+        restartButton.addEventListener('click', () => {
+            gameOverScreen.style.display = 'none';
+            initGame();
+        });
+        
+        // Initial render
+        render();
+    </script>
+</body>
+</html>

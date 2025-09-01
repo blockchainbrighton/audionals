@@ -1,0 +1,589 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Flux: Color-Shifting Puzzle</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            color: #fff;
+            overflow: hidden;
+        }
+        
+        .game-container {
+            width: 100%;
+            max-width: 500px;
+            padding: 20px;
+            text-align: center;
+        }
+        
+        h1 {
+            font-size: 3rem;
+            margin-bottom: 10px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            margin-bottom: 25px;
+            color: #a9afc3;
+        }
+        
+        .stats {
+            display: flex;
+            justify-content: space-between;
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 15px;
+            margin-bottom: 20px;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .stat-box {
+            flex: 1;
+        }
+        
+        .stat-value {
+            font-size: 2rem;
+            font-weight: bold;
+            color: #4ecdc4;
+        }
+        
+        .stat-label {
+            font-size: 0.9rem;
+            color: #a9afc3;
+        }
+        
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 8px;
+            margin: 20px auto;
+            max-width: 400px;
+        }
+        
+        .tile {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            font-size: 1.8rem;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+            position: relative;
+            overflow: hidden;
+        }
+        
+        .tile::before {
+            content: '';
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(255, 255, 255, 0.1);
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+        
+        .tile:hover::before {
+            opacity: 1;
+        }
+        
+        .tile.locked::after {
+            content: '🔒';
+            position: absolute;
+            font-size: 1.2rem;
+        }
+        
+        .red { background: linear-gradient(135deg, #ff6b6b, #ff8e8e); }
+        .blue { background: linear-gradient(135deg, #4ecdc4, #7bd5cd); }
+        .green { background: linear-gradient(135deg, #1dd3b0, #4de2c0); }
+        .yellow { background: linear-gradient(135deg, #ffd166, #ffe194); }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            margin-top: 20px;
+        }
+        
+        button {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 50px;
+            background: linear-gradient(45deg, #ff6b6b, #4ecdc4);
+            color: white;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        button:hover {
+            transform: translateY(-3px);
+            box-shadow: 0 6px 20px rgba(0, 0, 0, 0.3);
+        }
+        
+        button:active {
+            transform: translateY(1px);
+        }
+        
+        .instructions {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 10px;
+            padding: 20px;
+            margin-top: 25px;
+            text-align: left;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+        
+        .instructions h2 {
+            margin-bottom: 10px;
+            color: #4ecdc4;
+        }
+        
+        .instructions ul {
+            padding-left: 20px;
+        }
+        
+        .instructions li {
+            margin-bottom: 8px;
+            line-height: 1.5;
+        }
+        
+        .pulse {
+            animation: pulse 0.5s ease;
+        }
+        
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.1); }
+            100% { transform: scale(1); }
+        }
+        
+        .flash {
+            animation: flash 0.6s ease;
+        }
+        
+        @keyframes flash {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        
+        .win-message {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            flex-direction: column;
+            z-index: 100;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.5s ease;
+        }
+        
+        .win-message.show {
+            opacity: 1;
+            pointer-events: all;
+        }
+        
+        .win-content {
+            background: linear-gradient(135deg, #1a1a2e, #16213e);
+            padding: 40px;
+            border-radius: 20px;
+            text-align: center;
+            max-width: 90%;
+            width: 400px;
+            box-shadow: 0 0 50px rgba(78, 205, 196, 0.5);
+        }
+        
+        .win-content h2 {
+            font-size: 2.5rem;
+            margin-bottom: 20px;
+            color: #4ecdc4;
+        }
+        
+        .win-content p {
+            font-size: 1.2rem;
+            margin-bottom: 30px;
+            color: #a9afc3;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container">
+        <h1>FLUX</h1>
+        <div class="subtitle">Color-Shifting Puzzle</div>
+        
+        <div class="stats">
+            <div class="stat-box">
+                <div class="stat-value" id="score">0</div>
+                <div class="stat-label">SCORE</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="moves">15</div>
+                <div class="stat-label">MOVES LEFT</div>
+            </div>
+            <div class="stat-box">
+                <div class="stat-value" id="level">1</div>
+                <div class="stat-label">LEVEL</div>
+            </div>
+        </div>
+        
+        <div class="grid" id="grid"></div>
+        
+        <div class="controls">
+            <button id="reset">New Game</button>
+            <button id="hint">Hint</button>
+        </div>
+        
+        <div class="instructions">
+            <h2>How to Play</h2>
+            <ul>
+                <li>Tap any tile to change its color to the next in the cycle</li>
+                <li>All tiles of the original color will also shift!</li>
+                <li>Create groups of 3+ same-colored tiles to score points</li>
+                <li>Locked tiles (🔒) require two taps to change</li>
+                <li>Complete the objective before running out of moves</li>
+            </ul>
+        </div>
+    </div>
+    
+    <div class="win-message" id="winMessage">
+        <div class="win-content">
+            <h2>Level Complete!</h2>
+            <p>You've mastered the color flux!</p>
+            <button id="nextLevel">Next Level</button>
+        </div>
+    </div>
+
+    <script>
+        // Game state
+        const gameState = {
+            grid: [],
+            score: 0,
+            moves: 15,
+            level: 1,
+            lockedTiles: 0,
+            objective: "Create 3 groups of same-colored tiles"
+        };
+        
+        // Color definitions
+        const COLORS = ['red', 'blue', 'green', 'yellow'];
+        const COLOR_CYCLE = {
+            'red': 'blue',
+            'blue': 'green',
+            'green': 'yellow',
+            'yellow': 'red'
+        };
+        
+        // DOM elements
+        const gridElement = document.getElementById('grid');
+        const scoreElement = document.getElementById('score');
+        const movesElement = document.getElementById('moves');
+        const levelElement = document.getElementById('level');
+        const resetButton = document.getElementById('reset');
+        const hintButton = document.getElementById('hint');
+        const winMessage = document.getElementById('winMessage');
+        const nextLevelButton = document.getElementById('nextLevel');
+        
+        // Initialize game
+        function initGame() {
+            gameState.score = 0;
+            gameState.moves = 15 + (gameState.level - 1) * 3;
+            gameState.lockedTiles = Math.min(gameState.level - 1, 5);
+            
+            updateUI();
+            createGrid();
+            renderGrid();
+        }
+        
+        // Create the game grid
+        function createGrid() {
+            gameState.grid = [];
+            for (let i = 0; i < 25; i++) {
+                const randomColor = COLORS[Math.floor(Math.random() * COLORS.length)];
+                const isLocked = i < gameState.lockedTiles;
+                gameState.grid.push({
+                    color: randomColor,
+                    locked: isLocked,
+                    tapCount: 0
+                });
+            }
+        }
+        
+        // Render the grid to the DOM
+        function renderGrid() {
+            gridElement.innerHTML = '';
+            gameState.grid.forEach((tile, index) => {
+                const tileElement = document.createElement('div');
+                tileElement.className = `tile ${tile.color} ${tile.locked ? 'locked' : ''}`;
+                tileElement.dataset.index = index;
+                
+                if (tile.locked && tile.tapCount === 0) {
+                    tileElement.innerHTML = '🔒';
+                }
+                
+                tileElement.addEventListener('click', () => handleTileClick(index));
+                gridElement.appendChild(tileElement);
+            });
+        }
+        
+        // Handle tile click
+        function handleTileClick(index) {
+            if (gameState.moves <= 0) return;
+            
+            const tile = gameState.grid[index];
+            
+            // Handle locked tiles
+            if (tile.locked) {
+                tile.tapCount++;
+                if (tile.tapCount < 2) {
+                    renderGrid();
+                    return;
+                }
+                tile.locked = false;
+                tile.tapCount = 0;
+            }
+            
+            // Get original color
+            const originalColor = tile.color;
+            
+            // Change clicked tile color
+            tile.color = COLOR_CYCLE[tile.color];
+            
+            // Apply flux effect to all tiles of original color
+            gameState.grid.forEach((gridTile, i) => {
+                if (gridTile.color === originalColor && i !== index) {
+                    gridTile.color = COLOR_CYCLE[originalColor];
+                    // Add animation to affected tiles
+                    setTimeout(() => {
+                        const elements = document.querySelectorAll('.tile');
+                        if (elements[i]) {
+                            elements[i].classList.add('flash');
+                            setTimeout(() => {
+                                elements[i].classList.remove('flash');
+                            }, 600);
+                        }
+                    }, 100);
+                }
+            });
+            
+            // Update moves
+            gameState.moves--;
+            
+            // Check for groups and score
+            checkForGroups();
+            
+            // Update UI
+            updateUI();
+            renderGrid();
+            
+            // Add animation to clicked tile
+            const clickedElement = document.querySelector(`.tile[data-index="${index}"]`);
+            if (clickedElement) {
+                clickedElement.classList.add('pulse');
+                setTimeout(() => {
+                    clickedElement.classList.remove('pulse');
+                }, 500);
+            }
+            
+            // Check win condition
+            if (checkWinCondition()) {
+                setTimeout(showWinMessage, 500);
+            }
+        }
+        
+        // Check for groups of same-colored tiles
+        function checkForGroups() {
+            let groupsFound = 0;
+            const visited = new Array(25).fill(false);
+            
+            // Helper function to get adjacent indices
+            function getAdjacent(index) {
+                const row = Math.floor(index / 5);
+                const col = index % 5;
+                const adjacent = [];
+                
+                if (row > 0) adjacent.push(index - 5); // up
+                if (row < 4) adjacent.push(index + 5); // down
+                if (col > 0) adjacent.push(index - 1); // left
+                if (col < 4) adjacent.push(index + 1); // right
+                
+                return adjacent;
+            }
+            
+            // BFS to find connected groups
+            for (let i = 0; i < 25; i++) {
+                if (visited[i]) continue;
+                
+                const color = gameState.grid[i].color;
+                const queue = [i];
+                const group = [];
+                
+                while (queue.length > 0) {
+                    const current = queue.shift();
+                    if (visited[current]) continue;
+                    
+                    visited[current] = true;
+                    group.push(current);
+                    
+                    const adjacent = getAdjacent(current);
+                    for (const adj of adjacent) {
+                        if (!visited[adj] && gameState.grid[adj].color === color) {
+                            queue.push(adj);
+                        }
+                    }
+                }
+                
+                // If group size >= 3, it's a valid group
+                if (group.length >= 3) {
+                    groupsFound++;
+                    
+                    // Add points based on group size
+                    const points = group.length * 10 * groupsFound;
+                    gameState.score += points;
+                    
+                    // Visual feedback for group
+                    group.forEach(index => {
+                        setTimeout(() => {
+                            const elements = document.querySelectorAll('.tile');
+                            if (elements[index]) {
+                                elements[index].classList.add('pulse');
+                                setTimeout(() => {
+                                    elements[index].classList.remove('pulse');
+                                }, 500);
+                            }
+                        }, 100);
+                    });
+                }
+            }
+            
+            return groupsFound;
+        }
+        
+        // Check win condition
+        function checkWinCondition() {
+            // For this demo, win if score > 200
+            return gameState.score > 200;
+        }
+        
+        // Show win message
+        function showWinMessage() {
+            winMessage.classList.add('show');
+        }
+        
+        // Update UI elements
+        function updateUI() {
+            scoreElement.textContent = gameState.score;
+            movesElement.textContent = gameState.moves;
+            levelElement.textContent = gameState.level;
+        }
+        
+        // Event listeners
+        resetButton.addEventListener('click', () => {
+            gameState.level = 1;
+            initGame();
+        });
+        
+        hintButton.addEventListener('click', () => {
+            // Simple hint: find a tile that creates a group
+            for (let i = 0; i < 25; i++) {
+                const tile = gameState.grid[i];
+                const originalColor = tile.color;
+                const newColor = COLOR_CYCLE[originalColor];
+                
+                // Temporarily change color
+                tile.color = newColor;
+                
+                // Check if this creates a group
+                let groupsFound = 0;
+                const visited = new Array(25).fill(false);
+                
+                for (let j = 0; j < 25; j++) {
+                    if (visited[j]) continue;
+                    
+                    const color = gameState.grid[j].color;
+                    const queue = [j];
+                    const group = [];
+                    
+                    while (queue.length > 0) {
+                        const current = queue.shift();
+                        if (visited[current]) continue;
+                        
+                        visited[current] = true;
+                        group.push(current);
+                        
+                        const row = Math.floor(current / 5);
+                        const col = current % 5;
+                        const adjacent = [];
+                        
+                        if (row > 0) adjacent.push(current - 5);
+                        if (row < 4) adjacent.push(current + 5);
+                        if (col > 0) adjacent.push(current - 1);
+                        if (col < 4) adjacent.push(current + 1);
+                        
+                        for (const adj of adjacent) {
+                            if (!visited[adj] && gameState.grid[adj].color === color) {
+                                queue.push(adj);
+                            }
+                        }
+                    }
+                    
+                    if (group.length >= 3) {
+                        groupsFound++;
+                    }
+                }
+                
+                // Restore color
+                tile.color = originalColor;
+                
+                if (groupsFound > 0) {
+                    // Highlight the tile
+                    const tileElement = document.querySelector(`.tile[data-index="${i}"]`);
+                    if (tileElement) {
+                        tileElement.style.boxShadow = '0 0 20px #4ecdc4';
+                        setTimeout(() => {
+                            tileElement.style.boxShadow = '';
+                        }, 1000);
+                    }
+                    return;
+                }
+            }
+        });
+        
+        nextLevelButton.addEventListener('click', () => {
+            gameState.level++;
+            winMessage.classList.remove('show');
+            initGame();
+        });
+        
+        // Initialize the game
+        initGame();
+    </script>
+</body>
+</html>
