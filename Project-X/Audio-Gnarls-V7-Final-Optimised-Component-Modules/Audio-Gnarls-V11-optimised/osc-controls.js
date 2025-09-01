@@ -1,11 +1,12 @@
 /**
  * ============================================================================
- * <osc-controls> Web Component (Refactor)
+ * <osc-controls> Web Component (Refactor + Volume Slider)
  * ============================================================================
  * Behavior, identifiers, and public API preserved.
  * - UI-only component that emits semantic events
  * - DOM & styles fully encapsulated in Shadow DOM
  * - Helpers reduce duplication; code is lint-clean and concise
+ * - NEW: Master volume slider with live % readout
  * ============================================================================
  */
 
@@ -31,6 +32,21 @@ class OscControls extends HTMLElement {
           padding: 0.7rem 1.2rem; background: rgba(255,255,255,0.07); border-radius: 9px;
           width: 95%; max-width: 880px; margin: 1.1rem auto 0; box-sizing: border-box;
         }
+        .vol { display:flex; align-items:center; gap:.55rem; min-width: 190px; padding: .3rem .55rem; background:#23252b; border:1px solid #4e5668; border-radius:8px; }
+        .vol label { font-size:.95rem; color:#cfe3ff; letter-spacing:.02em; }
+        .vol input[type="range"] {
+          -webkit-appearance: none; appearance: none; width: 140px; height: 4px;
+          background: #3a3f4a; border-radius: 999px; outline: none;
+        }
+        .vol input[type="range"]::-webkit-slider-thumb {
+          -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius:50%;
+          background:#46ad6d; border:1px solid #2b6b44; box-shadow: 0 0 6px #46ad6d55; cursor:pointer;
+        }
+        .vol input[type="range"]::-moz-range-thumb {
+          width:14px; height:14px; border-radius:50%; background:#46ad6d; border:1px solid #2b6b44; cursor:pointer;
+        }
+        .vol #volVal { font-size:.92rem; color:#9df5c2; min-width: 3.5ch; text-align: right; }
+
         button, select {
           padding: 0.53em 1.17em; border-radius: 6px; border: 1px solid #555; background: #242; color: #fff;
           font-size: 1rem; cursor: pointer; font-family: inherit; font-weight: 500;
@@ -48,6 +64,9 @@ class OscControls extends HTMLElement {
           background: #ff2a39; color: #fff; border-color: #ff4e6a;
           box-shadow: 0 0 18px 5px #ff2a3999, 0 0 4px #ff748499;
           text-shadow: 0 1px 3px #8d2025cc, 0 0 10px #fff7; filter: brightness(1.10) saturate(1.2);
+        }
+        #startBtn:not(.ready) {
+          opacity: 0.7;
         }
         #muteBtn.muted {
           background: #a51427; color: #fff; border-color: #ff506e;
@@ -79,16 +98,22 @@ class OscControls extends HTMLElement {
           button, select { padding: 0.48em 0.9em; font-size: 0.95rem; }
         }
         button:disabled, select:disabled { opacity: 0.5; pointer-events: none; }
+        .vol:has(input:disabled) { opacity: 0.5; pointer-events: none; }
       </style>
 
       <div id="controls">
-        <button id="startBtn">POWER ON</button>
+        <button id="startBtn" title="Click to initialize audio">POWER ON</button>
         <button id="muteBtn">Mute</button>
         <select id="shapeSelect"></select>
         <button id="seqBtn">Create Sequence</button>
         <button id="audioSigBtn">Audio Signature</button>
         <button id="loopBtn" class="toggle" aria-pressed="false">Loop: Off</button>
         <button id="sigModeBtn" class="toggle" aria-pressed="false">Signature Mode: Off</button>
+        <div id="volWrap" class="vol" title="Master Volume">
+          <label for="vol">Vol</label>
+          <input id="vol" type="range" min="0" max="100" step="1" value="10" />
+          <span id="volVal">10%</span>
+        </div>
       </div>
     `;
 
@@ -100,6 +125,8 @@ class OscControls extends HTMLElement {
     this._audioSigBtn = byId('audioSigBtn');
     this._loopBtn     = byId('loopBtn');
     this._sigModeBtn  = byId('sigModeBtn');
+    this._vol         = byId('vol');
+    this._volVal      = byId('volVal');
 
     // cache for bulk ops
     this._allControls = [
@@ -109,7 +136,8 @@ class OscControls extends HTMLElement {
       this._seqBtn,
       this._audioSigBtn,
       this._loopBtn,
-      this._sigModeBtn
+      this._sigModeBtn,
+      this._vol
     ];
 
     // --- Events (semantic outward only) -------------------------------------
@@ -122,6 +150,9 @@ class OscControls extends HTMLElement {
     on(this._audioSigBtn, 'click', () => dispatch('audio-signature'));
     on(this._loopBtn, 'click', () => dispatch('loop-toggle'));
     on(this._sigModeBtn, 'click', () => dispatch('signature-mode-toggle'));
+    on(this._vol, 'input', () =>
+      dispatch('volume-change', { value: Number(this._vol.value) })
+    );
 
     // expose helpers for use in updateState without re-alloc
     this._helpers = { setPressed, setText };
@@ -147,6 +178,7 @@ class OscControls extends HTMLElement {
    * Accepts extra flags:
    * - isLoopEnabled (boolean)
    * - isSequenceSignatureMode (boolean)
+   * - volume (number 0..1)
    */
   updateState({
     isAudioStarted,
@@ -155,45 +187,64 @@ class OscControls extends HTMLElement {
     shapeKey,
     sequencerVisible,
     isLoopEnabled,
-    isSequenceSignatureMode
+    isSequenceSignatureMode,
+    volume
   } = {}) {
     const { setPressed, setText } = this._helpers;
 
-    if (typeof isAudioStarted === 'boolean') {
-      const dis = !isAudioStarted;
-      // start/mute/audioSig/loop/signatureMode follow audio init
-      this._startBtn.disabled = dis;
-      this._muteBtn.disabled = dis;
-      this._audioSigBtn.disabled = dis;
-      this._loopBtn.disabled = dis;
-      this._sigModeBtn.disabled = dis;
-    }
-
+    // --- Always allow toggling power (don't disable startBtn) ---
     if (typeof isPlaying === 'boolean') {
       setText(this._startBtn, isPlaying ? 'POWER OFF' : 'POWER ON');
-      this._startBtn.classList.toggle('power-on', !!isPlaying);
+      this._startBtn.classList.toggle('power-on', isPlaying);
       this._startBtn.classList.toggle('power-off', !isPlaying);
     }
 
-    if (typeof isMuted === 'boolean') {
-      setText(this._muteBtn, isMuted ? 'Unmute' : 'Mute');
-      this._muteBtn.classList.toggle('muted', !!isMuted);
+    // --- Visual feedback for audio initialization status ---
+    if (typeof isAudioStarted === 'boolean') {
+      this._startBtn.classList.toggle('ready', isAudioStarted);
     }
 
+    // --- Enable/disable dependent controls only when audio is initialized ---
+    if (typeof isAudioStarted === 'boolean') {
+      const enable = isAudioStarted;
+      this._muteBtn.disabled = !enable;
+      this._audioSigBtn.disabled = !enable;
+      this._loopBtn.disabled = !enable;
+      this._sigModeBtn.disabled = !enable;
+      this._vol.disabled = !enable;
+    }
+
+    // --- Update mute button text/class ---
+    if (typeof isMuted === 'boolean') {
+      setText(this._muteBtn, isMuted ? 'Unmute' : 'Mute');
+      this._muteBtn.classList.toggle('muted', isMuted);
+    }
+
+    // --- Shape selector ---
     if (shapeKey) this._shapeSelect.value = shapeKey;
 
+    // --- Sequencer button ---
     if (typeof sequencerVisible === 'boolean') {
       setText(this._seqBtn, sequencerVisible ? 'Hide Sequencer' : 'Create Sequence');
     }
 
+    // --- Loop toggle ---
     if (typeof isLoopEnabled === 'boolean') {
       setPressed(this._loopBtn, isLoopEnabled);
       setText(this._loopBtn, isLoopEnabled ? 'Loop: On' : 'Loop: Off');
     }
 
+    // --- Signature mode toggle ---
     if (typeof isSequenceSignatureMode === 'boolean') {
       setPressed(this._sigModeBtn, isSequenceSignatureMode);
       setText(this._sigModeBtn, isSequenceSignatureMode ? 'Signature Mode: On' : 'Signature Mode: Off');
+    }
+
+    // --- Volume slider ---
+    if (typeof volume === 'number' && !Number.isNaN(volume)) {
+      const pct = Math.round(Math.max(0, Math.min(1, volume)) * 100);
+      if (this._vol) this._vol.value = String(pct);
+      if (this._volVal) this._volVal.textContent = `${pct}%`;
     }
   }
 }

@@ -21,7 +21,7 @@
  *   • tone-loader: 'tone-ready'
  *   • osc-controls: 'start-request', 'mute-toggle', 'shape-change',
  *                   'toggle-sequencer', 'audio-signature', 'loop-toggle',
- *                   'signature-mode-toggle'
+ *                   'signature-mode-toggle', 'volume-change'
  *   • seq-app: 'seq-record-start', 'seq-step-cleared', 'seq-step-recorded',
  *              'seq-play-started', 'seq-play-stopped', 'seq-step-advance',
  *              'seq-step-time-changed'
@@ -34,19 +34,7 @@
  * - UI sync: Always call _updateControls({...}) after state changes.
  * - Startup: On 'tone-ready', generates presets, buffers hum, sets initial seed
  *   preview on canvas, enables controls.
- *
- * QUICK REFERENCE
- * ---------------
- * - Custom element: <osc-app>
- * - Children: <tone-loader>, <scope-canvas>, <osc-controls>, <seq-app>
- * - Depends on: osc-utils, osc-presets, osc-audio, osc-signature-sequencer
- * - Key API:
- *   • resetToSeed(newSeed) → stops audio, reloads presets/state/UI
- *   • _updateControls({...}) → pushes current state to <osc-controls>
- * - Hotkeys: 0=hum, 1–9=shapes, L=loop, M=signature mode
  */
-
-
 
 import { Utils } from './osc-utils.js';
 import { Presets } from './osc-presets.js';
@@ -81,7 +69,7 @@ class OscApp2 extends HTMLElement {
       '_onToggleSequencer','_onAudioSignature','_handleSeedSubmit','_handleKeyDown','_handleKeyUp','_handleBlur',
       '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded','_onSeqPlayStarted',
       '_onSeqPlayStopped','_onSeqStepAdvance','_onSeqStepTimeChanged',
-      '_onLoopToggle','_onSignatureModeToggle'
+      '_onLoopToggle','_onSignatureModeToggle','_onVolumeChange'
     ].forEach(fn => (this[fn] = this[fn].bind(this)));
   }
 
@@ -101,6 +89,9 @@ class OscApp2 extends HTMLElement {
 
       // Global loop toggle (applies to signatures and sequences)
       isLoopEnabled: false,
+
+      // Master Volume (linear 0..1)
+      volume: 0.2,
 
       // Sequencer
       isSequencerMode: false,
@@ -203,10 +194,9 @@ class OscApp2 extends HTMLElement {
     this._controls.addEventListener('shape-change', this._onShapeChange);
     this._controls.addEventListener('toggle-sequencer', this._onToggleSequencer);
     this._controls.addEventListener('audio-signature', this._onAudioSignature);
-
-    // Optional controls events for toggles
     this._controls.addEventListener('loop-toggle', this._onLoopToggle);
     this._controls.addEventListener('signature-mode-toggle', this._onSignatureModeToggle);
+    this._controls.addEventListener('volume-change', this._onVolumeChange);
 
     this._canvas.onIndicatorUpdate = (text) => {
       this._loader.textContent = (!this.state.isPlaying && !this.state.contextUnlocked)
@@ -276,9 +266,13 @@ class OscApp2 extends HTMLElement {
     shapeKey = this.state.current,
     sequencerVisible = this.state.isSequencerMode,
     isLoopEnabled = this.state.isLoopEnabled,
-    isSequenceSignatureMode = this.state.isSequenceSignatureMode
+    isSequenceSignatureMode = this.state.isSequenceSignatureMode,
+    volume = this.state.volume
   } = {}) {
-    this._controls.updateState?.({ isAudioStarted, isPlaying, isMuted, shapeKey, sequencerVisible, isLoopEnabled, isSequenceSignatureMode });
+    this._controls.updateState?.({
+      isAudioStarted, isPlaying, isMuted, shapeKey, sequencerVisible,
+      isLoopEnabled, isSequenceSignatureMode, volume
+    });
   }
 
   _onToneReady() {
@@ -289,7 +283,16 @@ class OscApp2 extends HTMLElement {
     this._setCanvas({ preset: this.state.presets[initialShape], shapeKey: initialShape, mode: 'seed' });
     this.state.current = this.humKey;
     this._controls.disableAll?.(false);
-    this._updateControls({ isAudioStarted: true, isPlaying: false, isMuted: false, shapeKey: this.humKey, sequencerVisible: false });
+
+    // Apply initial master volume to Tone and sync UI
+    if (this.state.Tone?.Destination?.volume) {
+      this.state.Tone.Destination.volume.value = this._linToDb(this.state.volume);
+    }
+
+    this._updateControls({
+      isAudioStarted: true, isPlaying: false, isMuted: false,
+      shapeKey: this.humKey, sequencerVisible: false, volume: this.state.volume
+    });
     this._loader.textContent = 'Tone.js loaded. Click “POWER ON” or the image to begin.';
   }
 
@@ -350,6 +353,26 @@ class OscApp2 extends HTMLElement {
   }
   _handleKeyUp(_) {}
   _handleBlur() {}
+
+  // Volume ------------------------------------------------------------------
+  _onVolumeChange(e) {
+    const pct = Math.max(0, Math.min(100, Number(e?.detail?.value ?? 10)));
+    const lin = pct / 100;
+    this.state.volume = lin;
+    const Tone = this.state.Tone;
+    if (Tone?.Destination?.volume) {
+      Tone.Destination.volume.value = this._linToDb(lin);
+    }
+    // Do not auto-unmute; user controls mute separately
+    this._updateControls({ volume: lin, isMuted: Tone?.Destination?.mute });
+  }
+
+  _linToDb(x) {
+    // Map 0..1 to dB with a sensible floor; Tone.js uses dB on Destination.volume
+    if (x <= 0) return -96;
+    const db = 20 * Math.log10(x);
+    return Math.max(-96, Math.min(0, db));
+  }
 }
 
 customElements.define('osc-app', OscApp2);

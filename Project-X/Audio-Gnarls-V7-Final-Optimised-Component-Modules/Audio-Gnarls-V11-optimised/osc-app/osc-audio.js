@@ -11,90 +11,89 @@
  * coordinates the <scope-canvas> visual via `_setCanvas`. Manages a dedicated
  * "hum" chain and per-shape synth chains, swaps the active output to the
  * destination, and mirrors analyser nodes into the canvas for live visuals.
- * (See: bufferHumChain, bufferShapeChain, setActiveChain.) :contentReference[oaicite:0]{index=0}
  *
  * HIGH-LEVEL FLOW
  * ---------------
  * • On first unlock, constructs the hum chain, routes it to destination, and
- *   pre-buffers all shape chains in the background. :contentReference[oaicite:1]{index=1}
+ *   pre-buffers all shape chains in the background.
  * • Tracks `contextUnlocked`, `initialBufferingStarted`, `initialShapeBuffered`,
- *   `isPlaying`, `current`, and a `chains` map in `app.state`. :contentReference[oaicite:2]{index=2}
+ *   `isPlaying`, `current`, and a `chains` map in `app.state`.
  * • Reflects playback/mute/shape changes to:
  *   - Tone.Destination.mute (toggle)
  *   - <scope-canvas> props (analyser, preset/shapeKey, mode, isPlaying)
- *   - UI controls via `app._updateControls` and `app._loader` text. :contentReference[oaicite:3]{index=3}
+ *   - UI controls via `app._updateControls` and `app._loader` text.
  *
  * PUBLIC METHODS (called as Audio(app).method(...))
  * -------------------------------------------------
  * • bufferHumChain(): (re)creates the low-volume sine hum chain:
  *     Oscillator(A0 sine) → Volume(-25dB) → Filter(80Hz lowpass, Q=0.5)
  *     → Freeverb(wet=0.3, roomSize=0.9) → (optionally) analyser. Stores in
- *     `chains[app.humKey]`. Disposes any stale chain first. :contentReference[oaicite:4]{index=4}
+ *     `chains[app.humKey]`. Disposes any stale chain first.
  *
  * • bufferShapeChain(shape): builds a synth chain from preset `app.state.presets[shape]`:
  *     Osc1 (type/freq from pr.osc1), optional Osc2 (pr.osc2),
  *     LFO(...pr.lfo) → filter.frequency (+ Osc2.detune)
  *     Osc* → Volume(5) → Filter(pr.filter, Q=pr.filterQ) → Freeverb(pr.reverb)
- *     → analyser. Stored in `chains[shape]`. Hum key delegates to bufferHumChain. :contentReference[oaicite:5]{index=5}
+ *     → analyser. Stored in `chains[shape]`. Hum key delegates to bufferHumChain.
  *
  * • setActiveChain(shape):
  *     - Disconnects all chains’ reverbs from destination, then sends the chosen
  *       chain to destination, sets `state.current`, and syncs canvas:
  *       { analyser?, isAudioStarted:true, isPlaying:state.isPlaying }.
- *       If `hum`, also sets { shapeKey: humKey, preset:null }. :contentReference[oaicite:6]{index=6}
+ *       If `hum`, also sets { shapeKey: humKey, preset:null }.
  *
- * • disposeAllChains(): disposes all Tone nodes and clears the `chains` map. :contentReference[oaicite:7]{index=7}
+ * • disposeAllChains(): disposes all Tone nodes and clears the `chains` map.
  *
  * • resetState():
  *     - Hard stop: disposes chains, stops sequence & audio signatures, rebuilds
  *       default state with same seed & Tone instance, reloads presets, buffers
  *       hum, sets canvas to seed mode on a randomly chosen first shape, and
- *       resets UI/sequencer visibility/arrays. :contentReference[oaicite:8]{index=8}
+ *       resets UI/sequencer visibility/arrays.
  *
  * • unlockAudioAndBufferInitial():
  *     - Resumes AudioContext (Tone.getContext()/Tone.context or Tone.start()).
  *     - Buffers hum, activates it, marks state ready/playing, wires canvas,
  *       then pre-buffers all shapes (yielding with `_sleep(0)` between). 
- *       Updates status messages throughout. Idempotent guards included. :contentReference[oaicite:9]{index=9}
+ *       Updates status messages throughout. Idempotent guards included.
  *
  * • stopAudioAndDraw():
  *     - Stops playback, disposes chains, halts sequencer/signatures, turns off
- *       canvas live flags, and calls resetState(). :contentReference[oaicite:10]{index=10}
+ *       canvas live flags, and calls resetState().
  *
- * • _onStartRequest(): convenience to call unlockAudioAndBufferInitial(). :contentReference[oaicite:11]{index=11}
+ * • _onStartRequest(): convenience to call unlockAudioAndBufferInitial().
  *
  * • _onMuteToggle():
  *     - Flips Tone.Destination.mute, updates controls/loader, and ensures the
- *       canvas reflects `isPlaying && !mute`. :contentReference[oaicite:12]{index=12}
+ *       canvas reflects `isPlaying && !mute`.
  *
  * • _onShapeChange(e):
  *     - Accepts { detail: { shapeKey } }, updates current/preset, nudges canvas
  *       (seed/live based on unlock/buffer state), and, if fully ready, switches
- *       the active chain. Also updates UI controls. :contentReference[oaicite:13]{index=13}
+ *       the active chain. Also updates UI controls.
  *
  * STATE & COORDINATION NOTES
  * --------------------------
  * • Canvas bridge: `_setCanvas({ analyser?, preset?, shapeKey?, mode?, isAudioStarted?, isPlaying? })`
  *   is the single source of truth for the visual. Live analyser is attached
- *   only when available. :contentReference[oaicite:14]{index=14}
+ *   only when available.
  * • Preset loading and first-shape seeding occur in `resetState()`. The canvas
- *   starts in seed mode until the context is unlocked and a live chain is active. :contentReference[oaicite:15]{index=15}
+ *   starts in seed mode until the context is unlocked and a live chain is active.
  * • Prebuffer loop: shapes are buffered sequentially after hum; break if the
- *   context becomes locked again. :contentReference[oaicite:16]{index=16}
+ *   context becomes locked again.
  *
  * ERROR HANDLING
  * --------------
  * • Each buffer method is wrapped in try/catch; on failure the chain entry is
- *   deleted and an error logged. Unlock errors reset all ready flags. :contentReference[oaicite:17]{index=17}
+ *   deleted and an error logged. Unlock errors reset all ready flags.
  *
  * GOTCHAS / BEST PRACTICES
  * ------------------------
- * • Always dispose stale chains before re-creating them to avoid orphan nodes. :contentReference[oaicite:18]{index=18}
+ * • Always dispose stale chains before re-creating them to avoid orphan nodes.
  * • When switching shapes, ensure UI + canvas are updated even if audio isn’t
- *   live yet; visuals should still reflect seed mode. :contentReference[oaicite:19]{index=19}
+ *   live yet; visuals should still reflect seed mode.
  * • Respect `state.isPlaying` vs mute: canvas `isPlaying` should be false when
- *   muted, even if transport is technically running. :contentReference[oaicite:20]{index=20}
- * • The “hum” chain is special-cased: preset is null and shapeKey is `humKey`. :contentReference[oaicite:21]{index=21}
+ *   muted, even if transport is technically running.
+ * • The “hum” chain is special-cased: preset is null and shapeKey is `humKey`.
  *
  * =============================================================================
  * DEVELOPER QUICK REFERENCE
@@ -123,7 +122,6 @@
  * // - app.state: { Tone, chains, isPlaying, contextUnlocked, ... }
  * // - app._setCanvas, app._updateControls, app._loader, app._rng, app._sleep
  */
-
 
 export function Audio(app) {
   return {
