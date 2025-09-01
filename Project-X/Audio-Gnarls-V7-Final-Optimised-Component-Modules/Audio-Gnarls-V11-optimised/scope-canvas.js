@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * ScopeCanvas2 – Oscilloscope Visual Renderer
+ * ScopeCanvas – Oscilloscope Visual Renderer
  * =============================================================================
  *
  * PURPOSE:
@@ -26,7 +26,7 @@
  * =============================================================================
  */
 
-class ScopeCanvas2 extends HTMLElement {
+class ScopeCanvas extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -338,4 +338,4 @@ class ScopeCanvas2 extends HTMLElement {
   }
 }
 
-customElements.define('scope-canvas', ScopeCanvas2);
+customElements.define('scope-canvas', ScopeCanvas);
