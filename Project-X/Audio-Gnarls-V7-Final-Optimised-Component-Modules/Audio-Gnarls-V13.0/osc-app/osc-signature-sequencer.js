@@ -361,23 +361,37 @@ export function SignatureSequencer(app) {
     },
 
      // ---------- Audio Signature UI trigger ----------
+// ---------- Audio Signature UI trigger ----------
 _onAudioSignature() {
   const s = app.state;
   if (!s.contextUnlocked || !s.initialShapeBuffered || s.audioSignaturePlaying) return;
-  if (s.sequencePlaying) this.stopSequence();
 
-  // Use the user's sticky selection first, then current, then hum as a last resort
-  const selectedShapeKey = s._uiReturnShapeKey || s.current || humKey();
+  // Prefer the user's sticky selection, else current, else hum
+  const selected = s._uiReturnShapeKey || s.current || humKey();
+  this._triggerSignatureFor(selected, { loop: s.isLoopEnabled });
+},
+
+// Fire a full Audio Signature run for a specific shape key, respecting loop
+_triggerSignatureFor(shapeKey, { loop = app.state.isLoopEnabled } = {}) {
+  const s = app.state;
+  if (!s.contextUnlocked || !s.initialShapeBuffered) return;
+
+  // Stop anything else first
+  if (s.sequencePlaying) this.stopSequence();
+  if (s.audioSignaturePlaying) this.stopAudioSignature();
+
+  // Make the user's chosen shape "sticky" for UI restore after silence
+  s._uiReturnShapeKey = shapeKey || s._uiReturnShapeKey || humKey();
 
   const algorithmMap = this._getUniqueAlgorithmMapping(s.seed);
-  const algorithm = algorithmMap[selectedShapeKey] || 1;
+  const algorithm = algorithmMap[shapeKey] || 1;
+  const sequence = this.generateAudioSignature(s.seed, algorithm);
 
-  const audioSignatureSequence = this.generateAudioSignature(s.seed, algorithm);
-  this.playAudioSignature(audioSignatureSequence, algorithm, { loop: s.isLoopEnabled });
+  this.playAudioSignature(sequence, algorithm, { loop });
 
-  app._loader.textContent = s.isLoopEnabled
-    ? 'Playing Audio Signature (Loop).'
-    : 'Playing Audio Signature...';
+  app._loader.textContent = loop
+    ? `Playing ${shapeKey} Audio Signature (Loop).`
+    : `Playing ${shapeKey} Audio Signature...`;
 },
 
 // ---------- Signature playback ----------

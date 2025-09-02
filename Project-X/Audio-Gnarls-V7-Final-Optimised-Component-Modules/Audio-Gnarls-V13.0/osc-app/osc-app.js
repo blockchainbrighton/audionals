@@ -395,6 +395,14 @@ class OscApp extends HTMLElement {
       }
       if (!shapeKey) return;
 
+      // If Signature Mode is ON, pressing a number should play that shape's signature to completion
+      if (this.state.isSequenceSignatureMode) {
+        // Run the signature immediately; no momentary audition, no sequencer involvement.
+        this._triggerSignatureFor(shapeKey, { loop: this.state.isLoopEnabled });
+        e.preventDefault();
+        return;
+      }
+
       const s = this.state;
 
       if (e.repeat) { e.preventDefault(); return; } // ignore auto-repeats
