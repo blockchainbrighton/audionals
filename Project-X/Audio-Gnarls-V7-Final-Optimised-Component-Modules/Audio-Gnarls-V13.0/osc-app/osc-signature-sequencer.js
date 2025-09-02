@@ -233,19 +233,7 @@ export function SignatureSequencer(app) {
       }
     },
 
-    // ---------- Audio Signature UI trigger ----------
-    _onAudioSignature() {
-      const s = app.state;
-      if (!s.contextUnlocked || !s.initialShapeBuffered || s.audioSignaturePlaying) return;
-      if (s.sequencePlaying) this.stopSequence();
-
-      const algorithmMap = this._getUniqueAlgorithmMapping(s.seed);
-      const algorithm = algorithmMap[s.current] || 1;
-      const audioSignatureSequence = this.generateAudioSignature(s.seed, algorithm);
-      this.playAudioSignature(audioSignatureSequence, algorithm, { loop: s.isLoopEnabled });
-
-      app._loader.textContent = s.isLoopEnabled ? 'Playing Audio Signature (Loop).' : 'Playing Audio Signature...';
-    },
+   
 
     // ---------- Signature generation ----------
     _getUniqueAlgorithmMapping(seed) {
@@ -372,82 +360,132 @@ export function SignatureSequencer(app) {
       return sequence;
     },
 
-    // ---------- Signature playback ----------
-    playAudioSignature(sequence, algorithm = 1, { loop = false, onComplete = null } = {}) {
-      const s = app.state;
-      if (s.audioSignaturePlaying) this.stopAudioSignature();
+     // ---------- Audio Signature UI trigger ----------
+_onAudioSignature() {
+  const s = app.state;
+  if (!s.contextUnlocked || !s.initialShapeBuffered || s.audioSignaturePlaying) return;
+  if (s.sequencePlaying) this.stopSequence();
 
-      s.audioSignaturePlaying = true;
-      s.audioSignatureStepIndex = 0;
-      s.audioSignatureOnComplete = onComplete;
+  // Use the user's sticky selection first, then current, then hum as a last resort
+  const selectedShapeKey = s._uiReturnShapeKey || s.current || humKey();
 
-      let stepTime;
-      switch (algorithm) {
-        case 3: case 7: stepTime = 100; break;
-        case 5: stepTime = 150; break;
-        case 10: stepTime = 200; break;
-        default: stepTime = 125;
+  const algorithmMap = this._getUniqueAlgorithmMapping(s.seed);
+  const algorithm = algorithmMap[selectedShapeKey] || 1;
+
+  const audioSignatureSequence = this.generateAudioSignature(s.seed, algorithm);
+  this.playAudioSignature(audioSignatureSequence, algorithm, { loop: s.isLoopEnabled });
+
+  app._loader.textContent = s.isLoopEnabled
+    ? 'Playing Audio Signature (Loop).'
+    : 'Playing Audio Signature...';
+},
+
+// ---------- Signature playback ----------
+playAudioSignature(sequence, algorithm = 1, { loop = false, onComplete = null } = {}) {
+  const s = app.state;
+  if (s.audioSignaturePlaying) this.stopAudioSignature();
+
+  // Remember the UI shape to restore after we finish (don’t leave UI on HUM)
+  const currentUiShape = (typeof s.current === 'string' && s.current) ? s.current : null;
+  s._uiReturnShapeKey = currentUiShape || s._uiReturnShapeKey || humKey();
+
+  s.audioSignaturePlaying = true;
+  s.audioSignatureStepIndex = 0;
+  s.audioSignatureOnComplete = onComplete;
+
+  let stepTime;
+  switch (algorithm) {
+    case 3:
+    case 7:  stepTime = 100; break;
+    case 5:  stepTime = 150; break;
+    case 10: stepTime = 200; break;
+    default: stepTime = 125;
+  }
+
+  const playStep = () => {
+    if (!s.audioSignaturePlaying) return;
+
+    const stepIndex = s.audioSignatureStepIndex;
+    const shapeIndex = sequence[stepIndex];
+
+    if (shapeIndex !== null) {
+      let shapeKey;
+      if (shapeIndex === 0) {
+        shapeKey = humKey();
+      } else {
+        const list = shapeList();
+        shapeKey = list[shapeIndex - 1];
       }
 
-      const playStep = () => {
-        if (!s.audioSignaturePlaying) return;
+      if (shapeKey) {
+        // Show step changes as before (selector + scope follow the playing step)
+        app._updateControls({ shapeKey });
+        app._onShapeChange({ detail: { shapeKey } });
+      }
+    }
 
-        const stepIndex = s.audioSignatureStepIndex;
-        const shapeIndex = sequence[stepIndex];
+    s.audioSignatureStepIndex++;
 
-        if (shapeIndex !== null) {
-          let shapeKey;
-          if (shapeIndex === 0) shapeKey = humKey();
-          else {
-            const list = shapeList();
-            shapeKey = list[shapeIndex - 1];
-          }
-
-          if (shapeKey) {
-            app._updateControls({ shapeKey });
-            app._onShapeChange({ detail: { shapeKey } });
-          }
-        }
-
-        s.audioSignatureStepIndex++;
-
-        if (s.audioSignatureStepIndex >= sequence.length) {
-          const finishOnce = () => {
-            s.audioSignaturePlaying = false;
-            s.audioSignatureTimer = null;
-            const cb = s.audioSignatureOnComplete;
-            s.audioSignatureOnComplete = null;
-            if (typeof cb === 'function') cb();
-            else app._loader.textContent = 'Audio Signature complete.';
-          };
-
-          if (loop) {
-            s.audioSignatureStepIndex = 0;
-            s.audioSignatureTimer = setTimeout(playStep, stepTime);
-          } else {
-            app._updateControls({ shapeKey: humKey() });
-            app._onShapeChange({ detail: { shapeKey: humKey() } });
-            s.audioSignatureTimer = setTimeout(finishOnce, stepTime);
-          }
-          return;
-        }
-
-        s.audioSignatureTimer = setTimeout(playStep, stepTime);
+    if (s.audioSignatureStepIndex >= sequence.length) {
+      const finishOnce = () => {
+        s.audioSignaturePlaying = false;
+        s.audioSignatureTimer = null;
+        const cb = s.audioSignatureOnComplete;
+        s.audioSignatureOnComplete = null;
+        if (typeof cb === 'function') cb();
+        else app._loader.textContent = 'Audio Signature complete.';
       };
 
-      playStep();
-    },
+      if (loop) {
+        s.audioSignatureStepIndex = 0;
+        s.audioSignatureTimer = setTimeout(playStep, stepTime);
+      } else {
+        // Go silent (route audio to HUM) but DO NOT change UI selection or scope shape
+        try { app.setActiveChain(humKey(), { updateCanvasShape: false, setStateCurrent: false }); } catch {}
+        if (app._canvas) app._canvas.isPlaying = false;
 
-    stopAudioSignature() {
-      const s = app.state;
-      if (s.audioSignatureTimer) {
-        clearTimeout(s.audioSignatureTimer);
-        s.audioSignatureTimer = null;
+        // Restore the user's selection in both state and controls
+        if (s._uiReturnShapeKey) {
+          app.state.current = s._uiReturnShapeKey;
+          app._updateControls({ shapeKey: s._uiReturnShapeKey });
+        } else {
+          app._updateControls({});
+        }
+
+        s.audioSignatureTimer = setTimeout(finishOnce, stepTime);
       }
-      s.audioSignaturePlaying = false;
-      s.audioSignatureStepIndex = 0;
-      s.audioSignatureOnComplete = null;
-    },
+      return;
+    }
+
+    s.audioSignatureTimer = setTimeout(playStep, stepTime);
+  };
+
+  playStep();
+},
+
+stopAudioSignature() {
+  const s = app.state;
+  if (s.audioSignatureTimer) {
+    clearTimeout(s.audioSignatureTimer);
+    s.audioSignatureTimer = null;
+  }
+  s.audioSignaturePlaying = false;
+  s.audioSignatureStepIndex = 0;
+
+  // Go silent now, without changing UI selection or scope shape
+  try { app.setActiveChain(humKey(), { updateCanvasShape: false, setStateCurrent: false }); } catch {}
+  if (app._canvas) app._canvas.isPlaying = false;
+
+  // Keep UI on the last meaningful selection (don’t flip UI to HUM)
+  if (s._uiReturnShapeKey) {
+    app.state.current = s._uiReturnShapeKey;
+    app._updateControls({ shapeKey: s._uiReturnShapeKey });
+  } else {
+    app._updateControls({});
+  }
+
+  s.audioSignatureOnComplete = null;
+},
 
     // ---------- Sequencer bridge ----------
     _onSeqRecordStart(e) {
@@ -579,9 +617,14 @@ export function SignatureSequencer(app) {
       if (s.signatureSequencerRunning) this._stopSignatureSequencer();
       s.signatureSequencerRunning = true;
 
+      // NEW: remember UI selection to restore after the whole signature-per-step run
+      const currentUiShape = (typeof s.current === 'string' && s.current) ? s.current : null;
+      s._uiReturnShapeKey = currentUiShape || s._uiReturnShapeKey || humKey();
+
       this.stopAudioSignature();
 
       const algorithmMap = this._getUniqueAlgorithmMapping(s.seed);
+
 
       const runOnePass = async () => {
         if (!s.signatureSequencerRunning) return;
@@ -634,12 +677,18 @@ export function SignatureSequencer(app) {
     _stopSignatureSequencer() {
       const s = app.state;
       s.signatureSequencerRunning = false;
-      this.stopAudioSignature();
+
+      this.stopAudioSignature(); // will route to HUM and restore UI
+
       s.sequencePlaying = false;
       s.sequenceStepIndex = 0;
       s._seqFirstCycleStarted = false;
+
       app.updateSequencerState();
-      app._updateControls();
+
+      // Keep UI on the last user selection; don’t flip to HUM
+      if (s._uiReturnShapeKey) app._updateControls({ shapeKey: s._uiReturnShapeKey });
+      else app._updateControls();
     },
 
     updateSequencerState() {

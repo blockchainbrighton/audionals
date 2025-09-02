@@ -41,6 +41,10 @@ class OscApp extends HTMLElement {
     super();
     this.attachShadow({ mode: 'open' });
 
+    // Track currently-held keyboard keys for momentary play
+    this._heldKeys = new Set();
+
+
     // --- Constants ---------------------------------------------------------
     this.humKey = 'hum';
     this.humLabel = 'Power Hum';
@@ -273,20 +277,45 @@ class OscApp extends HTMLElement {
 
   // App control utilities ---------------------------------------------------
   _updateControls({
-    isAudioStarted = this.state.contextUnlocked,
-    isPlaying = this.state.isPlaying,
-    isMuted = this.state.Tone?.Destination?.mute,
-    shapeKey = this.state.current,
-    sequencerVisible = this.state.isSequencerMode,
-    isLoopEnabled = this.state.isLoopEnabled,
-    isSequenceSignatureMode = this.state.isSequenceSignatureMode,
-    volume = this.state.volume
+    isAudioStarted,
+    isPlaying,
+    isMuted,
+    shapeKey, // NOTE: no default here — only update when explicitly provided
+    sequencerVisible,
+    isLoopEnabled,
+    isSequenceSignatureMode,
+    volume
   } = {}) {
-    this._controls.updateState?.({
-      isAudioStarted, isPlaying, isMuted, shapeKey, sequencerVisible,
-      isLoopEnabled, isSequenceSignatureMode, volume
-    });
+    const payload = {};
+
+    // Only include fields that were explicitly provided or we can safely derive.
+    if (typeof isAudioStarted === 'boolean') payload.isAudioStarted = isAudioStarted;
+    else payload.isAudioStarted = this.state.contextUnlocked;
+
+    if (typeof isPlaying === 'boolean') payload.isPlaying = isPlaying;
+    else payload.isPlaying = this.state.isPlaying;
+
+    if (typeof isMuted === 'boolean') payload.isMuted = isMuted;
+    else payload.isMuted = this.state.Tone?.Destination?.mute;
+
+    // IMPORTANT: only pass shapeKey if caller explicitly set it
+    if (typeof shapeKey === 'string') payload.shapeKey = shapeKey;
+
+    if (typeof sequencerVisible === 'boolean') payload.sequencerVisible = sequencerVisible;
+    else payload.sequencerVisible = this.state.isSequencerMode;
+
+    if (typeof isLoopEnabled === 'boolean') payload.isLoopEnabled = isLoopEnabled;
+    else payload.isLoopEnabled = this.state.isLoopEnabled;
+
+    if (typeof isSequenceSignatureMode === 'boolean') payload.isSequenceSignatureMode = isSequenceSignatureMode;
+    else payload.isSequenceSignatureMode = this.state.isSequenceSignatureMode;
+
+    if (typeof volume === 'number') payload.volume = volume;
+    else payload.volume = this.state.volume;
+
+    this._controls.updateState?.(payload);
   }
+
 
   // Tone ready --------------------------------------------------------------
   _onToneReady() {
@@ -343,67 +372,162 @@ class OscApp extends HTMLElement {
     this._loader.textContent = 'Seed updated. Click POWER ON.';
   }
 
-  // Keyboard ---------------------------------------------------------------
-  _handleKeyDown(e) {
-    if (!/INPUT|TEXTAREA/.test(e.target.tagName)) {
-      if (e.key === 'l' || e.key === 'L') { this._onLoopToggle(); e.preventDefault(); return; }
-      if (e.key === 'm' || e.key === 'M') {
-        if (this.state.isSequencerMode) { this._onSignatureModeToggle(); e.preventDefault(); return; }
+    // Keyboard ---------------------------------------------------------------
+    _handleKeyDown(e) {
+      if (!/INPUT|TEXTAREA/.test(e.target.tagName)) {
+        if (e.key === 'l' || e.key === 'L') { this._onLoopToggle(); e.preventDefault(); return; }
+        if (e.key === 'm' || e.key === 'M') {
+          if (this.state.isSequencerMode) { this._onSignatureModeToggle(); e.preventDefault(); return; }
+        }
       }
-    }
-    if (/INPUT|TEXTAREA/.test(e.target.tagName)) return;
+      if (/INPUT|TEXTAREA/.test(e.target.tagName)) return;
 
-    let shapeKey = null, idx = -1;
-    if (e.key === '0') {
-      shapeKey = this.humKey;
-    } else {
-      idx = e.key.charCodeAt(0) - 49; // '1' => 0
-      if (idx >= 0 && idx < this.shapes.length) shapeKey = this.shapes[idx];
-    }
+      // Lazy init (drop-in safe)
+      this._heldKeys = this._heldKeys || new Set();
+      this._recordedThisHold = this._recordedThisHold || new Set();
 
-    if (!shapeKey) return;
-    const s = this.state;
+      let shapeKey = null, idx = -1;
+      if (e.key === '0') {
+        shapeKey = this.humKey;
+      } else {
+        idx = e.key.charCodeAt(0) - 49; // '1' => 0
+        if (idx >= 0 && idx < this.shapes.length) shapeKey = this.shapes[idx];
+      }
+      if (!shapeKey) return;
 
-    if (s.isSequencerMode && s.isRecording) {
-      const recordValue = (idx >= 0) ? (idx + 1) : 0;
-      this.recordStep(recordValue);
+      const s = this.state;
+
+      if (e.repeat) { e.preventDefault(); return; } // ignore auto-repeats
+      this._heldKeys.add(e.key);
+
+      // --- Sequencer mode: physical keys are momentary; recording is one-step-per-press ---
+      if (s.isSequencerMode) {
+        if (s.isRecording) {
+          if (!this._recordedThisHold.has(e.key)) {
+            const recordValue = (idx >= 0) ? (idx + 1) : 0;
+            this.recordStep(recordValue);          // place once this press
+            this._recordedThisHold.add(e.key);
+          }
+          // Live monitor while held (non-latched)
+          if (s.contextUnlocked && s.initialShapeBuffered) {
+            this.setActiveChain(shapeKey);
+            if (idx >= 0)
+              this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' });
+            this._canvas.isPlaying = true;
+            this._updateControls({ shapeKey });
+          s.current = shapeKey;                    // NEW: reflect current selection for restore
+          if (shapeKey !== this.humKey) s._uiReturnShapeKey = shapeKey; // NEW: sticky UI target
+        }
+          e.preventDefault();
+          return;
+        }
+
+        // Not recording: audition momentarily while key is down
+        if (s.contextUnlocked && s.initialShapeBuffered) {
+          this.setActiveChain(shapeKey);
+          if (idx >= 0)
+            this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' });
+          this._canvas.isPlaying = true;
+          this._updateControls({ shapeKey });
+          s.current = shapeKey;                      // NEW
+          if (shapeKey !== this.humKey) s._uiReturnShapeKey = shapeKey; // NEW
+        }
+        e.preventDefault();
+        return;
+      }
+
+      // --- Manual play (non-sequencer): momentary while key is held ---
       if (s.contextUnlocked && s.initialShapeBuffered) {
         this.setActiveChain(shapeKey);
-        if (idx >= 0)
+        if (idx >= 0) {
           this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' });
+        }
         this._canvas.isPlaying = true;
         this._updateControls({ shapeKey });
+        s.current = shapeKey;                        // NEW
+        if (shapeKey !== this.humKey) s._uiReturnShapeKey = shapeKey; // NEW
       }
       e.preventDefault();
-      return;
     }
 
-    this._updateControls({ shapeKey });
-    this._onShapeChange({ detail: { shapeKey } });
-    e.preventDefault();
-  }
-  _handleKeyUp(_) {}
-  _handleBlur() {}
+    _handleKeyUp(e) {
+      if (/INPUT|TEXTAREA/.test(e.target.tagName)) return;
 
-  // Volume ------------------------------------------------------------------
-  _onVolumeChange(e) {
-    const pct = Math.max(0, Math.min(100, Number(e?.detail?.value ?? 10)));
-    const lin = pct / 100;
-    this.state.volume = lin;
-    const Tone = this.state.Tone;
-    if (Tone?.Destination?.volume) {
-      Tone.Destination.volume.value = this._linToDb(lin);
+      this._heldKeys = this._heldKeys || new Set();
+      this._recordedThisHold = this._recordedThisHold || new Set();
+
+      this._heldKeys.delete(e.key);
+      this._recordedThisHold.delete(e.key);
+
+      const s = this.state;
+
+      // Release audio, but KEEP the UI drop-down on the last selected shape
+      if (this._heldKeys.size === 0 && s.contextUnlocked && s.initialShapeBuffered) {
+        this.setActiveChain(this.humKey, { updateCanvasShape: false, setStateCurrent: false });
+        this._canvas.isPlaying = false;
+        this._updateControls({}); // <= no shapeKey change; UI stays where user set it
+      }
     }
-    // Do not auto-unmute; user controls mute separately
-    this._updateControls({ volume: lin, isMuted: Tone?.Destination?.mute });
+
+    _handleBlur() {
+      this._heldKeys = this._heldKeys || new Set();
+      this._recordedThisHold = this._recordedThisHold || new Set();
+      this._heldKeys.clear();
+      this._recordedThisHold.clear();
+
+      const s = this.state;
+      if (s.contextUnlocked && s.initialShapeBuffered) {
+        this.setActiveChain(this.humKey, { updateCanvasShape: false, setStateCurrent: false });
+        this._canvas.isPlaying = false;
+        this._updateControls({}); // <= don't flip UI to hum
+      }
+    }
+
+    // Shape change (drop-down) ------------------------------------------------
+    _onShapeChange(e) {
+      const shapeKey = e?.detail?.shapeKey ?? this.humKey;
+      const s = this.state;
+
+      // Always reflect the selection in the UI/state
+      this._updateControls({ shapeKey });
+      // If you keep a selected shape in state, mirror it here:
+      // s.selectedShapeKey = shapeKey;
+
+      // Do NOT auto-start playback on drop-down changes.
+      // Only update the active chain if something is already sounding:
+      // - a key is currently held, or
+      // - the sequencer is actively playing (fallback: canvas says it's playing).
+      const keysHeld = (this._heldKeys && this._heldKeys.size > 0);
+      const likelyPlaying = !!this._canvas?.isPlaying; // conservative fallback
+
+      if ((keysHeld || likelyPlaying) && s.contextUnlocked && s.initialShapeBuffered) {
+        this.setActiveChain(shapeKey);
+        const idx = this.shapes.indexOf(shapeKey);
+        if (idx >= 0) {
+          this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' });
+        }
+        // Note: we don't toggle isPlaying here; we just adapt the timbre if already sounding.
+      }
+    }
+
+    // Volume ------------------------------------------------------------------
+    _onVolumeChange(e) {
+      const pct = Math.max(0, Math.min(100, Number(e?.detail?.value ?? 10)));
+      const lin = pct / 100;
+      this.state.volume = lin;
+      const Tone = this.state.Tone;
+      if (Tone?.Destination?.volume) {
+        Tone.Destination.volume.value = this._linToDb(lin);
+      }
+      // Do not auto-unmute; user controls mute separately
+      this._updateControls({ volume: lin, isMuted: Tone?.Destination?.mute });
+    }
+
+    _linToDb(x) {
+      if (x <= 0) return -96;
+      const db = 20 * Math.log10(x);
+      return Math.max(-96, Math.min(0, db));
+    }
   }
 
-  _linToDb(x) {
-    // Map 0..1 to dB with a sensible floor; Tone.js uses dB on Destination.volume
-    if (x <= 0) return -96;
-    const db = 20 * Math.log10(x);
-    return Math.max(-96, Math.min(0, db));
-  }
-}
-
-customElements.define('osc-app', OscApp);
+  customElements.define('osc-app', OscApp);
