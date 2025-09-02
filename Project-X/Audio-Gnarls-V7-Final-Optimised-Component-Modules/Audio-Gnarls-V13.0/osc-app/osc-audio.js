@@ -135,11 +135,16 @@ export function Audio(app) {
         const filter = new Tone.Filter(80, 'lowpass'); filter.Q.value = 0.5;
         const volume = new Tone.Volume(-25);
         const reverb = new Tone.Freeverb().set({ wet: 0.3, roomSize: 0.9 });
+        const out = new Tone.Gain(0); // <- dedicated output (start silent)
         const analyser = app._createAnalyser(Tone);
 
-        osc.connect(volume); volume.connect(filter); filter.connect(reverb); if (analyser) filter.connect(analyser);
+        osc.connect(volume);
+        volume.connect(filter);
+        filter.connect(reverb);
+        if (analyser) filter.connect(analyser);
+        reverb.connect(out); // <- route reverb to our output gain
 
-        chains[app.humKey] = { osc, volume, filter, reverb, analyser };
+        chains[app.humKey] = { osc, volume, filter, reverb, out, analyser };
       } catch (e) {
         console.error('Error buffering hum chain', e);
         delete chains[app.humKey];
@@ -159,6 +164,7 @@ export function Audio(app) {
         const filter = new Tone.Filter(pr.filter, 'lowpass'); filter.Q.value = pr.filterQ;
         const lfo = new Tone.LFO(...pr.lfo).start();
         const reverb = new Tone.Freeverb().set({ wet: pr.reverb.wet, roomSize: pr.reverb.roomSize });
+        const out = new Tone.Gain(0); // <- dedicated output (start silent)
         const analyser = app._createAnalyser(Tone);
 
         lfo.connect(filter.frequency);
@@ -169,8 +175,9 @@ export function Audio(app) {
         volume.connect(filter);
         filter.connect(reverb);
         if (analyser) filter.connect(analyser);
+        reverb.connect(out); // <- route reverb to our output gain
 
-        chains[shape] = { osc1, osc2, volume, filter, lfo, reverb, analyser };
+        chains[shape] = { osc1, osc2, volume, filter, lfo, reverb, out, analyser };
       } catch (e) {
         console.error('Error buffering chain for shape', shape, e);
         delete chains[shape];
