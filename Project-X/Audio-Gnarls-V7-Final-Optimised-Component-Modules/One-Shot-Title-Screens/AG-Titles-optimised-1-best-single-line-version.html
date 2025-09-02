@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
-<title>Audio GNARLS Title Display — Optimised + Word Strobe</title>
+<title>Audio GNARLS Title Display</title>
 <style>
   :root{
     --pink:#ff0064;--cyan:#00ffff;--yellow:#ffff00;--orange:#ff5500;--green:#00ff00;--blue:#00aaff;
@@ -139,34 +139,18 @@
       <button id="font-btn" aria-label="Change font">Change Font</button>
     </div>
 
-    <!-- Word Strobe / One-word-after-the-other settings -->
+    <!-- Simplified Word Strobe -->
     <div class="panel" id="strobe-panel" aria-label="Word strobe settings">
       <h2>Word Strobe</h2>
       <div class="panel-grid">
         <label>Words (comma-separated)
           <input id="ws-words" type="text" value="Audio,GNARLS" />
         </label>
-        <label class="inline">Include blanks between words
-          <input id="ws-blanks" type="checkbox" checked />
-        </label>
-        <label>Speed (ms between items)
-          <input id="ws-interval" type="number" min="50" step="50" value="500" />
+        <label>Hold Time (ms)
+          <input id="ws-hold-time" type="number" min="0" step="100" value="1000" />
         </label>
         <label>Repeat cycles (0 = infinite)
-          <input id="ws-cycles" type="number" min="0" step="1" value="6" />
-        </label>
-        <label>Effect Mode
-          <select id="ws-mode">
-            <option value="current" selected>Use current effect</option>
-            <option value="two">Alternate two effects</option>
-            <option value="random">Random per word</option>
-          </select>
-        </label>
-        <label>Effect A
-          <select id="ws-eff-a"></select>
-        </label>
-        <label>Effect B
-          <select id="ws-eff-b" disabled></select>
+          <input id="ws-cycles" type="number" min="0" step="1" value="3" />
         </label>
         <div class="inline" style="gap:.75rem;">
           <button id="ws-start" class="control-chip">Start Word Strobe</button>
@@ -189,8 +173,7 @@
   const particlesEl = $('particles');
 
   // Word strobe inputs
-  const wsWords=$('ws-words'), wsBlanks=$('ws-blanks'), wsInterval=$('ws-interval'), wsCycles=$('ws-cycles');
-  const wsMode=$('ws-mode'), wsEffA=$('ws-eff-a'), wsEffB=$('ws-eff-b');
+  const wsWords=$('ws-words'), wsHoldTime=$('ws-hold-time'), wsCycles=$('ws-cycles');
   const wsStart=$('ws-start'), wsStop=$('ws-stop');
 
   /* ---------- Utilities ---------- */
@@ -373,7 +356,7 @@
   addCssEffect('Zoom In Up','zoomInUp','var(--pink)','0 0 10px var(--pink)');
   addCssEffect('Zoom Out Down','zoomOutDown','var(--green)','0 0 10px var(--green)');
   addCssEffect('Zoom Out Left','zoomOutLeft','#ff5500','0 0 10px #ff5500');
-  addCssEffect('Zoom Out Right','zoomOutRight','var(--blue)','0 0 10px #ff0000');
+  addCssEffect('Zoom Out Right','zoomOutRight','var(--blue)','0 0 10px var(--blue)');
   addCssEffect('Zoom Out Up','zoomOutUp','#f0f','0 0 10px #f0f');
 
   /* ---------- State & Controls ---------- */
@@ -381,6 +364,7 @@
   let autoCycleId=null; // effect auto-advance
   let strobeTimer=null; // word strobe interval
   let strobeActive=false;
+  let reverseTimeoutId=null; // timeout for reverse animation
 
   const runEffectByIndex=(i, text)=>{ const eff = effects[i%effects.length]; effectNameEl.textContent = eff.name; eff.render(text); };
   const applyEffect=(eff)=>{ effectNameEl.textContent=eff.name; eff.render(DEFAULT_TEXT); };
@@ -393,45 +377,130 @@
   function startAutoCycle(){ stopAutoCycle(); autoCycleId=setInterval(()=>{ if(!paused && !strobeActive) next(); }, 5000); }
   function stopAutoCycle(){ if(autoCycleId){ clearInterval(autoCycleId); autoCycleId=null; } }
 
-  /** Word Strobe: effect-aware */
-  function playWordStrobe({words=['Audio','GNARLS'], includeBlanks=true, intervalMs=500, cycles=6, mode='current', effA=0, effB=1}){
-    words = words.map(w=>String(w).trim());
-    const seq = includeBlanks ? words.flatMap(w=>[w,null]) : [...words];
-    let index=0; let completedCycles=0; strobeActive=true; paused=true; pauseBtn.textContent='Resume Animation';
-    stopAutoCycle();
+  // Map of entrance effects to matching exit effects
+  const effectPairs = {
+    'Zoom Crash': 'Zoom Out',
+    'Slide From Right': 'Slide Out Right',
+    '3D Spin In': 'Rotate Out',
+    'Bounce Fall': 'Bounce Out',
+    'Slide Up': 'Slide Out Up',
+    'Slide In': 'Slide Out',
+    'Flip In': 'Flip Out',
+    'Roll In': 'Roll Out',
+    'Blur In': 'Blur Out',
+    'Fade In': 'Fade Out',
+    'Fade In Down': 'Fade Out Down',
+    'Fade In Up': 'Fade Out Up',
+    'Fade In Left': 'Fade Out Left',
+    'Fade In Right': 'Fade Out Right',
+    'Slide In Down': 'Slide Out Down',
+    'Slide In Left': 'Slide Out Left',
+    'Slide In Right': 'Slide Out Right',
+    'Slide In Up': 'Slide Out Up',
+    'Zoom In': 'Zoom Out',
+    'Zoom In Down': 'Zoom Out Down',
+    'Zoom In Left': 'Zoom Out Left',
+    'Zoom In Right': 'Zoom Out Right',
+    'Zoom In Up': 'Zoom Out Up',
+    'Bounce In': 'Bounce Out',
+    'Jack In The Box': 'Fade Out',
+    'Light Speed In': 'Light Speed Out',
+    'Rotate In': 'Rotate Out',
+    'Rotate In Down Left': 'Rotate Out Down Left',
+    'Rotate In Down Right': 'Rotate Out Down Right',
+    'Rotate In Up Left': 'Rotate Out Up Left',
+    'Rotate In Up Right': 'Rotate Out Up Right',
+    'Implode': 'Explode',
+    'Appear': 'Fade Out'
+  };
 
-    function pickEffect(i){
-      if(mode==='current') return idx;
-      if(mode==='two') return (i%2===0? effA: effB) % effects.length;
-      // random
-      return (Math.random()*effects.length)|0;
-    }
+  /** Simplified Word Strobe with matching in/out effects */
+  async function playWordStrobe({
+  words=['Audio','GNARLS'],
+  includeBlanks=true,
+  intervalMs=400,
+  holdMs=600,
+  cycles=6,
+  loopPauseMs=600,
+  mode='current',
+  effA=0,
+  effB=1
+}){
+  words = words.map(w=>String(w).trim());
+  const seq = includeBlanks ? words.flatMap(w=>[w,null]) : [...words];
 
-    function tick(){
-      const item = seq[index];
-      const effIndex = pickEffect(index);
-      runEffectByIndex(effIndex, item==null? '': item);
-      index = (index+1) % seq.length;
-      if(index===0){
-        completedCycles++;
-        if(cycles>0 && completedCycles>=cycles){ stopWordStrobe(true); }
+  strobeActive = true;
+  paused = true;
+  pauseBtn.textContent = 'Resume Animation';
+  stopAutoCycle();
+
+  const pickEffect = (i)=>{
+    if(mode==='current') return idx;
+    if(mode==='two') return (i%2===0? effA: effB) % effects.length;
+    return (Math.random()*effects.length)|0;
+  };
+
+  const sleep = (ms)=> new Promise(r=> setTimeout(r, Math.max(0, ms|0)));
+
+  let completedCycles = 0;
+  while (strobeActive){
+    for (let i=0; i<seq.length && strobeActive; i++){
+      const item = seq[i];
+
+      // blank beat: just a timed gap
+      if (item == null || item === '') {
+        await sleep(intervalMs);
+        continue;
       }
+
+      // ENTER
+      const effIndex = pickEffect(i);
+      runEffectByIndex(effIndex, item);
+
+      // Wait for effect’s computed enter time then the hold
+      await sleep(currentEnterMs);
+      await sleep(holdMs);
+
+      // EXIT (try effect-provided reverse; always guarantee hide+clear)
+      try { await currentReverse(); } catch(e) { /* ignore */ }
+      await hideAndClear(260, 18); // guarantees removal
+
+      // GAP before next word
+      await sleep(intervalMs);
     }
 
-    tick();
-    strobeTimer = setInterval(tick, Math.max(50, intervalMs|0));
+    completedCycles++;
+    if (cycles > 0 && completedCycles >= cycles) break;
+    if (loopPauseMs > 0) await sleep(loopPauseMs);
   }
+
+  // wrap-up
+  strobeActive = false;
+  paused = false;
+  pauseBtn.textContent = 'Pause Animation';
+  startAutoCycle();
+  applyEffect(effects[idx]);
+}
+
+  // Smoothly hide current chars then clear the title DOM
+  const hideAndClear = async (ms = 300, perCharStagger = 20) => {
+    const chars = titleEl.querySelectorAll('.char');
+    if (!chars.length) return;
+    chars.forEach((ch, i) => {
+      ch.style.transition = `opacity ${ms}ms ${i*perCharStagger}ms ease, transform ${ms}ms ${i*perCharStagger}ms ease`;
+      ch.style.opacity = 0;
+      ch.style.transform += ' scale(0.98)';
+    });
+    await new Promise(r => setTimeout(r, ms + chars.length*perCharStagger + 10));
+    titleEl.innerHTML = ''; // ensure it’s removed before the next word
+  };
+
 
   function stopWordStrobe(resumeCarousel=false){
     if(strobeTimer){ clearInterval(strobeTimer); strobeTimer=null; }
+    clearTimeout(reverseTimeoutId);
     strobeActive=false;
     if(resumeCarousel){ paused=false; pauseBtn.textContent='Pause Animation'; startAutoCycle(); applyEffect(effects[idx]); }
-  }
-
-  // Populate effect selects
-  function populateEffectSelects(){
-    const opts = effects.map((e,i)=>`<option value="${i}">${i.toString().padStart(2,'0')} — ${e.name}</option>`).join('');
-    wsEffA.innerHTML = opts; wsEffB.innerHTML = opts; wsEffA.value = '0'; wsEffB.value = '1';
   }
 
   // Bind UI
@@ -441,22 +510,24 @@
   pauseBtn.addEventListener('click',togglePause);
   fontBtn.addEventListener('click',changeFont);
 
-  wsMode.addEventListener('change',()=>{ const two = wsMode.value==='two'; wsEffB.disabled = !two; });
   wsStart.addEventListener('click',()=>{
     const words = wsWords.value.split(',').map(s=>s.trim()).filter(Boolean);
     const includeBlanks = wsBlanks.checked;
-    const intervalMs = parseInt(wsInterval.value,10)||500;
-    const cycles = Math.max(0, parseInt(wsCycles.value,10)||0);
+    const intervalMs = parseInt(wsInterval.value,10) || 0;
+    const holdMs = parseInt(wsHold.value,10) || 0;           // <-- make sure this line exists
+    const cycles = Math.max(0, parseInt(wsCycles.value,10) || 0);
+    const loopPauseMs = parseInt(wsLoopPause.value,10) || 0;
     const mode = wsMode.value;
-    const effA = parseInt(wsEffA.value,10)||0;
-    const effB = parseInt(wsEffB.value,10)||0;
-    if(strobeActive) stopWordStrobe(false);
-    playWordStrobe({words: words.length? words: ['Audio','GNARLS'], includeBlanks, intervalMs, cycles, mode, effA, effB});
+    const effA = parseInt(wsEffA.value,10) || 0;
+    const effB = parseInt(wsEffB.value,10) || 0;
+
+    stopWordStrobe();
+    playWordStrobe({ words: words.length? words: ['Audio','GNARLS'], includeBlanks, intervalMs, holdMs, cycles, loopPauseMs, mode, effA, effB });
   });
+
   wsStop.addEventListener('click',()=> stopWordStrobe(true));
 
   // init
-  populateEffectSelects();
   applyEffect(effects[idx]);
   startAutoCycle();
 })();
