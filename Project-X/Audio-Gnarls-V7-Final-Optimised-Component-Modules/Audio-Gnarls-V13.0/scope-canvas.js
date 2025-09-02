@@ -329,19 +329,19 @@ class ScopeCanvas extends HTMLElement {
         });
       },
 
-      // Heart: heart-shaped curve
-      heart: (data, t) => {
-        const { cw, c } = this._g();
-        const S = 0.25 * cw;
-        this._trace(data, (i, n) => {
-          const th = (i / n) * this._TAU + t * 0.0003;
-          const amp = (data[i] + 1) / 2;
-          const scale = 0.8 + 0.2 * amp;
-          const x = S * 16 * Math.pow(Math.sin(th), 3) * scale;
-          const y = -S * (13 * Math.cos(th) - 5 * Math.cos(2*th) - 2 * Math.cos(3*th) - Math.cos(4*th)) * scale;
-          return [c + x, c + y];
-        }, { close: true });
-      },
+      // // Heart: heart-shaped curve
+      // heart: (data, t) => {
+      //   const { cw, c } = this._g();
+      //   const S = 0.25 * cw;
+      //   this._trace(data, (i, n) => {
+      //     const th = (i / n) * this._TAU + t * 0.0003;
+      //     const amp = (data[i] + 1) / 2;
+      //     const scale = 0.8 + 0.2 * amp;
+      //     const x = S * 16 * Math.pow(Math.sin(th), 3) * scale;
+      //     const y = -S * (13 * Math.cos(th) - 5 * Math.cos(2*th) - 2 * Math.cos(3*th) - Math.cos(4*th)) * scale;
+      //     return [c + x, c + y];
+      //   }, { close: true });
+      // },
 
       // DNA: double helix pattern
       dna: (data, t) => {
@@ -387,6 +387,11 @@ class ScopeCanvas extends HTMLElement {
         });
       },
     };
+  }
+
+  listShapes() {
+    // everything except the hum key
+    return Object.keys(this.drawFuncs).filter(k => k !== 'hum');
   }
 
   connectedCallback() {
@@ -447,7 +452,7 @@ class ScopeCanvas extends HTMLElement {
       wave: { freq: 1.1, harmonics: [1, 0.4, 0.2], complexity: 0.3 },
       mandala: { freq: 3.5, harmonics: [1, 0.3, 0.4, 0.2, 0.3, 0.1], complexity: 1.2 },
       infinity: { freq: 1.6, harmonics: [1, 0.5, 0.3], complexity: 0.4 },
-      heart: { freq: 1.4, harmonics: [1, 0.6, 0.2, 0.3], complexity: 0.5 },
+      // heart: { freq: 1.4, harmonics: [1, 0.6, 0.2, 0.3], complexity: 0.5 },
       dna: { freq: 2.7, harmonics: [1, 0.4, 0.3, 0.5, 0.2], complexity: 0.8 },
       tornado: { freq: 3.2, harmonics: [1, 0.3, 0.6, 0.2, 0.4], complexity: 1.1 },
       hum: { freq: 0.8, harmonics: [1, 0.2, 0.1], complexity: 0.2 }

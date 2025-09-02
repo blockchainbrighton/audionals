@@ -47,7 +47,7 @@ class OscApp extends HTMLElement {
     this.shapes = [
       'circle','square','butterfly','lissajous','spiro',
       'harmonograph','rose','hypocycloid','epicycloid',
-      'spiral','star','flower','wave','mandala','infinity','heart','dna','tornado'
+      'spiral','star','flower','wave','mandala','infinity','dna','tornado'
     ];
     this.shapeLabels = Object.fromEntries(
       this.shapes.map(k => [k, k[0].toUpperCase() + k.slice(1)])
