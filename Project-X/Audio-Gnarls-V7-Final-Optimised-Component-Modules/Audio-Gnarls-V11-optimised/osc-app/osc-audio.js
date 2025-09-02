@@ -177,20 +177,52 @@ export function Audio(app) {
       }
     },
 
+    // --- Minimal change: micro-fade around disconnect/connect to avoid clicks
     setActiveChain(shape) {
-      app._eachChain(chain => chain.reverb?.disconnect());
+      const { Tone, chains, current } = app.state;
+      const dur = 0.008; // 8 ms is enough to kill clicks, inaudible to users
 
-      const chain = app.state.chains[shape];
-      chain?.reverb?.toDestination();
-      app.state.current = shape;
-
-      if (chain?.analyser) {
-        app._setCanvas({ analyser: chain.analyser, isAudioStarted: true, isPlaying: app.state.isPlaying });
-      } else {
-        app._setCanvas({ isAudioStarted: true, isPlaying: app.state.isPlaying });
+      // 1) Fade out the *current* chain's reverb wet to 0 very quickly
+      const prev = current ? chains[current] : null;
+      if (prev?.reverb?.wet?.rampTo) {
+        try { prev.reverb.wet.rampTo(0, dur); } catch {}
       }
 
-      if (shape === app.humKey) app._setCanvas({ shapeKey: app.humKey, preset: null });
+      // 2) After the tiny fade, perform your existing switch, then fade the new one in
+      const doSwitch = () => {
+        // original behavior: hard switch routing
+        app._eachChain(chain => chain.reverb?.disconnect());
+        const next = chains[shape];
+        next?.reverb?.toDestination();
+
+        // Canvas/analyser updates (unchanged)
+        if (next?.analyser) {
+          app._setCanvas({ analyser: next.analyser, isAudioStarted: true, isPlaying: app.state.isPlaying });
+        } else {
+          app._setCanvas({ isAudioStarted: true, isPlaying: app.state.isPlaying });
+        }
+        if (shape === app.humKey) app._setCanvas({ shapeKey: app.humKey, preset: null });
+
+        // 3) Fade in the *new* chain's reverb wet from 0 to its current value
+        if (next?.reverb?.wet) {
+          try {
+            const target = next.reverb.wet.value ?? 0.3; // use its configured wet as the target
+            if (typeof next.reverb.wet.setValueAtTime === 'function') {
+              next.reverb.wet.setValueAtTime(0, Tone?.now?.() ?? 0);
+            } else {
+              next.reverb.wet.value = 0;
+            }
+            if (next.reverb.wet.rampTo) next.reverb.wet.rampTo(target, dur);
+            else next.reverb.wet.value = target;
+          } catch {}
+        }
+
+        app.state.current = shape;
+      };
+
+      // Use a short timeout ~ dur to keep it simple and avoid Transport dependencies
+      const ms = Math.max(1, Math.floor(dur * 1000));
+      setTimeout(doSwitch, ms);
     },
 
     disposeAllChains() {

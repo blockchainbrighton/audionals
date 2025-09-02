@@ -5,35 +5,27 @@
  * osc-app.js — <osc-app> Component
  * ============================================================================
  *
- * DEVELOPER NOTES
- * ---------------
- * - Purpose: Orchestration shell that renders the app, wires child components,
- *   and maintains global state (audio, sequencer, seed, UI).
- * - Mixins: Pulls in Utils, Presets, Audio, and SignatureSequencer factories:
- *       Object.assign(this, Utils(this), Presets(this), Audio(this), SignatureSequencer(this))
+ * PURPOSE
+ * -------
+ * Orchestration shell that renders the app, wires child components,
+ * and maintains global state (audio, sequencer, seed, UI).
+ *
+ * NOTES
+ * -----
+ * - Seed ownership: the single source of truth is HTML
+ *   • <html data-seed="..."> (global)
+ *   • <osc-app seed="..."> (component attribute)
+ *   The component prefers its own seed attribute, then falls back to
+ *   <html data-seed>, else 'default'. Any user change via the seed form
+ *   reflects back to BOTH the attribute and <html data-seed>.
+ *
+ * - Mixins: Utils, Presets, Audio, SignatureSequencer.
  * - Shapes: circle, square, butterfly, lissajous, spiro, harmonograph, rose,
  *   hypocycloid, epicycloid, plus hum ("Power Hum").
- * - State Model: defaultState(seed) tracks audio lifecycle, Tone context, chains,
- *   sequencer flags, loop toggle, signature mode, and presets keyed by seed.
- * - DOM: Two-column grid. Left = instructions + seed form. Right = <scope-canvas>,
- *   <osc-controls>, <seq-app>, loader. Wires event listeners for all children.
- * - Events listened:
- *   • tone-loader: 'tone-ready'
- *   • osc-controls: 'start-request', 'mute-toggle', 'shape-change',
- *                   'toggle-sequencer', 'audio-signature', 'loop-toggle',
- *                   'signature-mode-toggle', 'volume-change'
- *   • seq-app: 'seq-record-start', 'seq-step-cleared', 'seq-step-recorded',
- *              'seq-play-started', 'seq-play-stopped', 'seq-step-advance',
- *              'seq-step-time-changed'
- * - Keyboard Shortcuts:
- *   • 0 = hum
- *   • 1–9 = shape select
- *   • L = toggle loop
- *   • M = toggle signature mode (only if sequencer visible)
- * - Seed flow: Seed form updates state.seed, reloads presets, resets state/UI.
- * - UI sync: Always call _updateControls({...}) after state changes.
- * - Startup: On 'tone-ready', generates presets, buffers hum, sets initial seed
- *   preview on canvas, enables controls.
+ * - defaultState(seed): tracks audio lifecycle, Tone context, chains, sequencer,
+ *   loop toggle, signature mode, and presets keyed by seed.
+ * - DOM: Left = instructions + seed form. Right = <scope-canvas>, <osc-controls>,
+ *   <seq-app>, and loader.
  */
 
 import { Utils } from './osc-utils.js';
@@ -41,7 +33,10 @@ import { Presets } from './osc-presets.js';
 import { Audio } from './osc-audio.js';
 import { SignatureSequencer } from './osc-signature-sequencer.js';
 
-class OscApp2 extends HTMLElement {
+class OscApp extends HTMLElement {
+  // Allow external updates like: <osc-app seed="foo">
+  static get observedAttributes() { return ['seed']; }
+
   constructor() {
     super();
     this.attachShadow({ mode: 'open' });
@@ -61,16 +56,29 @@ class OscApp2 extends HTMLElement {
     Object.assign(this, Utils(this), Presets(this), Audio(this), SignatureSequencer(this));
 
     // --- State -------------------------------------------------------------
-    this.state = this.defaultState('afsdyg');
+    // Prefer <osc-app seed="…">, then <html data-seed="…">, else 'default'
+    const attrSeed = (this.getAttribute('seed') || '').trim();
+    const htmlSeed = (document.documentElement?.dataset?.seed || '').trim();
+    const initialSeed = attrSeed || htmlSeed || 'default';
+    this.state = this.defaultState(initialSeed);
 
     // --- Bind handlers once ------------------------------------------------
     [
       '_onToneReady','_onStartRequest','_onMuteToggle','_onShapeChange',
-      '_onToggleSequencer','_onAudioSignature','_handleSeedSubmit','_handleKeyDown','_handleKeyUp','_handleBlur',
-      '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded','_onSeqPlayStarted',
-      '_onSeqPlayStopped','_onSeqStepAdvance','_onSeqStepTimeChanged',
+      '_onToggleSequencer','_onAudioSignature','_handleSeedSubmit',
+      '_handleKeyDown','_handleKeyUp','_handleBlur',
+      '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded',
+      '_onSeqPlayStarted','_onSeqPlayStopped','_onSeqStepAdvance','_onSeqStepTimeChanged',
       '_onLoopToggle','_onSignatureModeToggle','_onVolumeChange'
     ].forEach(fn => (this[fn] = this[fn].bind(this)));
+  }
+
+  // React to <osc-app seed="..."> changes from HTML/JS
+  attributeChangedCallback(name, oldVal, newVal) {
+    if (name !== 'seed') return;
+    const next = (newVal || '').trim();
+    if (!next || next === oldVal || next === this.state.seed) return;
+    this.resetToSeed(next);
   }
 
   // Creates a fresh state object (used for construction and resets)
@@ -84,8 +92,8 @@ class OscApp2 extends HTMLElement {
 
       // Audio / synth graph
       Tone: null,
-      chains: {}, // keyed by shapeKey (and hum)
-      current: null, // current active shapeKey
+      chains: {},                  // keyed by shapeKey (and hum)
+      current: null,               // current active shapeKey
 
       // Global loop toggle (applies to signatures and sequences)
       isLoopEnabled: false,
@@ -99,10 +107,11 @@ class OscApp2 extends HTMLElement {
       currentRecordSlot: -1,
       sequence: Array(8).fill(null),
       sequencePlaying: false,
-      sequenceIntervalId: null, // (legacy, unused but kept for drop-in)
+      sequenceIntervalId: null,    // (legacy, unused but kept for drop-in)
       sequenceStepIndex: 0,
       stepTime: 200,
-      _seqFirstCycleStarted: false, // to detect wrap for play-once
+      _seqFirstCycleStarted: false, // detect wrap for play-once
+
       // Sequencer Signature Mode
       isSequenceSignatureMode: false,
       signatureSequencerRunning: false,
@@ -111,7 +120,7 @@ class OscApp2 extends HTMLElement {
       audioSignaturePlaying: false,
       audioSignatureTimer: null,
       audioSignatureStepIndex: 0,
-      audioSignatureOnComplete: null, // callback for when a signature finishes
+      audioSignatureOnComplete: null,
 
       // Seed / presets
       seed,
@@ -275,11 +284,13 @@ class OscApp2 extends HTMLElement {
     });
   }
 
+  // Tone ready --------------------------------------------------------------
   _onToneReady() {
     this.state.Tone = window.Tone;
     this.loadPresets(this.state.seed);
     this.bufferHumChain();
-    const initialShape = this.shapes[(this._rng(this.state.seed)() * this.shapes.length) | 0];
+    const initialShape =
+      this.shapes[(this._rng(this.state.seed)() * this.shapes.length) | 0];
     this._setCanvas({ preset: this.state.presets[initialShape], shapeKey: initialShape, mode: 'seed' });
     this.state.current = this.humKey;
     this._controls.disableAll?.(false);
@@ -305,9 +316,24 @@ class OscApp2 extends HTMLElement {
     this.resetToSeed(val);
   }
 
+  // Single source of truth updates:
+  // - update internal state
+  // - mirror to <osc-app seed="...">
+  // - mirror to <html data-seed="...">
+  // - rebuild presets and reset UI
   resetToSeed(newSeed) {
     this.stopAudioAndDraw();
+
+    // Update state
     this.state.seed = newSeed;
+
+    // Reflect to HTML so other modules can read it directly
+    this.setAttribute('seed', newSeed);
+    if (document?.documentElement) {
+      document.documentElement.dataset.seed = newSeed;
+    }
+
+    // Rebuild presets + reset UI
     this.loadPresets(newSeed);
     this.resetState();
     this._loader.textContent = 'Seed updated. Click POWER ON.';
@@ -339,7 +365,8 @@ class OscApp2 extends HTMLElement {
       this.recordStep(recordValue);
       if (s.contextUnlocked && s.initialShapeBuffered) {
         this.setActiveChain(shapeKey);
-        if (idx >= 0) this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' });
+        if (idx >= 0)
+          this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' });
         this._canvas.isPlaying = true;
         this._updateControls({ shapeKey });
       }
@@ -375,4 +402,4 @@ class OscApp2 extends HTMLElement {
   }
 }
 
-customElements.define('osc-app', OscApp2);
+customElements.define('osc-app', OscApp);

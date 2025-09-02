@@ -144,13 +144,16 @@ class ScopeCanvas extends HTMLElement {
 
       butterfly: (data, t) => {
         const { cw, c } = this._g();
-        const S = 0.4 * cw;
+        const S = 0.22 * cw;                      // intentionally small
+        const tSpeed = 0.00035;                   // a touch quicker
         this._trace(data, (i, n) => {
-          const th = (i / n) * Math.PI * 24 + t * 0.0003;
-          const amp = (data[i] + 1) / 2;
-          const scale = Math.exp(Math.cos(th)) - 2 * Math.cos(4 * th) + Math.pow(Math.sin(th / 12), 5);
-          return [c + Math.sin(th) * scale * S * (0.5 + 0.5 * amp),
-                  c + Math.cos(th) * scale * S * (0.5 + 0.5 * amp)];
+          const th = (i / n) * Math.PI * 28 + t * tSpeed;
+          const amp = ((this._samp(data, i) + 1) / 2) ** 1.25;
+          // tweak the classic butterfly to add finer “veins”
+          const scale =
+            Math.exp(0.85 * Math.cos(th)) - 1.6 * Math.cos(5.0 * th) + Math.pow(Math.sin(th / 10), 7);
+          const r = scale * S * (0.5 + 0.5 * amp);
+          return [c + Math.sin(th) * r, c + Math.cos(th) * r];
         }, { close: true });
       },
 
@@ -257,6 +260,16 @@ class ScopeCanvas extends HTMLElement {
     }
   }
 
+  // inside scope-canvas.js
+  _getSeed() {
+    if (this.preset?.seed) return this.preset.seed;
+    const osc = this.closest?.('osc-app');
+    if (osc?.getAttribute('seed')) return osc.getAttribute('seed');
+    const htmlSeed = document.documentElement?.dataset?.seed;
+    return htmlSeed || 'default';
+  }
+
+
   // Deterministic seed buffer using Mulberry32 PRNG seeded by (seed + shape)
   _makeSeedBuffer(shape, seed, len = 2048) {
     const str = `${seed}_${shape}`;
@@ -301,7 +314,9 @@ class ScopeCanvas extends HTMLElement {
       data = this._liveBuffer;
     } else if (this.preset && this.mode === 'seed') {
       const seed = this.preset?.seed ?? 'default';
-      data = this.preset._seedBuffer ??= this._makeSeedBuffer(this.shapeKey || 'circle', seed);
+      const sk = this.shapeKey || 'circle';
+      this.preset._seedBuffers ||= {};
+      data = this.preset._seedBuffers[sk] ||= this._makeSeedBuffer(sk, seed);
     } else {
       if (!this._dummyData) {
         const len = 2048, arr = new Float32Array(len), TAU = this._TAU;
