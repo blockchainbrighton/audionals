@@ -1,0 +1,720 @@
+Here’s a single, consolidated document with each file fully filled out.
+
+## Audio-Gnarls-V13.0/index.html
+
+* Purpose:
+
+  * HTML entry point that bootstraps the application and loads all ES modules.
+  * Provides a default deterministic seed via an HTML attribute.
+* Inputs:
+
+  * `<html data-seed="aurora-4">` (default seed).
+  * Module scripts: `./tone-loader.js`, `./scope-canvas.js`, `./osc-controls.js`, `./osc-app/osc-app.js`, `./seq-app.js`.
+* Outputs:
+
+  * Instantiates the root `<osc-app>` custom element in the DOM.
+* Public API (exports):
+
+  * None.
+* Internal dependencies:
+
+  * See “Inputs” (module script tags).
+* External deps:
+
+  * Browser ES Modules support.
+  * Web Components (Custom Elements + Shadow DOM).
+* Known issues / TODOs:
+
+  * Duplicate `<html>` tag observed in source (one with `lang`, another with `data-seed`) — fix markup.
+  * `<tone-loader>` element not instantiated in the DOM (script included but element unused); confirm intended load strategy.
+
+---
+
+## Audio-Gnarls-V13.0/tone-loader.js
+
+* Purpose:
+
+  * Defines `<tone-loader>` which dynamically imports Tone.js (from an Ordinals URL) and notifies when ready.
+* Inputs:
+
+  * None (beyond being present in DOM).
+* Outputs:
+
+  * Sets `window.Tone` if not already present.
+  * Dispatches bubbling, composed `tone-ready` event on success.
+  * Console error logging on failure.
+* Public API (exports):
+
+  * None (side-effect: `customElements.define('tone-loader', ToneLoader)`).
+* Internal dependencies:
+
+  * None.
+* External deps:
+
+  * Dynamic `import()` of Tone.js via external URL.
+  * Web APIs: Custom Elements, CustomEvent, Shadow DOM.
+* Known issues / TODOs:
+
+  * Hardcoded external URL; add configurable fallback and retry.
+  * Consider emitting an error event for UI handling.
+
+---
+
+## Audio-Gnarls-V13.0/scope-canvas.js
+
+* Purpose:
+
+  * Defines `<scope-canvas>` oscilloscope renderer for live audio (`AnalyserNode`) or deterministic seed buffers.
+* Inputs:
+
+  * Props/state from parent: `analyser`, `preset`, `shapeKey`, `mode: "seed"|"live"`, `isAudioStarted`, `isPlaying`, `onIndicatorUpdate`.
+* Outputs:
+
+  * Renders frames to an internal `<canvas>` (fixed 600×600).
+  * Invokes `onIndicatorUpdate` to surface UI/status.
+* Public API (exports):
+
+  * None (side-effect registration).
+* Internal dependencies:
+
+  * None.
+* External deps:
+
+  * Canvas 2D, Web Audio `AnalyserNode`, `requestAnimationFrame`, Custom Elements.
+* Known issues / TODOs:
+
+  * Fixed-size canvas (not responsive).
+  * Large set of draw functions; refactor or modularize for maintainability.
+  * Profile seed-buffer generators for perf on low-end devices.
+
+---
+
+## Audio-Gnarls-V13.0/osc-controls.js
+
+* Purpose:
+
+  * Defines `<osc-controls>`: UI control surface (Start, Mute, Shape select, Sequencer toggle, Audio Signature, Loop, Signature Mode, Volume).
+* Inputs:
+
+  * User interactions with buttons, select, and volume slider.
+  * `setShapes(shapes)` from parent to populate shape options.
+* Outputs:
+
+  * Emits semantic events: `start-request`, `mute-toggle`, `shape-change`, `toggle-sequencer`, `audio-signature`, `loop-toggle`, `signature-mode-toggle`, `volume-change`.
+  * `updateState(flags)` to reflect global state.
+* Public API (exports):
+
+  * None (custom element).
+  * Methods: `setShapes(shapes)`, `disableAll(disabled)`, `updateState(flags)`.
+* Internal dependencies:
+
+  * None.
+* External deps:
+
+  * Custom Elements, Shadow DOM, CustomEvent.
+* Known issues / TODOs:
+
+  * Styling/theme baked in; consider CSS custom properties.
+  * Relies on parent to set shape list before interaction.
+
+---
+
+## Audio-Gnarls-V13.0/osc-app/osc-utils.js
+
+* Purpose:
+
+  * Utility mixin providing DOM helpers, deterministic RNG, analyser creation, canvas prop setter, fade/ramp helpers, and safe node disposal.
+* Inputs:
+
+  * `app.state.Tone`, `app.state.chains`, seed string for `_rng`.
+* Outputs:
+
+  * Helpers:
+
+    * `_el(tag, opts)`, `_eachChain(cb)`, `_disposeChain(chain)`, `_rng(seed)`, `_setCanvas(props)`, `_createAnalyser(Tone)`, `_sleep(ms)`, `_timeNow()`, `_rampLinear(param, to, dur)`, `_silenceAllChains(fadeSec)`.
+* Public API (exports):
+
+  * `export function Utils(app)` → attaches helpers to `app`.
+* Internal dependencies:
+
+  * Uses `app.state` and other app methods where present.
+* External deps:
+
+  * Tone.js node interfaces (e.g., `.volume`, `.wet`).
+  * DOM APIs.
+* Known issues / TODOs:
+
+  * Assumes consistent Tone.js node parameter names.
+  * `_rng` algorithm fixed; document seed compatibility expectations.
+
+---
+
+## Audio-Gnarls-V13.0/osc-app/osc-presets.js
+
+* Purpose:
+
+  * Deterministic preset generation/loading per seed and shape; supplies synthesis parameters and visual pacing hints.
+* Inputs:
+
+  * `seed` (string), `shape` (string), `app._rng`, `app.shapes`.
+* Outputs:
+
+  * `deterministicPreset(seed, shape)` → object with `osc1`, `osc2`, `filter`, `filterQ`, `lfo`, `envelope`, `reverb`, `colorSpeed`, `shapeDrift`, `seed`.
+  * `loadPresets(seed)` populates `app.state.presets` for all shapes.
+* Public API (exports):
+
+  * `export function Presets(app)` → `{ deterministicPreset, loadPresets }` added to `app`.
+* Internal dependencies:
+
+  * `app._rng`, `app.shapes`, `app.state.presets`.
+* External deps:
+
+  * None.
+* Known issues / TODOs:
+
+  * Add schema/validation for preset objects.
+  * Document/expand oscillator note pool and mode probabilities.
+
+---
+
+## Audio-Gnarls-V13.0/osc-app/osc-audio.js
+
+* Purpose:
+
+  * Audio lifecycle/graph management as a mixin: builds Tone.js chains, buffers per-shape graphs + hum chain, manages mute/active output, unlocks context, and syncs with canvas/controls.
+* Inputs:
+
+  * `app.state.Tone`, `app.state.presets`, `app.shapes`.
+  * UI/event handlers: `_onStartRequest`, `_onMuteToggle`, `_onShapeChange`.
+* Outputs:
+
+  * Creates/disposes Tone.js node chains (oscillators, filter, LFO, reverb, analyser, volume).
+  * Updates canvas via `_setCanvas` and controls via `_updateControls`.
+  * Loader/status messaging.
+* Public API (exports):
+
+  * `export function Audio(app)` adds:
+
+    * `bufferHumChain()`, `bufferShapeChain(shape)`, `setActiveChain(shape)`, `disposeAllChains()`, `resetState()`, `unlockAudioAndBufferInitial()`, `stopAudioAndDraw()`,
+    * `_onStartRequest()`, `_onMuteToggle()`, `_onShapeChange(e)`.
+* Internal dependencies:
+
+  * Calls `app._setCanvas`, `app._updateControls`, `app._loader`, `app._rng`, `app._sleep`, `app._eachChain`, `app._disposeChain`.
+* External deps:
+
+  * Tone.js graph construction and scheduling.
+* Known issues / TODOs:
+
+  * Hardcoded small fade (≈8 ms) on chain switch; parameterize for different latencies.
+  * Improve user-facing error messages on buffer failures.
+
+---
+
+## Audio-Gnarls-V13.0/osc-app/osc-signature-sequencer.js
+
+* Purpose:
+
+  * Bridge between deterministic “Audio Signature” playback and the `<seq-app>` step sequencer; also provides a “Signature Sequencer Mode” where each step triggers a full signature.
+* Inputs:
+
+  * `app.state.seed` and UI events from `<osc-controls>` (sequencer toggle, loop toggle, signature mode toggle, audio signature).
+  * Events from `<seq-app>`: record, step clear/record, play start/stop, step advance, step time change, steps changed.
+* Outputs:
+
+  * Manages sequencing state/flags, triggers shape changes during signatures/sequence.
+  * Updates UI/loader, resizes certain UI containers.
+  * Controls signature playback start/stop and step scheduling.
+* Public API (exports):
+
+  * `export function SignatureSequencer(app)` adds methods including:
+
+    * Toggles: `_onToggleSequencer()`, `_onLoopToggle()`, `_onSignatureModeToggle()`.
+    * Signature: `_onAudioSignature()`, `_getUniqueAlgorithmMapping(seed)`, `generateAudioSignature(seed, algo)`, `_generateSignatureWithConstraints(seed, opts)`, `playAudioSignature(seq, algo, opts)`, `stopAudioSignature()`.
+    * Sequencer: `_onSeqRecordStart(e)`, `_onSeqStepCleared(e)`, `_onSeqStepRecorded(e)`, `_onSeqPlayStarted(e)`, `_onSeqPlayStopped()`, `_onSeqStepAdvance(e)`, `_onSeqStepTimeChanged(e)`, `_onSeqStepsChanged(e)`.
+    * Signature sequencer control: `_startSignatureSequencer()`, `_stopSignatureSequencer()`.
+    * State mirror/proxies: `updateSequencerState()`, `recordStep(num)`, `playSequence()`, `stopSequence()`.
+* Internal dependencies:
+
+  * Calls into `app` (`_onShapeChange`, `_updateControls`, `_rng`, `_sleep`, `_sequencerComponent`, `_canvas`, `stopSequence`, `stopAudioSignature`).
+* External deps:
+
+  * Web APIs: setTimeout/clearTimeout for timing.
+* Known issues / TODOs:
+
+  * Algorithm families/step-time buckets hardcoded; consider data-driven config.
+  * Uses timeouts, not Tone.Transport → risk of drift under CPU throttling.
+
+---
+
+## Audio-Gnarls-V13.0/osc-app/osc-app.js
+
+* Purpose:
+
+  * Root orchestrator `<osc-app>`: wires controls, canvas, sequencer, tone loader; manages seed, presets, audio chains, and global UI state/keyboard.
+* Inputs:
+
+  * Attribute `seed` (preferred over `<html data-seed>`), `#seedInput` form field.
+  * Events from `<osc-controls>` and `<seq-app>` (see above).
+  * Keyboard: 0–9, `L` (loop), `M` (mute).
+* Outputs:
+
+  * Creates/updates child components (`<scope-canvas>`, `<osc-controls>`, `<seq-app>`, `<tone-loader>`).
+  * Propagates `shapeKey`, `preset`, `analyser`, flags to `<scope-canvas>`.
+  * Updates controls via `updateState`.
+  * Reflects seed to attribute and `<html data-seed>`.
+  * Coordinates loading/buffering of Tone chains.
+* Public API (exports):
+
+  * None (custom element).
+* Internal dependencies:
+
+  * Mixins: `Utils(this)`, `Presets(this)`, `Audio(this)`, `SignatureSequencer(this)`.
+* External deps:
+
+  * Tone.js (via `<tone-loader>`), Custom Elements, Shadow DOM, DOM events.
+* Known issues / TODOs:
+
+  * Some legacy/duplicated sequencer state.
+  * Add graceful handling for Tone load failures (e.g., show actionable UI).
+
+---
+
+## Audio-Gnarls-V13.0/seq-app.js
+
+* Purpose:
+
+  * Defines `<seq-app>`: a UI step sequencer supporting 8/16/32/64 steps, per-step velocity, recording/painting, dynamic step count changes, and keyboard entry.
+* Inputs:
+
+  * Attribute `steps` (default 8; valid 8,16,32,64).
+  * User interactions: click/alt/right-click on steps, drag to paint velocity, keyboard digits during record, play/stop buttons, step time input, add/remove block buttons.
+* Outputs:
+
+  * Events: `seq-record-start`, `seq-step-recorded`, `seq-step-cleared`, `seq-play-started`, `seq-play-stopped`, `seq-step-advance`, `seq-step-time-changed`, `seq-steps-changed`.
+  * Shadow DOM updates (active step, velocity visualization, control state).
+* Public API (exports):
+
+  * None (custom element).
+  * Methods: `updateState(newState)`, `updateSequenceUI()`, `recordStep(num)`, `playSequence()`, `stopSequence()`, `changeStepCount(newSteps)`, `updateStepControls()`.
+* Internal dependencies:
+
+  * None.
+* External deps:
+
+  * Custom Elements, Shadow DOM, CustomEvent, setTimeout.
+* Known issues / TODOs:
+
+  * Playback via recursive `setTimeout` susceptible to drift/tab throttling; consider Tone.Transport.
+  * No built-in persistence/export of sequences.
+
+---
+
+## Audio-Gnarls-V13.0/seed-synth.js
+
+* Purpose:
+
+  * Single-file, consumer-facing wrapper that defines `<seed-synth>` and (re)registers all internal components for easy embedding; bundles logic from app/mixins.
+* Inputs:
+
+  * Attributes: `seed`, `show-sequencer` (bool), `toneModuleUrl` (override Tone.js URL), optional `audioContext`.
+  * User gesture to unlock audio.
+  * Keyboard digits for shape selection/recording when applicable.
+  * Child events proxied from internal components.
+* Outputs:
+
+  * Registers: `<tone-loader>`, `<scope-canvas>`, `<osc-controls>`, `<seq-app>`, `<osc-app>`, `<seed-synth>`.
+  * Emits outward events: `ready`, `optionchange` {key,label}, `statechange` {state}, `scopeframe` {buffer: Float32Array}.
+  * Provides lifecycle controls and state getters/setters.
+* Public API (exports):
+
+  * `export { v as SeedSynthElement }` (the `<seed-synth>` class).
+  * Methods: `setOptions()`, `start()`, `stop()`, `mute()`, `recordStep()`, `playSequence()`, `stopSequence()`, `setStepTime()`, `getAnalyser()`, `getState()`, `setState()`, `dispose()`.
+  * Props: `seed`, `options`, `currentKey`, `muted`, `audioContext`, `tone`.
+* Internal dependencies:
+
+  * Duplicates/wraps logic from `osc-app`, `osc-audio`, `osc-presets`, `scope-canvas`, and `seq-app`.
+* External deps:
+
+  * Tone.js (dynamic import), Web Components, Canvas 2D, Web Audio.
+* Known issues / TODOs:
+
+  * Overlaps with modular app path; ensure APIs stay in sync.
+  * Force-clear guidance for AudioContext unlock UX.
+  * Configurable Tone URL for offline/local builds.
+
+---
+
+## Audio-Gnarls-V13.0/osc-app/osc-app.js (recap of key wiring)
+
+* Purpose:
+
+  * (See above) Orchestrates mixins and child elements; centralizes state.
+* Inputs:
+
+  * Seed, controls/sequencer events, keyboard.
+* Outputs:
+
+  * Canvas/controls/sequencer wiring, loader/status text, seed reflection.
+* Public API (exports):
+
+  * None.
+* Internal dependencies:
+
+  * Mixins + DOM helpers.
+* External deps:
+
+  * Tone.js, Web APIs.
+* Known issues / TODOs:
+
+  * Maintainability of many bound handlers; consider sub-controllers.
+
+---
+
+# END OF CONSOLIDATED FILE LIST
+
+If you want, I can also generate a cross-file call/dependency graph or an “entrypoints & flows” page using the same style.
+
+
+
+
+
+# Audio-Gnarls‑V13 — Dependency Graph, Entry Points & Flows
+
+**Repo:** `Audio-Gnarls-V13.0`
+**Date:** 2025‑09‑03 (Europe/London)
+**Goal:** Map entry points, dependencies, and runtime flows to guide consolidation into a lean, largely stateless component architecture.
+
+---
+
+## 1) Entry Points
+
+* **index.html** → boots the modular app path and instantiates `<osc-app>`.
+* **seed-synth.js** → exposes a bundled **single-element** path via `<seed-synth>` for embedding.
+
+> Both paths register the same core custom elements: `<tone-loader>`, `<scope-canvas>`, `<osc-controls>`, `<seq-app>`, `<osc-app>`.
+
+---
+
+## 2) Module Inventory (concise)
+
+* **osc-app/osc-app.js** — Root orchestrator element; wires children; owns global state.
+* **osc-app/osc-utils.js** — Mixin: DOM helpers, PRNG, analyser factory, fade/disposal, canvas setter.
+* **osc-app/osc-presets.js** — Mixin: deterministic preset generation + bulk loader.
+* **osc-app/osc-audio.js** — Mixin: Tone.js graph lifecycle; buffering per shape + hum; active-chain switching.
+* **osc-app/osc-signature-sequencer.js** — Mixin: “Audio Signature” playback + bridge to `<seq-app>`.
+* **scope-canvas.js** — Visualizer custom element; draws from analyser/seed buffers.
+* **osc-controls.js** — Control surface custom element; emits semantic UI events.
+* **seq-app.js** — Step sequencer custom element; emits step/playback events.
+* **tone-loader.js** — Lazy loads Tone.js and raises `tone-ready`.
+* **seed-synth.js** — Single-file wrapper reimplementing/wrapping core logic for `<seed-synth>`.
+
+---
+
+## 3) Static Dependency Graph (modules)
+
+```mermaid
+graph TD
+  subgraph Entry
+    IDX[index.html]
+    SS[seed-synth.js]
+  end
+
+  subgraph App
+    OA[osc-app/osc-app.js]
+    OU[osc-app/osc-utils.js]
+    OP[osc-app/osc-presets.js]
+    OAUD[osc-app/osc-audio.js]
+    OSS[osc-app/osc-signature-sequencer.js]
+  end
+
+  SC[scope-canvas.js]
+  OC[osc-controls.js]
+  SQ[seq-app.js]
+  TL[tone-loader.js]
+
+  %% index path
+  IDX --> TL
+  IDX --> SC
+  IDX --> OC
+  IDX --> OA
+  IDX --> SQ
+
+  %% osc-app mixins
+  OA --> OU
+  OA --> OP
+  OA --> OAUD
+  OA --> OSS
+
+  %% osc-app comp deps
+  OA --- OC
+  OA --- SC
+  OA --- SQ
+  OA --- TL
+
+  %% seed-synth bundled path
+  SS --> TL
+  SS --> SC
+  SS --> OC
+  SS --> SQ
+  SS --> OA
+
+```
+
+**Notes:**
+
+* `<osc-app>` **uses** the four mixins (Utils, Presets, Audio, SignatureSequencer) and **coordinates** the three child elements (controls, canvas, sequencer) plus the loader.
+* `seed-synth.js` registers/uses the same elements but duplicates/wraps core logic to present a single-element API.
+
+---
+
+## 4) Event & API Surface (who emits → who handles)
+
+```mermaid
+flowchart LR
+  subgraph UI
+    OC_EVT[<osc-controls> events]\nstart-request\nshape-change\nmute-toggle\ntoggle-sequencer\naudio-signature\nloop-toggle\nsignature-mode-toggle\nvolume-change
+  end
+
+  subgraph Sequencer
+    SQ_EVT[<seq-app> events]\nseq-record-start\nseq-step-recorded/cleared\nseq-play-started/stopped\nseq-step-advance\nseq-step-time-changed\nseq-steps-changed
+  end
+
+  subgraph Orchestrator
+    OA_EVT[<osc-app> handlers]\n_onStartRequest\n_onShapeChange\n_onMuteToggle\n_onToggleSequencer\n_onAudioSignature\n_onLoopToggle\n_onSignatureModeToggle\n_onSeq* (bridge)
+  end
+
+  subgraph Audio
+    AUD_MX[osc-audio mixin]\nbuffer/build chains\nsetActiveChain\nunlock\nmute/silence
+  end
+
+  subgraph Visuals
+    SC_CAN[<scope-canvas>]\nmode: seed/live\nshapeKey\npreset\nanalyser
+  end
+
+  subgraph Tone
+    TL_RDY[tone-loader]\n tone-ready
+    TONE[Tone.js]
+  end
+
+  OC_EVT --> OA_EVT
+  SQ_EVT --> OA_EVT
+  TL_RDY --> OA_EVT
+  OA_EVT --> AUD_MX
+  AUD_MX --> SC_CAN
+  OA_EVT --> SC_CAN
+```
+
+**Dispatch examples:**
+
+* `osc-controls` → `start-request` → `<osc-app>._onStartRequest()` → `osc-audio.unlockAudioAndBufferInitial()` → canvas `mode=live` or `seed` + analyser assigned.
+* `seq-app` → `seq-step-advance` → `<osc-app>._onSeqStepAdvance()` → may call `_onShapeChange()` and/or schedule audio/signature.
+* `tone-loader` → `tone-ready` → `<osc-app>` caches `Tone` in state → enables controls.
+
+---
+
+## 5) Runtime Data Flow (seed → sound → scope)
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Controls as <osc-controls>
+  participant App as <osc-app>
+  participant Presets as Presets mixin
+  participant Audio as Audio mixin (Tone chains)
+  participant Canvas as <scope-canvas>
+
+  User->>Controls: Choose/enter seed, select shape, press Start
+  Controls-->>App: start-request / shape-change / volume-change
+  App->>Presets: loadPresets(seed)
+  Presets-->>App: preset map (shape → preset)
+  App->>Audio: bufferShapeChain(shape,preset) + bufferHumChain
+  Audio->>Audio: build Tone graph; attach Analyser
+  App->>Canvas: set {preset, shapeKey, analyser, mode}
+  loop RAF
+    Canvas->>Canvas: read analyser or seed buffer, draw
+  end
+```
+
+---
+
+## 6) Sequencer & Signature Flows
+
+### A) Step Sequencer (fixed step-time path)
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant SQ as <seq-app>
+  participant App as <osc-app>
+  participant Sig as SignatureSequencer mixin
+  participant Audio as Audio mixin
+
+  User->>SQ: Record/paint steps; press Play
+  SQ-->>App: seq-play-started (plus step-time)
+  App->>Sig: _onSeqPlayStarted()
+  loop per step (setTimeout-based)
+    SQ-->>App: seq-step-advance { index, value }
+    App->>Audio: setActiveChain(shapeForStep) / adjust volume
+  end
+  SQ-->>App: seq-play-stopped
+  App->>Sig: _onSeqPlayStopped()
+```
+
+### B) Audio Signature (algorithm-driven path)
+
+```mermaid
+sequenceDiagram
+  participant User
+  participant Controls as <osc-controls>
+  participant App as <osc-app>
+  participant Sig as SignatureSequencer mixin
+  participant Audio as Audio mixin
+
+  User->>Controls: Click “Audio Signature”
+  Controls-->>App: audio-signature
+  App->>Sig: _onAudioSignature()
+  Sig->>Sig: generateAudioSignature(seed, algo)
+  loop signature events
+    Sig->>App: request shape change / timing
+    App->>Audio: setActiveChain(nextShape)
+  end
+```
+
+**Timing note:** current implementation uses `setTimeout`, making it susceptible to timer clamp/throttling. Consider migration to `Tone.Transport`.
+
+---
+
+## 7) State Ownership Map
+
+* **Global (root `<osc-app>`):**
+
+  * Seed, shapeKey, isAudioStarted, isPlaying, isMuted, presets, chains, analyser, loader/status text, sequencer flags.
+* **Derived/ephemeral:**
+
+  * Signature algorithm mapping, step-time buckets, UI overflow/size tweaks.
+* **Child components (should be as stateless as possible):**
+
+  * `<osc-controls>` — **stateless UI** that reflects parent state via `updateState(flags)` and emits semantic events.
+  * `<scope-canvas>` — **render-only**: receives props; no long-lived internal state besides frame-local caches.
+  * `<seq-app>` — maintains **minimal local UI state** (step grid + cursor) but delegates timing/transport upward.
+
+> **Guiding principle:** Hoist state into the orchestrator; keep children declarative and event-driven.
+
+---
+
+## 8) Consolidation & Streamlining Plan
+
+### A) Unify timing/scheduling
+
+* Migrate step timing and signature playback from `setTimeout` to **Tone.Transport** or a shared scheduler service.
+* Benefits: stable timing under CPU load, single source of tempo/clock, easier pause/resume/loop.
+
+### B) Normalize preset + chain lifecycle
+
+* Define a **pure function** `makePreset(seed, shape)` (already present) + a **pure builder** `buildChain(Tone, preset)` that returns a disposable graph.
+* Centralize chain disposal/fades via `disposeChain(chain, opts)` (from Utils) with configurable fade times.
+
+### C) Collapse duplication between modular path and `<seed-synth>`
+
+* Extract a **Core Controller** (plain class) that both `<osc-app>` and `<seed-synth>` wrap.
+* Controller owns: seed, presets, chains, analyser, scheduler hooks, and emits typed events.
+* Web components become thin shells binding DOM to the controller.
+
+### D) Clarify canvas responsibilities
+
+* `<scope-canvas>` receives only: `{ analyser | seedBufferSource, shapeKey, colorSpeed, isPlaying }`.
+* Remove any internal seed-generation; let controller provide buffers (or analyser) explicitly.
+
+### E) Event vocabulary
+
+* Lock a small contract:
+
+  * Controls → App: `start-request`, `mute-toggle`, `shape-change`, `volume-change`, `signature-request`, `sequencer-toggle`, `loop-toggle`, `signature-mode-toggle`.
+  * Sequencer → App: `play`, `stop`, `step({index,value})`, `config({steps,stepTime})`.
+  * Loader/Status as explicit `statuschange` events for UI.
+
+### F) Config surfaces
+
+* Single config object: `{ toneUrl, canvasSize|fit, fadeMs, transport: { bpm, ppq }, shapes[], defaultSeed }`.
+* Make Tone URL configurable; fall back to local.
+
+---
+
+## 9) Proposed Consolidated Architecture
+
+```mermaid
+graph LR
+  subgraph Core
+    CTRL[Controller (plain class)]:::c
+    SCHED[Scheduler (Tone.Transport wrapper)]:::c
+    PRE[Preset Engine]:::c
+    CHAINS[Chain Builder/Pool]:::c
+  end
+
+  subgraph UI Shells
+    OA[<osc-app>]
+    SS[<seed-synth>]
+    OC[<osc-controls>]
+    SC[<scope-canvas>]
+    SQ[<seq-app>]
+    TL[<tone-loader>]
+  end
+
+  TL --> CTRL
+  OA --> CTRL
+  SS --> CTRL
+  OC --> CTRL
+  SQ --> CTRL
+  CTRL --> SC
+  CTRL --> SCHED
+  CTRL --> CHAINS
+  CTRL --> PRE
+
+  classDef c fill:#eef,stroke:#66f,stroke-width:1px;
+```
+
+**Key transitions:**
+
+* Mixins become methods on `Controller` (imports instead of `this` patching).
+* Web components observe controller state (one-way) and emit events (up to controller).
+
+---
+
+## 10) Incremental Migration Steps
+
+1. **Introduce Controller** with current `Utils`, `Presets`, `Audio`, `SignatureSequencer` functionality as plain modules/functions.
+2. **Wrap timing** with a scheduler interface; provide `setTimeout` adapter initially, then swap to `Tone.Transport`.
+3. **Surface config** (tone URL, fades, canvas fit) via constructor options; thread through `<osc-app>` and `<seed-synth>`.
+4. **Refactor `<scope-canvas>`** to accept a normalized props object; remove hidden size constants (add `resizeObserver` or attributes).
+5. **Align `<seed-synth>` with controller** (remove duplicate logic); expose a minimal external API that proxies to the controller.
+6. **Consolidate status/loader messaging**: single `statuschange` event with codes.
+7. **Add validation layer** for presets and chain definitions.
+
+---
+
+## 11) Open Questions / Decisions Needed
+
+1. Target timing backend: **Tone.Transport** vs light custom scheduler?
+2. Minimum browser support & audio latency targets (mobile Safari constraints?).
+3. Canonical shapes list and any cross-preset invariants (e.g., frequency ranges)?
+4. Should `<seq-app>` keep internal playback or delegate entirely to controller?
+5. Canvas responsiveness: fixed px vs device-pixel-ratio aware, or CSS-resize with re-render scaling?
+
+---
+
+## 12) Action Checklist (PR-sized)
+
+* [ ] Create `core/Controller.ts|js` and move mixin logic into class with events.
+* [ ] Add `core/Scheduler.ts|js` with swappable backend (timeouts→Transport).
+* [ ] Extract `core/chains.ts|js` (build/dispose) and `core/presets.ts|js` (pure).
+* [ ] Update `<osc-app>` to bind to controller; remove mixin patching.
+* [ ] Update `<seed-synth>` to proxy controller APIs; delete duplicated logic.
+* [ ] Normalize `<scope-canvas>` props and make size responsive (attr or CSS vars).
+* [ ] Replace signature/step timers with scheduler calls; implement loop handling.
+* [ ] Emit `statuschange` and `statechange` with structured payloads.
+* [ ] Add config (toneUrl, fadeMs, canvas fit) with sensible defaults.
+* [ ] Write tests for preset determinism and chain disposal safety.
+
+---
+
+*This page is meant to be iterated on as we refactor. Drop edits or comments where you want deeper dives (e.g., chain graphs per-shape, preset schema, or Transport migration plan).*

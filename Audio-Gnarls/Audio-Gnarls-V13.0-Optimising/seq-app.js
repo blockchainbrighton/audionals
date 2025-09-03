@@ -3,9 +3,10 @@
  * =============================================================================
  * SeqApp – Configurable Step Sequencer UI (8/16/32/64 Steps)
  * =============================================================================
- * Supports dynamic step count: 8, 16, 32, 64.
- * Layout: Vertical columns of 8 (e.g., 2x8 for 16, 4x8 for 32).
- * Fully backward compatible with existing API/events.
+ * Updates (statelessness + UX):
+ * - Keyboard record handler is now actually wired (keydown on window).
+ * - updateState() clones incoming arrays to avoid shared references with parent.
+ * - No behavioral changes to public API/events; fully backward compatible.
  */
 
 class SeqApp extends HTMLElement {
@@ -101,17 +102,20 @@ class SeqApp extends HTMLElement {
     this._addBlockBtn?.addEventListener('click', this.handleAddBlock);
     this._removeBlockBtn?.addEventListener('click', this.handleRemoveBlock);
     window.addEventListener('pointerup', this._onPointerUpGlobal);
+    // NEW: actually wire the keyboard recording handler
+    window.addEventListener('keydown', this._onWindowKeyDown);
   }
 
   disconnectedCallback() {
     window.removeEventListener('pointerup', this._onPointerUpGlobal);
+    window.removeEventListener('keydown', this._onWindowKeyDown);
     if (this._seqTimer) clearTimeout(this._seqTimer);
     if (this._tailTimer) clearTimeout(this._tailTimer);
   }
 
   // --- Render --------------------------------------------------------------
   render() {
-  this.shadowRoot.innerHTML = `
+    this.shadowRoot.innerHTML = `
     <style>
       :host { 
         display: block; 
@@ -332,7 +336,12 @@ class SeqApp extends HTMLElement {
       }
     }
 
-    Object.assign(this.state, newState);
+    // Clone arrays to avoid shared references with the parent
+    const patched = { ...newState };
+    if (Array.isArray(newState.sequence)) patched.sequence = [...newState.sequence];
+    if (Array.isArray(newState.velocities)) patched.velocities = [...newState.velocities];
+
+    Object.assign(this.state, patched);
     this.updateSequenceUI();
   }
 
@@ -358,7 +367,7 @@ class SeqApp extends HTMLElement {
 
     if (this._playBtn) this._playBtn.textContent = this.state.sequencePlaying ? 'Stop Sequence' : 'Play Sequence';
     if (this._stepTimeInput && !this.state.sequencePlaying) this._stepTimeInput.value = this.state.stepTime;
-    
+
     this.updateStepControls();
   }
 
@@ -398,87 +407,71 @@ class SeqApp extends HTMLElement {
   }
 
   handleAddBlock() {
-    if (this.state.sequencePlaying) {
-      return; // Don't allow changes during playback
-    }
-    
+    if (this.state.sequencePlaying) return; // Don't allow changes during playback
+
     // Progressive expansion: 8→16→32→64
     let newSteps;
-    if (this.steps === 8) {
-      newSteps = 16;
-    } else if (this.steps === 16) {
-      newSteps = 32;
-    } else if (this.steps === 32) {
-      newSteps = 64;
-    } else {
-      return; // Already at maximum
-    }
-    
+    if (this.steps === 8) newSteps = 16;
+    else if (this.steps === 16) newSteps = 32;
+    else if (this.steps === 32) newSteps = 64;
+    else return; // Already at maximum
+
     this.changeStepCount(newSteps);
   }
 
   handleRemoveBlock() {
-    if (this.state.sequencePlaying) {
-      return; // Don't allow changes during playback
-    }
-    
+    if (this.state.sequencePlaying) return; // Don't allow changes during playback
+
     // Progressive reduction: 64→32→16→8
     let newSteps;
-    if (this.steps === 64) {
-      newSteps = 32;
-    } else if (this.steps === 32) {
-      newSteps = 16;
-    } else if (this.steps === 16) {
-      newSteps = 8;
-    } else {
-      return; // Already at minimum
-    }
-    
+    if (this.steps === 64) newSteps = 32;
+    else if (this.steps === 32) newSteps = 16;
+    else if (this.steps === 16) newSteps = 8;
+    else return; // Already at minimum
+
     this.changeStepCount(newSteps);
   }
 
   changeStepCount(newSteps) {
     if (!SeqApp.VALID_SIZES.includes(newSteps)) return;
-    
+
     // Stop any recording
     this.state.isRecording = false;
     this.state.currentRecordSlot = -1;
-    
+
     // Preserve existing sequence data up to the new length
     const oldSequence = [...this.state.sequence];
     const oldVelocities = [...this.state.velocities];
-    
+
     this.steps = newSteps;
     this.state.sequence = Array(newSteps).fill(null);
     this.state.velocities = Array(newSteps).fill(1);
-    
-    // Copy over existing data
+
     for (let i = 0; i < Math.min(oldSequence.length, newSteps); i++) {
       this.state.sequence[i] = oldSequence[i];
       this.state.velocities[i] = oldVelocities[i];
     }
-    
-    // Reset step index if it's beyond the new range
+
     if (this.state.sequenceStepIndex >= newSteps) {
       this.state.sequenceStepIndex = 0;
     }
-    
+
     // Re-render the entire component
     this.render();
-    
+
     // Re-attach event listeners after render (since render() destroys the DOM)
     this._playBtn = this.shadowRoot.getElementById('playBtn');
     this._stepTimeInput = this.shadowRoot.getElementById('stepTimeInput');
     this._addBlockBtn = this.shadowRoot.getElementById('addBlockBtn');
     this._removeBlockBtn = this.shadowRoot.getElementById('removeBlockBtn');
-    
+
     this._playBtn?.addEventListener('click', this.handlePlayClick);
     this._stepTimeInput?.addEventListener('change', this.handleStepTimeChange);
     this._addBlockBtn?.addEventListener('click', this.handleAddBlock);
     this._removeBlockBtn?.addEventListener('click', this.handleRemoveBlock);
-    
+
     this.updateSequenceUI();
-    
+
     // Dispatch event to notify parent
     this.#dispatch('seq-steps-changed', { steps: newSteps });
   }
@@ -514,7 +507,7 @@ class SeqApp extends HTMLElement {
 
   playSequence() {
     if (this.state.sequencePlaying) return;
-    
+
     this.state.sequencePlaying = true;
     this.state.sequenceStepIndex = 0;
     this.updateSequenceUI();
