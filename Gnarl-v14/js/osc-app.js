@@ -6,15 +6,15 @@
 
 /**
  * ============================================================================
- * <osc-controls> Web Component
+ * <osc-controls> Web Component  — with Latch toggle
  * ============================================================================
  * - UI-only component that emits semantic events
  * - DOM & styles fully encapsulated in Shadow DOM
  * - Master volume slider with live % readout
- * - NEW: Seed input + “Set Seed” moved here from the removed left column
+ * - Seed input + “Set Seed”
+ * - NEW: Latch toggle that shows ON if (isLatchOn || isSequencerMode)
  * ============================================================================
  */
-
 class OscControls extends HTMLElement {
   constructor() {
     super();
@@ -114,6 +114,11 @@ class OscControls extends HTMLElement {
           background: #1f2a3f; border-color: #7aa2ff; color: #cfe0ff;
           box-shadow: 0 0 12px #7aa2ff55, inset 0 0 0 1px #7aa2ff33;
         }
+        /* Latch visual is same as .toggle true state */
+        #latchBtn.toggle[aria-pressed="true"] {
+          background: #1f3a26; border-color: #46ad6d; color: #9df5c2;
+          box-shadow: 0 0 10px #46ad6d55, inset 0 0 0 1px #46ad6d33;
+        }
 
         @media (max-width: 560px) {
           #controls { gap: 0.6rem; }
@@ -132,6 +137,10 @@ class OscControls extends HTMLElement {
 
         <button id="seqBtn">Create Sequence</button>
         <button id="audioSigBtn">Audio Signature</button>
+
+        <!-- NEW: Latch toggle -->
+        <button id="latchBtn" class="toggle" aria-pressed="false">Latch: Off</button>
+
         <button id="loopBtn" class="toggle" aria-pressed="false">Loop: Off</button>
         <button id="sigModeBtn" class="toggle" aria-pressed="false">Signature Mode: Off</button>
 
@@ -149,12 +158,13 @@ class OscControls extends HTMLElement {
       </div>
     `;
 
-    // --- Element refs (keep identifiers) ------------------------------------
+    // --- Element refs --------------------------------------------------------
     this._startBtn    = byId('startBtn');
     this._muteBtn     = byId('muteBtn');
     this._shapeSelect = byId('shapeSelect');
     this._seqBtn      = byId('seqBtn');
     this._audioSigBtn = byId('audioSigBtn');
+    this._latchBtn    = byId('latchBtn');     // NEW
     this._loopBtn     = byId('loopBtn');
     this._sigModeBtn  = byId('sigModeBtn');
     this._vol         = byId('vol');
@@ -162,13 +172,14 @@ class OscControls extends HTMLElement {
     this._seedForm    = byId('seedForm');
     this._seedInput   = byId('seedInput');
 
-    // cache for bulk ops (seed stays editable, so don't include it here)
+    // cache for bulk ops (seed stays editable)
     this._allControls = [
       this._startBtn,
       this._muteBtn,
       this._shapeSelect,
       this._seqBtn,
       this._audioSigBtn,
+      this._latchBtn,     // NEW
       this._loopBtn,
       this._sigModeBtn,
       this._vol
@@ -182,6 +193,7 @@ class OscControls extends HTMLElement {
     );
     on(this._seqBtn, 'click', () => dispatch('toggle-sequencer'));
     on(this._audioSigBtn, 'click', () => dispatch('audio-signature'));
+    on(this._latchBtn, 'click', () => dispatch('latch-toggle'));       // NEW
     on(this._loopBtn, 'click', () => dispatch('loop-toggle'));
     on(this._sigModeBtn, 'click', () => dispatch('signature-mode-toggle'));
     on(this._vol, 'input', () =>
@@ -193,7 +205,6 @@ class OscControls extends HTMLElement {
       dispatch('seed-set', { value });
     });
 
-    // expose helpers for use in updateState without re-alloc
     this._helpers = { setPressed, setText };
   }
 
@@ -221,6 +232,8 @@ class OscControls extends HTMLElement {
    * - isLoopEnabled (boolean)
    * - isSequenceSignatureMode (boolean)
    * - isAudioSignaturePlaying (boolean)
+   * - isSequencerMode (boolean)   // NEW (used to reflect latch)
+   * - isLatchOn (boolean)         // NEW
    * - volume (number 0..1)
    */
   updateState({
@@ -232,6 +245,8 @@ class OscControls extends HTMLElement {
     isLoopEnabled,
     isSequenceSignatureMode,
     isAudioSignaturePlaying,
+    isSequencerMode,     // NEW
+    isLatchOn,           // NEW
     volume
   } = {}) {
     const { setPressed, setText } = this._helpers;
@@ -243,30 +258,30 @@ class OscControls extends HTMLElement {
       setText(this._audioSigBtn, pressed ? 'Stop Signature' : 'Audio Signature');
     }
 
-    // --- Always allow toggling power (don't disable startBtn) ---
+    // --- Power button label/state ---
     if (typeof isPlaying === 'boolean') {
       setText(this._startBtn, isPlaying ? 'POWER OFF' : 'POWER ON');
       this._startBtn.classList.toggle('power-on', isPlaying);
       this._startBtn.classList.toggle('power-off', !isPlaying);
     }
 
-    // --- Visual feedback for audio initialization status ---
+    // --- Audio initialized visual ---
     if (typeof isAudioStarted === 'boolean') {
       this._startBtn.classList.toggle('ready', isAudioStarted);
     }
 
-    // --- Enable/disable dependent controls only when audio is initialized ---
+    // --- Enable dependent controls only when audio is initialized ---
     if (typeof isAudioStarted === 'boolean') {
       const enable = isAudioStarted;
       this._muteBtn.disabled = !enable;
       this._audioSigBtn.disabled = !enable;
+      this._latchBtn.disabled = !enable;   // NEW
       this._loopBtn.disabled = !enable;
       this._sigModeBtn.disabled = !enable;
       this._vol.disabled = !enable;
-      // NOTE: Seed form stays enabled at all times
     }
 
-    // --- Update mute button text/class ---
+    // --- Mute button ---
     if (typeof isMuted === 'boolean') {
       setText(this._muteBtn, isMuted ? 'Unmute' : 'Mute');
       this._muteBtn.classList.toggle('muted', isMuted);
@@ -292,6 +307,13 @@ class OscControls extends HTMLElement {
       setText(this._sigModeBtn, isSequenceSignatureMode ? 'Signature Mode: On' : 'Signature Mode: Off');
     }
 
+    // --- Latch toggle (reflects latch OR sequencer mode) ---
+    if (typeof isSequencerMode === 'boolean' || typeof isLatchOn === 'boolean') {
+      const latched = !!(isLatchOn || isSequencerMode);
+      setPressed(this._latchBtn, latched);
+      setText(this._latchBtn, latched ? 'Latch: On' : 'Latch: Off');
+    }
+
     // --- Volume slider ---
     if (typeof volume === 'number' && !Number.isNaN(volume)) {
       const pct = Math.round(Math.max(0, Math.min(1, volume)) * 100);
@@ -303,23 +325,25 @@ class OscControls extends HTMLElement {
 
 customElements.define('osc-controls', OscControls);
 
+
 // osc-app.js
-// Same <osc-app> custom element, but imports just TWO modules:
-// 1) Engine (Utils + Presets + Audio) and 2) Signatures (signature + sequencer)
+// <osc-app> shell – mixes in Engine + Signatures.
+// Now includes a Latch switch that affects key-up behavior and stays in sync with Sequencer mode.
 
 import { Engine } from './engine.js';
 import { Signatures } from './engine.js';
 
 class OscApp extends HTMLElement {
   static get observedAttributes() { return ['seed']; }
+
   constructor() {
-    super(); this.attachShadow({ mode: 'open' });
+    super();
+    this.attachShadow({ mode: 'open' });
     this._heldKeys = new Set();
     this.humKey = 'hum'; this.humLabel = 'Power Hum';
     this.shapes = ['circle','square','butterfly','lissajous','spiro','harmonograph','rose','hypocycloid','epicycloid','spiral','star','flower','wave','mandala','infinity','dna','tornado'];
     this.shapeLabels = Object.fromEntries(this.shapes.map(k => [k, k[0].toUpperCase() + k.slice(1)]));
 
-    // Mix in just two cohesive modules now
     Object.assign(this, Engine(this), Signatures(this));
 
     const attrSeed = (this.getAttribute('seed') || '').trim();
@@ -333,13 +357,16 @@ class OscApp extends HTMLElement {
       '_handleKeyDown','_handleKeyUp','_handleBlur',
       '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded',
       '_onSeqPlayStarted','_onSeqPlayStopped','_onSeqStepAdvance','_onSeqStepTimeChanged',
-      '_onSeqStepsChanged','_onLoopToggle','_onSignatureModeToggle','_onVolumeChange'
+      '_onSeqStepsChanged','_onLoopToggle','_onSignatureModeToggle','_onVolumeChange',
+      '_onLatchToggle' // NEW
     ].forEach(fn => (this[fn] = this[fn].bind(this)));
   }
 
   attributeChangedCallback(name, _oldVal, newVal) {
-    if (name !== 'seed') return; const next = (newVal || '').trim();
-    if (!next || next === this.state.seed) return; this.resetToSeed(next);
+    if (name !== 'seed') return;
+    const next = (newVal || '').trim();
+    if (!next || next === this.state.seed) return;
+    this.resetToSeed(next);
   }
 
   defaultState(seed = 'default') {
@@ -347,11 +374,16 @@ class OscApp extends HTMLElement {
       isPlaying: false, contextUnlocked: false, initialBufferingStarted: false, initialShapeBuffered: false,
       Tone: null, chains: {}, current: null,
       isLoopEnabled: false, volume: 0.2,
+      // Sequencer + recording
       isSequencerMode: false, isRecording: false, currentRecordSlot: -1,
       sequence: Array(8).fill(null), velocities: Array(8).fill(1), sequencePlaying: false, sequenceIntervalId: null,
       sequenceStepIndex: 0, stepTime: 200, _seqFirstCycleStarted: false, sequenceSteps: 8,
+      // Signature modes
       isSequenceSignatureMode: false, signatureSequencerRunning: false,
       audioSignaturePlaying: false, audioSignatureTimer: null, audioSignatureStepIndex: 0, audioSignatureOnComplete: null,
+      // NEW: Manual latch flag (key-up ignores when true)
+      isLatchOn: false,
+      // Misc
       seed, presets: {},
       uiHomeShapeKey: null,
       _transientOverride: false,
@@ -380,7 +412,7 @@ class OscApp extends HTMLElement {
 
     this._main.style.overflow = 'hidden';
 
-    // Initialize seed input within controls
+    // Seed init
     this._controls.setSeed?.(this.state.seed);
 
     this.shadowRoot.querySelector('tone-loader').addEventListener('tone-ready', this._onToneReady);
@@ -391,19 +423,23 @@ class OscApp extends HTMLElement {
     this._controls.addEventListener('shape-change', this._onShapeChange);
     this._controls.addEventListener('toggle-sequencer', this._onToggleSequencer);
     this._controls.addEventListener('audio-signature', this._onAudioSignature);
+    this._controls.addEventListener('latch-toggle', this._onLatchToggle); // NEW
     this._controls.addEventListener('loop-toggle', this._onLoopToggle);
     this._controls.addEventListener('signature-mode-toggle', this._onSignatureModeToggle);
     this._controls.addEventListener('volume-change', this._onVolumeChange);
     this._controls.addEventListener('seed-set', this._handleSeedSubmit);
 
+    // Loader text source
     this._canvas.onIndicatorUpdate = (text) => {
       this._loader.textContent = (!this.state.isPlaying && !this.state.contextUnlocked) ? 'Initializing...' : text;
     };
 
+    // Global key handlers
     window.addEventListener('keydown', this._handleKeyDown);
     window.addEventListener('keyup', this._handleKeyUp);
     window.addEventListener('blur', this._handleBlur);
 
+    // Sequencer events
     [
       ['seq-record-start', this._onSeqRecordStart],
       ['seq-step-cleared', this._onSeqStepCleared],
@@ -415,6 +451,7 @@ class OscApp extends HTMLElement {
       ['seq-steps-changed', this._onSeqStepsChanged],
     ].forEach(([t, h]) => this._sequencerComponent.addEventListener(t, h));
 
+    // Shapes list
     const shapeOptions = [{ value: this.humKey, label: this.humLabel }]
       .concat(this.shapes.map(key => ({ value: key, label: this.shapeLabels[key] })));
     this._controls.setShapes(shapeOptions);
@@ -436,19 +473,24 @@ class OscApp extends HTMLElement {
     ].forEach(([t, h]) => this._sequencerComponent?.removeEventListener(t, h));
   }
 
-  // NEW: central UI update proxy so Engine/Signatures can call app._updateControls(...)
+  // Central UI update proxy — now always injects latch + sequencer flags so UI stays in sync.
   _updateControls(patch = {}) {
     const c = this._controls;
     if (!c) return;
-    if (typeof c.updateState === 'function') return c.updateState(patch);
-    if (typeof c.setState === 'function') return c.setState(patch);
-    if (typeof c.update === 'function') return c.update(patch);
-    if ('shapeKey' in patch) c.dataset.shape = String(patch.shapeKey || '');
-    if ('isAudioStarted' in patch) c.dataset.ready = String(!!patch.isAudioStarted);
-    if ('isPlaying' in patch) c.dataset.playing = String(!!patch.isPlaying);
-    if ('isMuted' in patch) c.dataset.muted = String(!!patch.isMuted);
-    if ('sequencerVisible' in patch) c.dataset.sequencer = String(!!patch.sequencerVisible);
-    if ('volume' in patch) c.dataset.volume = String(patch.volume);
+    const enriched = {
+      isLatchOn: this.state?.isLatchOn,
+      isSequencerMode: this.state?.isSequencerMode,
+      ...patch
+    };
+    if (typeof c.updateState === 'function') return c.updateState(enriched);
+    if (typeof c.setState === 'function') return c.setState(enriched);
+    if (typeof c.update === 'function') return c.update(enriched);
+    if ('shapeKey' in enriched) c.dataset.shape = String(enriched.shapeKey || '');
+    if ('isAudioStarted' in enriched) c.dataset.ready = String(!!enriched.isAudioStarted);
+    if ('isPlaying' in enriched) c.dataset.playing = String(!!enriched.isPlaying);
+    if ('isMuted' in enriched) c.dataset.muted = String(!!enriched.isMuted);
+    if ('sequencerVisible' in enriched) c.dataset.sequencer = String(!!enriched.sequencerVisible);
+    if ('volume' in enriched) c.dataset.volume = String(enriched.volume);
   }
 
   _style() {
@@ -479,7 +521,6 @@ class OscApp extends HTMLElement {
       'default';
     if (!val || val === this.state.seed) return;
     this.resetToSeed(val);
-    // reflect current seed in the controls input
     this._controls.setSeed?.(val);
   }
 
@@ -490,7 +531,6 @@ class OscApp extends HTMLElement {
   }
 
   // --- Canvas click-to-trigger (grid mapping 0–9) and overlay ---
-
   _renderPowerOverlay() {
     try {
       const s = this.state;
@@ -565,12 +605,9 @@ class OscApp extends HTMLElement {
 
     this._onCanvasPointerDown = (ev) => {
       if (!this.state?.contextUnlocked) { try { this.unlockAudioAndBufferInitial?.(); } catch {} ev?.preventDefault?.(); return; }
-
       try {
         this._isCanvasPointerDown = true;
-        // Keep events even if cursor leaves the canvas
         try { ev.target?.setPointerCapture?.(ev.pointerId); } catch {}
-
         const key = gridKeyFromEvent(ev);
         if (key !== this._lastPointerDigitKey) {
           this._lastPointerDigitKey = key;
@@ -585,7 +622,6 @@ class OscApp extends HTMLElement {
       try {
         const key = gridKeyFromEvent(ev);
         if (key !== this._lastPointerDigitKey) {
-          // release previous, press new
           if (this._lastPointerDigitKey) fakeUp(this._lastPointerDigitKey);
           this._lastPointerDigitKey = key;
           fakeDown(key);
@@ -603,7 +639,7 @@ class OscApp extends HTMLElement {
       fakeUp(key);
     };
 
-    this._onCanvasPointerCancel = (ev) => {
+    this._onCanvasPointerCancel = () => {
       this._isCanvasPointerDown = false;
       if (this._lastPointerDigitKey) {
         const key = this._lastPointerDigitKey; this._lastPointerDigitKey = null;
@@ -618,7 +654,20 @@ class OscApp extends HTMLElement {
     window.addEventListener('pointerup', this._onCanvasPointerUp);
   }
 
+  // --- Latch toggle handler --------------------------------------------------
+  _onLatchToggle() {
+    this.state.isLatchOn = !this.state.isLatchOn;
+    this._updateControls({}); // will inject isLatchOn + isSequencerMode
+    // If turning latch OFF while not in sequencer and no keys held, drop to hum.
+    const s = this.state;
+    if (!s.isLatchOn && !s.isSequencerMode && !this._heldKeys?.size && s.contextUnlocked && s.initialShapeBuffered) {
+      this.setActiveChain(this.humKey, { updateCanvasShape: false, setStateCurrent: false });
+      this._canvas.isPlaying = false;
+      this._updateControls({});
+    }
+  }
 
+  // ---------------- Keyboard latch logic lives here -------------------------
   _handleKeyDown(e) {
     if (!/INPUT|TEXTAREA/.test(e.target.tagName)) {
       if (e.key === 'l' || e.key === 'L') { this._onLoopToggle(); e.preventDefault(); return; }
@@ -632,6 +681,7 @@ class OscApp extends HTMLElement {
     if (!shapeKey) return;
     if (this.state.isSequenceSignatureMode) { this._triggerSignatureFor(shapeKey, { loop: this.state.isLoopEnabled }); e.preventDefault(); return; }
     const s = this.state; if (e.repeat) { e.preventDefault(); return; } this._heldKeys.add(e.key);
+
     if (s.isSequencerMode) {
       if (s.isRecording) {
         if (!this._recordedThisHold.has(e.key)) { const recordValue = (idx >= 0) ? (idx + 1) : 0; this.recordStep(recordValue); this._recordedThisHold.add(e.key); }
@@ -641,12 +691,26 @@ class OscApp extends HTMLElement {
       if (s.contextUnlocked && s.initialShapeBuffered) { this.setActiveChain(shapeKey); if (idx >= 0) this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' }); this._canvas.isPlaying = true; this._updateControls({ shapeKey }); s.current = shapeKey; if (shapeKey !== this.humKey) s._uiReturnShapeKey = shapeKey; }
       e.preventDefault(); return;
     }
-    if (s.contextUnlocked && s.initialShapeBuffered) { this.setActiveChain(shapeKey); if (idx >= 0) { this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' }); } this._canvas.isPlaying = true; this._updateControls({ shapeKey }); s.current = shapeKey; if (shapeKey !== this.humKey) s._uiReturnShapeKey = shapeKey; }
+
+    if (s.contextUnlocked && s.initialShapeBuffered) {
+      this.setActiveChain(shapeKey);
+      if (idx >= 0) { this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' }); }
+      this._canvas.isPlaying = true; this._updateControls({ shapeKey }); s.current = shapeKey;
+      if (shapeKey !== this.humKey) s._uiReturnShapeKey = shapeKey;
+    }
   }
 
   _handleKeyUp(e) {
-    const s = this.state; if (this._heldKeys?.has(e.key)) { this._heldKeys.delete(e.key); this._recordedThisHold?.delete?.(e.key);
-      if (!s.isSequencerMode && s.contextUnlocked && s.initialShapeBuffered) { this.setActiveChain(this.humKey, { updateCanvasShape: false, setStateCurrent: false }); this._canvas.isPlaying = false; if (s._uiReturnShapeKey) this._updateControls({ shapeKey: s._uiReturnShapeKey }); else this._updateControls(); }
+    const s = this.state;
+    if (this._heldKeys?.has(e.key)) {
+      this._heldKeys.delete(e.key);
+      this._recordedThisHold?.delete?.(e.key);
+      // NOTE: now respect Latch OR Sequencer mode (either keeps sound on)
+      if (!(s.isSequencerMode || s.isLatchOn) && s.contextUnlocked && s.initialShapeBuffered) {
+        this.setActiveChain(this.humKey, { updateCanvasShape: false, setStateCurrent: false });
+        this._canvas.isPlaying = false;
+        if (s._uiReturnShapeKey) this._updateControls({ shapeKey: s._uiReturnShapeKey }); else this._updateControls({});
+      }
     }
   }
   _handleBlur() { this._heldKeys?.clear?.(); this._recordedThisHold?.clear?.(); }
@@ -656,3 +720,4 @@ class OscApp extends HTMLElement {
 
 customElements.define('osc-app', OscApp);
 export { OscApp };
+
