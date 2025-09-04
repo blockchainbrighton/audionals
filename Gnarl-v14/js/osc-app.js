@@ -542,32 +542,82 @@ class OscApp extends HTMLElement {
     const el = this._canvas;
     if (!el || this._canvasClickGridSetup) return;
     this._canvasClickGridSetup = true;
+
+    const gridKeyFromEvent = (ev) => {
+      const rect = el.getBoundingClientRect();
+      const x = Math.max(0, Math.min(rect.width, (ev.clientX ?? 0) - rect.left));
+      const y = Math.max(0, Math.min(rect.height, (ev.clientY ?? 0) - rect.top));
+      const cols = 5, rows = 2; // 10 cells total
+      const col = Math.min(cols - 1, Math.max(0, Math.floor(x / (rect.width / cols))));
+      const row = Math.min(rows - 1, Math.max(0, Math.floor(y / (rect.height / rows))));
+      const cell = row * cols + col; // 0..9
+      return (cell === 9) ? '0' : String(cell + 1);
+    };
+
+    const fakeDown = (key) => {
+      const e = { key, target: { tagName: 'DIV' }, preventDefault() {}, repeat: false };
+      this._handleKeyDown(e);
+    };
+    const fakeUp = (key) => {
+      const e = { key, target: { tagName: 'DIV' } };
+      this._handleKeyUp(e);
+    };
+
     this._onCanvasPointerDown = (ev) => {
       if (!this.state?.contextUnlocked) { try { this.unlockAudioAndBufferInitial?.(); } catch {} ev?.preventDefault?.(); return; }
+
       try {
-        const rect = el.getBoundingClientRect();
-        const x = Math.max(0, Math.min(rect.width, (ev.clientX ?? 0) - rect.left));
-        const y = Math.max(0, Math.min(rect.height, (ev.clientY ?? 0) - rect.top));
-        const cols = 5, rows = 2; // 10 cells total
-        const col = Math.min(cols - 1, Math.max(0, Math.floor(x / (rect.width / cols))));
-        const row = Math.min(rows - 1, Math.max(0, Math.floor(y / (rect.height / rows))));
-        const cell = row * cols + col; // 0..9
-        const key = (cell === 9) ? '0' : String(cell + 1); // map last cell to '0'
-        this._lastPointerDigitKey = key;
-        const fakeEvent = { key, target: { tagName: 'DIV' }, preventDefault() {}, repeat: false };
-        this._handleKeyDown(fakeEvent);
-      } catch (e) { console.error('canvas grid error', e); }
+        this._isCanvasPointerDown = true;
+        // Keep events even if cursor leaves the canvas
+        try { ev.target?.setPointerCapture?.(ev.pointerId); } catch {}
+
+        const key = gridKeyFromEvent(ev);
+        if (key !== this._lastPointerDigitKey) {
+          this._lastPointerDigitKey = key;
+          fakeDown(key);
+        }
+      } catch (e) { console.error('canvas grid down error', e); }
     };
-    this._onCanvasPointerUp = () => {
+
+    this._onCanvasPointerMove = (ev) => {
+      if (!this._isCanvasPointerDown) return;
+      if (!this.state?.contextUnlocked) return;
+      try {
+        const key = gridKeyFromEvent(ev);
+        if (key !== this._lastPointerDigitKey) {
+          // release previous, press new
+          if (this._lastPointerDigitKey) fakeUp(this._lastPointerDigitKey);
+          this._lastPointerDigitKey = key;
+          fakeDown(key);
+        }
+      } catch (e) { console.error('canvas grid move error', e); }
+    };
+
+    this._onCanvasPointerUp = (ev) => {
+      try {
+        this._isCanvasPointerDown = false;
+        try { ev?.target?.releasePointerCapture?.(ev.pointerId); } catch {}
+      } catch {}
       if (!this._lastPointerDigitKey) return;
       const key = this._lastPointerDigitKey; this._lastPointerDigitKey = null;
-      const fakeEvent = { key, target: { tagName: 'DIV' } };
-      this._handleKeyUp(fakeEvent);
+      fakeUp(key);
     };
+
+    this._onCanvasPointerCancel = (ev) => {
+      this._isCanvasPointerDown = false;
+      if (this._lastPointerDigitKey) {
+        const key = this._lastPointerDigitKey; this._lastPointerDigitKey = null;
+        fakeUp(key);
+      }
+    };
+
     el.addEventListener('pointerdown', this._onCanvasPointerDown);
-    window.addEventListener('pointerup', this._onCanvasPointerUp);
+    el.addEventListener('pointermove', this._onCanvasPointerMove);
+    el.addEventListener('pointercancel', this._onCanvasPointerCancel);
     el.addEventListener('pointerleave', this._onCanvasPointerUp);
+    window.addEventListener('pointerup', this._onCanvasPointerUp);
   }
+
 
   _handleKeyDown(e) {
     if (!/INPUT|TEXTAREA/.test(e.target.tagName)) {
