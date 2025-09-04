@@ -305,7 +305,9 @@ class OscApp extends HTMLElement {
       sequenceStepIndex: 0, stepTime: 200, _seqFirstCycleStarted: false, sequenceSteps: 8,
       isSequenceSignatureMode: false, signatureSequencerRunning: false,
       audioSignaturePlaying: false, audioSignatureTimer: null, audioSignatureStepIndex: 0, audioSignatureOnComplete: null,
-      seed, presets: {}
+      seed, presets: {},
+      uiHomeShapeKey: null,      // shape to restore to after any transient (key hold / signature)
+      _transientOverride: false, // true while a transient is active (prevents UI mapping churn)
     };
   }
 
@@ -314,24 +316,7 @@ class OscApp extends HTMLElement {
     const wrapper = $('div', { id: 'appWrapper' });
     const aside = $('aside', { id: 'instructions' });
     aside.innerHTML = `
-      <div>
-        <h2>How to Use</h2>
-        <ol>
-          <li><b>Numbers 1-9:</b><br/> Switch instantly between unique sound + visual shapes.</li>
-          <li><b>Step Sequencer:</b>
-            <ul style="margin:0 0 0 1em; padding:0; font-size:.98em;">
-              <li>Click <b>Create Sequence</b> to open.</li>
-              <li>Click a box to record steps (then press 1–9 or 0).</li>
-              <li>Right-click a box to clear.</li>
-              <li>Set <b>Step Time</b> for speed.</li>
-              <li>Press <b>Play Sequence</b> to play (<i>L toggles Loop</i>).</li>
-              <li><i>M toggles Sequencer Signature Mode.</i></li>
-            </ul>
-          </li>
-          <li><b>Mix Sounds:</b> Change shapes while audio is on to layer effects.</li>
-          <li><b>Toggle Audio:</b> Click the image or use <b>Start Audio</b>.</li>
-        </ol>
-      </div>
+      
       <form id="seedForm" autocomplete="off" style="margin-top:auto;background:#1c1c1c;padding:1.1em 1em 0.9em 0.9em;border-radius:8px;border:1px solid #292929;">
         <label for="seedInput" style="font-size:0.97em;color:#ffecb3;margin-bottom:0.1em;font-weight:600;">Seed (deterministic):</label>
         <input id="seedInput" name="seedInput" maxlength="32" spellcheck="false"
