@@ -197,6 +197,13 @@ class OscControls extends HTMLElement {
   } = {}) {
     const { setPressed, setText } = this._helpers;
 
+    // --- Audio Signature button pressed state/label ---
+    if (typeof isAudioSignaturePlaying === 'boolean') {
+      const pressed = isAudioSignaturePlaying;
+      this._helpers.setPressed(this._audioSigBtn, pressed);
+      this._helpers.setText(this._audioSigBtn, pressed ? 'Stop Signature' : 'Audio Signature');
+    }
+
     // --- Always allow toggling power (don't disable startBtn) ---
     if (typeof isPlaying === 'boolean') {
       setText(this._startBtn, isPlaying ? 'POWER OFF' : 'POWER ON');

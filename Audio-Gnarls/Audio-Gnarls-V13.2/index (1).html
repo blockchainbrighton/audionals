@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en" data-seed="abcddfgh">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Audio Gnarls - Unified</title>
+  <style>
+    html, body {
+      margin: 0;
+      padding: 0;
+      height: 100%;
+      width: 100%;
+      background: #000;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+    }
+    
+    body {
+      min-width: 480px;
+      min-height: 400px;
+    }
+    
+    /* Responsive design for mobile */
+    @media (max-width: 768px) {
+      html, body {
+        overflow: auto;
+      }
+      
+      body {
+        min-height: 100vh;
+      }
+    }
+    
+    /* Loading indicator */
+    .loading {
+      position: fixed;
+      top: 50%;
+      left: 50%;
+      transform: translate(-50%, -50%);
+      background: rgba(0,0,0,0.9);
+      padding: 2rem;
+      border-radius: 8px;
+      border: 1px solid #333;
+      z-index: 1000;
+      text-align: center;
+    }
+    
+    .loading.hidden {
+      display: none;
+    }
+    
+    /* Seed display */
+    .seed-info {
+      position: fixed;
+      top: 10px;
+      right: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      border: 1px solid #333;
+      font-size: 0.8rem;
+      z-index: 100;
+    }
+    
+    .seed-info .seed-label {
+      color: #888;
+    }
+    
+    .seed-info .seed-value {
+      color: #4a9eff;
+      font-weight: bold;
+    }
+    
+    /* Instructions */
+    .instructions {
+      position: fixed;
+      bottom: 10px;
+      left: 10px;
+      background: rgba(0,0,0,0.7);
+      padding: 0.5rem 1rem;
+      border-radius: 4px;
+      border: 1px solid #333;
+      font-size: 0.7rem;
+      color: #888;
+      z-index: 100;
+      max-width: 300px;
+    }
+    
+    @media (max-width: 768px) {
+      .seed-info,
+      .instructions {
+        position: relative;
+        margin: 0.5rem;
+        max-width: none;
+      }
+      
+      .instructions {
+        order: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <!-- Loading indicator -->
+  <div class="loading" id="loading">
+    <div>Loading Audio Gnarls...</div>
+    <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #888;">
+      Initializing audio synthesis engine
+    </div>
+  </div>
+  
+  <!-- Seed display -->
+  <div class="seed-info">
+    <span class="seed-label">Seed:</span>
+    <span class="seed-value" id="seedDisplay">abcddfgh</span>
+  </div>
+  
+  <!-- Instructions -->
+  <div class="instructions">
+    <div><strong>Instructions:</strong></div>
+    <div>• Click "Start Audio" to begin</div>
+    <div>• Change shapes to hear different sounds</div>
+    <div>• Modify seed to generate new patterns</div>
+    <div>• Use sequencer for step-based playback</div>
+  </div>
+  
+  <!-- Main application -->
+  <seed-synth id="audioGnarls"></seed-synth>
+  
+  <!-- Load the unified component -->
+  <script src="./audio-gnarls-unified.js"></script>
+  
+  <script>
+    // Initialize the application
+    document.addEventListener('DOMContentLoaded', function() {
+      const loading = document.getElementById('loading');
+      const seedDisplay = document.getElementById('seedDisplay');
+      const audioGnarls = document.getElementById('audioGnarls');
+      
+      // Get seed from HTML data attribute
+      function getCurrentSeed() {
+        return document.documentElement.dataset.seed || 
+               document.body.dataset.seed || 
+               'abcddfgh';
+      }
+      
+      // Update seed display
+      function updateSeedDisplay() {
+        const seed = getCurrentSeed();
+        seedDisplay.textContent = seed;
+        if (audioGnarls && audioGnarls.seed !== seed) {
+          audioGnarls.seed = seed;
+        }
+      }
+      
+      // Monitor seed changes
+      function setupSeedMonitoring() {
+        const observer = new MutationObserver(function(mutations) {
+          mutations.forEach(function(mutation) {
+            if (mutation.type === 'attributes' && 
+                (mutation.attributeName === 'data-seed')) {
+              updateSeedDisplay();
+            }
+          });
+        });
+        
+        observer.observe(document.documentElement, {
+          attributes: true,
+          attributeFilter: ['data-seed']
+        });
+        
+        observer.observe(document.body, {
+          attributes: true,
+          attributeFilter: ['data-seed']
+        });
+      }
+      
+      // Initialize seed
+      updateSeedDisplay();
+      setupSeedMonitoring();
+      
+      // Hide loading when component is ready
+      audioGnarls.addEventListener('ready', function() {
+        loading.classList.add('hidden');
+      });
+      
+      // Handle errors
+      window.addEventListener('error', function(e) {
+        console.error('Application error:', e);
+        loading.innerHTML = `
+          <div style="color: #ff4444;">Error loading application</div>
+          <div style="margin-top: 0.5rem; font-size: 0.8rem; color: #888;">
+            Check console for details
+          </div>
+        `;
+      });
+      
+      // Expose global functions for easy seed manipulation
+      window.setSeed = function(newSeed) {
+        document.documentElement.dataset.seed = newSeed;
+        updateSeedDisplay();
+      };
+      
+      window.getSeed = getCurrentSeed;
+      
+      window.getAudioGnarls = function() {
+        return audioGnarls;
+      };
+      
+      // Console welcome message
+      console.log('%cAudio Gnarls Unified', 'color: #4a9eff; font-size: 16px; font-weight: bold;');
+      console.log('Use setSeed("your-seed-here") to change the seed');
+      console.log('Use getSeed() to get current seed');
+      console.log('Use getAudioGnarls() to access the component');
+    });
+    
+    // Optional: Auto-hide instructions after first interaction
+    let hasInteracted = false;
+    document.addEventListener('click', function() {
+      if (!hasInteracted) {
+        hasInteracted = true;
+        setTimeout(function() {
+          const instructions = document.querySelector('.instructions');
+          if (instructions) {
+            instructions.style.opacity = '0.5';
+            instructions.style.transition = 'opacity 2s';
+          }
+        }, 5000);
+      }
+    });
+  </script>
+</body>
+</html>
+

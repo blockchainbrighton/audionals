@@ -180,7 +180,7 @@ export function Engine(app) {
       if (analyser) filter.connect(analyser);
       reverb.connect(out);
       chains[shape] = { osc1, osc2, volume, filter, lfo, reverb, out, analyser };
-    } catch (e) { console.error('Error buffering chain for shape', shape, e); delete app.state.chains[shape]; }
+    } catch (e) { console.error('Error buffering chain for shape', shape, e); delete chains[shape]; }
   }
 
   function setActiveChain(shape, {
@@ -313,35 +313,33 @@ export function Engine(app) {
     }
   }
 
-function _onShapeChange(e) {
-  const shapeKeyNew = e?.detail?.shapeKey; if (!shapeKeyNew) return;
-  const s = app.state; const HUM = humKey(app);
+  function _onShapeChange(e) {
+    const shapeKeyNew = e?.detail?.shapeKey; if (!shapeKeyNew) return;
+    const s = app.state; const HUM = humKey(app);
 
-  // Only let *user* shape changes update the "return" target.
-  // While an audio signature or the signature-sequencer is running,
-  // don't overwrite `_uiReturnShapeKey` with transient steps.
-  if (!s.audioSignaturePlaying && !s.signatureSequencerRunning) {
-    s._uiReturnShapeKey = shapeKeyNew !== HUM ? shapeKeyNew : s._uiReturnShapeKey;
-  }
+    // Only let *user* shape changes update the "return" target.
+    if (!s.audioSignaturePlaying && !s.signatureSequencerRunning) {
+      s._uiReturnShapeKey = shapeKeyNew !== HUM ? shapeKeyNew : s._uiReturnShapeKey;
+    }
 
-  if (!s.contextUnlocked || !s.initialShapeBuffered) {
-    if (shapeKeyNew === HUM) _setCanvas({ shapeKey: HUM, preset: null, mode: 'seed' });
-    else _setCanvas({ shapeKey: shapeKeyNew, preset: s.presets[shapeKeyNew], mode: 'seed' });
+    if (!s.contextUnlocked || !s.initialShapeBuffered) {
+      if (shapeKeyNew === HUM) _setCanvas({ shapeKey: HUM, preset: null, mode: 'seed' });
+      else _setCanvas({ shapeKey: shapeKeyNew, preset: s.presets[shapeKeyNew], mode: 'seed' });
+      app._updateControls({ shapeKey: shapeKeyNew });
+      return;
+    }
+
+    setActiveChain(shapeKeyNew);
+
+    if (shapeKeyNew !== HUM) {
+      _setCanvas({ shapeKey: shapeKeyNew, preset: s.presets[shapeKeyNew], mode: 'live' });
+    }
+    app._canvas.isPlaying = !app.state.Tone?.Destination?.mute;
     app._updateControls({ shapeKey: shapeKeyNew });
-    return;
+
+    // Keep `current` in sync for normal interaction; signatures handle their own restore.
+    s.current = shapeKeyNew;
   }
-
-  setActiveChain(shapeKeyNew);
-
-  if (shapeKeyNew !== HUM) {
-    _setCanvas({ shapeKey: shapeKeyNew, preset: s.presets[shapeKeyNew], mode: 'live' });
-  }
-  app._canvas.isPlaying = !app.state.Tone?.Destination?.mute;
-  app._updateControls({ shapeKey: shapeKeyNew });
-
-  // Keep `current` in sync for normal interaction; signatures handle their own restore.
-  s.current = shapeKeyNew;
-}
 
   // expose a minimal subset for Sequencer bridge to call back into
   function updateSequencerState() { app.sig?.updateSequencerState?.(); }
@@ -399,40 +397,28 @@ export function Signatures(app) {
     app._updateControls();
   }
 
-// Inside class OscApp { ... } add/replace with:
-function _onLoopToggle() {
-  const s = this.state;
-  s.isLoopEnabled = !s.isLoopEnabled;
-
-  // Sync the button (aria-pressed + label handled by OscControls.updateState)
-  this._updateControls({ isLoopEnabled: s.isLoopEnabled });
-
-  // Non-invasive feedback while audio signature is playing in normal (non-signature) mode
-  if (s.audioSignaturePlaying && !s.isSequenceSignatureMode) {
-    this._loader.textContent = s.isLoopEnabled ? 'Loop enabled.' : 'Loop disabled.';
+  function _onLoopToggle() {
+    const s = app.state;
+    s.isLoopEnabled = !s.isLoopEnabled;
+    app._updateControls({ isLoopEnabled: s.isLoopEnabled });
+    if (s.audioSignaturePlaying && !s.isSequenceSignatureMode) {
+      app._loader.textContent = s.isLoopEnabled ? 'Loop enabled.' : 'Loop disabled.';
+    }
   }
-}
-
 
   function _onSignatureModeToggle() {
-      const s = this.state;
-      s.isSequenceSignatureMode = !s.isSequenceSignatureMode;
+    const s = app.state;
+    s.isSequenceSignatureMode = !s.isSequenceSignatureMode;
+    app._updateControls({ isSequenceSignatureMode: s.isSequenceSignatureMode });
 
-      // reflect in controls immediately (aria-pressed + label handled by OscControls.updateState)
-      this._updateControls({ isSequenceSignatureMode: s.isSequenceSignatureMode });
+    // stop any running playback when flipping mode
+    if (s.sequencePlaying) { stopSequence(); }
+    if (s.audioSignaturePlaying) { stopAudioSignature(); }
 
-      // if anything is playing, stop it cleanly before switching mode
-      if (s.sequencePlaying) {
-        // these come from the Signatures mixin
-        if (typeof this.stopSequence === 'function') this.stopSequence();
-        if (typeof this.stopAudioSignature === 'function') this.stopAudioSignature();
-      }
-
-      // gentle, non-toggling user feedback
-      this._loader.textContent = s.isSequenceSignatureMode
-        ? 'Sequencer Signature Mode enabled. Press Play to run signatures per step.'
-        : 'Sequencer Signature Mode disabled. Press Play for normal step timing.';
-    }
+    app._loader.textContent = s.isSequenceSignatureMode
+      ? 'Sequencer Signature Mode enabled. Press Play to run signatures per step.'
+      : 'Sequencer Signature Mode disabled. Press Play for normal step timing.';
+  }
 
   // ---------- Signature generation ----------
   function _getUniqueAlgorithmMapping(seed) {
@@ -486,10 +472,21 @@ function _onLoopToggle() {
   }
 
   // ---------- Audio Signature triggers ----------
+  // TOGGLE behavior: click to start; click again to stop (even if looping)
   function _onAudioSignature() {
-    const s = app.state; if (!s.contextUnlocked || !s.initialShapeBuffered || s.audioSignaturePlaying) return;
+    const s = app.state;
+
+    if (s.audioSignaturePlaying) {
+      stopAudioSignature();
+      app._loader.textContent = 'Audio Signature stopped.';
+      app._updateControls({ isAudioSignaturePlaying: false });
+      return;
+    }
+
+    if (!s.contextUnlocked || !s.initialShapeBuffered) return;
     const selected = s._uiReturnShapeKey || s.current || HUM();
     _triggerSignatureFor(selected, { loop: s.isLoopEnabled });
+    app._updateControls({ isAudioSignaturePlaying: true });
   }
 
   function _triggerSignatureFor(shapeKey, { loop = app.state.isLoopEnabled } = {}) {
@@ -514,6 +511,9 @@ function _onLoopToggle() {
     s.audioSignaturePlaying = true;
     s.audioSignatureStepIndex = 0;
     s.audioSignatureOnComplete = onComplete;
+
+    // reflect UI button state (pressed + label if supported by controls)
+    app._updateControls({ isAudioSignaturePlaying: true });
 
     let stepTime;
     switch (algorithm) {
@@ -543,6 +543,7 @@ function _onLoopToggle() {
         const finishOnce = () => {
           s.audioSignaturePlaying = false;
           s.audioSignatureTimer = null;
+          app._updateControls({ isAudioSignaturePlaying: false });
           const cb = s.audioSignatureOnComplete; s.audioSignatureOnComplete = null;
           if (typeof cb === 'function') cb(); else app._loader.textContent = 'Audio Signature complete.';
         };
@@ -582,6 +583,9 @@ function _onLoopToggle() {
     if (s.audioSignatureTimer) { clearTimeout(s.audioSignatureTimer); s.audioSignatureTimer = null; }
     s.audioSignaturePlaying = false;
     s.audioSignatureStepIndex = 0;
+
+    // reflect UI button state
+    app._updateControls({ isAudioSignaturePlaying: false });
 
     const returnKey = s._uiReturnShapeKey || HUM();
 
