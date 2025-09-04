@@ -1,10 +1,11 @@
+
 <!DOCTYPE html>
 <html lang="en" data-seed="abcddfgh">
 <head>
   <meta charset="UTF-8" />
   <title>Oscilloscope App 2</title>
 
-  <!-- Mobile viewport with safe-area support -->
+  <!-- Mobile viewport: use dynamic viewport units + allow safe-area usage -->
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
 
   <!-- Helpful mobile meta -->
@@ -21,24 +22,22 @@
       height: 100%; width: 100%;
       background: #000; color: #fff;
       font-family: 'Courier New', monospace;
-      overflow: hidden; /* no page scroll while performing */
+      overflow: hidden; /* no page scroll during performance */
     }
 
-    /* Desktop-friendly floor, but let phones fit */
+    /* Desktop-friendly floor, but don't block phones from fitting */
     body { min-width: 480px; min-height: 400px; }
+
+    /* On small screens, let the app fill the dynamic viewport
+       (prevents iOS URL bar shrinking issues) */
     @media (max-width: 480px) {
-      body { min-width: 0; min-height: 100dvh; }
+      body {
+        min-width: 0;
+        min-height: 100dvw; /* dynamic viewport height on mobile */
+      }
     }
 
-    /* Slight global downsize on small phones so more fits */
-    @media (max-width: 430px) {
-      html { font-size: 15px; }
-    }
-    @media (max-width: 380px) {
-      html { font-size: 14px; }
-    }
-
-    /* Respect reduced motion */
+    /* Respect reduced motion preferences (small global nudge) */
     @media (prefers-reduced-motion: reduce) {
       * { scroll-behavior: auto !important; }
     }
@@ -53,120 +52,6 @@
       });
       mo.observe(document.documentElement, { attributes: true, attributeFilter: ['data-seed'] });
     });
-
-    /**
-     * Force the osc-app canvas area to be a square that fully fits
-     * alongside the controls on small touch screens.
-     * Works by measuring the controls in the component's open shadow DOM.
-     */
-    (function setupSquareCanvasFitter() {
-      const SAFE_INSET_BOTTOM = () => {
-        // Try CSS env() via computed style fallback; otherwise estimate 0
-        const div = document.createElement('div');
-        div.style.cssText = `
-          position: fixed; bottom: 0; height: 0;
-          padding-bottom: env(safe-area-inset-bottom, 0px);
-          visibility: hidden; pointer-events: none;`;
-        document.documentElement.appendChild(div);
-        const pb = parseFloat(getComputedStyle(div).paddingBottom) || 0;
-        div.remove();
-        return pb;
-      };
-
-      const applySizing = () => {
-        const app = document.querySelector('osc-app');
-        if (!app || !app.shadowRoot) return;
-
-        const root = app.shadowRoot;
-        const main = root.getElementById('main');
-        const wrap = root.getElementById('appWrapper');
-        const canvasContainer = root.getElementById('canvasContainer');
-        const controls = root.querySelector('osc-controls');
-        const loader = root.getElementById('loader');
-
-        if (!canvasContainer || !main || !wrap || !controls) return;
-
-        // Measure available space for the square canvas
-        const vw = Math.max(1, window.innerWidth || document.documentElement.clientWidth);
-        const vh = Math.max(1, window.innerHeight || document.documentElement.clientHeight);
-
-        // Controls+loader height inside the shadow root
-        const controlsRect = controls.getBoundingClientRect();
-        const loaderRect = loader ? loader.getBoundingClientRect() : { height: 0 };
-        const safeBottom = SAFE_INSET_BOTTOM();
-
-        // Vertical padding we added inside #appWrapper (6px each side in our component CSS);
-        // we don't know exact values here, so be conservative:
-        const paddingAllowance = 12; // px (top+bottom)
-
-        // Available height for the square (within app area)
-        const availableH = Math.max(
-          1,
-          vh - controlsRect.height - loaderRect.height - safeBottom - paddingAllowance
-        );
-
-        // Target square side: limited by width AND available height
-        const side = Math.floor(Math.max(1, Math.min(vw, availableH)));
-
-        // Apply sizing to the container (the visual fills it)
-        canvasContainer.style.boxSizing = 'border-box';
-        canvasContainer.style.width = side + 'px';
-        canvasContainer.style.height = side + 'px';
-        canvasContainer.style.maxWidth = '100%';
-        canvasContainer.style.maxHeight = 'calc(100dvh - ' + (controlsRect.height + loaderRect.height + safeBottom + paddingAllowance) + 'px)';
-        canvasContainer.style.aspectRatio = '1 / 1'; // keep square on resizes
-
-        // Center it horizontally
-        canvasContainer.style.margin = '0 auto';
-
-        // Ensure the main column keeps the controls visible
-        main.style.gap = '8px';
-
-        // Nudge the internal scope-canvas if present (harmless if not)
-        const sc = root.querySelector('scope-canvas');
-        if (sc) {
-          sc.style.width = '100%';
-          sc.style.height = '100%';
-          sc.style.aspectRatio = '1 / 1';
-          sc.style.touchAction = 'none';
-          sc.style.display = 'block';
-        }
-      };
-
-      const ready = () => {
-        // Run once DOM paints the custom element (and on subsequent resizes)
-        applySizing();
-        // Re-run after a tick in case web components finish later
-        setTimeout(applySizing, 50);
-        setTimeout(applySizing, 250);
-
-        window.addEventListener('resize', () => {
-          requestAnimationFrame(applySizing);
-        }, { passive: true });
-
-        window.addEventListener('orientationchange', () => {
-          setTimeout(applySizing, 250);
-        }, { passive: true });
-
-        // If sequencer becomes visible later, re-fit when its button toggles label/height
-        const app = document.querySelector('osc-app');
-        if (app && app.shadowRoot) {
-          const ro = new ResizeObserver(() => applySizing());
-          // Watch the controls block for height changes
-          const controls = app.shadowRoot.querySelector('osc-controls');
-          if (controls) ro.observe(controls);
-          // Watch loader too (text changes)
-          const loader = app.shadowRoot.getElementById('loader');
-          if (loader) ro.observe(loader);
-        }
-      };
-
-      if (document.readyState === 'complete' || document.readyState === 'interactive') {
-        requestAnimationFrame(ready);
-      } else {
-        document.addEventListener('DOMContentLoaded', () => requestAnimationFrame(ready), { once: true });
-      }
-    })();
   </script>
 </head>
 <body>
@@ -184,3 +69,4 @@
   <script type="module" src="./js/seq-app.js"></script>
 </body>
 </html>
+
