@@ -1,4 +1,4 @@
-// ui/osc-app.js
+// osc-app.js
 // Single module containing both the <osc-app> shell and <osc-controls> UI.
 // Imports Engine+Signatures from ../engine/engine.js (Tone loader inlined there).
 
@@ -328,7 +328,10 @@ class OscApp extends HTMLElement {
     const main = $('div', { id: 'main' }); this._main = main;
     const canvasContainer = $('div', { id: 'canvasContainer' }); this._canvasContainer = canvasContainer;
     this._canvas = $('scope-canvas'); canvasContainer.appendChild(this._canvas);
-    this._controls = $('osc-controls');
+    
+    this._setupCanvasClickGrid();
+    this._renderPowerOverlay();
+this._controls = $('osc-controls');
     this._sequencerComponent = $('seq-app'); this._sequencerComponent.style.display = 'none';
     this._loader = $('div', { id: 'loader', textContent: 'Initializing...' });
 
@@ -444,7 +447,93 @@ class OscApp extends HTMLElement {
   }
 
   // --- Keyboard (same behavior as before) ---
-  _handleKeyDown(e) {
+  
+  // --- Canvas click-to-trigger (grid mapping 0–9) ---
+
+  // --- Power-on overlay (first click unlocks audio) ---
+  _renderPowerOverlay() {
+    // Create centered overlay only if audio context not yet unlocked
+    try {
+      const s = this.state;
+      const container = this._canvasContainer || this._main || this.shadowRoot?.host || document.body;
+      if (!container) return;
+      if (s?.contextUnlocked) { this._removePowerOverlay(); return; }
+      if (this._powerOverlay) return;
+      const overlay = document.createElement('div');
+      overlay.id = 'powerOverlay';
+      Object.assign(overlay.style, {
+        position: 'absolute', inset: '0', display: 'flex',
+        alignItems: 'center', justifyContent: 'center',
+        zIndex: '20', pointerEvents: 'auto',
+        background: 'rgba(0,0,0,0.55)', userSelect: 'none', cursor: 'pointer',
+        fontFamily: "'Courier New', monospace",
+      });
+      const inner = document.createElement('div');
+      inner.textContent = 'Click to power on';
+      Object.assign(inner.style, {
+        padding: '14px 18px', border: '1px dashed rgba(255,255,255,0.65)',
+        borderRadius: '8px', fontSize: '18px', letterSpacing: '0.06em',
+        color: '#fff', background: 'rgba(0,0,0,0.25)',
+        textShadow: '0 1px 2px rgba(0,0,0,0.5)',
+      });
+      overlay.appendChild(inner);
+      const parent = this._canvasContainer || this._main;
+      if (parent && getComputedStyle(parent).position === 'static') parent.style.position = 'relative';
+      (this._canvasContainer || this._main || container).appendChild(overlay);
+      this._powerOverlay = overlay;
+      const onClick = async (ev) => {
+        ev?.preventDefault?.();
+        try { await this.unlockAudioAndBufferInitial?.(); } catch (e) { console.error('Power-on unlock failed:', e); }
+        finally {
+          setTimeout(() => {
+            if (this.state?.contextUnlocked) this._removePowerOverlay();
+            else this._renderPowerOverlay();
+          }, 0);
+        }
+      };
+      overlay.addEventListener('click', onClick, { once: false });
+    } catch (e) { console.error('overlay error', e); }
+  }
+  _removePowerOverlay() {
+    if (this._powerOverlay?.parentNode) this._powerOverlay.parentNode.removeChild(this._powerOverlay);
+    this._powerOverlay = null;
+  }
+  // --- end Power-on overlay ---
+
+  _setupCanvasClickGrid() {
+    const el = this._canvas;
+    if (!el || this._canvasClickGridSetup) return;
+    this._canvasClickGridSetup = true;
+    // Bind once
+    this._onCanvasPointerDown = (ev) => {
+      if (!this.state?.contextUnlocked) { try { this.unlockAudioAndBufferInitial?.(); } catch {} ev?.preventDefault?.(); return; }
+      try {
+        const rect = el.getBoundingClientRect();
+        const x = Math.max(0, Math.min(rect.width, (ev.clientX ?? 0) - rect.left));
+        const y = Math.max(0, Math.min(rect.height, (ev.clientY ?? 0) - rect.top));
+        const cols = 5, rows = 2; // 10 cells total
+        const col = Math.min(cols - 1, Math.max(0, Math.floor(x / (rect.width / cols))));
+        const row = Math.min(rows - 1, Math.max(0, Math.floor(y / (rect.height / rows))));
+        const cell = row * cols + col; // 0..9
+        const key = (cell === 9) ? '0' : String(cell + 1); // map last cell to '0'
+        this._lastPointerDigitKey = key;
+        // Reuse the existing keyboard logic so sequencer/signature modes just work
+        const fakeEvent = { key, target: { tagName: 'DIV' }, preventDefault() {}, repeat: false };
+        this._handleKeyDown(fakeEvent);
+      } catch (e) { console.error('canvas grid error', e); }
+    };
+    this._onCanvasPointerUp = () => {
+      if (!this._lastPointerDigitKey) return;
+      const key = this._lastPointerDigitKey; this._lastPointerDigitKey = null;
+      const fakeEvent = { key, target: { tagName: 'DIV' } };
+      this._handleKeyUp(fakeEvent);
+    };
+    el.addEventListener('pointerdown', this._onCanvasPointerDown);
+    window.addEventListener('pointerup', this._onCanvasPointerUp);
+    el.addEventListener('pointerleave', this._onCanvasPointerUp);
+  }
+  // --- end Canvas click-to-trigger ---
+_handleKeyDown(e) {
     if (!/INPUT|TEXTAREA/.test(e.target.tagName)) {
       if (e.key === 'l' || e.key === 'L') { this._onLoopToggle(); e.preventDefault(); return; }
       if (e.key === 'm' || e.key === 'M') { if (this.state.isSequencerMode) { this._onSignatureModeToggle(); e.preventDefault(); return; } }
