@@ -1,6 +1,6 @@
 /**
  * =============================================================================
- * ScopeCanvas – Oscilloscope Visual Renderer (refactored/compact)
+ * ScopeCanvas – Oscilloscope Visual Renderer (DPR + pixel-perfect center)
  * =============================================================================
  * Public API (unchanged):
  *   - analyser: AudioAnalyser|null
@@ -13,20 +13,22 @@
  * Internal:
  *   - _animate(): main loop
  *   - _makeSeedBuffer(shape, seed, len?): deterministic PRNG buffer
+ *
  * Notes:
- *   - Canvas fixed 600x600
+ *   - The canvas *bitmap* auto-resizes to match the element’s CSS size × devicePixelRatio.
+ *   - Drawing uses CSS-space units; the context is scaled to DPR and the "center"
+ *     passed into draw functions is aligned to an exact device pixel to avoid 0.5px drift.
  *   - Stroke-only visuals; shapes must handle any data.length.
  * =============================================================================
  */
-
 (function registerScopeCanvas () {
-  // ---- Hoisted Math + helpers (minifier-friendly) ----
+  // ---- Hoisted Math + helpers ----
   const { sin, cos, abs, PI, exp, pow, SQRT2 } = Math;
   const TAU = PI * 2;
   const theta = (i, n, phase = 0) => (i / n) * TAU + phase;
   const norm = v => (v + 1) * 0.5;
 
-  // Seed buffer params (hoisted once)
+  // Seed buffer params
   const SHAPE_PARAMS = {
     circle:       { freq: 1.0, harmonics: [1, 0.5, 0.25],                 complexity: 0.3 },
     square:       { freq: 1.5, harmonics: [1, 0.3, 0.7, 0.2],             complexity: 0.6 },
@@ -51,13 +53,19 @@
   class ScopeCanvas extends HTMLElement {
     constructor() {
       super();
-      this.attachShadow({ mode: 'open' });
+      const root = this.attachShadow({ mode: 'open' });
 
-      // Canvas (fixed-size)
+      // Shadow styling ensures the element fills its parent and the canvas fills the host.
+      const style = document.createElement('style');
+      style.textContent = `
+        :host { display:block; width:100%; height:100%; }
+        canvas { display:block; width:100%; height:100%; }
+      `;
+      root.appendChild(style);
+
+      // Canvas
       this._canvas = document.createElement('canvas');
-      this._canvas.width = 600;
-      this._canvas.height = 600;
-      this.shadowRoot.appendChild(this._canvas);
+      root.appendChild(this._canvas);
       this._ctx = this._canvas.getContext('2d');
 
       // Public state
@@ -74,20 +82,29 @@
       this._liveBuffer = null;
       this._animId = null;
 
-      // Bind
-      this._animate = this._animate.bind(this);
+      // Sizing cache
+      this._cssW = 0;        // CSS pixel width (not device pixels)
+      this._cssH = 0;
+      this._dpr  = 1;
 
-      // Constants + helpers
+      // Bindings
+      this._animate = this._animate.bind(this);
+      this._resizeCanvas = this._resizeCanvas.bind(this);
+
+      // Helpers
       this._TAU = TAU;
       this._samp = (arr, i) => (arr ? arr[i % arr.length] ?? 0 : 0);
 
-      // Single grab of ctx/cw/c per draw
+      // Provide ctx, width (CSS space), and a pixel-perfect center in CSS units.
       this._withCtx = (fn) => {
-        const cw = this._canvas.width, c = cw / 2;
+        const cw = this._cssW || this._canvas.clientWidth || this._canvas.width;
+        // Choose center that maps to an exact device pixel to avoid half-pixel drift
+        const cxDev = Math.round(this._canvas.width  / 2);  // device pixels
+        const cyDev = Math.round(this._canvas.height / 2);
+        const c = Math.min(cxDev, cyDev) / (this._dpr || 1); // CSS-space center (square assumption)
         return fn(this._ctx, cw, c);
       };
 
-      // Tracers
       this._traceParam = (data, mapPoint, { close = false } = {}) =>
         this._withCtx((ctx, cw, c) => {
           ctx.beginPath();
@@ -101,11 +118,15 @@
         });
 
       this._tracePolar = (data, rFn, { phase = 0, close = false } = {}) =>
-        this._traceParam(data, (i, n, cw, c) => {
-          const th = theta(i, n, phase);
-          const r = rFn(i, n, th, cw, c);
-          return [c + cos(th) * r, c + sin(th) * r];
-        }, { close });
+        this._traceParam(
+          data,
+          (i, n, cw, c) => {
+            const th = theta(i, n, phase);
+            const r = rFn(i, n, th, cw, c);
+            return [c + cos(th) * r, c + sin(th) * r];
+          },
+          { close }
+        );
 
       this._ampAt = (data, i) => norm(this._samp(data, i));
       this._avgAbs = (data) => {
@@ -114,34 +135,39 @@
       };
 
       this._prepareStroke = (hue) => {
-        const ctx = this._ctx, w = this._canvas.width, h = this._canvas.height;
-        ctx.clearRect(0, 0, w, h);
+        const ctx = this._ctx;
+        // Clear in CSS coordinates because the context is scaled to DPR
+        ctx.clearRect(0, 0, this._cssW, this._cssH);
         ctx.strokeStyle = `hsl(${hue},85%,60%)`;
         ctx.lineWidth = 2;
         ctx.lineJoin = ctx.lineCap = 'round';
       };
 
-      // === Drawing registry (keys + behavior preserved) ===
-      const cycloidFactory = (kind /* 'epi' | 'hypo' */) => (data, t) => this._withCtx((ctx, cw, c) => {
-        const epi = kind === 'epi' ? 1 : -1;
-        const S = (kind === 'epi' ? 0.36 : 0.39) * cw;
-        const n = (kind === 'epi'
-          ? 4 + Math.round(3 * abs(sin(t * 0.00021 + 0.5)))
-          : 3 + Math.round(3 * abs(cos(t * 0.00023))));
-        const R = 1, r = 1 / n, coef = (R + epi * r) / r;
-        const ph = kind === 'epi' ? t * 0.00038 : t * 0.0004;
+      // === Drawing registry (unchanged math) ===
+      const cycloidFactory = (kind /* 'epi' | 'hypo' */) => (data, t) =>
+        this._withCtx((ctx, cw, c) => {
+          const epi = kind === 'epi' ? 1 : -1;
+          const S = (kind === 'epi' ? 0.36 : 0.39) * cw;
+          const n = (kind === 'epi'
+            ? 4 + Math.round(3 * abs(sin(t * 0.00021 + 0.5)))
+            : 3 + Math.round(3 * abs(cos(t * 0.00023))));
+          const R = 1, r = 1 / n, coef = (R + epi * r) / r;
+          const ph = kind === 'epi' ? t * 0.00038 : t * 0.0004;
 
-        this._traceParam(data, (i, N) => {
-          const th = theta(i, N, ph);
-          const M = 0.7 + 0.3 * this._ampAt(data, i);
-          const x = S * ((R + epi * r) * cos(th) - epi * r * cos(coef * th)) * M;
-          const y = S * ((R + epi * r) * sin(th) - r * sin(coef * th)) * M;
-          return [c + x, c + y];
-        }, { close: true });
-      });
+          this._traceParam(
+            data,
+            (i, N) => {
+              const th = theta(i, N, ph);
+              const M = 0.7 + 0.3 * this._ampAt(data, i);
+              const x = S * ((R + epi * r) * cos(th) - epi * r * cos(coef * th)) * M;
+              const y = S * ((R + epi * r) * sin(th) - r * sin(coef * th)) * M;
+              return [c + x, c + y];
+            },
+            { close: true }
+          );
+        });
 
       this.drawFuncs = {
-        // Power Hum
         hum: (data, t) => this._withCtx((ctx, cw, c) => {
           const baseRadius = 0.33 * cw + sin(t * 0.0002) * 5;
           ctx.save();
@@ -184,7 +210,7 @@
           this._traceParam(data, (i, n) => {
             const p = i / n;
             const [x, y] = seg(p);
-            if (!i) return [x, y]; // first moveTo matches original
+            if (!i) return [x, y];
             const A = 0.8 + 0.2 * this._ampAt(data, i);
             return [c + (x - c) * A + jigX, c + (y - c) * A + jigY];
           }, { close: true });
@@ -232,7 +258,7 @@
 
         harmonograph: (data, t) => this._withCtx((ctx, cw, c) => {
           const S = 0.7 * cw / 4;
-          void exp(-t * 0.0002); // parity no-op
+          void exp(-t * 0.0002);
           this._traceParam(data, (i, n) => {
             const th = theta(i, n);
             const x = S * (sin(3 * th + t * 0.0003) * 0.7 + sin(5 * th + t * 0.0004) * 0.3) * (0.5 + 0.5 * this._samp(data, i));
@@ -343,8 +369,47 @@
 
     listShapes() { return Object.keys(this.drawFuncs).filter(k => k !== 'hum'); }
 
-    connectedCallback() { if (!this._animId) this._animate(); }
-    disconnectedCallback() { if (this._animId) { cancelAnimationFrame(this._animId); this._animId = null; } }
+    connectedCallback() {
+      if (!this._animId) this._animId = requestAnimationFrame(this._animate);
+      // Observe size so bitmap matches CSS size × DPR
+      try {
+        this._ro = new ResizeObserver(this._resizeCanvas);
+        this._ro.observe(this);
+      } catch { /* older browsers */ this._resizeCanvas(); }
+      this._resizeCanvas();
+    }
+
+    disconnectedCallback() {
+      if (this._animId) { cancelAnimationFrame(this._animId); this._animId = null; }
+      if (this._ro) { try { this._ro.disconnect(); } catch {} this._ro = null; }
+    }
+
+    // Sync the canvas bitmap to the element's CSS size and DPR, and scale context.
+    _resizeCanvas() {
+      const rect = this.getBoundingClientRect();
+      const cssW = Math.max(1, Math.floor(rect.width));
+      const cssH = Math.max(1, Math.floor(rect.height));
+      const dpr = Math.min(4, Math.max(1, window.devicePixelRatio || 1));
+
+      // Avoid redundant work
+      if (cssW === this._cssW && cssH === this._cssH && dpr === this._dpr) return;
+
+      this._cssW = cssW;
+      this._cssH = cssH;
+      this._dpr  = dpr;
+
+      // Set bitmap size in device pixels
+      const devW = Math.max(1, Math.round(cssW * dpr));
+      const devH = Math.max(1, Math.round(cssH * dpr));
+      if (this._canvas.width !== devW)  this._canvas.width  = devW;
+      if (this._canvas.height !== devH) this._canvas.height = devH;
+
+      // Scale context to CSS space (so all drawing uses CSS units)
+      const ctx = this._ctx;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, devW, devH);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    }
 
     _getSeed() {
       if (this.preset?.seed) return this.preset.seed;
@@ -383,6 +448,9 @@
     _animate() {
       const now = performance.now();
 
+      // Resize guard in case something changed between frames (rare)
+      this._resizeCanvas();
+
       // 1) Data source select
       let data;
       if (this.isAudioStarted && this.isPlaying && this.analyser) {
@@ -391,7 +459,7 @@
         this.analyser.getFloatTimeDomainData(this._liveBuffer);
         data = this._liveBuffer;
       } else if (this.preset && this.mode === 'seed') {
-        const seed = this.preset?.seed ?? 'default';
+        const seed = this.preset?.seed ?? this._getSeed();
         const sk = this.shapeKey || 'circle';
         this.preset._seedBuffers ||= {};
         data = this.preset._seedBuffers[sk] ||= this._makeSeedBuffer(sk, seed);
@@ -407,11 +475,11 @@
         data = this._dummyData;
       }
 
-      // 2) Color (same behavior)
+      // 2) Color
       const pr = this.preset ?? {};
       const hue = (now * (pr.colorSpeed ?? 0.06)) % 360;
 
-      // 3) Clear & stroke, draw
+      // 3) Clear & stroke, draw (ctx already scaled to CSS units)
       this._prepareStroke(hue);
       (this.drawFuncs[this.shapeKey] || this.drawFuncs.circle)(data, now, pr);
 

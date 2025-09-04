@@ -380,22 +380,27 @@ export function Signatures(app) {
   function _onToggleSequencer() {
     const s = app.state;
     s.isSequencerMode = !s.isSequencerMode;
-    app._sequencerComponent.style.display = s.isSequencerMode ? 'block' : 'none';
-    if (s.isSequencerMode) {
-      app._main.style.overflow = 'auto';
-      if (app._canvasContainer) { app._canvasContainer.style.maxHeight = '60vh'; app._canvasContainer.style.flex = '0 0 auto'; }
-      if (app._canvas) { app._canvas.style.maxHeight = '60vh'; }
-      updateSequencerState();
-    } else {
-      app._main.style.overflow = 'hidden';
-      if (app._canvasContainer) { app._canvasContainer.style.maxHeight = ''; app._canvasContainer.style.flex = ''; }
-      if (app._canvas) { app._canvas.style.maxHeight = ''; }
-      s.isRecording = false; s.currentRecordSlot = -1;
+
+    // Only show/hide the component; don't touch layout here.
+    if (app._sequencerComponent) {
+      app._sequencerComponent.style.display = s.isSequencerMode ? 'block' : 'none';
+    }
+
+    // Clean up sequencer state when turning off
+    if (!s.isSequencerMode) {
+      s.isRecording = false;
+      s.currentRecordSlot = -1;
       if (s.sequencePlaying) stopSequence();
       if (s.signatureSequencerRunning) _stopSignatureSequencer();
+    } else {
+      updateSequencerState();
     }
-    app._updateControls();
+
+    // Tell the UI and layout fitter to recompute sizes/centering.
+    app._updateControls({ sequencerVisible: s.isSequencerMode });
+    if (typeof app._fitLayout === 'function') app._fitLayout();
   }
+
 
   function _onLoopToggle() {
     const s = app.state;

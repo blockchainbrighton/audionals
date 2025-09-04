@@ -509,15 +509,14 @@ class OscApp extends HTMLElement {
       }
       #canvasContainer{
         flex:0 0 auto;
-        width:100%;
+        max-width:100%;
         position:relative;
         display:flex; flex-direction:column; justify-content:center; align-items:center;
 
-      /* center without offset math */
-      margin-left: auto;
-      margin-right: auto;
+        transform:none;
+        margin-left:auto;
+        margin-right:auto;
 
-        /* keep it perfectly square */
         aspect-ratio:1/1;
         box-sizing:border-box;
       }
@@ -581,7 +580,7 @@ class OscApp extends HTMLElement {
       // mirror the hard-centering in case inline styles ever override CSS
       cc.style.left = '';
       cc.style.transform = '';
-      cc.style.margin = '0';
+      // cc.style.margin = '0';
 
       sc.style.width = '100%';
       sc.style.height = '100%';
