@@ -399,25 +399,40 @@ export function Signatures(app) {
     app._updateControls();
   }
 
-  function _onLoopToggle() {
-    app.state.isLoopEnabled = !app.state.isLoopEnabled;
-    app._updateControls();
-    if (app.state.audioSignaturePlaying && !app.state.isSequenceSignatureMode) {
-      app._loader.textContent = app.state.isLoopEnabled ? 'Loop enabled.' : 'Loop disabled.';
-    }
+// Inside class OscApp { ... } add/replace with:
+function _onLoopToggle() {
+  const s = this.state;
+  s.isLoopEnabled = !s.isLoopEnabled;
+
+  // Sync the button (aria-pressed + label handled by OscControls.updateState)
+  this._updateControls({ isLoopEnabled: s.isLoopEnabled });
+
+  // Non-invasive feedback while audio signature is playing in normal (non-signature) mode
+  if (s.audioSignaturePlaying && !s.isSequenceSignatureMode) {
+    this._loader.textContent = s.isLoopEnabled ? 'Loop enabled.' : 'Loop disabled.';
   }
+}
+
 
   function _onSignatureModeToggle() {
-    const s = app.state;
-    s.isSequenceSignatureMode = !s.isSequenceSignatureMode;
-    app._updateControls();
-    if (s.sequencePlaying) {
-      stopSequence(); stopAudioSignature();
-      app._loader.textContent = s.isSequenceSignatureMode
+      const s = this.state;
+      s.isSequenceSignatureMode = !s.isSequenceSignatureMode;
+
+      // reflect in controls immediately (aria-pressed + label handled by OscControls.updateState)
+      this._updateControls({ isSequenceSignatureMode: s.isSequenceSignatureMode });
+
+      // if anything is playing, stop it cleanly before switching mode
+      if (s.sequencePlaying) {
+        // these come from the Signatures mixin
+        if (typeof this.stopSequence === 'function') this.stopSequence();
+        if (typeof this.stopAudioSignature === 'function') this.stopAudioSignature();
+      }
+
+      // gentle, non-toggling user feedback
+      this._loader.textContent = s.isSequenceSignatureMode
         ? 'Sequencer Signature Mode enabled. Press Play to run signatures per step.'
         : 'Sequencer Signature Mode disabled. Press Play for normal step timing.';
     }
-  }
 
   // ---------- Signature generation ----------
   function _getUniqueAlgorithmMapping(seed) {
