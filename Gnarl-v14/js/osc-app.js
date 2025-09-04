@@ -608,13 +608,12 @@ class OscApp extends HTMLElement {
     };
 
     const fakeDown = (key) => {
-      const e = { key, target: { tagName: 'DIV' }, preventDefault() {}, repeat: false };
-      this._handleKeyDown(e);
+      if (this._hotkeys?.simulatePressKey) this._hotkeys.simulatePressKey(key);
     };
     const fakeUp = (key) => {
-      const e = { key, target: { tagName: 'DIV' } };
-      this._handleKeyUp(e);
+      if (this._hotkeys?.simulateReleaseKey) this._hotkeys.simulateReleaseKey(key);
     };
+
 
     this._onCanvasPointerDown = (ev) => {
       if (!this.state?.contextUnlocked) { try { this.unlockAudioAndBufferInitial?.(); } catch {} ev?.preventDefault?.(); return; }
