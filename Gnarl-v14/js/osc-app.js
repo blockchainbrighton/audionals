@@ -351,15 +351,17 @@ class OscApp extends HTMLElement {
     const initialSeed = attrSeed || htmlSeed || 'default';
     this.state = this.defaultState(initialSeed);
 
-    [
-      '_onToneReady','_onStartRequest','_onMuteToggle','_onShapeChange',
-      '_onToggleSequencer','_onAudioSignature','_handleSeedSubmit',
-      '_handleKeyDown','_handleKeyUp','_handleBlur',
-      '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded',
-      '_onSeqPlayStarted','_onSeqPlayStopped','_onSeqStepAdvance','_onSeqStepTimeChanged',
-      '_onSeqStepsChanged','_onLoopToggle','_onSignatureModeToggle','_onVolumeChange',
-      '_onLatchToggle' // NEW
-    ].forEach(fn => (this[fn] = this[fn].bind(this)));
+  [
+    '_onToneReady','_onStartRequest','_onMuteToggle','_onShapeChange',
+    '_onToggleSequencer','_onAudioSignature','_handleSeedSubmit',
+    // removed: _handleKeyDown, _handleKeyUp, _handleBlur
+    '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded',
+    '_onSeqPlayStarted','_onSeqPlayStopped','_onSeqStepAdvance','_onSeqStepTimeChanged',
+    '_onSeqStepsChanged','_onLoopToggle','_onSignatureModeToggle','_onVolumeChange',
+    // NEW: hotkeys event handlers
+    '_onHotkeyPress','_onHotkeyRelease','_onHotkeyLoopToggle','_onHotkeySignatureToggle',
+    '_onLatchToggle'
+  ].forEach(fn => (this[fn] = this[fn].bind(this)));
   }
 
   attributeChangedCallback(name, _oldVal, newVal) {
@@ -401,6 +403,17 @@ class OscApp extends HTMLElement {
     this._setupCanvasClickGrid();
     this._renderPowerOverlay();
     this._controls = $('osc-controls');
+
+    this._hotkeys = $('osc-hotkeys');
+    this._hotkeys.setConfig({ humKey: this.humKey, shapes: this.shapes });
+    main.appendChild(this._hotkeys);
+
+    // Wire hotkey events
+    this._hotkeys.addEventListener('hk-press', this._onHotkeyPress);
+    this._hotkeys.addEventListener('hk-release', this._onHotkeyRelease);
+    this._hotkeys.addEventListener('hk-toggle-loop', this._onHotkeyLoopToggle);
+    this._hotkeys.addEventListener('hk-toggle-signature', this._onHotkeySignatureToggle);
+
     this._sequencerComponent = $('seq-app'); this._sequencerComponent.style.display = 'none';
     this._loader = $('div', { id: 'loader', textContent: 'Initializing...' });
 
@@ -435,9 +448,9 @@ class OscApp extends HTMLElement {
     };
 
     // Global key handlers
-    window.addEventListener('keydown', this._handleKeyDown);
-    window.addEventListener('keyup', this._handleKeyUp);
-    window.addEventListener('blur', this._handleBlur);
+    // window.addEventListener('keydown', this._handleKeyDown);
+    // window.addEventListener('keyup', this._handleKeyUp);
+    // window.addEventListener('blur', this._handleBlur);
 
     // Sequencer events
     [
@@ -653,6 +666,75 @@ class OscApp extends HTMLElement {
     el.addEventListener('pointerleave', this._onCanvasPointerUp);
     window.addEventListener('pointerup', this._onCanvasPointerUp);
   }
+
+  // --- Hotkey event handlers (centralized shortcuts) --------------------------
+_onHotkeyLoopToggle() { this._onLoopToggle(); }
+_onHotkeySignatureToggle() { if (this.state.isSequencerMode) this._onSignatureModeToggle(); }
+
+/**
+ * detail: { key, idx, shapeKey }
+ */
+_onHotkeyPress({ detail }) {
+  const s = this.state;
+  const { key, idx, shapeKey } = detail || {};
+  if (!shapeKey) return;
+
+  // Sequence Signature Mode: trigger then return
+  if (s.isSequenceSignatureMode) {
+    this._triggerSignatureFor(shapeKey, { loop: s.isLoopEnabled });
+    return;
+  }
+
+  // Avoid handling repeats via OscHotkeys; treat as new press
+  this._heldKeys.add(key);
+
+  if (s.isSequencerMode) {
+    if (s.isRecording) {
+      this._recordedThisHold = this._recordedThisHold || new Set();
+      if (!this._recordedThisHold.has(key)) {
+        const recordValue = (idx >= 0) ? (idx + 1) : 0;
+        this.recordStep(recordValue);
+        this._recordedThisHold.add(key);
+      }
+    }
+    if (s.contextUnlocked && s.initialShapeBuffered) {
+      this.setActiveChain(shapeKey);
+      if (idx >= 0) this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' });
+      this._canvas.isPlaying = true;
+      this._updateControls({ shapeKey });
+      s.current = shapeKey;
+      if (shapeKey !== this.humKey) s._uiReturnShapeKey = shapeKey;
+    }
+    return; // latched via sequencer mode
+  }
+
+  // Live (non-sequencer) mode
+  if (s.contextUnlocked && s.initialShapeBuffered) {
+    this.setActiveChain(shapeKey);
+    if (idx >= 0) this._setCanvas({ shapeKey, preset: s.presets[shapeKey], mode: 'live' });
+    this._canvas.isPlaying = true;
+    this._updateControls({ shapeKey });
+    s.current = shapeKey;
+    if (shapeKey !== this.humKey) s._uiReturnShapeKey = shapeKey;
+  }
+}
+
+_onHotkeyRelease({ detail }) {
+  const s = this.state;
+  const { key } = detail || {};
+  if (this._heldKeys?.has(key)) {
+    this._heldKeys.delete(key);
+    this._recordedThisHold?.delete?.(key);
+
+    // Respect latch OR sequencer; only stop when both are off
+    if (!(s.isSequencerMode || s.isLatchOn) && s.contextUnlocked && s.initialShapeBuffered) {
+      this.setActiveChain(this.humKey, { updateCanvasShape: false, setStateCurrent: false });
+      this._canvas.isPlaying = false;
+      if (s._uiReturnShapeKey) this._updateControls({ shapeKey: s._uiReturnShapeKey }); else this._updateControls();
+    }
+  }
+}
+
 
   // --- Latch toggle handler --------------------------------------------------
   _onLatchToggle() {
