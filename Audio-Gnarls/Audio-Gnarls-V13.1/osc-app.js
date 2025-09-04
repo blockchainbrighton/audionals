@@ -1,17 +1,17 @@
+
 // osc-app.js
 // Single module containing both the <osc-app> shell and <osc-controls> UI.
-// Imports Engine+Signatures from ../engine/engine.js (Tone loader inlined there).
+// Imports Engine+Signatures from ./engine.js (Tone loader inlined there).
 
 
 /**
  * ============================================================================
- * <osc-controls> Web Component (Refactor + Volume Slider)
+ * <osc-controls> Web Component
  * ============================================================================
- * Behavior, identifiers, and public API preserved.
  * - UI-only component that emits semantic events
  * - DOM & styles fully encapsulated in Shadow DOM
- * - Helpers reduce duplication; code is lint-clean and concise
- * - NEW: Master volume slider with live % readout
+ * - Master volume slider with live % readout
+ * - NEW: Seed input + “Set Seed” moved here from the removed left column
  * ============================================================================
  */
 
@@ -35,8 +35,27 @@ class OscControls extends HTMLElement {
         #controls {
           display: flex; gap: 1.1rem; align-items: center; flex-wrap: wrap; justify-content: center;
           padding: 0.7rem 1.2rem; background: rgba(255,255,255,0.07); border-radius: 9px;
-          width: 95%; max-width: 880px; margin: 1.1rem auto 0; box-sizing: border-box;
+          width: 95%; max-width: 980px; margin: 1.1rem auto 0; box-sizing: border-box;
         }
+
+        /* Seed group */
+        .seed {
+          display:flex; align-items:center; gap:.55rem; padding:.3rem .55rem;
+          background:#23252b; border:1px solid #4e5668; border-radius:8px;
+        }
+        .seed label { font-size:.95rem; color:#ffe7b3; letter-spacing:.02em; }
+        .seed input {
+          font-family: inherit; font-size: .98rem; color:#ffecb3; background:#1c1d22;
+          border:1px solid #3c3f48; border-radius:6px; padding:.38rem .55rem; width: 15ch;
+          letter-spacing:.04em;
+        }
+        .seed button {
+          padding: .42rem .8rem; border-radius: 6px; border: 1px solid #665; background: #221; color: #ffe0a3;
+          cursor: pointer; font-family: inherit; font-size: .95rem; transition: background .18s;
+        }
+        .seed button:hover { background:#2c1f1f; }
+
+        /* Volume */
         .vol { display:flex; align-items:center; gap:.55rem; min-width: 190px; padding: .3rem .55rem; background:#23252b; border:1px solid #4e5668; border-radius:8px; }
         .vol label { font-size:.95rem; color:#cfe3ff; letter-spacing:.02em; }
         .vol input[type="range"] {
@@ -70,9 +89,7 @@ class OscControls extends HTMLElement {
           box-shadow: 0 0 18px 5px #ff2a3999, 0 0 4px #ff748499;
           text-shadow: 0 1px 3px #8d2025cc, 0 0 10px #fff7; filter: brightness(1.10) saturate(1.2);
         }
-        #startBtn:not(.ready) {
-          opacity: 0.7;
-        }
+        #startBtn:not(.ready) { opacity: 0.7; }
         #muteBtn.muted {
           background: #a51427; color: #fff; border-color: #ff506e;
           box-shadow: 0 0 12px #ff506e66; text-shadow: 0 1px 2px #320a0b;
@@ -101,6 +118,7 @@ class OscControls extends HTMLElement {
         @media (max-width: 560px) {
           #controls { gap: 0.6rem; }
           button, select { padding: 0.48em 0.9em; font-size: 0.95rem; }
+          .seed input { width: 12ch; }
         }
         button:disabled, select:disabled { opacity: 0.5; pointer-events: none; }
         .vol:has(input:disabled) { opacity: 0.5; pointer-events: none; }
@@ -109,16 +127,25 @@ class OscControls extends HTMLElement {
       <div id="controls">
         <button id="startBtn" title="Click to initialize audio">POWER ON</button>
         <button id="muteBtn">Mute</button>
+
         <select id="shapeSelect"></select>
+
         <button id="seqBtn">Create Sequence</button>
         <button id="audioSigBtn">Audio Signature</button>
         <button id="loopBtn" class="toggle" aria-pressed="false">Loop: Off</button>
         <button id="sigModeBtn" class="toggle" aria-pressed="false">Signature Mode: Off</button>
+
         <div id="volWrap" class="vol" title="Master Volume">
           <label for="vol">Vol</label>
           <input id="vol" type="range" min="0" max="100" step="1" value="10" />
           <span id="volVal">10%</span>
         </div>
+
+        <form id="seedForm" class="seed" autocomplete="off">
+          <label for="seedInput">Seed</label>
+          <input id="seedInput" name="seedInput" maxlength="32" spellcheck="false" />
+          <button id="seedSetBtn" type="submit">Set Seed</button>
+        </form>
       </div>
     `;
 
@@ -132,8 +159,10 @@ class OscControls extends HTMLElement {
     this._sigModeBtn  = byId('sigModeBtn');
     this._vol         = byId('vol');
     this._volVal      = byId('volVal');
+    this._seedForm    = byId('seedForm');
+    this._seedInput   = byId('seedInput');
 
-    // cache for bulk ops
+    // cache for bulk ops (seed stays editable, so don't include it here)
     this._allControls = [
       this._startBtn,
       this._muteBtn,
@@ -158,13 +187,17 @@ class OscControls extends HTMLElement {
     on(this._vol, 'input', () =>
       dispatch('volume-change', { value: Number(this._vol.value) })
     );
+    on(this._seedForm, 'submit', (e) => {
+      e.preventDefault();
+      const value = (this._seedInput?.value || '').trim();
+      dispatch('seed-set', { value });
+    });
 
     // expose helpers for use in updateState without re-alloc
     this._helpers = { setPressed, setText };
   }
 
   setShapes(shapes) {
-    // Keep same API; efficient DOM updates
     const frag = document.createDocumentFragment();
     for (const { value, label } of shapes ?? []) {
       const opt = document.createElement('option');
@@ -175,6 +208,10 @@ class OscControls extends HTMLElement {
     this._shapeSelect.replaceChildren(frag);
   }
 
+  setSeed(seed) {
+    if (this._seedInput) this._seedInput.value = seed ?? '';
+  }
+
   disableAll(disabled) {
     for (const el of this._allControls) el.disabled = !!disabled;
   }
@@ -183,6 +220,7 @@ class OscControls extends HTMLElement {
    * Accepts extra flags:
    * - isLoopEnabled (boolean)
    * - isSequenceSignatureMode (boolean)
+   * - isAudioSignaturePlaying (boolean)
    * - volume (number 0..1)
    */
   updateState({
@@ -193,6 +231,7 @@ class OscControls extends HTMLElement {
     sequencerVisible,
     isLoopEnabled,
     isSequenceSignatureMode,
+    isAudioSignaturePlaying,
     volume
   } = {}) {
     const { setPressed, setText } = this._helpers;
@@ -200,8 +239,8 @@ class OscControls extends HTMLElement {
     // --- Audio Signature button pressed state/label ---
     if (typeof isAudioSignaturePlaying === 'boolean') {
       const pressed = isAudioSignaturePlaying;
-      this._helpers.setPressed(this._audioSigBtn, pressed);
-      this._helpers.setText(this._audioSigBtn, pressed ? 'Stop Signature' : 'Audio Signature');
+      setPressed(this._audioSigBtn, pressed);
+      setText(this._audioSigBtn, pressed ? 'Stop Signature' : 'Audio Signature');
     }
 
     // --- Always allow toggling power (don't disable startBtn) ---
@@ -224,6 +263,7 @@ class OscControls extends HTMLElement {
       this._loopBtn.disabled = !enable;
       this._sigModeBtn.disabled = !enable;
       this._vol.disabled = !enable;
+      // NOTE: Seed form stays enabled at all times
     }
 
     // --- Update mute button text/class ---
@@ -313,46 +353,39 @@ class OscApp extends HTMLElement {
       isSequenceSignatureMode: false, signatureSequencerRunning: false,
       audioSignaturePlaying: false, audioSignatureTimer: null, audioSignatureStepIndex: 0, audioSignatureOnComplete: null,
       seed, presets: {},
-      uiHomeShapeKey: null,      // shape to restore to after any transient (key hold / signature)
-      _transientOverride: false, // true while a transient is active (prevents UI mapping churn)
+      uiHomeShapeKey: null,
+      _transientOverride: false,
     };
   }
 
   connectedCallback() {
     const $ = this._el.bind(this);
     const wrapper = $('div', { id: 'appWrapper' });
-    const aside = $('aside', { id: 'instructions' });
-    aside.innerHTML = `
-      
-      <form id="seedForm" autocomplete="off" style="margin-top:auto;background:#1c1c1c;padding:1.1em 1em 0.9em 0.9em;border-radius:8px;border:1px solid #292929;">
-        <label for="seedInput" style="font-size:0.97em;color:#ffecb3;margin-bottom:0.1em;font-weight:600;">Seed (deterministic):</label>
-        <input id="seedInput" name="seedInput" maxlength="32" spellcheck="false"
-          style="font-family:inherit;padding:0.35em 0.5em;border-radius:4px;border:1px solid #444;background:#232325;color:#ffecb3;font-size:1em;width:100%;margin-bottom:0.2em;letter-spacing:.05em;" />
-        <button id="seedSetBtn" type="submit" style="padding:0.3em 1em;border-radius:4px;border:1px solid #666;background:#212;color:#ffe0a3;cursor:pointer;font-family:inherit;font-size:0.97em;transition:background .18s;">Set Seed</button>
-      </form>
-    `;
 
     const main = $('div', { id: 'main' }); this._main = main;
     const canvasContainer = $('div', { id: 'canvasContainer' }); this._canvasContainer = canvasContainer;
     this._canvas = $('scope-canvas'); canvasContainer.appendChild(this._canvas);
-    
+
     this._setupCanvasClickGrid();
     this._renderPowerOverlay();
-this._controls = $('osc-controls');
+    this._controls = $('osc-controls');
     this._sequencerComponent = $('seq-app'); this._sequencerComponent.style.display = 'none';
     this._loader = $('div', { id: 'loader', textContent: 'Initializing...' });
 
     main.append(canvasContainer, this._controls, this._sequencerComponent, this._loader);
-    wrapper.append(aside, main);
+    wrapper.append(main);
     this.shadowRoot.append(
       $('style', { textContent: this._style() }), $('tone-loader'), wrapper
     );
 
     this._main.style.overflow = 'hidden';
 
-    this.shadowRoot.getElementById('seedInput').value = this.state.seed;
+    // Initialize seed input within controls
+    this._controls.setSeed?.(this.state.seed);
+
     this.shadowRoot.querySelector('tone-loader').addEventListener('tone-ready', this._onToneReady);
 
+    // Wire control events
     this._controls.addEventListener('start-request', this._onStartRequest);
     this._controls.addEventListener('mute-toggle', this._onMuteToggle);
     this._controls.addEventListener('shape-change', this._onShapeChange);
@@ -361,12 +394,11 @@ this._controls = $('osc-controls');
     this._controls.addEventListener('loop-toggle', this._onLoopToggle);
     this._controls.addEventListener('signature-mode-toggle', this._onSignatureModeToggle);
     this._controls.addEventListener('volume-change', this._onVolumeChange);
+    this._controls.addEventListener('seed-set', this._handleSeedSubmit);
 
     this._canvas.onIndicatorUpdate = (text) => {
       this._loader.textContent = (!this.state.isPlaying && !this.state.contextUnlocked) ? 'Initializing...' : text;
     };
-
-    this.shadowRoot.getElementById('seedForm').addEventListener('submit', this._handleSeedSubmit);
 
     window.addEventListener('keydown', this._handleKeyDown);
     window.addEventListener('keyup', this._handleKeyUp);
@@ -422,13 +454,10 @@ this._controls = $('osc-controls');
   _style() {
     return `
       :host { display:block;width:100%;height:100%; }
-      #appWrapper { display:grid;grid-template-columns:minmax(220px,340px) 1fr;grid-template-rows:100vh;gap:0;height:100%; }
-      @media (max-width:900px){ #appWrapper{grid-template-columns:1fr;}}
-      aside#instructions { background:linear-gradient(90deg,#181818 97%,#0000);color:#e1d9ce;font-size:1.07rem;min-width:210px;max-width:340px;height:100vh;border-right:2px solid #2229;line-height:1.65;box-sizing:border-box;display:flex;flex-direction:column;gap:1.4rem;padding:2.2rem 1.2rem 2.4rem 2.2rem;overflow-y:auto;}
-      aside#instructions h2 { color:#f7c469;font-size:1.22rem;margin:0 0 0.95em 0;font-weight:bold;letter-spacing:.04em;}
-      #main { width:100%;height:100vh;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:hidden;background:#000;}
-      #canvasContainer { flex:1 1 0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;}
-      #loader { font-size:.98rem;color:#aaa;min-height:1.3em;text-align:center;font-style:italic;margin-top:.1em;}
+      #appWrapper { display:flex; flex-direction:column; height:100vh; }
+      #main { width:100%;height:100%;display:flex;flex-direction:column;align-items:center;justify-content:flex-start;overflow:hidden;background:#000;}
+      #canvasContainer { flex:1 1 0;width:100%;display:flex;flex-direction:column;align-items:center;justify-content:center;position:relative;}
+      #loader { font-size:.98rem;color:#aaa;min-height:1.3em;text-align:center;font-style:italic;margin-top:.2em;margin-bottom:.8rem;}
     `;
   }
 
@@ -443,8 +472,15 @@ this._controls = $('osc-controls');
   }
 
   _handleSeedSubmit(e) {
-    e.preventDefault(); const input = this.shadowRoot.getElementById('seedInput');
-    const val = (input?.value?.trim()) || 'default'; if (val === this.state.seed) return; this.resetToSeed(val);
+    const val =
+      (e?.detail?.value && String(e.detail.value).trim()) ||
+      (this.getAttribute('seed') || '').trim() ||
+      (document.documentElement?.dataset?.seed || '').trim() ||
+      'default';
+    if (!val || val === this.state.seed) return;
+    this.resetToSeed(val);
+    // reflect current seed in the controls input
+    this._controls.setSeed?.(val);
   }
 
   resetToSeed(newSeed) {
@@ -453,13 +489,9 @@ this._controls = $('osc-controls');
     this.loadPresets(newSeed); this.resetState(); this._loader.textContent = 'Seed updated. Click POWER ON.';
   }
 
-  // --- Keyboard (same behavior as before) ---
-  
-  // --- Canvas click-to-trigger (grid mapping 0–9) ---
+  // --- Canvas click-to-trigger (grid mapping 0–9) and overlay ---
 
-  // --- Power-on overlay (first click unlocks audio) ---
   _renderPowerOverlay() {
-    // Create centered overlay only if audio context not yet unlocked
     try {
       const s = this.state;
       const container = this._canvasContainer || this._main || this.shadowRoot?.host || document.body;
@@ -505,13 +537,11 @@ this._controls = $('osc-controls');
     if (this._powerOverlay?.parentNode) this._powerOverlay.parentNode.removeChild(this._powerOverlay);
     this._powerOverlay = null;
   }
-  // --- end Power-on overlay ---
 
   _setupCanvasClickGrid() {
     const el = this._canvas;
     if (!el || this._canvasClickGridSetup) return;
     this._canvasClickGridSetup = true;
-    // Bind once
     this._onCanvasPointerDown = (ev) => {
       if (!this.state?.contextUnlocked) { try { this.unlockAudioAndBufferInitial?.(); } catch {} ev?.preventDefault?.(); return; }
       try {
@@ -524,7 +554,6 @@ this._controls = $('osc-controls');
         const cell = row * cols + col; // 0..9
         const key = (cell === 9) ? '0' : String(cell + 1); // map last cell to '0'
         this._lastPointerDigitKey = key;
-        // Reuse the existing keyboard logic so sequencer/signature modes just work
         const fakeEvent = { key, target: { tagName: 'DIV' }, preventDefault() {}, repeat: false };
         this._handleKeyDown(fakeEvent);
       } catch (e) { console.error('canvas grid error', e); }
@@ -539,8 +568,8 @@ this._controls = $('osc-controls');
     window.addEventListener('pointerup', this._onCanvasPointerUp);
     el.addEventListener('pointerleave', this._onCanvasPointerUp);
   }
-  // --- end Canvas click-to-trigger ---
-_handleKeyDown(e) {
+
+  _handleKeyDown(e) {
     if (!/INPUT|TEXTAREA/.test(e.target.tagName)) {
       if (e.key === 'l' || e.key === 'L') { this._onLoopToggle(); e.preventDefault(); return; }
       if (e.key === 'm' || e.key === 'M') { if (this.state.isSequencerMode) { this._onSignatureModeToggle(); e.preventDefault(); return; } }
