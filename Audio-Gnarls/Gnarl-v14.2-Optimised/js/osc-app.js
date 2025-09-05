@@ -370,6 +370,21 @@ class OscApp extends HTMLElement {
     this._renderPowerOverlay();
     this._controls = $('osc-controls');
 
+    // Prepare the shape data for the dropdown
+    const shapeOptions = this.shapes.map(shapeKey => ({
+      value: shapeKey,
+      label: this.shapeLabels[shapeKey] || shapeKey
+    }));
+
+    // *** ADD THIS: Prepend the "hum" option to the list ***
+    shapeOptions.unshift({
+      value: this.humKey,
+      label: this.humLabel
+    });
+
+    // Populate the dropdown in the controls component
+    this._controls.setShapes(shapeOptions);
+
     // Hotkeys (separate module osc-hotkeys.js)
     this._hotkeys = $('osc-hotkeys');
     this._hotkeys.setConfig({ humKey: this.humKey, shapes: this.shapes });
