@@ -9,7 +9,7 @@
  * - UI-only component that emits semantic events
  * - Master volume slider with live % readout
  * - Seed input + “Set Seed”
- * - Latch toggle that shows ON if (isLatchOn || isSequencerMode)
+ * - Latch toggle reflects only isLatchOn (sequencer does not force latch)
  * - Compact CSS for small iPhones
  * ============================================================================
  */
@@ -224,8 +224,8 @@ class OscControls extends HTMLElement {
   /**
    * Accepts extra flags:
    * - isLoopEnabled, isSequenceSignatureMode, isAudioSignaturePlaying
-   * - isSequencerMode (reflects latch)
-   * - isLatchOn
+   * - isSequencerMode (ref UI, but does NOT control latch)
+   * - isLatchOn (the only thing that controls the Latch button)
    * - volume (0..1)
    */
   updateState({
@@ -279,8 +279,9 @@ class OscControls extends HTMLElement {
       setText(this._sigModeBtn, isSequenceSignatureMode ? 'Signature Mode: On' : 'Signature Mode: Off');
     }
 
-    if (typeof isSequencerMode === 'boolean' || typeof isLatchOn === 'boolean') {
-      const latched = !!(isLatchOn || isSequencerMode);
+    // Latch reflects ONLY isLatchOn (sequencer mode does not force it)
+    if (typeof isLatchOn === 'boolean') {
+      const latched = !!isLatchOn;
       setPressed(this._latchBtn, latched);
       setText(this._latchBtn, latched ? 'Latch: On' : 'Latch: Off');
     }
@@ -810,14 +811,16 @@ class OscApp extends HTMLElement {
       this._heldKeys.delete(key);
       this._recordedThisHold?.delete?.(key);
 
-      // Respect latch OR sequencer; only stop when both are off
-      if (!(s.isSequencerMode || s.isLatchOn) && s.contextUnlocked && s.initialShapeBuffered) {
+      // Only manual latch sustains. Sequencer mode does NOT force sustain.
+      if (!s.isLatchOn && s.contextUnlocked && s.initialShapeBuffered) {
         this.setActiveChain(this.humKey, { updateCanvasShape: false, setStateCurrent: false });
         this._canvas.isPlaying = false;
-        if (s._uiReturnShapeKey) this._updateControls({ shapeKey: s._uiReturnShapeKey }); else this._updateControls();
+        if (s._uiReturnShapeKey) this._updateControls({ shapeKey: s._uiReturnShapeKey });
+        else this._updateControls();
       }
     }
   }
+
 
   // --- Latch toggle ----------------------------------------------------------
   _onLatchToggle() {

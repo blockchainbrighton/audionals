@@ -628,40 +628,87 @@ export function Signatures(app) {
   }
   function _onSeqPlayStarted(e) {
     const stepTime = e?.detail?.stepTime;
-    app.state.sequencePlaying = true; app.state.sequenceStepIndex = 0; app.state._seqFirstCycleStarted = false;
+    app.state.sequencePlaying = true;
+    app.state.sequenceStepIndex = 0;
+    app.state._seqFirstCycleStarted = false;
+    app.state.isSequencerMode = true; // sequencer active (does NOT imply latch)
     if (typeof stepTime === 'number') app.state.stepTime = stepTime;
     app._updateControls();
     if (app.state.isSequenceSignatureMode) { app._sequencerComponent?.stopSequence(); _startSignatureSequencer(); }
   }
+
   function _onSeqPlayStopped() {
     const s = app.state;
-    s.sequencePlaying = false; s.sequenceStepIndex = 0; s._seqFirstCycleStarted = false;
+    s.sequencePlaying = false;
+    s.sequenceStepIndex = 0;
+    s._seqFirstCycleStarted = false;
+    s.isSequencerMode = false;
     if (s.signatureSequencerRunning) _stopSignatureSequencer();
+
+    // If latch is OFF, return to HUM at stop so playback truly releases.
+    if (!s.isLatchOn) {
+      try {
+        const hum = HUM();
+        app._updateControls({ shapeKey: hum });
+        app._onShapeChange({ detail: { shapeKey: hum } });
+      } catch {}
+    }
+
     app._updateControls();
   }
+
   function _onSeqStepAdvance(e) {
     if (app.state.isSequenceSignatureMode) return;
     const d = e?.detail || {};
-    const stepIndex = (typeof d.stepIndex === 'number') ? d.stepIndex : (typeof d.index === 'number') ? d.index : app.state.sequenceStepIndex;
+    const stepIndex =
+      (typeof d.stepIndex === 'number') ? d.stepIndex :
+      (typeof d.index === 'number') ? d.index :
+      app.state.sequenceStepIndex;
     const value = d.value;
 
     if (app.state.sequencePlaying) {
       if (stepIndex === 0) {
         if (app.state._seqFirstCycleStarted) {
           if (!app.state.isLoopEnabled) { stopSequence(); return; }
-        } else { app.state._seqFirstCycleStarted = true; }
+        } else {
+          app.state._seqFirstCycleStarted = true;
+        }
       }
     }
     app.state.sequenceStepIndex = stepIndex;
 
-    let shapeKeyVal = null;
-    if (value === 0) shapeKeyVal = HUM();
-    else if (value >= 1 && value <= COUNT()) shapeKeyVal = LIST()[value - 1];
-    else return;
+    // Latch-aware handling:
+    // - value == null: empty step. With latch OFF → go HUM; with latch ON → sustain (do nothing).
+    // - value === 0: explicit HUM/rest. With latch OFF → HUM; with latch ON → sustain (do nothing).
+    // - 1..COUNT(): switch to that shape.
+    if (value == null) {
+      if (!app.state.isLatchOn) {
+        const hum = HUM();
+        app._updateControls({ shapeKey: hum });
+        app._onShapeChange({ detail: { shapeKey: hum } });
+      }
+      return;
+    }
 
-    app._updateControls({ shapeKey: shapeKeyVal });
-    app._onShapeChange({ detail: { shapeKey: shapeKeyVal } });
+    if (value === 0) {
+      if (!app.state.isLatchOn) {
+        const hum = HUM();
+        app._updateControls({ shapeKey: hum });
+        app._onShapeChange({ detail: { shapeKey: hum } });
+      }
+      return;
+    }
+
+    if (value >= 1 && value <= COUNT()) {
+      const shapeKeyVal = LIST()[value - 1];
+      app._updateControls({ shapeKey: shapeKeyVal });
+      app._onShapeChange({ detail: { shapeKey: shapeKeyVal } });
+      return;
+    }
+
+    // Unknown value → ignore.
   }
+  
   function _onSeqStepTimeChanged(e) {
     const stepTime = e?.detail?.stepTime; if (typeof stepTime === 'number') app.state.stepTime = stepTime;
   }
