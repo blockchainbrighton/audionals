@@ -97,6 +97,17 @@ class OscHotkeys extends HTMLElement {
     if (key === 'l' || key === 'L') { this._emit('hk-toggle-loop'); ev.preventDefault(); return; }
     if (key === 'm' || key === 'M') { this._emit('hk-toggle-signature'); ev.preventDefault(); return; }
 
+    // --- START: MODIFIED SECTION FOR ARROW KEYS ---
+    // Handle shape stepping with arrow keys
+    if (key === 'ArrowUp' || key === 'ArrowDown') {
+      ev.preventDefault();
+      // This is a momentary action, not a held key, so we don't add it to _downKeys.
+      const direction = (key === 'ArrowDown') ? 1 : -1;
+      this._emit('hk-shape-step', { direction });
+      return; // Stop further processing for this key event
+    }
+    // --- END: MODIFIED SECTION ---
+
     // avoid auto-repeat spam
     if (this._downKeys.has(key)) { ev.preventDefault(); return; }
     this._downKeys.add(key);

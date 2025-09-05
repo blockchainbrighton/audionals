@@ -326,7 +326,7 @@ class OscApp extends HTMLElement {
       '_onSeqPlayStarted','_onSeqPlayStopped','_onSeqStepAdvance','_onSeqStepTimeChanged',
       '_onSeqStepsChanged','_onLoopToggle','_onSignatureModeToggle','_onVolumeChange',
       '_onHotkeyPress','_onHotkeyRelease','_onHotkeyLoopToggle','_onHotkeySignatureToggle',
-      '_onLatchToggle','_fitLayout','_onWindowResize'
+      '_onLatchToggle','_fitLayout','_onWindowResize','_onShapeStep'
     ].forEach(fn => (this[fn] = this[fn].bind(this)));
   }
 
@@ -393,6 +393,7 @@ class OscApp extends HTMLElement {
     this._hotkeys.addEventListener('hk-release', this._onHotkeyRelease);
     this._hotkeys.addEventListener('hk-toggle-loop', this._onHotkeyLoopToggle);
     this._hotkeys.addEventListener('hk-toggle-signature', this._onHotkeySignatureToggle);
+    this._hotkeys.addEventListener('hk-shape-step', this._onShapeStep);
 
     this._sequencerComponent = $('seq-app'); this._sequencerComponent.style.display = 'none';
     this._loader = $('div', { id: 'loader', textContent: 'Initializing...' });
@@ -833,6 +834,42 @@ class OscApp extends HTMLElement {
         if (s._uiReturnShapeKey) this._updateControls({ shapeKey: s._uiReturnShapeKey });
         else this._updateControls();
       }
+    }
+  }
+
+  _onShapeStep({ detail }) {
+    const { direction } = detail;
+    if (!direction || !this.shapes.length) return;
+
+    const s = this.state;
+    // We only want to step through the actual shapes, not 'hum'.
+    const shapes = this.shapes;
+    
+    // Find the current shape's index. If the current shape is 'hum' or not in the list,
+    // we establish a sensible starting point.
+    const currentShapeKey = s._uiReturnShapeKey || s.current;
+    let currentIndex = shapes.indexOf(currentShapeKey);
+
+    if (currentIndex === -1) {
+      // If the current shape isn't a known one (e.g., it's 'hum'),
+      // stepping down starts at the first shape, stepping up starts at the last.
+      currentIndex = (direction === 1) ? -1 : 0;
+    }
+
+    // Calculate the next index, ensuring it loops correctly for both directions.
+    const nextIndex = (currentIndex + direction + shapes.length) % shapes.length;
+    const nextShapeKey = shapes[nextIndex];
+    
+    // If audio is active, trigger the new shape. This simulates a key press.
+    if (s.contextUnlocked && s.initialShapeBuffered) {
+      this.setActiveChain(nextShapeKey);
+      this._setCanvas({ shapeKey: nextShapeKey, preset: s.presets[nextShapeKey], mode: 'live' });
+      this._canvas.isPlaying = true; // Ensure the canvas visual is active
+      
+      // Update the controls and state
+      this._updateControls({ shapeKey: nextShapeKey });
+      s.current = nextShapeKey;
+      s._uiReturnShapeKey = nextShapeKey; // Crucially, update this for the next arrow press
     }
   }
 
