@@ -94,7 +94,9 @@ export function Engine(app) {
 
   const setActiveChain = (shape, { updateCanvasShape: u = true, setStateCurrent: s = u, syncCanvasPlayState: y = true } = {}) => {
     const { Tone: T, chains: C, current } = app.state, d = .008;
-    const prev = current ? C[current] : null; if (prev?.reverb?.wet?.rampTo) { try { prev.reverb.wet.rampTo(0, d); } catch {} }
+    const prev = current ? C[current] : null; 
+    try { if (current && current !== humKey(app)) applyVariant(current, null); } catch {}
+    if (prev?.reverb?.wet?.rampTo) { try { prev.reverb.wet.rampTo(0, d); } catch {} }
     const nonce = (app.state._switchNonce = (app.state._switchNonce || 0) + 1);
     const doSwitch = () => {
       if (nonce !== app.state._switchNonce) return;
@@ -130,6 +132,46 @@ export function Engine(app) {
     app.state.isSequencerMode = false; app._sequencerComponent.style.display = 'none'; app._main.style.overflow = 'hidden';
     app.state.sequence = Array(8).fill(null); updateSequencerState?.();
   };
+
+
+    // --- Variant FX (seed-linked) ---
+  const _ensureDelay = (ch, T) => {
+    if (ch._delay) return ch._delay;
+    try {
+      const d = new T.FeedbackDelay(0.25, 0.4); // default; will set exactly below
+      // Rewire: filter -> delay -> reverb -> out
+      // If already filter->reverb->out, disconnect filter->reverb and insert delay
+      try { ch.filter.disconnect?.(ch.reverb); } catch {}
+      ch.filter.connect(d); d.connect(ch.reverb);
+      ch._delay = d;
+      return d;
+    } catch { return null; }
+  };
+
+  const _resetVariant = (ch, T) => {
+    if (!ch) return;
+    // reset reverb wet to original (store once)
+    if (ch._origRevWet == null) ch._origRevWet = ch?.reverb?.wet?.value ?? 0.3;
+    try { ch.reverb?.wet?.rampTo?.(ch._origRevWet, .06); } catch {}
+    // remove delay if we added it
+    if (ch._delay) {
+      try {
+        // Reconnect filter -> reverb directly
+        ch.filter.disconnect?.(ch._delay);
+        ch._delay.disconnect?.(ch.reverb);
+        ch.filter.connect?.(ch.reverb);
+      } catch {}
+      try { ch._delay.dispose?.(); } catch {}
+      ch._delay = null;
+    }
+    // optional: restore LFO rate in case we change it later
+    if (typeof ch._origLfoFreq === 'number' && ch.lfo?.frequency?.value != null) {
+      try { ch.lfo.frequency.rampTo(ch._origLfoFreq, .06); } catch {}
+    }
+  };
+
+  
+
 
   const unlockAudioAndBufferInitial = async () => {
     const s = app.state;
@@ -287,6 +329,73 @@ export function Signatures(app) {
     tick();
   };
 
+    const applyVariant = (shape, variant) => {
+    const s = app.state, T = s.Tone; if (!T) return;
+    if (!shape || shape === humKey(app)) return;
+
+    const ch = s.chains?.[shape];
+    if (!ch) return;
+
+    // Helpers local to this function so there are no free identifiers.
+    const ensureDelay = () => {
+      if (ch._delay) return ch._delay;
+      try {
+        const d = new T.FeedbackDelay(0.25, 0.4);
+        try { ch.filter.disconnect?.(ch.reverb); } catch {}
+        ch.filter.connect(d); d.connect(ch.reverb);
+        ch._delay = d;
+        return d;
+      } catch { return null; }
+    };
+
+    const resetVariant = () => {
+      if (!ch) return;
+      if (ch._origRevWet == null) ch._origRevWet = ch?.reverb?.wet?.value ?? 0.3;
+      try { ch.reverb?.wet?.rampTo?.(ch._origRevWet, .06); } catch {}
+      if (ch._delay) {
+        try { ch.filter.disconnect?.(ch._delay); ch._delay.disconnect?.(ch.reverb); ch.filter.connect?.(ch.reverb); } catch {}
+        try { ch._delay.dispose?.(); } catch {}
+        ch._delay = null;
+      }
+      if (typeof ch._origLfoFreq === 'number' && ch.lfo?.frequency?.value != null) {
+        try { ch.lfo.frequency.rampTo(ch._origLfoFreq, .06); } catch {}
+      }
+    };
+
+    // capture originals once
+    if (ch._origRevWet == null) ch._origRevWet = ch?.reverb?.wet?.value ?? .3;
+    if (ch.lfo && ch.lfo.frequency && ch._origLfoFreq == null) ch._origLfoFreq = ch.lfo.frequency.value ?? 1;
+
+    if (!variant) { resetVariant(); return; }
+
+    const r = app._rng(`${s.seed}_${shape}_fx_${variant}`);
+    resetVariant();
+
+    if (variant === 'reverb' || variant === 'both') {
+      const target = Math.min(0.95, Math.max(0.35, ch._origRevWet + 0.25 + r()*0.35));
+      try { ch.reverb?.wet?.rampTo?.(target, .08); } catch {}
+    }
+    if (variant === 'delay' || variant === 'both') {
+      const d = ensureDelay();
+      if (d) {
+        const dt = 0.15 + r()*0.35;  // 150–500ms
+        const fb = 0.25 + r()*0.45;  // 0.25–0.7
+        const wet = 0.18 + r()*0.2;  // 0.18–0.38
+        try {
+          d.delayTime?.rampTo?.(dt, .06);
+          d.feedback?.linearRampToValueAtTime?.(fb, (T?.now?.() ?? 0)+.06);
+          d.wet?.rampTo?.(wet, .06);
+        } catch {}
+      }
+    }
+    if (ch.lfo?.frequency) {
+      const mult = (variant==='delay') ? 0.85 + r()*0.3 : (variant==='reverb' ? 0.75 + r()*0.2 : 0.65 + r()*0.4);
+      const tgt = Math.max(0.01, (ch._origLfoFreq||1) * mult);
+      try { ch.lfo.frequency.rampTo(tgt, .1); } catch {}
+    }
+  };
+
+
   const stopAudioSignature = () => {
     const s = app.state; s.audioSignatureTimer && (clearTimeout(s.audioSignatureTimer), s.audioSignatureTimer = null);
     s.audioSignaturePlaying = false; s.audioSignatureStepIndex = 0; app._updateControls({ isAudioSignaturePlaying: false });
@@ -393,7 +502,7 @@ export function Signatures(app) {
   return {
     _onToggleSequencer, _onLoopToggle, _onSignatureModeToggle,
     _getUniqueAlgorithmMapping, generateAudioSignature, _generateSignatureWithConstraints,
-    _onAudioSignature, _triggerSignatureFor, playAudioSignature, stopAudioSignature,
+    _onAudioSignature, _triggerSignatureFor, playAudioSignature, stopAudioSignature, applyVariant,
     _onSeqRecordStart, _onSeqStepCleared, _onSeqStepRecorded, _onSeqPlayStarted, _onSeqPlayStopped, _onSeqStepAdvance, _onSeqStepTimeChanged, _onSeqStepsChanged,
     _startSignatureSequencer, _stopSignatureSequencer, updateSequencerState,
     recordStep, playSequence, stopSequence

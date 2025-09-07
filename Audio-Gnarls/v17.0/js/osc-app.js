@@ -5,7 +5,7 @@
 import {
   clamp01, pct, on, off, setText, setPressed, toggleClass, byId, isBool, isNum,
   setDisabledAll, addEvents, removeEvents,
-} from './shared/utils.js';
+} from './utils.js';
 
 /* ============================== <osc-controls> ============================== */
 class OscControls extends HTMLElement {
@@ -180,6 +180,105 @@ class OscApp extends HTMLElement {
       ['hk-shape-step',this._onShapeStep],
     ]);
 
+    // Build 5x5 cell map:
+    // - outer ring (16 cells): shapes[0..15]
+    // - two inner-edge: shapes[16], shapes[17]
+    // - center 2x2: hum
+    // - remaining 3 inner cells: seed-linked FX variants of random base shapes
+    this._buildGridMap = () => {
+      const rng = this._rng(this.state.seed + '_grid25');
+      const pick = (arr, n) => {
+        const out = [];
+        const pool = arr.slice();
+        for (let i = 0; i < n && pool.length; i++) {
+          const j = (rng() * pool.length) | 0;
+          out.push(pool.splice(j, 1)[0]);
+        }
+        return out;
+      };
+
+      // 5x5 coordinates (r,c) with 0-based indices
+      // define convenience predicates
+      const isBorder = (r,c) => r===0||c===0||r===4||c===4;
+      // central 2x2 block: rows 1..2, cols 1..2 (this forms the “central four” in a 5x5)
+      const isHumCell = (r,c) => (r===1||r===2) && (c===1||c===2);
+
+      // collect coordinates by bands
+      const borderCells = [];
+      const innerCells = [];
+      for (let r=0;r<5;r++){
+        for (let c=0;c<5;c++){
+          if (isHumCell(r,c)) continue;
+          if (isBorder(r,c)) borderCells.push([r,c]);
+          else innerCells.push([r,c]);
+        }
+      }
+
+      // Order border clockwise starting at top-left going right, then down, then left, then up
+      const cw = [];
+      // top row (0,0..4)
+      for (let c=0;c<5;c++) cw.push([0,c]);
+      // right col (1..4,4)
+      for (let r=1;r<5;r++) cw.push([r,4]);
+      // bottom row (4,3..0)
+      for (let c=3;c>=0;c--) cw.push([4,c]);
+      // left col (3..1,0)
+      for (let r=3;r>=1;r--) cw.push([r,0]);
+      // remove any that are hum (none) and keep unique 16
+      const seen = new Set();
+      const borderCW = cw.filter(([r,c])=>{
+        const k=`${r},${c}`; if (seen.has(k)) return false; seen.add(k); return !isHumCell(r,c);
+      }).slice(0,16);
+
+      // assign the 18 sounds
+      const sounds = this.shapes.slice(0,18);
+      const map = new Map();
+
+      // 16 border -> shapes[0..15]
+      sounds.slice(0,16).forEach((shape,i)=>{
+        const [r,c]=borderCW[i]; map.set(`${r},${c}`, { type:'shape', shapeKey: shape });
+      });
+
+      // choose two inner-edge cells to hold shapes[16], shapes[17]
+      // prefer the midpoints of each side inside the border (these are: (1,2), (2,3), (3,2), (2,1), (1,3), (3,1) minus hum cells)
+      const innerEdgeCandidates = innerCells.filter(([r,c])=>{
+        const nearEdge = (r===1||r===3||c===1||c===3);
+        return nearEdge && !isHumCell(r,c);
+      });
+      const twoInner = pick(innerEdgeCandidates, 2);
+      if (twoInner[0]) map.set(`${twoInner[0][0]},${twoInner[0][1]}`, { type:'shape', shapeKey: sounds[16] });
+      if (twoInner[1]) map.set(`${twoInner[1][0]},${twoInner[1][1]}`, { type:'shape', shapeKey: sounds[17] });
+
+      // remaining inner cells (excluding any we just filled and the hum 2x2) -> 3 seed-linked FX variant cells
+      const filled = new Set([...map.keys()]);
+      const remainingInner = innerCells.filter(([r,c])=>!filled.has(`${r},${c}`) && !isHumCell(r,c));
+      const fxCells = pick(remainingInner, 3);
+
+      // deterministically pick 3 base shapes from the 18 to “repeat” with FX
+      const baseForFx = pick(sounds, 3);
+      const fxTypes = ['reverb','delay','both'];
+
+      fxCells.forEach(([r,c],i)=>{
+        const v = fxTypes[i%fxTypes.length];
+        const base = baseForFx[i%baseForFx.length];
+        map.set(`${r},${c}`, { type:'fx', shapeKey: base, variant: v });
+      });
+
+      // hum cells (central 2x2)
+      for (let r=1;r<=2;r++){
+        for (let c=1;c<=2;c++){
+          map.set(`${r},${c}`, { type:'hum', shapeKey: this.humKey });
+        }
+      }
+
+      this._grid25 = {
+        map,
+        cellInfo: (r,c)=> map.get(`${r},${c}`) || null
+      };
+    };
+
+    this._buildGridMap();
+
     this._sequencerComponent=$('seq-app'); this._sequencerComponent.style.display='none';
     this._loader=$('div',{id:'loader',textContent:'Initializing...'});
     main.append(canvasContainer,this._controls,this._sequencerComponent,this._loader);
@@ -332,45 +431,101 @@ class OscApp extends HTMLElement {
   }
   _removePowerOverlay(){this._powerOverlay?.parentNode?.removeChild(this._powerOverlay); this._powerOverlay=null;}
 
-  _setupCanvasClickGrid(){
+    _setupCanvasClickGrid(){
     const el=this._canvas; if(!el||this._canvasClickGridSetup)return; this._canvasClickGridSetup=true;
-    const keyFrom=(ev)=>{const r=el.getBoundingClientRect(),x=Math.max(0,Math.min(r.width,(ev.clientX??0)-r.left)),y=Math.max(0,Math.min(r.height,(ev.clientY??0)-r.top)),cols=5,rows=2,col=Math.min(cols-1,Math.max(0,Math.floor(x/(r.width/cols)))),row=Math.min(rows-1,Math.max(0,Math.floor(y/(r.height/rows)))),cell=row*cols+col; return cell===9?'0':String(cell+1);};
-    const down=k=>this._hotkeys?.simulatePressKey?.(k), up=k=>this._hotkeys?.simulateReleaseKey?.(k);
+
+    const cellFromEvent=(ev)=>{
+      const rct=el.getBoundingClientRect();
+      const x=Math.max(0,Math.min(rct.width,(ev.clientX??0)-rct.left));
+      const y=Math.max(0,Math.min(rct.height,(ev.clientY??0)-rct.top));
+      const cols=5, rows=5;
+      const col=Math.min(cols-1,Math.max(0,Math.floor(x/(rct.width/cols))));
+      const row=Math.min(rows-1,Math.max(0,Math.floor(y/(rct.height/rows))));
+      const info=this._grid25?.cellInfo(row,col);
+      return { row, col, info };
+    };
+
+    const pressCell=(row,col,info)=>{
+      // synth the same detail shape hotkeys would send, plus a stable key for hold-tracking
+      const key=`r${row}c${col}`;
+      const shapeKey=info?.shapeKey || this.humKey;
+      const idx=(shapeKey===this.humKey)?-1:this.shapes.indexOf(shapeKey);
+      // remember the last pressed logical key so release works
+      this._heldKeys.add(key);
+      // carry variant if present
+      const detail={ key, idx, shapeKey, variant: info?.variant || null };
+      this._onHotkeyPress({ detail });
+    };
+
+    const releaseCell=(key)=>{
+      // tell release with the same key id
+      this._onHotkeyRelease({ detail:{ key } });
+    };
+
     this._onCanvasPointerDown=ev=>{
-      if(!this.state?.contextUnlocked){try{this.unlockAudioAndBufferInitial?.();}catch{} ev?.preventDefault?.(); return;}
+      if(!this.state?.contextUnlocked){ try{ this.unlockAudioAndBufferInitial?.(); }catch{} ev?.preventDefault?.(); return; }
       try{
         this._isCanvasPointerDown=true; try{ev.target?.setPointerCapture?.(ev.pointerId);}catch{}
-        const k=keyFrom(ev); if(k!==this._lastPointerDigitKey){this._lastPointerDigitKey=k; down(k);}
-      }catch(e){console.error('canvas grid down error',e);}
+        const {row,col,info}=cellFromEvent(ev);
+        this._lastPointerKey=`r${row}c${col}`; this._lastPointerInfo=info||null;
+        pressCell(row,col,info);
+      }catch(e){ console.error('canvas grid down error',e); }
     };
+
     this._onCanvasPointerMove=ev=>{
       if(!this._isCanvasPointerDown||!this.state?.contextUnlocked)return;
       try{
-        const k=keyFrom(ev);
-        if(k!==this._lastPointerDigitKey){this._lastPointerDigitKey&&up(this._lastPointerDigitKey); this._lastPointerDigitKey=k; down(k);}
-      }catch(e){console.error('canvas grid move error',e);}
+        const {row,col,info}=cellFromEvent(ev);
+        const key=`r${row}c${col}`;
+        if(key!==this._lastPointerKey){
+          const prev=this._lastPointerKey; this._lastPointerKey=key; this._lastPointerInfo=info||null;
+          prev && releaseCell(prev);
+          pressCell(row,col,info);
+        }
+      }catch(e){ console.error('canvas grid move error',e); }
     };
+
     this._onCanvasPointerUp=ev=>{
-      try{this._isCanvasPointerDown=false; ev?.target?.releasePointerCapture?.(ev.pointerId);}catch{}
-      if(!this._lastPointerDigitKey)return; const k=this._lastPointerDigitKey; this._lastPointerDigitKey=null; up(k);
+      try{ this._isCanvasPointerDown=false; ev?.target?.releasePointerCapture?.(ev.pointerId);}catch{}
+      if(!this._lastPointerKey)return; const k=this._lastPointerKey; this._lastPointerKey=null; this._lastPointerInfo=null; releaseCell(k);
     };
-    this._onCanvasPointerCancel=()=>{this._isCanvasPointerDown=false; if(this._lastPointerDigitKey){const k=this._lastPointerDigitKey; this._lastPointerDigitKey=null; up(k);}};
-    addEvents(el,[['pointerdown',this._onCanvasPointerDown],['pointermove',this._onCanvasPointerMove],['pointercancel',this._onCanvasPointerCancel],['pointerleave',this._onCanvasPointerUp]]);
+    this._onCanvasPointerCancel=()=>{ this._isCanvasPointerDown=false; if(this._lastPointerKey){ const k=this._lastPointerKey; this._lastPointerKey=null; this._lastPointerInfo=null; releaseCell(k); }};
+
+    addEvents(el,[
+      ['pointerdown',this._onCanvasPointerDown],
+      ['pointermove',this._onCanvasPointerMove],
+      ['pointercancel',this._onCanvasPointerCancel],
+      ['pointerleave',this._onCanvasPointerUp],
+    ]);
     on(window,'pointerup',this._onCanvasPointerUp);
   }
+
 
   _onHotkeyLoopToggle(){this._onLoopToggle();}
   _onHotkeySignatureToggle(){this.state.isSequencerMode&&this._onSignatureModeToggle();}
 
-  _onHotkeyPress({detail}){
-    const s=this.state,{key,idx,shapeKey}=detail||{}; if(!shapeKey)return;
-    if(s.isSequenceSignatureMode){this._triggerSignatureFor(shapeKey,{loop:s.isLoopEnabled}); return;}
+    _onHotkeyPress({detail}){
+    const s=this.state; const {key,idx,shapeKey,variant}=detail||{}; if(!shapeKey)return;
+
+    // NEW: remember requested variant for this press
+    s._transientOverride = variant || null;
+
+    if(s.isSequenceSignatureMode){ this._triggerSignatureFor(shapeKey,{loop:s.isLoopEnabled}); return; }
     this._heldKeys.add(key);
-    const enter=()=>{this.setActiveChain(shapeKey); (idx>=0)&&this._setCanvas({shapeKey,preset:s.presets[shapeKey],mode:'live'}); this._canvas.isPlaying=true; this._updateControls({shapeKey}); s.current=shapeKey; (shapeKey!==this.humKey)&&(s._uiReturnShapeKey=shapeKey);};
+
+    const enter=()=>{
+      this.setActiveChain(shapeKey);
+      if (s._transientOverride) { this.applyVariant?.(shapeKey, s._transientOverride); } // <— NEW
+
+      (idx>=0)&&this._setCanvas({shapeKey,preset:s.presets[shapeKey],mode:'live'});
+      this._canvas.isPlaying=true; this._updateControls({shapeKey}); s.current=shapeKey;
+      (shapeKey!==this.humKey)&&(s._uiReturnShapeKey=shapeKey);
+    };
+
     if(s.isSequencerMode){
       if(s.isRecording){
         this._recordedThisHold=this._recordedThisHold||new Set();
-        if(!this._recordedThisHold.has(key)){this.recordStep((idx>=0)?(idx+1):0); this._recordedThisHold.add(key);}
+        if(!this._recordedThisHold.has(key)){ this.recordStep((idx>=0)?(idx+1):0); this._recordedThisHold.add(key); }
       }
       (s.contextUnlocked&&s.initialShapeBuffered)&&enter(); return;
     }
@@ -378,14 +533,22 @@ class OscApp extends HTMLElement {
   }
 
   _onHotkeyRelease({detail}){
-    const s=this.state,{key}=detail||{}; if(!this._heldKeys?.has(key))return;
+    const s=this.state; const {key}=detail||{}; if(!this._heldKeys?.has(key))return;
     this._heldKeys.delete(key); this._recordedThisHold?.delete?.(key);
+
+    // NEW: reset any variant we applied
+    if (s._transientOverride && s.current && s.current!==this.humKey) {
+      this.applyVariant?.(s.current, null);
+    }
+    s._transientOverride = null;
+
     if(!s.isLatchOn&&s.contextUnlocked&&s.initialShapeBuffered){
       this.setActiveChain(this.humKey,{updateCanvasShape:false,setStateCurrent:false});
       this._canvas.isPlaying=false;
       s._uiReturnShapeKey?this._updateControls({shapeKey:s._uiReturnShapeKey}):this._updateControls();
     }
   }
+
 
   _onShapeStep({detail}){
     const d=detail?.direction; if(!d||!this.shapes.length)return;
