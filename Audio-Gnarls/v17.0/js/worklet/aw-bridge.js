@@ -79,20 +79,51 @@ class AWOscillator {
 
 
 const patchTone = () => {
-  if (!window.Tone || !window.Tone.Oscillator) return false;
-  const ctx = window.Tone?.getContext?.()?.rawContext || window.Tone?.context?._context || window.Tone?.context?._nativeAudioContext || window.Tone?.context?.rawContext || window.Tone?.context || null;
-  if (!ctx || !ctx.audioWorklet) {
+  const W = window;
+  const ToneNS = W.Tone;
+  if (!ToneNS || !('Oscillator' in ToneNS)) return false;
+
+  const ctx = ToneNS?.getContext?.()?.rawContext
+           || ToneNS?.context?._context
+           || ToneNS?.context?._nativeAudioContext
+           || ToneNS?.context?.rawContext
+           || ToneNS?.context
+           || null;
+
+  if (!ctx?.audioWorklet) {
     console.info('[AW Bridge] AudioWorklet not supported; keeping original Tone.Oscillator.');
     return false;
   }
+
   try {
-    window.Tone.__OrigOscillator = window.Tone.Oscillator;
-    window.Tone.Oscillator = AWOscillator;
-    console.info('[AW Bridge] Patched Tone.Oscillator -> AudioWorklet-backed oscillator');
+    // Keep original for escape hatch
+    W.Tone = new Proxy(ToneNS, {
+      get(target, prop, receiver) {
+        if (prop === 'Oscillator') return AWOscillator;
+        return Reflect.get(target, prop, receiver);
+      }
+    });
+    W.Tone.__OrigOscillator = ToneNS.Oscillator;
+    console.info('[AW Bridge] Patched Tone via Proxy -> Oscillator routed to AudioWorklet');
     return true;
   } catch (e) {
-    console.warn('[AW Bridge] Failed to patch Tone.Oscillator', e);
-    return false;
+    console.warn('[AW Bridge] Failed to install Proxy; falling back to shadow object', e);
+    // Fall back to Option B
+    try {
+      const shadow = Object.create(ToneNS);
+      Object.defineProperty(shadow, 'Oscillator', {
+        configurable: true,
+        enumerable: true,
+        get: () => AWOscillator
+      });
+      shadow.__OrigOscillator = ToneNS.Oscillator;
+      W.Tone = shadow;
+      console.info('[AW Bridge] Patched Tone via shadow object -> Oscillator routed to AudioWorklet');
+      return true;
+    } catch (e2) {
+      console.warn('[AW Bridge] Failed to patch Tone.', e2);
+      return false;
+    }
   }
 };
 
