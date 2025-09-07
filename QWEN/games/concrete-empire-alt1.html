@@ -1,0 +1,960 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concrete Empire</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: #111;
+        }
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: #222;
+        }
+        #uiContainer {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #fff;
+            font-size: 16px;
+            text-shadow: 2px 2px 2px #000;
+            z-index: 100;
+        }
+        #healthBar {
+            width: 200px;
+            height: 20px;
+            background-color: #333;
+            margin-bottom: 5px;
+        }
+        #healthFill {
+            height: 100%;
+            background-color: #f00;
+            width: 100%;
+            transition: width 0.3s;
+        }
+        #wantedContainer {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            z-index: 100;
+        }
+        .wantedStar {
+            display: inline-block;
+            width: 30px;
+            height: 30px;
+            background-color: #444;
+            margin-left: 5px;
+            clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+        }
+        .wantedStar.active {
+            background-color: #f00;
+        }
+        #moneyDisplay {
+            position: absolute;
+            top: 60px;
+            right: 20px;
+            color: #ff0;
+            font-size: 20px;
+            font-weight: bold;
+            text-shadow: 2px 2px 2px #000;
+            z-index: 100;
+        }
+        #weaponDisplay {
+            position: absolute;
+            bottom: 80px;
+            left: 20px;
+            color: #fff;
+            font-size: 18px;
+            z-index: 100;
+        }
+        #minimap {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            width: 150px;
+            height: 150px;
+            background-color: rgba(0, 0, 0, 0.7);
+            border: 2px solid #fff;
+            z-index: 100;
+        }
+        #minimapPlayer {
+            position: absolute;
+            width: 6px;
+            height: 6px;
+            background-color: #0f0;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+        }
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            font-size: 24px;
+        }
+        #titleScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(to bottom, #000, #222);
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            font-size: 32px;
+        }
+        .menuButton {
+            margin: 15px;
+            padding: 15px 30px;
+            background-color: #800;
+            color: #fff;
+            border: 2px solid #fff;
+            cursor: pointer;
+            font-size: 20px;
+            font-family: 'Courier New', Courier, monospace;
+            transition: all 0.3s;
+        }
+        .menuButton:hover {
+            background-color: #a00;
+            transform: scale(1.05);
+        }
+        #missionText {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 20px;
+            border: 2px solid #f00;
+            font-size: 24px;
+            text-align: center;
+            z-index: 200;
+            display: none;
+        }
+        #pauseMenu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 300;
+            font-size: 24px;
+        }
+        #dialogBox {
+            position: absolute;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 80%;
+            background-color: rgba(0, 0, 0, 0.8);
+            color: #fff;
+            padding: 15px;
+            border: 2px solid #f00;
+            font-size: 18px;
+            text-align: center;
+            z-index: 200;
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingScreen">
+        <h1>CONCRETE EMPIRE</h1>
+        <p>Loading...</p>
+        <div id="loadingProgress">0%</div>
+    </div>
+
+    <div id="titleScreen" style="display: none;">
+        <h1>CONCRETE EMPIRE</h1>
+        <p>Port Carmine, 1998</p>
+        <button class="menuButton" id="startGameBtn">START NEW GAME</button>
+        <button class="menuButton" id="loadGameBtn">LOAD GAME</button>
+        <button class="menuButton" id="optionsBtn">OPTIONS</button>
+        <button class="menuButton" id="creditsBtn">CREDITS</button>
+    </div>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="uiContainer">
+            <div id="healthBar">
+                <div id="healthFill"></div>
+            </div>
+            <div id="weaponDisplay">Weapon: 9mm Pistol</div>
+        </div>
+        
+        <div id="wantedContainer">
+            <div class="wantedStar"></div>
+            <div class="wantedStar"></div>
+            <div class="wantedStar"></div>
+            <div class="wantedStar"></div>
+            <div class="wantedStar"></div>
+        </div>
+        
+        <div id="moneyDisplay">$200</div>
+        
+        <div id="minimap">
+            <div id="minimapPlayer"></div>
+        </div>
+        
+        <div id="missionText"></div>
+        <div id="dialogBox"></div>
+        
+        <div id="pauseMenu">
+            <h2>PAUSED</h2>
+            <button class="menuButton" id="resumeBtn">RESUME</button>
+            <button class="menuButton" id="saveBtn">SAVE GAME</button>
+            <button class="menuButton" id="optionsBtn2">OPTIONS</button>
+            <button class="menuButton" id="mainMenuBtn">MAIN MENU</button>
+        </div>
+    </div>
+
+    <script>
+        // Game initialization
+        document.addEventListener('DOMContentLoaded', function() {
+            // Simulate loading
+            let progress = 0;
+            const loadingInterval = setInterval(() => {
+                progress += Math.random() * 5;
+                if (progress >= 100) {
+                    progress = 100;
+                    clearInterval(loadingInterval);
+                    document.getElementById('loadingScreen').style.display = 'none';
+                    document.getElementById('titleScreen').style.display = 'flex';
+                }
+                document.getElementById('loadingProgress').textContent = Math.floor(progress) + '%';
+            }, 100);
+
+            // Title screen buttons
+            document.getElementById('startGameBtn').addEventListener('click', startGame);
+            document.getElementById('loadGameBtn').addEventListener('click', loadGame);
+            document.getElementById('optionsBtn').addEventListener('click', showOptions);
+            document.getElementById('creditsBtn').addEventListener('click', showCredits);
+            
+            // Pause menu buttons
+            document.getElementById('resumeBtn').addEventListener('click', togglePause);
+            document.getElementById('saveBtn').addEventListener('click', saveGame);
+            document.getElementById('optionsBtn2').addEventListener('click', showOptions);
+            document.getElementById('mainMenuBtn').addEventListener('click', returnToMainMenu);
+        });
+
+        // Game state
+        let gameState = {
+            paused: false,
+            player: {
+                x: 400,
+                y: 300,
+                angle: 0,
+                speed: 3,
+                health: 100,
+                maxHealth: 100,
+                money: 200,
+                wantedLevel: 0,
+                currentWeapon: 0,
+                weapons: [
+                    { name: "9mm Pistol", ammo: 17, maxAmmo: 17 },
+                    { name: "Brass Knuckles", ammo: Infinity },
+                    { name: "Baseball Bat", ammo: Infinity }
+                ],
+                inventory: [],
+                respect: 0,
+                heat: 0,
+                chapter: 1,
+                mission: 1
+            },
+            camera: {
+                x: 0,
+                y: 0,
+                zoom: 1
+            },
+            keys: {},
+            mouse: {
+                x: 0,
+                y: 0,
+                down: false
+            },
+            world: {
+                width: 5000,
+                height: 5000,
+                buildings: [],
+                vehicles: [],
+                npcs: [],
+                gangs: [],
+                businesses: []
+            },
+            missions: [],
+            currentMission: null
+        };
+
+        // Canvas setup
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+        
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Input handling
+        window.addEventListener('keydown', function(e) {
+            gameState.keys[e.key.toLowerCase()] = true;
+            
+            // Weapon switching
+            if (e.key >= '1' && e.key <= '9') {
+                const weaponIndex = parseInt(e.key) - 1;
+                if (weaponIndex < gameState.player.weapons.length) {
+                    gameState.player.currentWeapon = weaponIndex;
+                    updateWeaponDisplay();
+                }
+            }
+            
+            // Pause
+            if (e.key === 'Escape') {
+                togglePause();
+            }
+        });
+        
+        window.addEventListener('keyup', function(e) {
+            gameState.keys[e.key.toLowerCase()] = false;
+        });
+        
+        canvas.addEventListener('mousemove', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            gameState.mouse.x = e.clientX - rect.left;
+            gameState.mouse.y = e.clientY - rect.top;
+            
+            // Calculate player aim angle
+            const playerScreenX = canvas.width / 2;
+            const playerScreenY = canvas.height / 2;
+            gameState.player.angle = Math.atan2(gameState.mouse.y - playerScreenY, gameState.mouse.x - playerScreenX);
+        });
+        
+        canvas.addEventListener('mousedown', function(e) {
+            gameState.mouse.down = true;
+        });
+        
+        canvas.addEventListener('mouseup', function(e) {
+            gameState.mouse.down = false;
+        });
+
+        // Game functions
+        function startGame() {
+            document.getElementById('titleScreen').style.display = 'none';
+            initWorld();
+            startMission(1, 1);
+            gameLoop();
+        }
+        
+        function loadGame() {
+            // Load saved game state from localStorage
+            const savedGame = localStorage.getItem('concreteEmpireSave');
+            if (savedGame) {
+                try {
+                    const parsedGame = JSON.parse(savedGame);
+                    Object.assign(gameState, parsedGame);
+                    document.getElementById('titleScreen').style.display = 'none';
+                    gameLoop();
+                } catch (e) {
+                    alert('Error loading saved game');
+                    startGame();
+                }
+            } else {
+                alert('No saved game found');
+                startGame();
+            }
+        }
+        
+        function saveGame() {
+            try {
+                localStorage.setItem('concreteEmpireSave', JSON.stringify(gameState));
+                showDialog("Game saved successfully!");
+            } catch (e) {
+                showDialog("Error saving game");
+            }
+        }
+        
+        function showOptions() {
+            showDialog("Options not implemented in demo");
+        }
+        
+        function showCredits() {
+            showDialog("CONCRETE EMPIRE\n\nDeveloped by: Indie Dev\n\nInspired by GTA 1 and Kingpin: Life of Crime");
+        }
+        
+        function returnToMainMenu() {
+            if (confirm("Return to main menu? Unsaved progress will be lost.")) {
+                document.getElementById('pauseMenu').style.display = 'none';
+                document.getElementById('titleScreen').style.display = 'flex';
+                gameState.paused = false;
+            }
+        }
+        
+        function togglePause() {
+            gameState.paused = !gameState.paused;
+            document.getElementById('pauseMenu').style.display = gameState.paused ? 'flex' : 'none';
+        }
+
+        // World initialization
+        function initWorld() {
+            // Generate buildings
+            for (let i = 0; i < 200; i++) {
+                gameState.world.buildings.push({
+                    x: Math.random() * gameState.world.width,
+                    y: Math.random() * gameState.world.height,
+                    width: 80 + Math.random() * 120,
+                    height: 80 + Math.random() * 120,
+                    type: ['residential', 'commercial', 'industrial'][Math.floor(Math.random() * 3)],
+                    color: ['#888', '#666', '#777'][Math.floor(Math.random() * 3)]
+                });
+            }
+            
+            // Generate vehicles
+            for (let i = 0; i < 50; i++) {
+                gameState.world.vehicles.push({
+                    x: Math.random() * gameState.world.width,
+                    y: Math.random() * gameState.world.height,
+                    angle: Math.random() * Math.PI * 2,
+                    speed: 0,
+                    maxSpeed: 2 + Math.random() * 3,
+                    type: ['sedan', 'truck', 'sports', 'motorcycle'][Math.floor(Math.random() * 4)],
+                    color: ['#f00', '#0f0', '#00f', '#ff0', '#f0f', '#0ff'][Math.floor(Math.random() * 6)]
+                });
+            }
+            
+            // Generate NPCs
+            for (let i = 0; i < 100; i++) {
+                gameState.world.npcs.push({
+                    x: Math.random() * gameState.world.width,
+                    y: Math.random() * gameState.world.height,
+                    angle: Math.random() * Math.PI * 2,
+                    speed: 0.5 + Math.random() * 1,
+                    type: ['civilian', 'police', 'gang'][Math.floor(Math.random() * 3)],
+                    color: ['#fff', '#00f', '#f00'][Math.floor(Math.random() * 3)],
+                    health: 100,
+                    weapon: Math.random() > 0.7 ? 0 : -1 // 30% chance of being armed
+                });
+            }
+            
+            // Generate gangs
+            const gangNames = ["Falcone Family", "Marconi Family", "Dockside Boys", "Vietnamese Syndicate", "Russian Mob", "Latin Kings", "Yakuza"];
+            const gangColors = ["#f00", "#0f0", "#00f", "#ff0", "#f0f", "#0ff", "#fff"];
+            
+            for (let i = 0; i < 7; i++) {
+                gameState.world.gangs.push({
+                    name: gangNames[i],
+                    color: gangColors[i],
+                    territory: {
+                        x: Math.random() * (gameState.world.width - 500),
+                        y: Math.random() * (gameState.world.height - 500),
+                        width: 400 + Math.random() * 200,
+                        height: 400 + Math.random() * 200
+                    },
+                    members: Math.floor(10 + Math.random() * 40),
+                    power: Math.floor(1 + Math.random() * 5),
+                    isEnemy: i === 0 // Falcone Family is initial enemy
+                });
+            }
+            
+            // Generate businesses
+            const businessTypes = ["Convenience Store", "Bar", "Restaurant", "Gas Station", "Pawn Shop", "Laundromat", "Warehouse"];
+            
+            for (let i = 0; i < 30; i++) {
+                gameState.world.businesses.push({
+                    x: Math.random() * gameState.world.width,
+                    y: Math.random() * gameState.world.height,
+                    type: businessTypes[Math.floor(Math.random() * businessTypes.length)],
+                    name: generateBusinessName(businessTypes[Math.floor(Math.random() * businessTypes.length)]),
+                    owned: false,
+                    income: Math.floor(100 + Math.random() * 900),
+                    protection: 0 // 0-100% protected
+                });
+            }
+        }
+        
+        function generateBusinessName(type) {
+            const prefixes = ["Quick", "Best", "Super", "Mega", "Ultra", "Prime", "Golden", "Silver", "Red", "Blue"];
+            const suffixes = ["Mart", "Stop", "Place", "Spot", "Zone", "Depot", "Outlet", "Center", "Hub", "Station"];
+            
+            switch(type) {
+                case "Convenience Store":
+                    return prefixes[Math.floor(Math.random() * prefixes.length)] + " Stop";
+                case "Bar":
+                    return "The " + ["Red", "Blue", "Green", "Black", "White", "Golden", "Silver"][Math.floor(Math.random() * 7)] + " " + ["Dragon", "Lion", "Tiger", "Bear", "Wolf", "Eagle", "Hawk"][Math.floor(Math.random() * 7)];
+                case "Restaurant":
+                    return ["Mario's", "Tony's", "Luigi's", "Frankie's", "Vinnie's", "Sal's", "Joey's"][Math.floor(Math.random() * 7)] + " " + ["Pizza", "Pasta", "Burgers", "Steakhouse", "Diner", "Cafe", "Grill"][Math.floor(Math.random() * 7)];
+                default:
+                    return prefixes[Math.floor(Math.random() * prefixes.length)] + " " + type + " " + suffixes[Math.floor(Math.random() * suffixes.length)];
+            }
+        }
+
+        // Mission system
+        function startMission(chapter, mission) {
+            gameState.player.chapter = chapter;
+            gameState.player.mission = mission;
+            
+            const missionData = getMissionData(chapter, mission);
+            gameState.currentMission = missionData;
+            
+            // Display mission briefing
+            document.getElementById('missionText').textContent = missionData.briefing;
+            document.getElementById('missionText').style.display = 'block';
+            
+            setTimeout(() => {
+                document.getElementById('missionText').style.display = 'none';
+            }, 5000);
+        }
+        
+        function getMissionData(chapter, mission) {
+            const missions = {
+                1: {
+                    1: {
+                        title: "Welcome Back",
+                        briefing: "You're out of prison with nothing but $200 and a grudge. Rob the convenience store on Elm Street to get starter funds.",
+                        objectives: [
+                            "Locate the convenience store at 123 Elm St",
+                            "Enter the store",
+                            "Threaten the clerk",
+                            "Collect $500"
+                        ],
+                        reward: 500,
+                        failCondition: "Die or get arrested"
+                    },
+                    2: {
+                        title: "Debt Collection",
+                        briefing: "The Marconi family needs someone to collect debts from local shop owners. Show them what happens when they don't pay.",
+                        objectives: [
+                            "Visit 3 shops marked on your map",
+                            "Collect payments (use intimidation)",
+                            "Return to Marconi contact"
+                        ],
+                        reward: 800,
+                        failCondition: "Die or fail to collect from all shops"
+                    },
+                    3: {
+                        title: "Street Cred",
+                        briefing: "The Dockside Boys have been disrespecting our territory. Teach them a lesson in the warehouse district.",
+                        objectives: [
+                            "Go to the warehouse district",
+                            "Defeat 5 Dockside Boys members",
+                            "Survive the gang fight"
+                        ],
+                        reward: 1000,
+                        failCondition: "Die or flee the area"
+                    },
+                    4: {
+                        title: "First Taste",
+                        briefing: "A Vietnamese syndicate drug shipment is coming through the docks tonight. Hijack it and bring it to our contact.",
+                        objectives: [
+                            "Go to the docks at night",
+                            "Locate the shipment (marked on minimap)",
+                            "Eliminate guards",
+                            "Deliver shipment to contact"
+                        ],
+                        reward: 2000,
+                        failCondition: "Die or let shipment leave the area"
+                    },
+                    5: {
+                        title: "Making Connections",
+                        briefing: "We need inside information. Bribe a corrupt cop at the police station with $500 to get intel on the Falcone family.",
+                        objectives: [
+                            "Go to the police station",
+                            "Find the corrupt cop (wearing a green tie)",
+                            "Pay the bribe",
+                            "Get the intel"
+                        ],
+                        reward: 0, // Unlocks next chapter
+                        failCondition: "Die or get arrested"
+                    }
+                }
+            };
+            
+            return missions[chapter][mission] || {
+                title: "Unknown Mission",
+                briefing: "No mission data available.",
+                objectives: ["Explore the city"],
+                reward: 0,
+                failCondition: "Die"
+            };
+        }
+
+        // UI Updates
+        function updateHealthBar() {
+            const healthPercent = gameState.player.health / gameState.player.maxHealth * 100;
+            document.getElementById('healthFill').style.width = `${Math.max(0, healthPercent)}%`;
+            
+            // Color changes based on health
+            if (healthPercent < 25) {
+                document.getElementById('healthFill').style.backgroundColor = '#f00';
+            } else if (healthPercent < 50) {
+                document.getElementById('healthFill').style.backgroundColor = '#ff0';
+            } else {
+                document.getElementById('healthFill').style.backgroundColor = '#0f0';
+            }
+        }
+        
+        function updateWantedLevel() {
+            const stars = document.querySelectorAll('.wantedStar');
+            for (let i = 0; i < stars.length; i++) {
+                if (i < gameState.player.wantedLevel) {
+                    stars[i].classList.add('active');
+                } else {
+                    stars[i].classList.remove('active');
+                }
+            }
+        }
+        
+        function updateMoneyDisplay() {
+            document.getElementById('moneyDisplay').textContent = `$${gameState.player.money.toLocaleString()}`;
+        }
+        
+        function updateWeaponDisplay() {
+            if (gameState.player.weapons[gameState.player.currentWeapon]) {
+                const weapon = gameState.player.weapons[gameState.player.currentWeapon];
+                document.getElementById('weaponDisplay').textContent = `Weapon: ${weapon.name} ${weapon.ammo !== Infinity ? `(${weapon.ammo})` : ''}`;
+            }
+        }
+        
+        function updateMinimap() {
+            const minimapPlayer = document.getElementById('minimapPlayer');
+            // Calculate player position on minimap (scaled to 150x150)
+            const scaleX = 150 / gameState.world.width;
+            const scaleY = 150 / gameState.world.height;
+            const playerX = (gameState.player.x * scaleX);
+            const playerY = (gameState.player.y * scaleY);
+            
+            minimapPlayer.style.left = `${playerX}px`;
+            minimapPlayer.style.top = `${playerY}px`;
+        }
+
+        // Dialog system
+        function showDialog(text, callback) {
+            const dialogBox = document.getElementById('dialogBox');
+            dialogBox.textContent = text;
+            dialogBox.style.display = 'block';
+            
+            setTimeout(() => {
+                dialogBox.style.display = 'none';
+                if (callback) callback();
+            }, 3000);
+        }
+
+        // Game loop
+        function gameLoop() {
+            if (!gameState.paused) {
+                update();
+                render();
+            }
+            requestAnimationFrame(gameLoop);
+        }
+        
+        function update() {
+            // Player movement
+            let dx = 0;
+            let dy = 0;
+            
+            if (gameState.keys['w'] || gameState.keys['arrowup']) dy -= gameState.player.speed;
+            if (gameState.keys['s'] || gameState.keys['arrowdown']) dy += gameState.player.speed;
+            if (gameState.keys['a'] || gameState.keys['arrowleft']) dx -= gameState.player.speed;
+            if (gameState.keys['d'] || gameState.keys['arrowright']) dx += gameState.player.speed;
+            
+            // Normalize diagonal movement
+            if (dx !== 0 && dy !== 0) {
+                dx *= 0.7071; // 1/sqrt(2)
+                dy *= 0.7071;
+            }
+            
+            // Update player position
+            gameState.player.x += dx;
+            gameState.player.y += dy;
+            
+            // Keep player in bounds
+            gameState.player.x = Math.max(0, Math.min(gameState.world.width, gameState.player.x));
+            gameState.player.y = Math.max(0, Math.min(gameState.world.height, gameState.player.y));
+            
+            // Update camera to follow player
+            gameState.camera.x = gameState.player.x - canvas.width / 2;
+            gameState.camera.y = gameState.player.y - canvas.height / 2;
+            
+            // Update vehicle positions (simple AI)
+            gameState.world.vehicles.forEach(vehicle => {
+                if (Math.random() < 0.02) {
+                    vehicle.angle += (Math.random() - 0.5) * 0.2;
+                }
+                vehicle.speed = Math.min(vehicle.maxSpeed, vehicle.speed + 0.01);
+                
+                vehicle.x += Math.cos(vehicle.angle) * vehicle.speed;
+                vehicle.y += Math.sin(vehicle.angle) * vehicle.speed;
+                
+                // Keep vehicles in bounds or turn around
+                if (vehicle.x < 0 || vehicle.x > gameState.world.width || vehicle.y < 0 || vehicle.y > gameState.world.height) {
+                    vehicle.angle += Math.PI;
+                }
+            });
+            
+            // Update NPC positions
+            gameState.world.npcs.forEach(npc => {
+                if (Math.random() < 0.03) {
+                    npc.angle += (Math.random() - 0.5) * 0.3;
+                }
+                
+                npc.x += Math.cos(npc.angle) * npc.speed;
+                npc.y += Math.sin(npc.angle) * npc.speed;
+                
+                // Keep NPCs in bounds
+                if (npc.x < 0 || npc.x > gameState.world.width || npc.y < 0 || npc.y > gameState.world.height) {
+                    npc.angle += Math.PI;
+                }
+            });
+            
+            // Shooting
+            if (gameState.mouse.down) {
+                const weapon = gameState.player.weapons[gameState.player.currentWeapon];
+                if (weapon.ammo > 0 || weapon.ammo === Infinity) {
+                    if (weapon.ammo !== Infinity) {
+                        weapon.ammo--;
+                        updateWeaponDisplay();
+                    }
+                    
+                    // Create bullet (not rendered in this demo)
+                    // In a full game, you'd create a bullet object and add it to an array
+                    
+                    // Simple hit detection (demo only)
+                    gameState.world.npcs.forEach((npc, index) => {
+                        const distance = Math.sqrt(
+                            Math.pow(npc.x - gameState.player.x, 2) + 
+                            Math.pow(npc.y - gameState.player.y, 2)
+                        );
+                        
+                        if (distance < 200) { // Within range
+                            npc.health -= 25;
+                            if (npc.health <= 0) {
+                                gameState.world.npcs.splice(index, 1);
+                                gameState.player.money += 50;
+                                updateMoneyDisplay();
+                            }
+                        }
+                    });
+                }
+            }
+            
+            // Wanted level system (demo: increases when shooting)
+            if (gameState.mouse.down && Math.random() < 0.1) {
+                gameState.player.wantedLevel = Math.min(5, gameState.player.wantedLevel + 0.1);
+                updateWantedLevel();
+            }
+            
+            // Health regeneration (when not in combat)
+            if (!gameState.mouse.down && Math.random() < 0.01) {
+                gameState.player.health = Math.min(gameState.player.maxHealth, gameState.player.health + 0.5);
+                updateHealthBar();
+            }
+            
+            // Update UI elements
+            updateHealthBar();
+            updateWantedLevel();
+            updateMoneyDisplay();
+            updateWeaponDisplay();
+            updateMinimap();
+        }
+        
+        function render() {
+            // Clear canvas
+            ctx.fillStyle = '#333';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid for ground
+            ctx.strokeStyle = '#222';
+            ctx.lineWidth = 1;
+            
+            const gridSize = 50;
+            const startX = -gameState.camera.x % gridSize;
+            const startY = -gameState.camera.y % gridSize;
+            
+            for (let x = startX; x < canvas.width + gridSize; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            
+            for (let y = startY; y < canvas.height + gridSize; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            // Draw buildings
+            gameState.world.buildings.forEach(building => {
+                const screenX = building.x - gameState.camera.x;
+                const screenY = building.y - gameState.camera.y;
+                
+                if (screenX + building.width > 0 && screenX < canvas.width && 
+                    screenY + building.height > 0 && screenY < canvas.height) {
+                    ctx.fillStyle = building.color;
+                    ctx.fillRect(screenX, screenY, building.width, building.height);
+                    
+                    // Draw building details
+                    ctx.fillStyle = '#fff';
+                    ctx.fillRect(screenX + building.width/2 - 5, screenY + building.height/2 - 5, 10, 10);
+                }
+            });
+            
+            // Draw vehicles
+            gameState.world.vehicles.forEach(vehicle => {
+                const screenX = vehicle.x - gameState.camera.x;
+                const screenY = vehicle.y - gameState.camera.y;
+                
+                if (screenX > -50 && screenX < canvas.width + 50 && 
+                    screenY > -50 && screenY < canvas.height + 50) {
+                    ctx.save();
+                    ctx.translate(screenX, screenY);
+                    ctx.rotate(vehicle.angle);
+                    
+                    ctx.fillStyle = vehicle.color;
+                    
+                    // Draw different vehicle types
+                    switch(vehicle.type) {
+                        case 'sedan':
+                            ctx.fillRect(-15, -8, 30, 16);
+                            break;
+                        case 'truck':
+                            ctx.fillRect(-20, -10, 40, 20);
+                            break;
+                        case 'sports':
+                            ctx.fillRect(-12, -7, 24, 14);
+                            break;
+                        case 'motorcycle':
+                            ctx.fillRect(-10, -3, 20, 6);
+                            ctx.fillRect(-2, -10, 4, 10); // Rider
+                            break;
+                    }
+                    
+                    ctx.restore();
+                }
+            });
+            
+            // Draw NPCs
+            gameState.world.npcs.forEach(npc => {
+                const screenX = npc.x - gameState.camera.x;
+                const screenY = npc.y - gameState.camera.y;
+                
+                if (screenX > -50 && screenX < canvas.width + 50 && 
+                    screenY > -50 && screenY < canvas.height + 50) {
+                    ctx.save();
+                    ctx.translate(screenX, screenY);
+                    ctx.rotate(npc.angle);
+                    
+                    ctx.fillStyle = npc.color;
+                    ctx.fillRect(-5, -5, 10, 10); // Simple square for NPC
+                    
+                    // Draw weapon if armed
+                    if (npc.weapon >= 0) {
+                        ctx.fillStyle = '#333';
+                        ctx.fillRect(5, -2, 10, 4);
+                    }
+                    
+                    ctx.restore();
+                }
+            });
+            
+            // Draw player
+            ctx.save();
+            ctx.translate(canvas.width / 2, canvas.height / 2);
+            ctx.rotate(gameState.player.angle);
+            
+            // Player body
+            ctx.fillStyle = '#0f0';
+            ctx.fillRect(-10, -10, 20, 20);
+            
+            // Weapon
+            const weapon = gameState.player.weapons[gameState.player.currentWeapon];
+            if (gameState.player.currentWeapon > 0 || weapon.ammo > 0) {
+                ctx.fillStyle = '#333';
+                ctx.fillRect(10, -3, 15, 6);
+            }
+            
+            // Aim line (for debugging)
+            ctx.strokeStyle = '#f00';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            ctx.moveTo(0, 0);
+            ctx.lineTo(50, 0);
+            ctx.stroke();
+            
+            ctx.restore();
+            
+            // Draw gang territories
+            gameState.world.gangs.forEach(gang => {
+                const screenX = gang.territory.x - gameState.camera.x;
+                const screenY = gang.territory.y - gameState.camera.y;
+                
+                if (screenX + gang.territory.width > 0 && screenX < canvas.width && 
+                    screenY + gang.territory.height > 0 && screenY < canvas.height) {
+                    ctx.fillStyle = gang.color + '40'; // Add transparency
+                    ctx.fillRect(screenX, screenY, gang.territory.width, gang.territory.height);
+                    
+                    // Border
+                    ctx.strokeStyle = gang.color;
+                    ctx.lineWidth = 2;
+                    ctx.strokeRect(screenX, screenY, gang.territory.width, gang.territory.height);
+                }
+            });
+            
+            // Draw businesses
+            gameState.world.businesses.forEach(business => {
+                const screenX = business.x - gameState.camera.x;
+                const screenY = business.y - gameState.camera.y;
+                
+                if (screenX > -50 && screenX < canvas.width + 50 && 
+                    screenY > -50 && screenY < canvas.height + 50) {
+                    ctx.fillStyle = business.owned ? '#0f0' : '#ff0';
+                    ctx.fillRect(screenX - 10, screenY - 10, 20, 20);
+                    
+                    // Protection indicator
+                    if (business.protection > 0) {
+                        ctx.fillStyle = '#00f';
+                        ctx.fillRect(screenX - 10, screenY - 15, 20 * (business.protection / 100), 3);
+                    }
+                }
+            });
+        }
+    </script>
+</body>
+</html>

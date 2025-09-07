@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Concrete Empire</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #gameContainer {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            background-color: #111;
+        }
+        #gameCanvas {
+            position: absolute;
+            top: 0;
+            left: 0;
+            background-color: #222;
+        }
+        #uiContainer {
+            position: absolute;
+            bottom: 20px;
+            left: 20px;
+            color: #fff;
+            font-size: 16px;
+            text-shadow: 2px 2px 2px #000;
+            z-index: 100;
+        }
+        #hud {
+            position: absolute;
+            top: 20px;
+            left: 20px;
+            color: #fff;
+            font-size: 18px;
+            text-shadow: 2px 2px 2px #000;
+            z-index: 100;
+        }
+        #weaponWheel {
+            position: absolute;
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            background: rgba(0, 0, 0, 0.7);
+            display: none;
+            z-index: 200;
+            transform: translate(-50%, -50%);
+        }
+        .weaponSlot {
+            position: absolute;
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid #fff;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: #fff;
+            font-size: 12px;
+            text-align: center;
+        }
+        #loadingScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: #000;
+            color: #fff;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+        }
+        #loadingBar {
+            width: 400px;
+            height: 30px;
+            background: #333;
+            margin-top: 20px;
+            border: 2px solid #fff;
+        }
+        #loadingBarFill {
+            height: 100%;
+            width: 0%;
+            background: #f00;
+            transition: width 0.5s;
+        }
+        #menu {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.9);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 500;
+        }
+        .menuButton {
+            padding: 15px 30px;
+            margin: 10px;
+            background: #222;
+            color: #fff;
+            border: 2px solid #f00;
+            font-size: 20px;
+            cursor: pointer;
+            width: 300px;
+            text-align: center;
+            transition: all 0.3s;
+        }
+        .menuButton:hover {
+            background: #f00;
+            color: #000;
+        }
+        #title {
+            font-size: 48px;
+            color: #f00;
+            margin-bottom: 30px;
+            text-shadow: 3px 3px 0 #000;
+            letter-spacing: 2px;
+        }
+        #subtitle {
+            font-size: 24px;
+            color: #ccc;
+            margin-bottom: 50px;
+        }
+        .hidden {
+            display: none !important;
+        }
+    </style>
+</head>
+<body>
+    <div id="loadingScreen">
+        <h1>CONCRETE EMPIRE</h1>
+        <p>Loading game assets...</p>
+        <div id="loadingBar">
+            <div id="loadingBarFill"></div>
+        </div>
+    </div>
+
+    <div id="menu" class="hidden">
+        <h1 id="title">CONCRETE EMPIRE</h1>
+        <h2 id="subtitle">Port Carmine, 1998</h2>
+        <div class="menuButton" id="newGameBtn">NEW GAME</div>
+        <div class="menuButton" id="continueBtn">CONTINUE</div>
+        <div class="menuButton" id="optionsBtn">OPTIONS</div>
+        <div class="menuButton" id="creditsBtn">CREDITS</div>
+    </div>
+
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        
+        <div id="hud">
+            <div id="money">CASH: $<span id="cashAmount">200</span></div>
+            <div id="respect">RESPECT: <span id="respectLevel">0</span></div>
+            <div id="wanted">WANTED: <span id="wantedLevel">0</span>★</div>
+            <div id="health">HEALTH: <span id="healthBar">██████████</span></div>
+            <div id="weapon">WEAPON: <span id="currentWeapon">Fists</span></div>
+        </div>
+
+        <div id="uiContainer">
+            <div id="missionObjective">MISSION: Get out of prison and find your first score</div>
+            <div id="location">LOCATION: Downtown Port Carmine</div>
+        </div>
+
+        <div id="weaponWheel">
+            <!-- Weapon slots will be added dynamically -->
+        </div>
+    </div>
+
+    <script>
+        // Game state
+        const gameState = {
+            player: {
+                x: 400,
+                y: 300,
+                speed: 3,
+                health: 100,
+                maxHealth: 100,
+                cash: 200,
+                respect: 0,
+                wantedLevel: 0,
+                currentWeapon: "fists",
+                weapons: ["fists", "brass_knuckles", "9mm_pistol"],
+                direction: 0, // 0-7 for 8 directions
+                isMoving: false,
+                isAiming: false,
+                aimX: 0,
+                aimY: 0
+            },
+            game: {
+                isRunning: false,
+                currentMission: 0,
+                chapter: 1,
+                time: 0, // in-game time in minutes
+                day: 1,
+                weather: "clear",
+                paused: false
+            },
+            map: {
+                width: 5000,
+                height: 5000,
+                cameraX: 0,
+                cameraY: 0
+            },
+            entities: [],
+            gangs: [],
+            businesses: []
+        };
+
+        // DOM Elements
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const loadingScreen = document.getElementById('loadingScreen');
+        const loadingBarFill = document.getElementById('loadingBarFill');
+        const menu = document.getElementById('menu');
+        const newGameBtn = document.getElementById('newGameBtn');
+        const continueBtn = document.getElementById('continueBtn');
+        const optionsBtn = document.getElementById('optionsBtn');
+        const creditsBtn = document.getElementById('creditsBtn');
+        const weaponWheel = document.getElementById('weaponWheel');
+        const cashAmount = document.getElementById('cashAmount');
+        const respectLevel = document.getElementById('respectLevel');
+        const wantedLevel = document.getElementById('wantedLevel');
+        const healthBar = document.getElementById('healthBar');
+        const currentWeapon = document.getElementById('currentWeapon');
+        const missionObjective = document.getElementById('missionObjective');
+        const locationDisplay = document.getElementById('location');
+
+        // Resize canvas to fill window
+        function resizeCanvas() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+        }
+
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // Loading simulation
+        let loadProgress = 0;
+        const totalAssets = 100;
+
+        function updateLoadingProgress() {
+            loadProgress++;
+            loadingBarFill.style.width = `${(loadProgress / totalAssets) * 100}%`;
+            
+            if (loadProgress >= totalAssets) {
+                loadingScreen.classList.add('hidden');
+                menu.classList.remove('hidden');
+            }
+        }
+
+        // Simulate loading assets
+        for (let i = 0; i < totalAssets; i++) {
+            setTimeout(updateLoadingProgress, i * 20);
+        }
+
+        // Weapon definitions
+        const weapons = {
+            fists: { name: "Fists", damage: 5, range: 1, ammo: Infinity, icon: "👊" },
+            brass_knuckles: { name: "Brass Knuckles", damage: 15, range: 1, ammo: Infinity, icon: "🥊" },
+            baseball_bat: { name: "Baseball Bat", damage: 20, range: 2, ammo: Infinity, icon: "🏏" },
+            knife: { name: "Knife", damage: 25, range: 1, ammo: Infinity, icon: "🔪" },
+            crowbar: { name: "Crowbar", damage: 18, range: 1.5, ammo: Infinity, icon: "🔨" },
+            "9mm_pistol": { name: "9mm Pistol", damage: 15, range: 100, ammo: 17, maxAmmo: 17, icon: "🔫" },
+            "44_magnum": { name: ".44 Magnum", damage: 45, range: 80, ammo: 6, maxAmmo: 6, icon: "🔫" },
+            uzi: { name: "Uzi", damage: 10, range: 70, ammo: 32, maxAmmo: 32, icon: "🔫" },
+            shotgun: { name: "Shotgun", damage: 60, range: 30, ammo: 8, maxAmmo: 8, icon: "🔫" },
+            ak47: { name: "AK-47", damage: 30, range: 150, ammo: 30, maxAmmo: 30, icon: "🔫" },
+            sniper_rifle: { name: "Sniper Rifle", damage: 100, range: 500, ammo: 5, maxAmmo: 5, icon: "🎯" },
+            molotov: { name: "Molotov Cocktail", damage: 40, range: 60, ammo: 3, maxAmmo: 3, icon: "🔥" },
+            grenade: { name: "Grenade", damage: 80, range: 100, ammo: 2, maxAmmo: 2, icon: "💣" }
+        };
+
+        // Create weapon wheel
+        function createWeaponWheel() {
+            weaponWheel.innerHTML = '';
+            const weaponsList = Object.keys(weapons).filter(w => gameState.player.weapons.includes(w));
+            
+            weaponsList.forEach((weaponId, index) => {
+                const angle = (index / weaponsList.length) * Math.PI * 2;
+                const slot = document.createElement('div');
+                slot.className = 'weaponSlot';
+                slot.innerHTML = weapons[weaponId].icon;
+                slot.title = weapons[weaponId].name;
+                slot.dataset.weapon = weaponId;
+                
+                // Position around circle
+                const radius = 120;
+                const x = 150 + Math.cos(angle) * radius;
+                const y = 150 + Math.sin(angle) * radius;
+                
+                slot.style.left = `${x - 30}px`;
+                slot.style.top = `${y - 30}px`;
+                
+                slot.addEventListener('click', () => {
+                    gameState.player.currentWeapon = weaponId;
+                    currentWeapon.textContent = weapons[weaponId].name;
+                    weaponWheel.style.display = 'none';
+                });
+                
+                weaponWheel.appendChild(slot);
+            });
+        }
+
+        // Input handling
+        const keys = {};
+        let mouseX = 0;
+        let mouseY = 0;
+        let showWeaponWheel = false;
+
+        window.addEventListener('keydown', (e) => {
+            keys[e.key.toLowerCase()] = true;
+            
+            // Weapon wheel toggle
+            if (e.key === 'Tab' || e.key === 'w') {
+                showWeaponWheel = !showWeaponWheel;
+                weaponWheel.style.display = showWeaponWheel ? 'block' : 'none';
+                if (showWeaponWheel) {
+                    createWeaponWheel();
+                    weaponWheel.style.left = `${canvas.width / 2}px`;
+                    weaponWheel.style.top = `${canvas.height / 2}px`;
+                }
+            }
+            
+            // Pause game
+            if (e.key === 'Escape') {
+                gameState.game.paused = !gameState.game.paused;
+                menu.classList.toggle('hidden', !gameState.game.paused);
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            keys[e.key.toLowerCase()] = false;
+        });
+
+        canvas.addEventListener('mousemove', (e) => {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+            
+            // Calculate aim direction
+            const dx = mouseX - canvas.width / 2;
+            const dy = mouseY - canvas.height / 2;
+            gameState.player.aimX = dx;
+            gameState.player.aimY = dy;
+            gameState.player.isAiming = true;
+        });
+
+        canvas.addEventListener('click', () => {
+            // Fire weapon
+            if (gameState.player.currentWeapon !== "fists") {
+                // In a real game, this would create a bullet entity
+                console.log(`Firing ${gameState.player.currentWeapon}`);
+                
+                // Reduce ammo
+                const weapon = weapons[gameState.player.currentWeapon];
+                if (weapon.ammo !== Infinity) {
+                    weapon.ammo--;
+                    if (weapon.ammo <= 0) {
+                        console.log("Out of ammo!");
+                        // Switch to fists if out of ammo
+                        if (weapon.ammo <= 0) {
+                            gameState.player.currentWeapon = "fists";
+                            currentWeapon.textContent = "Fists";
+                        }
+                    }
+                }
+            }
+        });
+
+        // Update player movement
+        function updatePlayer() {
+            let moved = false;
+            
+            // 8-directional movement
+            if (keys['w'] || keys['arrowup']) {
+                gameState.player.y -= gameState.player.speed;
+                gameState.player.direction = 1;
+                moved = true;
+            }
+            if (keys['s'] || keys['arrowdown']) {
+                gameState.player.y += gameState.player.speed;
+                gameState.player.direction = 5;
+                moved = true;
+            }
+            if (keys['a'] || keys['arrowleft']) {
+                gameState.player.x -= gameState.player.speed;
+                gameState.player.direction = 3;
+                moved = true;
+            }
+            if (keys['d'] || keys['arrowright']) {
+                gameState.player.x += gameState.player.speed;
+                gameState.player.direction = 7;
+                moved = true;
+            }
+            if (keys['w'] && keys['a']) gameState.player.direction = 0;
+            if (keys['w'] && keys['d']) gameState.player.direction = 2;
+            if (keys['s'] && keys['a']) gameState.player.direction = 6;
+            if (keys['s'] && keys['d']) gameState.player.direction = 4;
+            
+            gameState.player.isMoving = moved;
+            
+            // Keep player within bounds
+            gameState.player.x = Math.max(0, Math.min(gameState.map.width, gameState.player.x));
+            gameState.player.y = Math.max(0, Math.min(gameState.map.height, gameState.player.y));
+            
+            // Update camera to follow player
+            gameState.map.cameraX = gameState.player.x - canvas.width / 2;
+            gameState.map.cameraY = gameState.player.y - canvas.height / 2;
+            
+            // Update UI
+            cashAmount.textContent = Math.floor(gameState.player.cash);
+            respectLevel.textContent = gameState.player.respect;
+            wantedLevel.textContent = gameState.player.wantedLevel;
+            
+            // Update health bar
+            const healthPercent = gameState.player.health / gameState.player.maxHealth;
+            let healthBlocks = Math.floor(healthPercent * 10);
+            healthBar.textContent = "█".repeat(healthBlocks) + "░".repeat(10 - healthBlocks);
+            
+            // Update current weapon display
+            currentWeapon.textContent = weapons[gameState.player.currentWeapon].name;
+        }
+
+        // Simple entity system
+        class Entity {
+            constructor(x, y, type, properties = {}) {
+                this.x = x;
+                this.y = y;
+                this.type = type;
+                this.properties = properties;
+                this.width = properties.width || 30;
+                this.height = properties.height || 30;
+            }
+            
+            update() {
+                // Entity-specific update logic would go here
+            }
+            
+            render(ctx, cameraX, cameraY) {
+                ctx.fillStyle = this.properties.color || '#fff';
+                ctx.fillRect(
+                    this.x - cameraX, 
+                    this.y - cameraY, 
+                    this.width, 
+                    this.height
+                );
+                
+                if (this.properties.label) {
+                    ctx.fillStyle = '#fff';
+                    ctx.font = '14px Courier New';
+                    ctx.fillText(
+                        this.properties.label, 
+                        this.x - cameraX, 
+                        this.y - cameraY - 10
+                    );
+                }
+            }
+        }
+
+        // Initialize game entities
+        function initEntities() {
+            gameState.entities = [];
+            
+            // Add some sample buildings
+            for (let i = 0; i < 20; i++) {
+                gameState.entities.push(new Entity(
+                    Math.random() * gameState.map.width,
+                    Math.random() * gameState.map.height,
+                    'building',
+                    {
+                        width: 120,
+                        height: 80,
+                        color: '#555',
+                        label: ['Convenience Store', 'Bar', 'Pawn Shop', 'Warehouse'][Math.floor(Math.random() * 4)]
+                    }
+                ));
+            }
+            
+            // Add some vehicles
+            for (let i = 0; i < 10; i++) {
+                gameState.entities.push(new Entity(
+                    Math.random() * gameState.map.width,
+                    Math.random() * gameState.map.height,
+                    'vehicle',
+                    {
+                        width: 40,
+                        height: 25,
+                        color: ['#f00', '#0f0', '#00f', '#ff0', '#f0f'][Math.floor(Math.random() * 5)],
+                        label: '🚗'
+                    }
+                ));
+            }
+            
+            // Add some NPCs
+            for (let i = 0; i < 30; i++) {
+                gameState.entities.push(new Entity(
+                    Math.random() * gameState.map.width,
+                    Math.random() * gameState.map.height,
+                    'npc',
+                    {
+                        width: 20,
+                        height: 20,
+                        color: '#0ff',
+                        label: '🙂'
+                    }
+                ));
+            }
+        }
+
+        // Render game
+        function render() {
+            // Clear canvas
+            ctx.fillStyle = '#222';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Render grid for visual reference (would be replaced with actual map tiles in a real game)
+            ctx.strokeStyle = '#333';
+            ctx.lineWidth = 1;
+            const gridSize = 100;
+            for (let x = -gameState.map.cameraX % gridSize; x < canvas.width; x += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, canvas.height);
+                ctx.stroke();
+            }
+            for (let y = -gameState.map.cameraY % gridSize; y < canvas.height; y += gridSize) {
+                ctx.beginPath();
+                ctx.moveTo(0, y);
+                ctx.lineTo(canvas.width, y);
+                ctx.stroke();
+            }
+            
+            // Render entities
+            gameState.entities.forEach(entity => {
+                entity.render(ctx, gameState.map.cameraX, gameState.map.cameraY);
+            });
+            
+            // Render player
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(
+                canvas.width / 2 - 15, 
+                canvas.height / 2 - 15, 
+                30, 
+                30
+            );
+            ctx.fillStyle = '#fff';
+            ctx.font = '20px Courier New';
+            ctx.fillText('🤵', canvas.width / 2 - 10, canvas.height / 2 + 10);
+            
+            // Render aiming reticle
+            if (gameState.player.isAiming) {
+                ctx.strokeStyle = '#f00';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.arc(mouseX, mouseY, 10, 0, Math.PI * 2);
+                ctx.stroke();
+                
+                // Draw line from player to aim point
+                ctx.beginPath();
+                ctx.moveTo(canvas.width / 2, canvas.height / 2);
+                ctx.lineTo(mouseX, mouseY);
+                ctx.stroke();
+            }
+            
+            // Render minimap
+            const minimapSize = 150;
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(canvas.width - minimapSize - 20, 20, minimapSize, minimapSize);
+            
+            // Draw map outline
+            ctx.strokeStyle = '#fff';
+            ctx.strokeRect(canvas.width - minimapSize - 20, 20, minimapSize, minimapSize);
+            
+            // Draw player position on minimap
+            const mapRatio = minimapSize / gameState.map.width;
+            ctx.fillStyle = '#f00';
+            ctx.fillRect(
+                canvas.width - minimapSize - 20 + (gameState.player.x * mapRatio) - 3,
+                20 + (gameState.player.y * mapRatio) - 3,
+                6,
+                6
+            );
+            
+            // Render time and day
+            ctx.fillStyle = '#fff';
+            ctx.font = '16px Courier New';
+            const hours = Math.floor((gameState.game.time % 1440) / 60);
+            const minutes = Math.floor(gameState.game.time % 60);
+            const timeString = `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}`;
+            ctx.fillText(`DAY ${gameState.game.day} - ${timeString}`, canvas.width - 200, canvas.height - 40);
+            
+            // Render weather
+            ctx.fillText(`WEATHER: ${gameState.game.weather.toUpperCase()}`, canvas.width - 200, canvas.height - 20);
+        }
+
+        // Game loop
+        function gameLoop() {
+            if (!gameState.game.paused && gameState.game.isRunning) {
+                updatePlayer();
+                gameState.entities.forEach(entity => entity.update());
+                
+                // Update game time
+                gameState.game.time += 0.1; // Advance time
+                if (gameState.game.time >= 1440) { // 24 hours * 60 minutes
+                    gameState.game.time = 0;
+                    gameState.game.day++;
+                    
+                    // Random weather change
+                    if (Math.random() < 0.3) {
+                        const weathers = ['clear', 'rainy', 'foggy', 'stormy'];
+                        gameState.game.weather = weathers[Math.floor(Math.random() * weathers.length)];
+                    }
+                }
+            }
+            
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+
+        // Button event listeners
+        newGameBtn.addEventListener('click', () => {
+            menu.classList.add('hidden');
+            gameState.game.isRunning = true;
+            gameState.game.paused = false;
+            initEntities();
+            missionObjective.textContent = "MISSION: Rob a convenience store to get starter funds";
+            locationDisplay.textContent = "LOCATION: Downtown Port Carmine";
+        });
+
+        continueBtn.addEventListener('click', () => {
+            menu.classList.add('hidden');
+            gameState.game.paused = false;
+        });
+
+        optionsBtn.addEventListener('click', () => {
+            alert("Options menu would be implemented here.\n\nGraphics, Sound, Controls settings.");
+        });
+
+        creditsBtn.addEventListener('click', () => {
+            alert("CONCRETE EMPIRE\n\nInspired by GTA 1 and Kingpin: Life of Crime\n\nCreated with JavaScript and HTML5 Canvas\n\n© 2023");
+        });
+
+        // Start game loop
+        gameLoop();
+
+        // For demonstration purposes, add a cheat to add weapons
+        window.addEventListener('keydown', (e) => {
+            if (e.ctrlKey && e.key === 'i') {
+                // Add all weapons
+                gameState.player.weapons = Object.keys(weapons);
+                alert("All weapons unlocked!");
+                if (showWeaponWheel) {
+                    createWeaponWheel();
+                }
+            }
+            if (e.ctrlKey && e.key === 'm') {
+                // Add money
+                gameState.player.cash += 10000;
+                alert("Added $10,000!");
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Block Height Clock (Web3 Safe)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+
+  <!-- Web3-safe: load OrdJS from a same-origin content path (no domain). -->
+  <!-- Replace ORDJS_INSCRIPTION_ID with your on-chain OrdJS inscription id. -->
+  <!-- If your tester doesn't have OrdJS, comment this line out to use mock mode. -->
+  <script src="/content/7e37766541506810ba6399c4b2735121f508bd9209df43dd200bf2316b014594i0"></script>
+
+  <style>
+    :root { color-scheme: dark; }
+    html, body {
+      height: 100%;
+      margin: 0;
+      background: #000;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    .wrap { min-height: 100%; display: grid; place-items: center; padding: 2vmin; }
+    .canvas-shell { width: min(90vmin, 720px); aspect-ratio: 1 / 1; position: relative; }
+    canvas {
+      width: 100%; height: 100%; display: block; background: #050505; border-radius: 20px;
+      box-shadow: 0 10px 30px rgba(0,0,0,.5), inset 0 0 0 1px rgba(255,255,255,.05);
+    }
+    .status {
+      position: absolute; bottom: 12px; left: 50%; transform: translateX(-50%);
+      font-size: 12px; color: #9aa0a6; letter-spacing: .08em; text-transform: uppercase; opacity: .85;
+      user-select: none; pointer-events: none; text-align: center; max-width: 90%; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <div class="canvas-shell">
+      <canvas id="blockCanvas"></canvas>
+      <div class="status" id="status">Initializing…</div>
+    </div>
+  </div>
+
+  <script>
+    // Domain-agnostic, inline version.
+    // Policy:
+    //   - If OrdJS (same-origin) is present -> use OrdJS, and *optionally* /blockheight (same-origin).
+    //   - If OrdJS is NOT present -> enter MOCK mode immediately (no network).
+    // This avoids any domain references and prevents /blockheight calls in local Web3 testers that don't provide it.
+
+    (function () {
+      const canvas = document.getElementById('blockCanvas');
+      const statusEl = document.getElementById('status');
+
+      const config = {
+        apiPath: '/blockheight', // same-origin only; NEVER a domain
+        ordInterval: 2000,
+        apiInterval: 5000,
+        fallbackSeed: 800000
+      };
+
+      let lastKnown = 0;
+      let ordTimer = null;
+      let apiTimer = null;
+      let mockTimer = null;
+
+      const ctx = canvas.getContext('2d');
+
+      // ----- DPI-aware canvas sizing -----
+      const resizeObserver = new ResizeObserver(fitCanvas);
+      resizeObserver.observe(canvas);
+      fitCanvas();
+      renderSplash('— — — — —');
+      setStatus('Starting…');
+
+      // Kick off monitoring
+      initHeights();
+
+      // -------------------- Monitoring logic --------------------
+      async function initHeights() {
+        const hasOrdJS = typeof window !== 'undefined' && typeof window.OrdJS === 'function';
+
+        if (hasOrdJS) {
+          // Hosted/inscription environment (OrdJS available)
+          try {
+            const ord = new window.OrdJS(''); // empty base => same-origin
+            const h = await ord.getBlockheight();
+            if (!Number.isFinite(h) || h <= 0) throw new Error('OrdJS invalid initial height');
+
+            lastKnown = h;
+            renderHeight(h, true);
+            setStatus(`Height ${h} (OrdJS)`);
+
+            // Poll OrdJS
+            ordTimer = setInterval(async () => {
+              try {
+                const cur = await ord.getBlockheight();
+                maybeUpdate(cur, 'OrdJS');
+              } catch {
+                setStatus('OrdJS error; continuing…');
+              }
+            }, config.ordInterval);
+
+            // Optionally poll same-origin /blockheight, but ONLY if it exists.
+            // Probe once; if it fails, never try again.
+            try {
+              const seed = await fetchSameOriginHeight(); // one-time probe
+              // Start API polling only if probe succeeded.
+              apiTimer = setInterval(async () => {
+                try {
+                  const cur = await fetchSameOriginHeight();
+                  maybeUpdate(cur, 'API');
+                } catch {
+                  // silent; may be temporarily unavailable
+                }
+              }, config.apiInterval);
+              // Merge initial probe result (in case it's higher)
+              maybeUpdate(seed, 'API');
+            } catch {
+              // Host doesn't expose /blockheight; that's fine.
+            }
+
+            return;
+          } catch {
+            // OrdJS present but failed; try API-only
+            try {
+              const seed = await fetchSameOriginHeight();
+              lastKnown = seed;
+              renderHeight(seed, true);
+              setStatus(`Height ${seed} (API-only)`);
+
+              apiTimer = setInterval(async () => {
+                try {
+                  const cur = await fetchSameOriginHeight();
+                  maybeUpdate(cur, 'API');
+                } catch { /* keep trying silently */ }
+              }, config.apiInterval);
+
+              return;
+            } catch {
+              // Fall through to mock
+            }
+          }
+        }
+
+        // Local/static Web3 tester path: NO network calls at all
+        enterMockMode();
+      }
+
+      async function fetchSameOriginHeight() {
+        const res = await fetch(config.apiPath, { cache: 'no-store' });
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const txt = await res.text();
+        const n = parseInt(String(txt).trim(), 10);
+        if (!Number.isFinite(n) || n <= 0) throw new Error('Bad height body');
+        return n;
+      }
+
+      function maybeUpdate(newHeight, source) {
+        if (!Number.isFinite(newHeight) || newHeight <= 0) return;
+        if (newHeight > lastKnown) {
+          lastKnown = newHeight;
+          renderHeight(newHeight);
+          pulse();
+          setStatus(`Height ${newHeight} (${source})`);
+        }
+      }
+
+      function enterMockMode() {
+        lastKnown = config.fallbackSeed;
+        renderHeight(lastKnown, true);
+        setStatus(`Mock mode: ${lastKnown} (no OrdJS; no /blockheight)`);
+
+        // Simulate a "new block" periodically (no network).
+        const MOCK_PERIOD_MS = 15000; // 15s
+        mockTimer = setInterval(() => {
+          const jump = 1 + (Math.random() < 0.05 ? 1 : 0);
+          maybeUpdate(lastKnown + jump, 'Mock');
+        }, MOCK_PERIOD_MS);
+      }
+
+      // -------------------- Rendering --------------------
+      function fitCanvas() {
+        const rect = canvas.getBoundingClientRect();
+        const dpr = Math.max(1, window.devicePixelRatio || 1);
+        const w = Math.max(1, Math.floor(rect.width * dpr));
+        const h = Math.max(1, Math.floor(rect.height * dpr));
+        if (canvas.width !== w || canvas.height !== h) {
+          canvas.width = w;
+          canvas.height = h;
+          if (lastKnown > 0) renderHeight(lastKnown, true);
+        }
+      }
+
+      function renderSplash(text = 'Loading…') {
+        clearCanvas();
+        drawSevenSegmentText(text, { dim: true });
+      }
+
+      function renderHeight(height, immediate = false) {
+        if (immediate) {
+          clearCanvas();
+          drawSevenSegmentText(String(height));
+          return;
+        }
+        animateFade(String(height));
+      }
+
+      function clearCanvas() {
+        ctx.clearRect(0, 0, canvas.width, canvas.height);
+        const g = ctx.createRadialGradient(
+          canvas.width * 0.5, canvas.height * 0.5, canvas.width * 0.1,
+          canvas.width * 0.5, canvas.height * 0.5, canvas.width * 0.7
+        );
+        g.addColorStop(0, '#0a0a0a');
+        g.addColorStop(1, '#000000');
+        ctx.fillStyle = g;
+        ctx.fillRect(0, 0, canvas.width, canvas.height);
+      }
+
+      function animateFade(text) {
+        const start = performance.now();
+        const dur = 200;
+        const step = (now) => {
+          const t = Math.min(1, (now - start) / dur);
+          clearCanvas();
+          ctx.globalAlpha = 0.3 + 0.7 * t;
+          drawSevenSegmentText(text);
+          ctx.globalAlpha = 1;
+          if (t < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }
+
+      function pulse() {
+        const start = performance.now();
+        const dur = 250;
+        const step = (now) => {
+          const t = Math.min(1, (now - start) / dur);
+          const r = canvas.width * 0.47 * t;
+          ctx.save();
+          ctx.globalCompositeOperation = 'lighter';
+          ctx.lineWidth = Math.max(2, canvas.width * 0.01 * (1 - t));
+          ctx.strokeStyle = 'rgba(255,255,255,' + (0.35 * (1 - t)) + ')';
+          ctx.beginPath();
+          ctx.arc(canvas.width/2, canvas.height/2, r, 0, Math.PI*2);
+          ctx.stroke();
+          ctx.restore();
+          if (t < 1) requestAnimationFrame(step);
+        };
+        requestAnimationFrame(step);
+      }
+
+      function setStatus(msg) {
+        if (statusEl) statusEl.textContent = msg;
+      }
+
+      // -------------------- Seven-seg drawing --------------------
+      function drawSevenSegmentText(text, { dim = false } = {}) {
+        const W = canvas.width, H = canvas.height;
+
+        const padding = Math.min(W, H) * 0.10;
+        const boxW = W - padding * 2;
+        const boxH = H - padding * 2;
+
+        const str = String(text);
+        const n = str.length;
+        const gap = boxW * 0.02;
+        const digitW = (boxW - (n - 1) * gap) / n;
+        const digitH = Math.min(boxH, digitW * 1.9);
+
+        const baseX = padding;
+        const baseY = (H - digitH) / 2;
+
+        for (let i = 0; i < n; i++) {
+          const ch = str[i];
+          const x = baseX + i * (digitW + gap);
+          drawDigit(ch, x, baseY, digitW, digitH, dim);
+        }
+      }
+
+      function drawDigit(ch, x, y, w, h, dim) {
+        if (!/[0-9]/.test(ch)) ch = '-';
+
+        const seg = {
+          a: [[x+0.15*w, y+0.08*h], [x+0.85*w, y+0.08*h]],
+          b: [[x+0.90*w, y+0.12*h], [x+0.90*w, y+0.48*h]],
+          c: [[x+0.90*w, y+0.52*h], [x+0.90*w, y+0.88*h]],
+          d: [[x+0.15*w, y+0.92*h], [x+0.85*w, y+0.92*h]],
+          e: [[x+0.10*w, y+0.52*h], [x+0.10*w, y+0.88*h]],
+          f: [[x+0.10*w, y+0.12*h], [x+0.10*w, y+0.48*h]],
+          g: [[x+0.15*w, y+0.50*h], [x+0.85*w, y+0.50*h]],
+        };
+
+        const map = {
+          '0': ['a','b','c','d','e','f'],
+          '1': ['b','c'],
+          '2': ['a','b','g','e','d'],
+          '3': ['a','b','g','c','d'],
+          '4': ['f','g','b','c'],
+          '5': ['a','f','g','c','d'],
+          '6': ['a','f','g','e','c','d'],
+          '7': ['a','b','c'],
+          '8': ['a','b','c','d','e','f','g'],
+          '9': ['a','b','c','d','f','g'],
+          '-': ['g']
+        };
+
+        const on = new Set(map[ch] || []);
+        const active = 'rgba(0, 255, 180, 0.92)';
+        const glow = 'rgba(0, 255, 180, 0.25)';
+        const inactive = dim ? 'rgba(0,0,0,0)' : 'rgba(0, 255, 180, 0.06)';
+
+        drawAllSegments(seg, Object.keys(seg), inactive, 10);
+        drawAllSegments(seg, Array.from(on), glow, 22);
+        drawAllSegments(seg, Array.from(on), active, 12);
+      }
+
+      function drawAllSegments(seg, which, color, thickness) {
+        ctx.save();
+        ctx.lineCap = 'round';
+        ctx.lineJoin = 'round';
+        ctx.strokeStyle = color;
+        ctx.lineWidth = thickness;
+        for (const key of which) {
+          const [[x1,y1],[x2,y2]] = seg[key];
+          ctx.beginPath();
+          ctx.moveTo(x1, y1);
+          ctx.lineTo(x2, y2);
+          ctx.stroke();
+        }
+        ctx.restore();
+      }
+    })();
+  </script>
+</body>
+</html>

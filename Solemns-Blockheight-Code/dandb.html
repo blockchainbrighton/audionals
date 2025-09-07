@@ -1,0 +1,394 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Drum and Bass</title>
+
+  <script src="https://ordinals.com/content/9029843543713fe7a5a9e76f17c20aa79a6b7f8d37caf0238539cc542c37de7ci0"></script> <!-- p5.js -->
+  <script src="https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0"></script> <!-- Tone.js -->
+
+  <style>
+    body {
+      margin: 0;
+      padding: 0;
+      overflow: hidden;
+      background: transparent;
+      color: #fff;
+      font-family: Arial, sans-serif;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 100vh;
+      user-select: none;
+      -webkit-user-select: none;
+      -webkit-touch-callout: none;
+    }
+    #start-screen { 
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      text-align: center;
+      max-width: 90vw;
+      z-index: 1;
+    }
+    #start-button {
+      padding: clamp(0.5rem, 2vw, 1rem) clamp(1rem, 4vw, 2rem);
+      font-size: clamp(1rem, 3vw, 1.5rem);
+      background-color: #fff;
+      color: #000;
+      border: none;
+      border-radius: 0.3rem;
+      cursor: pointer;
+      margin: 0 auto;
+      min-width: 120px;
+      max-width: 300px;
+      z-index: 2;
+    }
+    #start-button:hover {
+      background-color: #ccc;
+    }
+    #start-text {
+      font-size: clamp(1.2rem, 4vw, 2rem);
+      margin-bottom: clamp(0.5rem, 2vw, 1rem);
+      text-transform: uppercase;
+      max-width: 90vw;
+      z-index: 2;
+    }
+    .hidden {
+      display: none !important;
+    }
+  
+  </style>
+</head>
+<body>
+
+  <div id="start-screen">
+    <div id="start-text">Click to start Rave</div>
+    <button id="start-button">Play</button>
+  </div>
+  <script>
+    let audioStarted = false;
+    let isMuted = false;
+    let kickSynth, snareSynth, snareLowSynth, snareDistortion, hatSynth, shakerSynth, ghostSnareSynth, rideSynth, tambourineSynth, lowTomSynth, bassSynth, bassDistortion;
+    const currentBPM = 170;
+    let loopCounter = 0;
+    let currentBassPattern = [];
+
+    // Dynamic seed for unique start
+    let seed = Date.now();
+    function seededRandom() {
+      seed = (seed * 9301 + 49297) % 233280;
+      return seed / 233280;
+    }
+
+    // Generate probabilities
+    const noteProbOnBeat = 0.3 + seededRandom() * 0.2; // 30%–50%
+    const noteProbOffBeat = 0.4 + seededRandom() * 0.2; // 40%–60%
+    const durationProb4n = 0.6; // 60% 4n
+    const durationProb2n = 0.3; // 30% 2n
+    console.log(`Probabilities: noteOnBeat=${noteProbOnBeat.toFixed(2)}, noteOffBeat=${noteProbOffBeat.toFixed(2)}, 4n=${durationProb4n}, 2n=${durationProb2n}`);
+
+    // Generate random bass pattern (8 steps, min 2 notes)
+    function generateBassPattern() {
+      const notes = ["A1", "A#1", "B1", "C2", "C#2", "D2"];
+      const pattern = [];
+      let noteCount = 0;
+      for (let i = 0; i < 8; i++) {
+        const hasNote = i % 2 === 1 ? seededRandom() < noteProbOffBeat : seededRandom() < noteProbOnBeat;
+        if (hasNote || (i === 7 && noteCount < 2)) { // Ensure at least 2 notes
+          const note = notes[Math.floor(seededRandom() * notes.length)];
+          let duration;
+          const rand = seededRandom();
+          if (rand < durationProb4n) {
+            duration = "4n"; // ~0.353s
+          } else if (rand < durationProb4n + durationProb2n) {
+            duration = "2n"; // ~0.706s
+          } else {
+            duration = "8n"; // ~0.176s
+          }
+          const velocity = 0.6 + seededRandom() * 0.2;
+          pattern.push({ note, duration, velocity });
+          noteCount++;
+        } else {
+          pattern.push(null);
+        }
+      }
+      console.log("Generated bass pattern:", pattern);
+      return pattern;
+    }
+
+    // Check Tone.js
+    if (typeof Tone === "undefined") {
+      console.error("Tone.js not loaded. Check script URL.");
+      alert("Error: Tone.js failed to load. Please try Chrome/Firefox or check network.");
+    } else {
+      console.log("Tone.js loaded successfully, version:", Tone.version);
+    }
+
+    // Button event listener
+    document.addEventListener('DOMContentLoaded', () => {
+      const startButton = document.getElementById('start-button');
+      if (startButton) {
+        startButton.addEventListener('click', () => {
+          console.log("Play button clicked");
+          const startScreen = document.getElementById('start-screen');
+          if (startScreen) {
+            startScreen.classList.add('hidden');
+          }
+          startAudio();
+        });
+      } else {
+        console.error("Start button not found in DOM");
+        alert("Error: Play button not found. Check HTML.");
+      }
+    });
+
+    function setupAudio() {
+      console.log("Setting up audio...");
+      try {
+        kickSynth = new Tone.MembraneSynth({
+          pitchDecay: 0.02,
+          octaves: 3,
+          oscillator: { type: "sine" },
+          envelope: { attack: 0.001, decay: 0.2, sustain: 0.2, release: 0.2 },
+          volume: 3
+        }).toDestination();
+
+        snareDistortion = new Tone.Distortion(0.1).toDestination();
+        snareSynth = new Tone.NoiseSynth({
+          noise: { type: "white" },
+          envelope: { attack: 0.001, decay: 0.15, sustain: 0.05, release: 0.2 },
+          volume: -3
+        }).connect(snareDistortion);
+        snareLowSynth = new Tone.MembraneSynth({
+          pitchDecay: 0.01,
+          octaves: 2,
+          oscillator: { type: "sine" },
+          envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
+          volume: -6
+        }).connect(snareDistortion);
+
+        hatSynth = new Tone.NoiseSynth({
+          noise: { type: "white" },
+          envelope: { attack: 0.001, decay: 0.03, sustain: 0, release: 0.03 },
+          volume: -16
+        }).toDestination();
+
+        shakerSynth = new Tone.NoiseSynth({
+          noise: { type: "white" },
+          envelope: { attack: 0.001, decay: 0.02, sustain: 0, release: 0.02 },
+          volume: -22
+        }).toDestination();
+
+        ghostSnareSynth = new Tone.NoiseSynth({
+          noise: { type: "white" },
+          envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.1 },
+          volume: -20
+        }).toDestination();
+
+        rideSynth = new Tone.NoiseSynth({
+          noise: { type: "white" },
+          envelope: { attack: 0.001, decay: 0.1, sustain: 0, release: 0.1 },
+          volume: -16
+        }).toDestination();
+
+        tambourineSynth = new Tone.NoiseSynth({
+          noise: { type: "white" },
+          envelope: { attack: 0.001, decay: 0.05, sustain: 0, release: 0.05 },
+          volume: -20
+        }).toDestination();
+
+        lowTomSynth = new Tone.MembraneSynth({
+          pitchDecay: 0.05,
+          octaves: 2,
+          oscillator: { type: "sine" },
+          envelope: { attack: 0.001, decay: 0.3, sustain: 0, release: 0.2 },
+          volume: -22
+        }).toDestination();
+
+        bassDistortion = new Tone.Distortion(0.2).toDestination();
+        bassSynth = new Tone.MonoSynth({
+          oscillator: { type: "square" },
+          envelope: { attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.2 },
+          filter: { type: "lowpass", frequency: 400, Q: 8 },
+          filterEnvelope: { attack: 0.1, decay: 0.3, sustain: 0.5, release: 0.8, baseFrequency: 80, octaves: 3 },
+          volume: - 22
+        }).connect(bassDistortion);
+
+        currentBassPattern = generateBassPattern();
+
+        Tone.Transport.scheduleRepeat((time) => {
+          const drumStep = loopCounter % 16; // 16-step drum pattern (16th notes)
+          const bassStep = Math.floor(loopCounter / 2) % 8; // 8-step bass pattern (eighth notes)
+          const barCount = Math.floor(loopCounter / 16); // Bar count based on 16-step drum bar
+          const barIn8BarCycle = barCount % 8;
+
+          if (loopCounter % 256 === 0 && loopCounter > 0) { // 16 bars = 256 16th notes = 128 8th notes
+            currentBassPattern = generateBassPattern();
+            console.log(`Auto-switching to new bass pattern at bar ${barCount}`);
+          }
+
+          // Kick on positions 1 (step 0), 11 (step 10)
+          if (drumStep === 0 || drumStep === 10) {
+            if (barIn8BarCycle < 6) {
+              console.log(`Kick triggered at bar ${barCount}, step ${drumStep} (position ${drumStep + 1})`);
+              kickSynth.triggerAttackRelease("C1", "16n", time, 1);
+            } else {
+              console.log(`Kick muted at bar ${barCount}, step ${drumStep} (position ${drumStep + 1})`);
+            }
+          }
+
+          // Amen-style snare/clap on positions 5 (step 4), 13 (step 12)
+          if (drumStep === 4 || drumStep === 12) {
+            console.log(`Snare triggered at bar ${barCount}, step ${drumStep} (position ${drumStep + 1})`);
+            snareSynth.triggerAttackRelease("16n", time, 0.9);
+            snareLowSynth.triggerAttackRelease("C3", "16n", time, 0.7);
+          }
+
+          // Hi-hats every 16th, open on step 15
+          if (drumStep % 1 === 0) {
+            console.log(`Hi-hat triggered at bar ${barCount}, step ${drumStep} (open: ${drumStep === 15})`);
+            hatSynth.triggerAttackRelease(drumStep === 15 ? "8n" : "16n", time, drumStep % 2 === 0 ? 0.4 : 0.7);
+          }
+
+          // Shaker on off-beats (odd steps)
+          if (drumStep % 2 === 1) {
+            console.log(`Shaker triggered at bar ${barCount}, step ${drumStep} (position ${drumStep + 1})`);
+            shakerSynth.triggerAttackRelease("16n", time, 0.5);
+          }
+
+          // Ghost snare on steps 6, 14 (positions 7, 15)
+          if (drumStep === 6 || drumStep === 14) {
+            console.log(`Ghost snare triggered at bar ${barCount}, step ${drumStep} (position ${drumStep + 1})`);
+            ghostSnareSynth.triggerAttackRelease("16n", time, 0.3);
+          }
+
+          // Ride cymbal on steps 2, 6, 10, 14 (positions 3, 7, 11, 15)
+          if (drumStep === 2 || drumStep === 6 || drumStep === 10 || drumStep === 14) {
+            console.log(`Ride triggered at bar ${barCount}, step ${drumStep} (position ${drumStep + 1})`);
+            rideSynth.triggerAttackRelease("16n", time, 0.6);
+          }
+
+          // Tambourine on steps 8, 12 (positions 9, 13)
+          if (drumStep === 8 || drumStep === 12) {
+            console.log(`Tambourine triggered at bar ${barCount}, step ${drumStep} (position ${drumStep + 1})`);
+            tambourineSynth.triggerAttackRelease("16n", time, 0.5);
+          }
+
+          // Low tom on steps 3, 7 (positions 4, 8)
+          if (drumStep === 3 || drumStep === 7) {
+            console.log(`Low tom triggered at bar ${barCount}, step ${drumStep} (position ${drumStep + 1})`);
+            lowTomSynth.triggerAttackRelease("C2", "16n", time, 0.4);
+          }
+
+          // Bass (8-step pattern, triggered every 2 drum steps)
+          if (loopCounter % 2 === 0) {
+            const bassNote = currentBassPattern[bassStep];
+            if (bassNote && bassNote.note) {
+              console.log(`Bass triggered at bar ${barCount}, bass step ${bassStep}, note ${bassNote.note}`);
+              bassSynth.triggerAttackRelease(bassNote.note, bassNote.duration, time, bassNote.velocity);
+            } else {
+              console.log(`Bass skipped at bar ${barCount}, bass step ${bassStep} (no note)`);
+            }
+          }
+
+          loopCounter++;
+        }, "16n");
+
+        Tone.Transport.bpm.value = currentBPM;
+        Tone.Destination.mute = isMuted;
+        console.log("Audio setup complete");
+      } catch (err) {
+        console.error("Audio setup failed:", err.message);
+        alert("Failed to set up audio: " + err.message);
+      }
+    }
+
+    function startAudio() {
+      console.log("startAudio() called");
+      if (!audioStarted) {
+        if (typeof Tone !== "undefined") {
+          console.log("Attempting to start Tone.js context...");
+          Tone.start().then(() => {
+            console.log("Audio context started, state:", Tone.context.state);
+            setupAudio();
+            Tone.Transport.start("+0.1");
+            audioStarted = true;
+            console.log("Audio started successfully");
+          }).catch((err) => {
+            console.error("Tone.start failed:", err.message);
+            alert("Failed to start audio: " + err.message + ". Try clicking again or using Chrome/Firefox.");
+          });
+        } else {
+          console.error("Tone.js not loaded");
+          alert("Tone.js not loaded. Please check the script URL.");
+        }
+      } else {
+        console.log("Audio already started");
+      }
+    }
+
+    document.addEventListener('click', () => {
+      if (audioStarted) {
+        currentBassPattern = generateBassPattern();
+        console.log(`Click: Switched to new bass pattern`);
+      }
+    });
+
+    if (typeof p5 !== "undefined") {
+      function setup() {
+        console.log("p5.js setup() called");
+        noCanvas();
+      }
+      function mousePressed() {
+        console.log("Mouse pressed");
+        if (!audioStarted) {
+          const startScreen = document.getElementById('start-screen');
+          if (startScreen) {
+            startScreen.classList.add('hidden');
+          }
+          startAudio();
+        }
+        return false;
+      }
+      function touchStarted() {
+        console.log("Touch started");
+        if (touches.length === 1 && !audioStarted) {
+          const startScreen = document.getElementById('start-screen');
+          if (startScreen) {
+            startScreen.classList.add('hidden');
+          }
+          startAudio();
+        }
+        return false;
+      }
+      function keyPressed() {
+        if (key === " ") {
+          isMuted = !isMuted;
+          if (audioStarted) {
+            Tone.Destination.mute = isMuted;
+            console.log("Spacebar: Audio Muted:", isMuted);
+          }
+          return false;
+        }
+      }  
+    } else { 
+      console.warn("p5.js not loaded, skipping p5.js setup");
+    }
+ 
+    document.addEventListener('keydown', (event) => {
+      if (event.key === " ") {
+        console.log("Spacebar pressed");
+        isMuted = !isMuted;
+        if (audioStarted && typeof Tone !== "undefined") {
+          Tone.Destination.mute = isMuted;
+          console.log("Spacebar: Audio Muted:", isMuted);
+        }
+        event.preventDefault();
+      }
+    });
+  </script> 
+</body>
+</html>

@@ -1,0 +1,1381 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Concrete Empire - Enhanced Prototype</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+        }
+        
+        #gameContainer {
+            position: relative;
+            width: 800px;
+            height: 600px;
+            background-color: #222;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.8);
+        }
+        
+        #gameCanvas {
+            background-color: #333;
+            image-rendering: pixelated;
+        }
+        
+        #hud {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-size: 16px;
+            text-shadow: 2px 2px 2px #000;
+            z-index: 10;
+        }
+        
+        #weaponDisplay {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            color: white;
+            font-size: 16px;
+            text-shadow: 2px 2px 2px #000;
+            z-index: 10;
+        }
+        
+        #missionText {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: yellow;
+            font-size: 24px;
+            text-shadow: 2px 2px 4px #000;
+            z-index: 20;
+            text-align: center;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        
+        #startScreen {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 30;
+            color: white;
+        }
+        
+        #startScreen h1 {
+            color: #ff0000;
+            font-size: 48px;
+            margin-bottom: 20px;
+            text-shadow: 3px 3px 5px #000;
+        }
+        
+        #startButton {
+            padding: 15px 30px;
+            font-size: 24px;
+            background-color: #ff0000;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+            text-shadow: 2px 2px 4px #000;
+        }
+        
+        #startButton:hover {
+            background-color: #cc0000;
+        }
+        
+        .minimap {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            width: 150px;
+            height: 150px;
+            background-color: rgba(0, 0, 0, 0.5);
+            border: 2px solid #fff;
+            z-index: 10;
+        }
+        
+        #tutorialOverlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: none;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 25;
+            color: white;
+            text-align: center;
+            padding: 20px;
+        }
+        
+        .tutorial-step {
+            font-size: 20px;
+            margin-bottom: 20px;
+            max-width: 600px;
+        }
+        
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 10px;
+            margin: 20px 0;
+        }
+        
+        .control-item {
+            background-color: rgba(255, 255, 255, 0.1);
+            padding: 10px;
+            border-radius: 5px;
+        }
+        
+        #continueButton {
+            padding: 10px 20px;
+            font-size: 18px;
+            background-color: #00aa00;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+        
+        #continueButton:hover {
+            background-color: #007700;
+        }
+        
+        #storyText {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(0, 0, 0, 0.8);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            max-width: 600px;
+            text-align: center;
+            z-index: 22;
+            display: none;
+        }
+        
+        #storyText p {
+            font-size: 18px;
+            line-height: 1.5;
+            margin-bottom: 20px;
+        }
+        
+        #storyContinue {
+            padding: 10px 20px;
+            background-color: #ff0000;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin-top: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas" width="800" height="600"></canvas>
+        <div id="hud">Money: $<span id="money">50</span> | Health: <span id="health">100</span> | Wanted: <span id="wanted">0</span> | Day: <span id="day">1</span></div>
+        <div id="weaponDisplay">Weapon: <span id="currentWeapon">Fists</span> | Ammo: <span id="ammo">∞</span></div>
+        <div id="missionText"></div>
+        <div class="minimap"></div>
+        
+        <div id="tutorialOverlay">
+            <div class="tutorial-step" id="tutorialStep">Use WASD to move around</div>
+            <div class="controls-grid">
+                <div class="control-item">WASD - Move</div>
+                <div class="control-item">Mouse - Aim</div>
+                <div class="control-item">Click - Shoot</div>
+                <div class="control-item">1-4 - Change Weapon</div>
+                <div class="control-item">SPACE - Enter/Exit Vehicle</div>
+                <div class="control-item">E - Interact</div>
+            </div>
+            <button id="continueButton">Continue</button>
+        </div>
+        
+        <div id="storyText">
+            <p id="storyContent">Welcome to Port Carmine. You're Vincent Moretti, just released from prison after 5 years. You have nothing but $50 and a burning desire for revenge against the Falcone family who set you up.</p>
+            <p>Start small. Learn the streets. Build your reputation. Your empire begins today.</p>
+            <button id="storyContinue">Begin Your Journey</button>
+        </div>
+        
+        <div id="startScreen">
+            <h1>CONCRETE EMPIRE</h1>
+            <p>The gritty top-down crime simulator</p>
+            <button id="startButton">START GAME</button>
+        </div>
+    </div>
+
+    <script>
+        // Game initialization
+        const canvas = document.getElementById('gameCanvas');
+        const ctx = canvas.getContext('2d');
+        const startScreen = document.getElementById('startScreen');
+        const startButton = document.getElementById('startButton');
+        const moneyDisplay = document.getElementById('money');
+        const healthDisplay = document.getElementById('health');
+        const wantedDisplay = document.getElementById('wanted');
+        const dayDisplay = document.getElementById('day');
+        const currentWeaponDisplay = document.getElementById('currentWeapon');
+        const ammoDisplay = document.getElementById('ammo');
+        const missionText = document.getElementById('missionText');
+        const tutorialOverlay = document.getElementById('tutorialOverlay');
+        const tutorialStep = document.getElementById('tutorialStep');
+        const continueButton = document.getElementById('continueButton');
+        const storyText = document.getElementById('storyText');
+        const storyContent = document.getElementById('storyContent');
+        const storyContinue = document.getElementById('storyContinue');
+        
+        // Game state
+        let gameRunning = false;
+        let tutorialMode = false;
+        let tutorialStepIndex = 0;
+        let currentMission = 0;
+        let day = 1;
+        let timeOfDay = 0; // 0-24, 0 is midnight
+        let gameSpeed = 1;
+        
+        let player = {
+            x: 400,
+            y: 300,
+            width: 20,
+            height: 20,
+            speed: 3,
+            health: 100,
+            money: 50,
+            wantedLevel: 0,
+            angle: 0,
+            inVehicle: false,
+            vehicle: null,
+            weapons: [
+                { name: "Fists", ammo: Infinity, damage: 10, fireRate: 500 },
+                { name: "Pistol", ammo: 0, damage: 20, fireRate: 300 },
+                { name: "Uzi", ammo: 0, damage: 15, fireRate: 100 },
+                { name: "Shotgun", ammo: 0, damage: 50, fireRate: 800 }
+            ],
+            currentWeapon: 0,
+            lastShot: 0,
+            hasMoved: false,
+            hasShot: false
+        };
+        
+        let vehicles = [
+            { x: 500, y: 300, width: 30, height: 20, color: "#ffcc00", speed: 5, occupied: false, type: "car" },
+            { x: 300, y: 450, width: 30, height: 20, color: "#cccccc", speed: 4, occupied: false, type: "sedan" }
+        ];
+        
+        let enemies = [];
+        let bullets = [];
+        let stores = [
+            { x: 650, y: 100, width: 60, height: 60, color: "#ff4444", robbed: false, value: 500, name: "Convenience Store" },
+            { x: 100, y: 500, width: 60, height: 60, color: "#ff4444", robbed: false, value: 750, name: "Liquor Store" },
+            { x: 700, y: 500, width: 60, height: 60, color: "#ff4444", robbed: false, value: 600, name: "Electronics Shop" }
+        ];
+        
+        let police = [];
+        let civilians = [];
+        let missionMarkers = [];
+        let lastEnemySpawn = 0;
+        let lastPoliceSpawn = 0;
+        let lastCivilianSpawn = 0;
+        let keys = {};
+        let mouseX = 0;
+        let mouseY = 0;
+        let camera = { x: 0, y: 0 };
+        let gameTimer = 0;
+        
+        // Tutorial steps
+        const tutorialSteps = [
+            "Welcome to Port Carmine. Use WASD to move around.",
+            "Move to the yellow marker to begin your first mission.",
+            "You can enter vehicles by pressing SPACE when near them.",
+            "Use your mouse to aim and left-click to shoot.",
+            "Press 1-4 to switch between weapons.",
+            "Rob stores (red buildings) to earn money.",
+            "Be careful - committing crimes increases your wanted level!",
+            "Now it's time to make your mark on this city. Good luck!"
+        ];
+        
+        // Missions
+        const missions = [
+            {
+                title: "First Steps",
+                description: "Move to the marker on your minimap to meet your first contact.",
+                objective: "Reach the marker",
+                completed: false,
+                marker: { x: 200, y: 150, radius: 20, color: "#ffff00" }
+            },
+            {
+                title: "First Job",
+                description: "Your contact has given you information about an easy target. Rob the convenience store to get some starting cash.",
+                objective: "Rob the convenience store",
+                completed: false,
+                marker: { x: 650, y: 100, radius: 20, color: "#ff00ff" }
+            },
+            {
+                title: "First Weapon",
+                description: "Visit the gun shop (blue building) to purchase your first real weapon.",
+                objective: "Buy a weapon",
+                completed: false,
+                marker: { x: 150, y: 150, radius: 20, color: "#0000ff" }
+            }
+        ];
+        
+        // Add gun shop
+        let gunShop = {
+            x: 120,
+            y: 120,
+            width: 50,
+            height: 50,
+            color: "#0088ff",
+            weapons: [
+                { name: "Pistol", price: 200, ammo: 50 },
+                { name: "Uzi", price: 500, ammo: 120 },
+                { name: "Shotgun", price: 400, ammo: 30 }
+            ]
+        };
+        
+        // Show mission text
+        function showMissionText(text, duration = 3000) {
+            missionText.textContent = text;
+            missionText.style.opacity = 1;
+            setTimeout(() => {
+                missionText.style.opacity = 0;
+            }, duration);
+        }
+        
+        // Start game
+        startButton.addEventListener('click', function() {
+            startScreen.style.display = 'none';
+            storyText.style.display = 'block';
+        });
+        
+        storyContinue.addEventListener('click', function() {
+            storyText.style.display = 'none';
+            tutorialMode = true;
+            tutorialStepIndex = 0;
+            tutorialStep.textContent = tutorialSteps[tutorialStepIndex];
+            tutorialOverlay.style.display = 'flex';
+            gameRunning = true;
+            gameLoop();
+        });
+        
+        continueButton.addEventListener('click', function() {
+            tutorialStepIndex++;
+            if (tutorialStepIndex < tutorialSteps.length) {
+                tutorialStep.textContent = tutorialSteps[tutorialStepIndex];
+                
+                // Add mission marker for step 1
+                if (tutorialStepIndex === 1) {
+                    missions[0].marker.active = true;
+                }
+            } else {
+                tutorialMode = false;
+                tutorialOverlay.style.display = 'none';
+                showMissionText("Tutorial complete! Check your missions.");
+                // Activate first mission
+                missions[0].active = true;
+                missions[0].marker.active = true;
+            }
+        });
+        
+        // Input handling
+        window.addEventListener('keydown', function(e) {
+            keys[e.key.toLowerCase()] = true;
+            
+            // Weapon switching
+            if (e.key >= '1' && e.key <= '4') {
+                const weaponIndex = parseInt(e.key) - 1;
+                if (weaponIndex < player.weapons.length) {
+                    player.currentWeapon = weaponIndex;
+                    currentWeaponDisplay.textContent = player.weapons[player.currentWeapon].name;
+                    if (player.weapons[player.currentWeapon].ammo === Infinity) {
+                        ammoDisplay.textContent = "∞";
+                    } else {
+                        ammoDisplay.textContent = player.weapons[player.currentWeapon].ammo;
+                    }
+                    
+                    if (tutorialMode && tutorialStepIndex === 4 && !player.hasShot) {
+                        player.hasShot = true;
+                        continueButton.click();
+                    }
+                }
+            }
+            
+            // Enter/exit vehicle
+            if (e.key === ' ' && gameRunning) {
+                if (player.inVehicle && player.vehicle) {
+                    player.inVehicle = false;
+                    player.vehicle.occupied = false;
+                    player.vehicle = null;
+                } else {
+                    // Try to enter a vehicle
+                    for (let vehicle of vehicles) {
+                        if (!vehicle.occupied && 
+                            Math.abs(player.x - vehicle.x) < 40 && 
+                            Math.abs(player.y - vehicle.y) < 40) {
+                            player.inVehicle = true;
+                            player.vehicle = vehicle;
+                            vehicle.occupied = true;
+                            
+                            if (tutorialMode && tutorialStepIndex === 2) {
+                                continueButton.click();
+                            }
+                            break;
+                        }
+                    }
+                }
+            }
+            
+            // Interact with objects (E key)
+            if (e.key.toLowerCase() === 'e' && gameRunning) {
+                // Check if near gun shop
+                if (!player.inVehicle && 
+                    player.x >= gunShop.x - 30 && 
+                    player.x <= gunShop.x + gunShop.width + 30 && 
+                    player.y >= gunShop.y - 30 && 
+                    player.y <= gunShop.y + gunShop.height + 30) {
+                    
+                    // Buy pistol if player can afford it and doesn't have ammo for it
+                    if (player.money >= 200 && player.weapons[1].ammo === 0) {
+                        player.money -= 200;
+                        player.weapons[1].ammo = 50;
+                        moneyDisplay.textContent = player.money;
+                        showMissionText("Purchased a Pistol with 50 rounds!");
+                        
+                        // Complete mission if active
+                        if (missions[2] && !missions[2].completed) {
+                            missions[2].completed = true;
+                            showMissionText("Mission Complete: First Weapon!");
+                            // Start next mission
+                            setTimeout(() => {
+                                showMissionText("New Mission: Build your reputation by eliminating a rival gang member.");
+                            }, 3000);
+                        }
+                    } else if (player.weapons[1].ammo === 0) {
+                        showMissionText("You need $200 to buy a Pistol!");
+                    } else {
+                        showMissionText("You already have a Pistol!");
+                    }
+                }
+            }
+        });
+        
+        window.addEventListener('keyup', function(e) {
+            keys[e.key.toLowerCase()] = false;
+        });
+        
+        window.addEventListener('mousemove', function(e) {
+            const rect = canvas.getBoundingClientRect();
+            mouseX = e.clientX - rect.left;
+            mouseY = e.clientY - rect.top;
+        });
+        
+        window.addEventListener('click', function() {
+            shoot();
+            
+            if (tutorialMode && tutorialStepIndex === 3 && !player.hasShot) {
+                player.hasShot = true;
+                continueButton.click();
+            }
+        });
+        
+        // Shooting function
+        function shoot() {
+            const now = Date.now();
+            const weapon = player.weapons[player.currentWeapon];
+            
+            if (now - player.lastShot > weapon.fireRate) {
+                if (weapon.ammo > 0 || weapon.ammo === Infinity) {
+                    if (weapon.ammo !== Infinity) {
+                        weapon.ammo--;
+                        ammoDisplay.textContent = weapon.ammo;
+                    }
+                    
+                    player.lastShot = now;
+                    
+                    // Calculate bullet direction
+                    const speed = 8;
+                    const dx = mouseX - canvas.width / 2;
+                    const dy = mouseY - canvas.height / 2;
+                    const angle = Math.atan2(dy, dx);
+                    
+                    // Create bullet
+                    bullets.push({
+                        x: player.x,
+                        y: player.y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        damage: weapon.damage,
+                        life: 100
+                    });
+                    
+                    // Play sound effect (would add in full game)
+                } else if (weapon.ammo === 0 && weapon.name !== "Fists") {
+                    showMissionText("No ammo! Find a gun shop to buy more.");
+                }
+            }
+        }
+        
+        // Spawn civilians (non-aggressive NPCs)
+        function spawnCivilians() {
+            const now = Date.now();
+            if (now - lastCivilianSpawn > 2000 && civilians.length < 10) {
+                // Spawn civilian at edge of screen
+                let x, y;
+                const side = Math.floor(Math.random() * 4);
+                
+                switch(side) {
+                    case 0: // top
+                        x = Math.random() * 2000;
+                        y = 0;
+                        break;
+                    case 1: // right
+                        x = 2000;
+                        y = Math.random() * 2000;
+                        break;
+                    case 2: // bottom
+                        x = Math.random() * 2000;
+                        y = 2000;
+                        break;
+                    case 3: // left
+                        x = 0;
+                        y = Math.random() * 2000;
+                        break;
+                }
+                
+                // Set destination
+                const destX = Math.random() * 2000;
+                const destY = Math.random() * 2000;
+                
+                civilians.push({
+                    x: x,
+                    y: y,
+                    width: 12,
+                    height: 12,
+                    speed: 1,
+                    destX: destX,
+                    destY: destY,
+                    color: "#77ff77",
+                    waitTime: 0
+                });
+                
+                lastCivilianSpawn = now;
+            }
+        }
+        
+        // Spawn enemies (rare at first, more common as game progresses)
+        function spawnEnemies() {
+            const now = Date.now();
+            // Only start spawning enemies after mission 2 or with high wanted level
+            const shouldSpawn = (currentMission >= 2 || player.wantedLevel > 1) && 
+                               now - lastEnemySpawn > (5000 - (day * 200)) && 
+                               enemies.length < 2 + player.wantedLevel + Math.floor(day/3);
+            
+            if (shouldSpawn) {
+                // Spawn enemy at edge of screen
+                let x, y;
+                const side = Math.floor(Math.random() * 4);
+                
+                switch(side) {
+                    case 0: // top
+                        x = Math.random() * 2000;
+                        y = 0;
+                        break;
+                    case 1: // right
+                        x = 2000;
+                        y = Math.random() * 2000;
+                        break;
+                    case 2: // bottom
+                        x = Math.random() * 2000;
+                        y = 2000;
+                        break;
+                    case 3: // left
+                        x = 0;
+                        y = Math.random() * 2000;
+                        break;
+                }
+                
+                enemies.push({
+                    x: x,
+                    y: y,
+                    width: 15,
+                    height: 15,
+                    speed: 1 + Math.random() * 0.5 + (day * 0.1),
+                    health: 30 + (day * 5),
+                    lastShot: 0,
+                    aggressive: player.wantedLevel > 0 || currentMission >= 2
+                });
+                
+                lastEnemySpawn = now;
+            }
+        }
+        
+        // Spawn police based on wanted level
+        function spawnPolice() {
+            if (player.wantedLevel > 0) {
+                const now = Date.now();
+                const spawnRate = Math.max(8000 - (player.wantedLevel * 1500), 1000);
+                
+                if (now - lastPoliceSpawn > spawnRate && police.length < player.wantedLevel * 2) {
+                    // Spawn police at edge of screen
+                    let x, y;
+                    const side = Math.floor(Math.random() * 4);
+                    
+                    switch(side) {
+                        case 0: // top
+                            x = Math.random() * 2000;
+                            y = 0;
+                            break;
+                        case 1: // right
+                            x = 2000;
+                            y = Math.random() * 2000;
+                            break;
+                        case 2: // bottom
+                            x = Math.random() * 2000;
+                            y = 2000;
+                            break;
+                        case 3: // left
+                            x = 0;
+                            y = Math.random() * 2000;
+                            break;
+                    }
+                    
+                    police.push({
+                        x: x,
+                        y: y,
+                        width: 18,
+                        height: 18,
+                        speed: 2 + (player.wantedLevel * 0.3),
+                        health: 50 + (day * 10),
+                        lastShot: 0,
+                        vehicle: player.wantedLevel > 2
+                    });
+                    
+                    lastPoliceSpawn = now;
+                }
+            }
+        }
+        
+        // Check mission objectives
+        function checkMissions() {
+            // Mission 0: Reach marker
+            if (!missions[0].completed && 
+                Math.abs(player.x - missions[0].marker.x) < 40 && 
+                Math.abs(player.y - missions[0].marker.y) < 40) {
+                missions[0].completed = true;
+                missions[0].marker.active = false;
+                showMissionText("Mission Complete: First Steps!");
+                
+                // Activate next mission
+                setTimeout(() => {
+                    missions[1].active = true;
+                    missions[1].marker.active = true;
+                    showMissionText(missions[1].description, 5000);
+                }, 2000);
+                
+                currentMission = 1;
+            }
+            
+            // Mission 1: Rob store
+            if (!missions[1].completed && stores[0].robbed) {
+                missions[1].completed = true;
+                missions[1].marker.active = false;
+                showMissionText("Mission Complete: First Job!");
+                
+                // Activate next mission
+                setTimeout(() => {
+                    missions[2].active = true;
+                    missions[2].marker.active = true;
+                    showMissionText(missions[2].description, 5000);
+                }, 2000);
+                
+                currentMission = 2;
+            }
+        }
+        
+        // Update game state
+        function update() {
+            if (!gameRunning) return;
+            
+            gameTimer++;
+            
+            // Update day/night cycle
+            if (gameTimer % (60 * 60 * gameSpeed) === 0) { // Every in-game hour
+                timeOfDay = (timeOfDay + 1) % 24;
+                if (timeOfDay === 0) {
+                    day++;
+                    dayDisplay.textContent = day;
+                    showMissionText(`Day ${day} - New opportunities await...`);
+                }
+            }
+            
+            // Update camera to follow player
+            camera.x = player.x - canvas.width / 2;
+            camera.y = player.y - canvas.height / 2;
+            
+            // Player movement
+            let speed = player.inVehicle ? player.vehicle.speed : player.speed;
+            let moved = false;
+            
+            if (keys['w'] || keys['arrowup']) {
+                player.y -= speed;
+                moved = true;
+            }
+            if (keys['s'] || keys['arrowdown']) {
+                player.y += speed;
+                moved = true;
+            }
+            if (keys['a'] || keys['arrowleft']) {
+                player.x -= speed;
+                moved = true;
+            }
+            if (keys['d'] || keys['arrowright']) {
+                player.x += speed;
+                moved = true;
+            }
+            
+            // Keep player within bounds
+            player.x = Math.max(10, Math.min(1990, player.x));
+            player.y = Math.max(10, Math.min(1990, player.y));
+            
+            // Track if player has moved for tutorial
+            if (moved && tutorialMode && tutorialStepIndex === 0 && !player.hasMoved) {
+                player.hasMoved = true;
+                continueButton.click();
+            }
+            
+            // Calculate player angle to mouse
+            const dx = mouseX - canvas.width / 2;
+            const dy = mouseY - canvas.height / 2;
+            player.angle = Math.atan2(dy, dx);
+            
+            // Update bullets
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                bullets[i].x += bullets[i].vx;
+                bullets[i].y += bullets[i].vy;
+                bullets[i].life--;
+                
+                if (bullets[i].life <= 0) {
+                    bullets.splice(i, 1);
+                    continue;
+                }
+                
+                // Check bullet collisions with enemies
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    if (checkCollision(bullets[i], enemies[j])) {
+                        enemies[j].health -= bullets[i].damage;
+                        bullets.splice(i, 1);
+                        
+                        if (enemies[j].health <= 0) {
+                            enemies.splice(j, 1);
+                            player.money += 100 + day * 10;
+                            moneyDisplay.textContent = player.money;
+                            showMissionText("Enemy eliminated! +$" + (100 + day * 10));
+                        }
+                        break;
+                    }
+                }
+                
+                // Check bullet collisions with police
+                for (let j = police.length - 1; j >= 0; j--) {
+                    if (checkCollision(bullets[i], police[j])) {
+                        police[j].health -= bullets[i].damage;
+                        bullets.splice(i, 1);
+                        
+                        if (police[j].health <= 0) {
+                            police.splice(j, 1);
+                            player.wantedLevel = Math.min(5, player.wantedLevel + 1);
+                            wantedDisplay.textContent = player.wantedLevel;
+                            showMissionText("You killed a police officer! Wanted level increased!");
+                        }
+                        break;
+                    }
+                }
+                
+                // Check bullet collisions with civilians (bad!)
+                for (let j = civilians.length - 1; j >= 0; j--) {
+                    if (checkCollision(bullets[i], civilians[j])) {
+                        civilians.splice(j, 1);
+                        bullets.splice(i, 1);
+                        player.wantedLevel = Math.min(5, player.wantedLevel + 2);
+                        wantedDisplay.textContent = player.wantedLevel;
+                        showMissionText("You killed an innocent civilian! Wanted level +2!");
+                        break;
+                    }
+                }
+            }
+            
+            // Update enemies
+            for (let i = 0; i < enemies.length; i++) {
+                // Only chase player if aggressive
+                if (enemies[i].aggressive) {
+                    // Move enemies toward player
+                    const dx = player.x - enemies[i].x;
+                    const dy = player.y - enemies[i].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist > 0) {
+                        enemies[i].x += (dx / dist) * enemies[i].speed;
+                        enemies[i].y += (dy / dist) * enemies[i].speed;
+                    }
+                    
+                    // Enemy shooting
+                    const now = Date.now();
+                    if (now - enemies[i].lastShot > 1500 && dist < 300) {
+                        enemies[i].lastShot = now;
+                        
+                        const angle = Math.atan2(dy, dx);
+                        const speed = 5;
+                        
+                        bullets.push({
+                            x: enemies[i].x,
+                            y: enemies[i].y,
+                            vx: Math.cos(angle) * speed,
+                            vy: Math.sin(angle) * speed,
+                            damage: 10 + day,
+                            life: 100,
+                            isEnemy: true
+                        });
+                    }
+                    
+                    // Check collision with player
+                    if (checkCollision(player, enemies[i])) {
+                        player.health -= 5;
+                        healthDisplay.textContent = player.health;
+                        
+                        if (player.health <= 0) {
+                            gameOver();
+                        }
+                    }
+                } else {
+                    // Non-aggressive enemies just wander
+                    if (Math.random() < 0.02) {
+                        enemies[i].destX = enemies[i].x + (Math.random() * 200 - 100);
+                        enemies[i].destY = enemies[i].y + (Math.random() * 200 - 100);
+                    }
+                    
+                    const dx = enemies[i].destX - enemies[i].x;
+                    const dy = enemies[i].destY - enemies[i].y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    
+                    if (dist > 5) {
+                        enemies[i].x += (dx / dist) * enemies[i].speed * 0.5;
+                        enemies[i].y += (dy / dist) * enemies[i].speed * 0.5;
+                    }
+                }
+            }
+            
+            // Update police
+            for (let i = 0; i < police.length; i++) {
+                // Move police toward player
+                const dx = player.x - police[i].x;
+                const dy = player.y - police[i].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > 0) {
+                    police[i].x += (dx / dist) * police[i].speed;
+                    police[i].y += (dy / dist) * police[i].speed;
+                }
+                
+                // Police shooting
+                const now = Date.now();
+                if (now - police[i].lastShot > 1000 && dist < 400) {
+                    police[i].lastShot = now;
+                    
+                    const angle = Math.atan2(dy, dx);
+                    const speed = 6;
+                    
+                    bullets.push({
+                        x: police[i].x,
+                        y: police[i].y,
+                        vx: Math.cos(angle) * speed,
+                        vy: Math.sin(angle) * speed,
+                        damage: 15,
+                        life: 100,
+                        isEnemy: true
+                    });
+                }
+                
+                // Check collision with player
+                if (checkCollision(player, police[i])) {
+                    player.health -= 10;
+                    healthDisplay.textContent = player.health;
+                    
+                    if (player.health <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+            
+            // Update civilians
+            for (let i = 0; i < civilians.length; i++) {
+                // Move toward destination
+                const dx = civilians[i].destX - civilians[i].x;
+                const dy = civilians[i].destY - civilians[i].y;
+                const dist = Math.sqrt(dx * dx + dy * dy);
+                
+                if (dist > 2) {
+                    civilians[i].x += (dx / dist) * civilians[i].speed;
+                    civilians[i].y += (dy / dist) * civilians[i].speed;
+                } else {
+                    // Reached destination, set new one after waiting
+                    civilians[i].waitTime++;
+                    if (civilians[i].waitTime > 60) {
+                        civilians[i].destX = Math.random() * 2000;
+                        civilians[i].destY = Math.random() * 2000;
+                        civilians[i].waitTime = 0;
+                    }
+                }
+                
+                // Avoid player if too close
+                const playerDist = Math.sqrt(
+                    Math.pow(player.x - civilians[i].x, 2) + 
+                    Math.pow(player.y - civilians[i].y, 2)
+                );
+                
+                if (playerDist < 50) {
+                    const avoidX = civilians[i].x - player.x;
+                    const avoidY = civilians[i].y - player.y;
+                    const avoidDist = Math.sqrt(avoidX * avoidX + avoidY * avoidY);
+                    
+                    if (avoidDist > 0) {
+                        civilians[i].x += (avoidX / avoidDist) * civilians[i].speed * 2;
+                        civilians[i].y += (avoidY / avoidDist) * civilians[i].speed * 2;
+                    }
+                }
+            }
+            
+            // Check bullet collisions with player
+            for (let i = bullets.length - 1; i >= 0; i--) {
+                if (bullets[i].isEnemy && checkCollision(bullets[i], player)) {
+                    player.health -= bullets[i].damage;
+                    healthDisplay.textContent = player.health;
+                    bullets.splice(i, 1);
+                    
+                    if (player.health <= 0) {
+                        gameOver();
+                    }
+                }
+            }
+            
+            // Check store interactions
+            for (let i = 0; i < stores.length; i++) {
+                if (!stores[i].robbed && checkCollision(player, stores[i]) && !player.inVehicle) {
+                    stores[i].robbed = true;
+                    player.money += stores[i].value;
+                    moneyDisplay.textContent = player.money;
+                    player.wantedLevel = Math.min(5, player.wantedLevel + 1);
+                    wantedDisplay.textContent = player.wantedLevel;
+                    showMissionText(`Robbed ${stores[i].name} for $${stores[i].value}! Wanted level increased!`);
+                }
+            }
+            
+            // Check gun shop interaction
+            if (!player.inVehicle && 
+                player.x >= gunShop.x - 30 && 
+                player.x <= gunShop.x + gunShop.width + 30 && 
+                player.y >= gunShop.y - 30 && 
+                player.y <= gunShop.y + gunShop.height + 30) {
+                if (player.weapons[1].ammo === 0) {
+                    showMissionText("Press E to enter gun shop and buy weapons");
+                }
+            }
+            
+            // Spawn civilians, enemies and police
+            spawnCivilians();
+            spawnEnemies();
+            spawnPolice();
+            
+            // Decrease wanted level over time if not increasing
+            if (player.wantedLevel > 0 && Math.random() < 0.0005 * (6 - player.wantedLevel)) {
+                player.wantedLevel--;
+                wantedDisplay.textContent = player.wantedLevel;
+                if (player.wantedLevel === 0) {
+                    showMissionText("Wanted level cleared! Lay low for a while.");
+                }
+            }
+            
+            // Check mission objectives
+            checkMissions();
+        }
+        
+        // Check collision between two objects
+        function checkCollision(obj1, obj2) {
+            return obj1.x < obj2.x + obj2.width &&
+                   obj1.x + obj1.width > obj2.x &&
+                   obj1.y < obj2.y + obj2.height &&
+                   obj1.y + obj1.height > obj2.y;
+        }
+        
+        // Game over
+        function gameOver() {
+            gameRunning = false;
+            showMissionText("GAME OVER - You're dead or in custody!");
+            setTimeout(() => {
+                startScreen.style.display = 'flex';
+                resetGame();
+            }, 3000);
+        }
+        
+        // Reset game state
+        function resetGame() {
+            player.x = 400;
+            player.y = 300;
+            player.health = 100;
+            player.money = 50;
+            player.wantedLevel = 0;
+            player.inVehicle = false;
+            player.vehicle = null;
+            player.currentWeapon = 0;
+            player.hasMoved = false;
+            player.hasShot = false;
+            
+            healthDisplay.textContent = player.health;
+            moneyDisplay.textContent = player.money;
+            wantedDisplay.textContent = player.wantedLevel;
+            dayDisplay.textContent = "1";
+            currentWeaponDisplay.textContent = player.weapons[player.currentWeapon].name;
+            ammoDisplay.textContent = "∞";
+            
+            enemies = [];
+            bullets = [];
+            police = [];
+            civilians = [];
+            currentMission = 0;
+            day = 1;
+            timeOfDay = 12;
+            
+            for (let store of stores) {
+                store.robbed = false;
+            }
+            
+            for (let vehicle of vehicles) {
+                vehicle.occupied = false;
+            }
+            
+            // Reset missions
+            for (let mission of missions) {
+                mission.completed = false;
+                mission.active = false;
+            }
+        }
+        
+        // Render game
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw background based on time of day
+            let bgColor, streetColor;
+            if (timeOfDay >= 6 && timeOfDay < 18) {
+                // Day
+                bgColor = '#336699';
+                streetColor = '#444';
+            } else if (timeOfDay >= 18 && timeOfDay < 21) {
+                // Dusk
+                bgColor = '#663366';
+                streetColor = '#555';
+            } else if (timeOfDay >= 21 || timeOfDay < 3) {
+                // Night
+                bgColor = '#001133';
+                streetColor = '#666';
+            } else {
+                // Dawn
+                bgColor = '#666633';
+                streetColor = '#555';
+            }
+            
+            ctx.fillStyle = bgColor;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid for city feel
+            ctx.strokeStyle = streetColor;
+            ctx.lineWidth = 1;
+            
+            // Draw streets
+            for (let i = 0; i < 20; i++) {
+                // Horizontal streets
+                ctx.beginPath();
+                ctx.moveTo(0, i * 100 - camera.y % 100);
+                ctx.lineTo(canvas.width, i * 100 - camera.y % 100);
+                ctx.stroke();
+                
+                // Vertical streets
+                ctx.beginPath();
+                ctx.moveTo(i * 100 - camera.x % 100, 0);
+                ctx.lineTo(i * 100 - camera.x % 100, canvas.height);
+                ctx.stroke();
+            }
+            
+            // Draw buildings
+            drawBuilding(200, 200, 80, 80, "#888888");
+            drawBuilding(600, 200, 100, 60, "#777799");
+            drawBuilding(200, 400, 70, 90, "#887777");
+            drawBuilding(500, 450, 90, 70, "#778877");
+            
+            // Draw gun shop
+            ctx.fillStyle = gunShop.color;
+            ctx.fillRect(gunShop.x - camera.x, gunShop.y - camera.y, gunShop.width, gunShop.height);
+            ctx.fillStyle = "#ffffff";
+            ctx.font = "12px Arial";
+            ctx.fillText("GUN", gunShop.x - camera.x + 8, gunShop.y - camera.y + 25);
+            ctx.fillText("SHOP", gunShop.x - camera.x + 5, gunShop.y - camera.y + 40);
+            
+            // Draw stores
+            for (let store of stores) {
+                ctx.fillStyle = store.robbed ? '#555555' : store.color;
+                ctx.fillRect(store.x - camera.x, store.y - camera.y, store.width, store.height);
+                
+                // Draw store sign
+                ctx.fillStyle = '#ffffff';
+                ctx.font = '12px Arial';
+                ctx.fillText('STORE', store.x - camera.x + 5, store.y - camera.y + 20);
+            }
+            
+            // Draw mission markers
+            for (let mission of missions) {
+                if (mission.active && mission.marker.active) {
+                    ctx.strokeStyle = mission.marker.color;
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(
+                        mission.marker.x - camera.x, 
+                        mission.marker.y - camera.y, 
+                        mission.marker.radius + Math.sin(Date.now() / 200) * 5, 
+                        0, 
+                        Math.PI * 2
+                    );
+                    ctx.stroke();
+                }
+            }
+            
+            // Draw vehicles
+            for (let vehicle of vehicles) {
+                ctx.fillStyle = vehicle.color;
+                ctx.fillRect(vehicle.x - camera.x, vehicle.y - camera.y, vehicle.width, vehicle.height);
+                
+                // Draw car details
+                ctx.fillStyle = '#000000';
+                // Windows
+                ctx.fillRect(vehicle.x - camera.x + 5, vehicle.y - camera.y + 3, vehicle.width - 10, 8);
+                // Wheels
+                ctx.fillRect(vehicle.x - camera.x, vehicle.y - camera.y, 6, 6);
+                ctx.fillRect(vehicle.x - camera.x + vehicle.width - 6, vehicle.y - camera.y, 6, 6);
+                ctx.fillRect(vehicle.x - camera.x, vehicle.y - camera.y + vehicle.height - 6, 6, 6);
+                ctx.fillRect(vehicle.x - camera.x + vehicle.width - 6, vehicle.y - camera.y + vehicle.height - 6, 6, 6);
+            }
+            
+            // Draw civilians
+            for (let civilian of civilians) {
+                ctx.fillStyle = civilian.color;
+                ctx.fillRect(civilian.x - camera.x, civilian.y - camera.y, civilian.width, civilian.height);
+                
+                // Draw civilian direction
+                const length = 8;
+                ctx.beginPath();
+                ctx.moveTo(civilian.x - camera.x + civilian.width/2, civilian.y - camera.y + civilian.height/2);
+                ctx.lineTo(
+                    civilian.x - camera.x + civilian.width/2,
+                    civilian.y - camera.y + civilian.height/2 - length
+                );
+                ctx.lineWidth = 2;
+                ctx.stroke();
+            }
+            
+            // Draw enemies
+            for (let enemy of enemies) {
+                ctx.fillStyle = enemy.aggressive ? '#ff8800' : '#aa7700';
+                ctx.fillRect(enemy.x - camera.x, enemy.y - camera.y, enemy.width, enemy.height);
+                
+                // Draw enemy weapon if aggressive
+                if (enemy.aggressive) {
+                    ctx.fillStyle = '#444444';
+                    const angle = Math.atan2(player.y - enemy.y, player.x - enemy.x);
+                    const length = 10;
+                    ctx.beginPath();
+                    ctx.moveTo(enemy.x - camera.x + enemy.width/2, enemy.y - camera.y + enemy.height/2);
+                    ctx.lineTo(
+                        enemy.x - camera.x + enemy.width/2 + Math.cos(angle) * length,
+                        enemy.y - camera.y + enemy.height/2 + Math.sin(angle) * length
+                    );
+                    ctx.lineWidth = 3;
+                    ctx.stroke();
+                }
+            }
+            
+            // Draw police
+            for (let cop of police) {
+                ctx.fillStyle = '#0088ff';
+                ctx.fillRect(cop.x - camera.x, cop.y - camera.y, cop.width, cop.height);
+                
+                // Draw police car if they're in one
+                if (cop.vehicle) {
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(cop.x - camera.x - 5, cop.y - camera.y - 5, cop.width + 10, cop.height + 10);
+                    // Police lights
+                    ctx.fillStyle = '#ff0000';
+                    ctx.fillRect(cop.x - camera.x - 3, cop.y - camera.y - 7, 4, 3);
+                    ctx.fillStyle = '#0000ff';
+                    ctx.fillRect(cop.x - camera.x + cop.width - 1, cop.y - camera.y - 7, 4, 3);
+                }
+                
+                // Draw police weapon
+                ctx.fillStyle = '#444444';
+                const angle = Math.atan2(player.y - cop.y, player.x - cop.x);
+                const length = 10;
+                ctx.beginPath();
+                ctx.moveTo(cop.x - camera.x + cop.width/2, cop.y - camera.y + cop.height/2);
+                ctx.lineTo(
+                    cop.x - camera.x + cop.width/2 + Math.cos(angle) * length,
+                    cop.y - camera.y + cop.height/2 + Math.sin(angle) * length
+                );
+                ctx.lineWidth = 3;
+                ctx.stroke();
+            }
+            
+            // Draw bullets
+            for (let bullet of bullets) {
+                ctx.fillStyle = bullet.isEnemy ? '#ff0000' : '#ffff00';
+                ctx.beginPath();
+                ctx.arc(bullet.x - camera.x, bullet.y - camera.y, 3, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            
+            // Draw player
+            ctx.fillStyle = '#00ff00';
+            ctx.fillRect(player.x - camera.x, player.y - camera.y, player.width, player.height);
+            
+            // Draw player weapon
+            ctx.fillStyle = '#ffffff';
+            const length = player.inVehicle ? 0 : 15;
+            ctx.beginPath();
+            ctx.moveTo(player.x - camera.x + player.width/2, player.y - camera.y + player.height/2);
+            ctx.lineTo(
+                player.x - camera.x + player.width/2 + Math.cos(player.angle) * length,
+                player.y - camera.y + player.height/2 + Math.sin(player.angle) * length
+            );
+            ctx.lineWidth = 4;
+            ctx.stroke();
+            
+            // Draw minimap
+            const minimap = document.querySelector('.minimap');
+            const minimapCtx = minimap.getContext ? minimap.getContext('2d') : null;
+            
+            if (minimapCtx) {
+                minimapCtx.clearRect(0, 0, 150, 150);
+                
+                // Draw city outline
+                minimapCtx.fillStyle = '#333';
+                minimapCtx.fillRect(0, 0, 150, 150);
+                
+                // Scale factor for minimap
+                const scale = 150 / 2000;
+                
+                // Draw player on minimap
+                minimapCtx.fillStyle = '#00ff00';
+                minimapCtx.fillRect(player.x * scale, player.y * scale, 3, 3);
+                
+                // Draw stores on minimap
+                for (let store of stores) {
+                    minimapCtx.fillStyle = store.robbed ? '#555' : '#ff0000';
+                    minimapCtx.fillRect(store.x * scale, store.y * scale, 4, 4);
+                }
+                
+                // Draw gun shop on minimap
+                minimapCtx.fillStyle = '#0088ff';
+                minimapCtx.fillRect(gunShop.x * scale, gunShop.y * scale, 4, 4);
+                
+                // Draw mission markers on minimap
+                for (let mission of missions) {
+                    if (mission.active && mission.marker.active) {
+                        minimapCtx.strokeStyle = mission.marker.color;
+                        minimapCtx.lineWidth = 2;
+                        minimapCtx.beginPath();
+                        minimapCtx.arc(
+                            mission.marker.x * scale, 
+                            mission.marker.y * scale, 
+                            mission.marker.radius * scale, 
+                            0, 
+                            Math.PI * 2
+                        );
+                        minimapCtx.stroke();
+                    }
+                }
+                
+                // Draw enemies on minimap
+                for (let enemy of enemies) {
+                    minimapCtx.fillStyle = enemy.aggressive ? '#ff8800' : '#aa7700';
+                    minimapCtx.fillRect(enemy.x * scale, enemy.y * scale, 2, 2);
+                }
+                
+                // Draw police on minimap
+                for (let cop of police) {
+                    minimapCtx.fillStyle = '#0088ff';
+                    minimapCtx.fillRect(cop.x * scale, cop.y * scale, 2, 2);
+                }
+                
+                // Draw civilians on minimap
+                for (let civilian of civilians) {
+                    minimapCtx.fillStyle = '#77ff77';
+                    minimapCtx.fillRect(civilian.x * scale, civilian.y * scale, 1, 1);
+                }
+            }
+        }
+        
+        // Helper function to draw buildings
+        function drawBuilding(x, y, width, height, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(x - camera.x, y - camera.y, width, height);
+            
+            // Draw windows
+            ctx.fillStyle = '#ffffff';
+            for (let i = 0; i < Math.floor(width / 15) - 1; i++) {
+                for (let j = 0; j < Math.floor(height / 15) - 1; j++) {
+                    if (Math.random() > 0.3 || timeOfDay < 19) { // Lights on in daytime or randomly at night
+                        ctx.fillRect(
+                            x - camera.x + 8 + i * 15, 
+                            y - camera.y + 8 + j * 15, 
+                            8, 8
+                        );
+                    }
+                }
+            }
+        }
+        
+        // Game loop
+        function gameLoop() {
+            update();
+            render();
+            requestAnimationFrame(gameLoop);
+        }
+        
+        // Initialize display
+        currentWeaponDisplay.textContent = player.weapons[player.currentWeapon].name;
+        ammoDisplay.textContent = "∞";
+        dayDisplay.textContent = day;
+    </script>
+</body>
+</html>
