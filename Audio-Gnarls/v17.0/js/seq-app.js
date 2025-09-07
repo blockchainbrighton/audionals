@@ -41,6 +41,39 @@ class SeqApp extends HTMLElement {
     on(this._removeBlockBtn, "click", this.handleRemoveBlock);
   }
 
+  // --- Quantize UI edits to next sequencer tick to avoid mid-buffer clicks ---
+  _applyPendingEdits(immediateIfIdle = false) {
+    const q = this._pendingEdits || [];
+    if (!q.length) return;
+    // If not playing, apply immediately
+    if (immediateIfIdle && !this.state.sequencePlaying) {
+      for (const e of q) {
+        if (e.type === 'paint') {
+          this.#setSeq(e.i, e.value);
+          this.#dispatch("seq-step-recorded", { slotIndex: e.i, value: e.value, nextSlot: this.#next(e.i), isRecording: false });
+        } else if (e.type === 'clear') {
+          this.#setSeq(e.i, null);
+          this.#dispatch("seq-step-cleared", { slotIndex: e.i });
+        }
+      }
+      this._pendingEdits.length = 0;
+      this.updateSequenceUI();
+      return;
+    }
+    // While playing, we only commit at step boundaries inside the tick
+    for (const e of q) {
+      if (e.type === 'paint') {
+        this.#setSeq(e.i, e.value);
+        this.#dispatch("seq-step-recorded", { slotIndex: e.i, value: e.value, nextSlot: this.#next(e.i), isRecording: false });
+      } else if (e.type === 'clear') {
+        this.#setSeq(e.i, null);
+        this.#dispatch("seq-step-cleared", { slotIndex: e.i });
+      }
+    }
+    this._pendingEdits.length = 0;
+    this.updateSequenceUI();
+  }
+
   #recordAt(i, n) {
     if (!this.state.isRecording || i < 0 || i >= this.#len()) return;
     this.#setSeq(i, n);
@@ -58,10 +91,13 @@ class SeqApp extends HTMLElement {
   }
 
   #paint(i, to) {
-    if (to == null) return this.#clearAt(i);
-    this.#setSeq(i, 0);
+    // Queue the edit to apply at the next tick to avoid audio discontinuities
+    this._pendingEdits ||= [];
+    if (to == null) this._pendingEdits.push({ type: 'clear', i });
+    else this._pendingEdits.push({ type: 'paint', i, value: 0 }); // 0 = hum/rest sentinel per app
+    // Update UI optimistically, but don't dispatch now
+    this.#setSeq(i, to == null ? null : 0);
     this.updateSequenceUI();
-    this.#dispatch("seq-step-recorded", { slotIndex: i, value: 0, nextSlot: this.#next(i), isRecording: false });
   }
 
   #beginDragPaint(i) {
@@ -231,14 +267,12 @@ class SeqApp extends HTMLElement {
 
   handleStepRightClick(e, i) {
     e.preventDefault();
+    // queue clear for next tick
+    this._pendingEdits ||= [];
+    this._pendingEdits.push({ type: 'clear', i });
+    // optimistic UI
     this.#setSeq(i, null);
-    if (this.state.isRecording && this.state.currentRecordSlot === i) {
-      const nx = this.#next(i);
-      this.state.currentRecordSlot = nx;
-      if (nx === 0) this.state.isRecording = false;
-    }
     this.updateSequenceUI();
-    this.#dispatch("seq-step-cleared", { slotIndex: i });
   }
 
   handlePlayClick() { this.state.sequencePlaying ? this.stopSequence() : this.playSequence(); }
@@ -286,10 +320,16 @@ class SeqApp extends HTMLElement {
     this.state.sequenceStepIndex = 0;
     this.updateSequenceUI();
     this.#dispatch("seq-play-started", { stepTime: this.state.stepTime });
+
     const tick = () => {
       if (!this.state.sequencePlaying) return;
+
+      // Commit any queued UI edits exactly at step boundary
+      this._applyPendingEdits(false);
+
       const i = this.state.sequenceStepIndex, v = this.state.sequence[i], vel = this.#velAt(i), last = this.#next(i) === 0;
       this.#dispatch("seq-step-advance", { stepIndex: i, index: i, value: v, velocity: vel, isLastStep: last });
+
       this.state.sequenceStepIndex = this.#next(i);
       this.updateSequenceUI();
       this._seqTimer = this.state.sequencePlaying ? setTimeout(tick, this.state.stepTime) : null;
@@ -301,6 +341,8 @@ class SeqApp extends HTMLElement {
     this.state.sequencePlaying = false;
     this._seqTimer && (clearTimeout(this._seqTimer), (this._seqTimer = null));
     this._tailTimer && (clearTimeout(this._tailTimer), (this._tailTimer = null));
+    // If user made edits while stopped, apply them now
+    this._applyPendingEdits(true);
     this.updateSequenceUI();
     this.#dispatch("seq-play-stopped", {});
     const d = Math.max(20, Math.min(this.state.stepTime, 200));
@@ -310,4 +352,8 @@ class SeqApp extends HTMLElement {
     }, d);
   }
 }
-customElements.define("seq-app", SeqApp);
+
+// Safe, idempotent registration (no-op if already defined)
+if (!customElements.get('seq-app')) {
+  customElements.define('seq-app', SeqApp);
+}
