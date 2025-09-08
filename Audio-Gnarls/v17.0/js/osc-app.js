@@ -195,8 +195,7 @@ class OscApp extends HTMLElement {
     // Build 5x5 cell map:
     // - outer ring (16 cells): shapes[0..15]
     // - two inner-edge: shapes[16], shapes[17]
-    // - center 2x2: hum
-    // - remaining 3 inner cells: seed-linked FX variants of random base shapes
+    // - all other inner cells (including central 2x2): hum
     this._buildGridMap = () => {
       const rng = this._rng(this.state.seed + '_grid25');
       const pick = (arr, n) => {
@@ -210,37 +209,30 @@ class OscApp extends HTMLElement {
       };
 
       // 5x5 coordinates (r,c) with 0-based indices
-      // define convenience predicates
       const isBorder = (r,c) => r===0||c===0||r===4||c===4;
-      // central 2x2 block: rows 1..2, cols 1..2 (this forms the “central four” in a 5x5)
-      const isHumCell = (r,c) => (r===1||r===2) && (c===1||c===2);
+      // central 2x2 block: rows 1..2, cols 1..2
+      const isHumCore = (r,c) => (r===1||r===2) && (c===1||c===2);
 
-      // collect coordinates by bands
+      // collect coordinates by bands (excluding the core for now)
       const borderCells = [];
       const innerCells = [];
       for (let r=0;r<5;r++){
         for (let c=0;c<5;c++){
-          if (isHumCell(r,c)) continue;
           if (isBorder(r,c)) borderCells.push([r,c]);
           else innerCells.push([r,c]);
         }
       }
 
-      // Order border clockwise starting at top-left going right, then down, then left, then up
+      // order border clockwise starting at top-left
       const cw = [];
-      // top row (0,0..4)
-      for (let c=0;c<5;c++) cw.push([0,c]);
-      // right col (1..4,4)
-      for (let r=1;r<5;r++) cw.push([r,4]);
-      // bottom row (4,3..0)
-      for (let c=3;c>=0;c--) cw.push([4,c]);
-      // left col (3..1,0)
-      for (let r=3;r>=1;r--) cw.push([r,0]);
-      // remove any that are hum (none) and keep unique 16
+      for (let c=0;c<5;c++) cw.push([0,c]);          // top
+      for (let r=1;r<5;r++) cw.push([r,4]);          // right
+      for (let c=3;c>=0;c--) cw.push([4,c]);         // bottom
+      for (let r=3;r>=1;r--) cw.push([r,0]);         // left
       const seen = new Set();
       const borderCW = cw.filter(([r,c])=>{
-        const k=`${r},${c}`; if (seen.has(k)) return false; seen.add(k); return !isHumCell(r,c);
-      }).slice(0,16);
+        const k=`${r},${c}`; if (seen.has(k)) return false; seen.add(k); return true;
+      }).slice(0,16); // 16 unique border cells
 
       // assign the 18 sounds
       const sounds = this.shapes.slice(0,18);
@@ -248,38 +240,27 @@ class OscApp extends HTMLElement {
 
       // 16 border -> shapes[0..15]
       sounds.slice(0,16).forEach((shape,i)=>{
-        const [r,c]=borderCW[i]; map.set(`${r},${c}`, { type:'shape', shapeKey: shape });
+        const [r,c]=borderCW[i];
+        map.set(`${r},${c}`, { type:'shape', shapeKey: shape });
       });
 
       // choose two inner-edge cells to hold shapes[16], shapes[17]
-      // prefer the midpoints of each side inside the border (these are: (1,2), (2,3), (3,2), (2,1), (1,3), (3,1) minus hum cells)
+      // prefer the midpoints/near-edges inside the border (rows/cols 1 or 3)
       const innerEdgeCandidates = innerCells.filter(([r,c])=>{
         const nearEdge = (r===1||r===3||c===1||c===3);
-        return nearEdge && !isHumCell(r,c);
+        return nearEdge && !isHumCore(r,c);
       });
       const twoInner = pick(innerEdgeCandidates, 2);
       if (twoInner[0]) map.set(`${twoInner[0][0]},${twoInner[0][1]}`, { type:'shape', shapeKey: sounds[16] });
       if (twoInner[1]) map.set(`${twoInner[1][0]},${twoInner[1][1]}`, { type:'shape', shapeKey: sounds[17] });
 
-      // remaining inner cells (excluding any we just filled and the hum 2x2) -> 3 seed-linked FX variant cells
-      const filled = new Set([...map.keys()]);
-      const remainingInner = innerCells.filter(([r,c])=>!filled.has(`${r},${c}`) && !isHumCell(r,c));
-      const fxCells = pick(remainingInner, 3);
-
-      // deterministically pick 3 base shapes from the 18 to “repeat” with FX
-      const baseForFx = pick(sounds, 3);
-      const fxTypes = ['reverb','delay','both'];
-
-      fxCells.forEach(([r,c],i)=>{
-        const v = fxTypes[i%fxTypes.length];
-        const base = baseForFx[i%baseForFx.length];
-        map.set(`${r},${c}`, { type:'fx', shapeKey: base, variant: v });
-      });
-
-      // hum cells (central 2x2)
-      for (let r=1;r<=2;r++){
-        for (let c=1;c<=2;c++){
-          map.set(`${r},${c}`, { type:'hum', shapeKey: this.humKey });
+      // fill all remaining inner cells with hum (this includes the central 2x2)
+      for (let r=1;r<=3;r++){
+        for (let c=1;c<=3;c++){
+          const key = `${r},${c}`;
+          if (!map.has(key)) {
+            map.set(key, { type:'hum', shapeKey: this.humKey });
+          }
         }
       }
 
@@ -290,6 +271,9 @@ class OscApp extends HTMLElement {
     };
 
     this._buildGridMap();
+
+
+
 
     this._sequencerComponent=$('seq-app'); this._sequencerComponent.style.display='none';
     this._loader=$('div',{id:'loader',textContent:'Initializing...'});
