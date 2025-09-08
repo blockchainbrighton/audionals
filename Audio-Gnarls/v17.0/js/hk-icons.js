@@ -107,18 +107,89 @@
       canvasContainer.appendChild(ring);
 
       // Keep radius right outside the canvas edge
-        const adjustRadius = () => {
-        const rect = canvasContainer.getBoundingClientRect();
-        const side = Math.min(rect.width, rect.height);        // canvas is square
-        const badgeHalf = 15;                                   // matches 30px badge
-        const outside = 22;                                     // how far past the edge you want
-        const r = (side / 2) + outside;                         // center -> just outside edge
-        // Safety clamps for tiny screens (optional)
-        const R = Math.max(badgeHalf + 8, Math.min(9999, Math.round(r)));
-        ring.style.setProperty('--r', `${R}px`);
+        // Read iOS safe-area insets (works everywhere; 0s where unsupported)
+        function getSafeInsets(){
+        const d = document.createElement('div');
+        d.style.cssText = `
+            position:fixed; inset:auto 0 0 0; height:0;
+            padding-left:env(safe-area-inset-left,0px);
+            padding-right:env(safe-area-inset-right,0px);
+            padding-top:env(safe-area-inset-top,0px);
+            padding-bottom:env(safe-area-inset-bottom,0px);
+            visibility:hidden; pointer-events:none;`;
+        document.body.appendChild(d);
+        const cs = getComputedStyle(d);
+        const s = {
+            top: parseFloat(cs.paddingTop)||0,
+            right: parseFloat(cs.paddingRight)||0,
+            bottom: parseFloat(cs.paddingBottom)||0,
+            left: parseFloat(cs.paddingLeft)||0
         };
-      adjustRadius();
-      window.addEventListener('resize', adjustRadius, { passive:true });
+        d.remove();
+        return s;
+        }
+
+        // Clamp badges so they never go off-screen, and keep bottom ones above controls
+        const adjustPlacement = () => {
+        const rect = canvasContainer.getBoundingClientRect();
+        const cx = rect.left + rect.width/2;
+        const cy = rect.top  + rect.height/2;
+
+        const vw = window.innerWidth;
+        const vh = window.innerHeight;
+        const inset = getSafeInsets();
+
+        const PAD = 10;               // viewport padding
+        const BADGE = 30;             // badge size (px) — keep in sync with CSS
+        const HALF = BADGE / 2;
+        const OUTSIDE = 22;           // aim just outside the canvas
+        const baseR = (Math.min(rect.width, rect.height) / 2) + OUTSIDE;
+
+        // If controls are visible, don't let badges overlap them
+        const controls = sr.querySelector('osc-controls');
+        const controlsRect = (controls && controls.offsetParent !== null)
+            ? controls.getBoundingClientRect()
+            : null;
+
+        const minX = inset.left + PAD + HALF;
+        const maxX = vw - inset.right - PAD - HALF;
+        const minY = inset.top + PAD + HALF;
+        // keep badges above controls if visible, else bottom inset
+        const capBottom = controlsRect ? (controlsRect.top - PAD - HALF) : (vh - inset.bottom - PAD - HALF);
+        const maxY = Math.max(minY, capBottom);
+
+        ring.querySelectorAll('.hk-badge').forEach(el => {
+            const ang = parseFloat(el.style.getPropertyValue('--ang')) || 0;
+            const rad = ang * Math.PI / 180;
+            const ux = Math.cos(rad), uy = Math.sin(rad);
+
+            // Start with desired radius
+            let r = baseR;
+
+            // Clamp by horizontal boundaries
+            if (ux > 0) r = Math.min(r, (maxX - cx) / ux);
+            if (ux < 0) r = Math.min(r, (cx - minX) / -ux);
+
+            // Clamp by vertical boundaries
+            if (uy > 0) r = Math.min(r, (maxY - cy) / uy);
+            if (uy < 0) r = Math.min(r, (cy - minY) / -uy);
+
+            // Keep r sane
+            r = Math.max(HALF + 4, Math.floor(r));
+
+            // Apply per-badge transform
+            el.style.transform = `translate(-50%, -50%) rotate(${ang}deg) translateX(${r}px)`;
+        });
+        };
+
+      adjustPlacement();
+        window.addEventListener('resize', adjustPlacement, { passive:true });
+
+        // Also re-run when the controls show/hide (optional but recommended)
+        const controls = sr.querySelector('osc-controls');
+        if (controls) {
+        try { new ResizeObserver(adjustPlacement).observe(controls); } catch {}
+        }
 
       // (Optional) If you decide you want them hidden while controls are visible,
       // uncomment the block below.
