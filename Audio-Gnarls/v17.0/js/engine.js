@@ -1,5 +1,8 @@
 // engine.js
+// Corrected, simplified, and streamlined version.
+// All references to effects have been removed and audio routing is fixed.
 // Public API preserved: export { Engine, Signatures }; registers <tone-loader>.
+
 import { humKey, shapeList, shapeCount, allKeys } from './shapes.js';
 
 export function Engine(app) {
@@ -12,41 +15,36 @@ export function Engine(app) {
   const _createAnalyser = T => { const n = T?.context?.createAnalyser?.(); if (n) { n.fftSize = 2048; try { n.smoothingTimeConstant = .06; } catch {} } return n || null; };
   const _linToDb = v => v <= 0 ? -60 : Math.max(-60, Math.min(0, 20 * Math.log10(Math.min(1, Math.max(1e-4, v)))));
 
-  // --- Platform-aware fades (iOS Safari benefits from longer ramps) ---
+  // --- Platform-aware fades ---
   const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
-  const FADE = isiOS ? 0.028 : 0.012; // ~28ms on iOS, ~12ms elsewhere
+  const FADE = isiOS ? 0.028 : 0.012;
   const SWITCH_FADE = isiOS ? 0.028 : 0.008;
 
   const _rampLinear = (p, t, s = FADE, T) => {
     if (!p || !T) return;
     const n = _timeNow(T);
     try {
-      typeof p.cancelScheduledValues == 'function' && p.cancelScheduledValues(n);
-      const cur = typeof p.value == 'number' ? p.value : p.value?.value;
-      typeof p.setValueAtTime == 'function' && p.setValueAtTime(cur ?? 0, n);
-      typeof p.linearRampToValueAtTime == 'function' && p.linearRampToValueAtTime(t, n + Math.max(.001, s));
+      p.cancelScheduledValues?.(n);
+      const cur = p.value;
+      p.setValueAtTime?.(cur ?? 0, n);
+      p.linearRampToValueAtTime?.(t, n + Math.max(.001, s));
     } catch {}
   };
 
   const _silenceAllChains = async (f = FADE) => {
     const T = app.state?.Tone; if (!T) return;
-    const n = _timeNow(T);
     _eachChain(ch => {
-      const g = ch?.out?.gain ?? ch?.volume?.volume;
-      if (g?.linearRampToValueAtTime) { try { g.cancelScheduledValues?.(n); g.setValueAtTime?.(g.value, n); g.linearRampToValueAtTime(0, n + f); } catch {} }
-      const w = ch?.reverb?.wet; if (w?.rampTo) { try { w.rampTo(0, f); } catch {} }
+      if (ch?.out?.gain) _rampLinear(ch.out.gain, 0, f, T);
     });
     await app._sleep(Math.ceil((f + .002) * 1e3));
   };
 
   const _disposeChain = async ch => {
-    const T = app.state?.Tone, f = FADE;
+    const T = app.state?.Tone;
     try {
-      if (T && ch) {
-        const n = _timeNow(T), g = ch?.out?.gain ?? ch?.volume?.volume, w = ch?.reverb?.wet;
-        if (g?.linearRampToValueAtTime && g?.setValueAtTime) { g.cancelScheduledValues?.(n); g.setValueAtTime(g.value, n); g.linearRampToValueAtTime(0, n + f); }
-        if (w?.rampTo) { try { w.rampTo(0, f); } catch {} }
-        await app._sleep(Math.ceil((f + .002) * 1e3));
+      if (T && ch?.out?.gain) {
+        _rampLinear(ch.out.gain, 0, FADE, T);
+        await app._sleep(Math.ceil((FADE + .002) * 1e3));
       }
     } catch {}
     for (const n of Object.values(ch || {})) { try { n.stop?.(); } catch {} try { n.dispose?.(); } catch {} try { n.disconnect?.(); } catch {} }
@@ -64,7 +62,6 @@ export function Engine(app) {
     return {
       osc1: oscs[0], osc2: oscs[1] || null, filter: filterBase, filterQ: .6 + r() * .7,
       lfo: [lfoRate, lfoMin, lfoMax], envelope: env,
-      reverb: { wet: mode === 3 ? .4 + r() * .5 : .1 + r() * .5, roomSize: mode === 3 ? .85 + r() * .12 : .6 + r() * .38 },
       colorSpeed: .06 + r() * .22, shapeDrift: .0006 + r() * .0032, seed
     };
   };
@@ -75,11 +72,20 @@ export function Engine(app) {
     const { Tone: T, chains: C } = app.state; if (!T) return;
     const key = humKey(app); if (C[key]) { await _disposeChain(C[key]); delete C[key]; }
     try {
-      const osc = new T.Oscillator('A0', 'sine').start(), filter = new T.Filter(150, 'lowpass'); filter.Q.value = .5;
-      const volume = new T.Volume(-25), reverb = new T.Freeverb().set({ wet: .3, roomSize: .9 }), out = new T.Gain(0), analyser = _createAnalyser(T);
-      // Keep graph stable: connect once, gate with gains
-      osc.connect(volume); volume.connect(filter); filter.connect(reverb); analyser && filter.connect(analyser); reverb.connect(out);
-      C[key] = { osc, volume, filter, reverb, out, analyser };
+      const osc = new T.Oscillator('A0', 'sine').start();
+      const filter = new T.Filter(150, 'lowpass');
+      filter.Q.value = .5;
+      const volume = new T.Volume(-25);
+      const analyser = _createAnalyser(T);
+      const out = new T.Gain(0).toDestination(); // FIX: Initialize silent and connect to destination
+      
+      // Simplified graph:
+      osc.connect(volume);
+      volume.connect(filter);
+      filter.connect(out);
+      analyser && filter.connect(analyser);
+
+      C[key] = { osc, volume, filter, out, analyser };
     } catch (e) { console.error('Error buffering hum chain', e); delete app.state.chains[key]; }
   };
 
@@ -88,41 +94,49 @@ export function Engine(app) {
     const { Tone: T, presets: P, chains: C } = app.state, pr = P[shape]; if (!pr || !T) return;
     if (C[shape]) { await _disposeChain(C[shape]); delete C[shape]; }
     try {
-      const o1 = new T.Oscillator(pr.osc1[1], pr.osc1[0]).start(), o2 = pr.osc2 ? new T.Oscillator(pr.osc2[1], pr.osc2[0]).start() : null;
-      const vol = new T.Volume(5), fil = new T.Filter(pr.filter, 'lowpass'); fil.Q.value = pr.filterQ;
-      const lfo = new T.LFO(...pr.lfo).start(), rev = new T.Freeverb().set({ wet: pr.reverb.wet, roomSize: pr.reverb.roomSize });
-      const out = new T.Gain(0), an = _createAnalyser(T);
-      // Stable graph: no disconnect/reconnect during playback
-      lfo.connect(fil.frequency); o2 && lfo.connect(o2.detune);
-      o1.connect(vol); o2?.connect(vol); vol.connect(fil); fil.connect(rev); an && fil.connect(an); rev.connect(out);
-      C[shape] = { osc1: o1, osc2: o2, volume: vol, filter: fil, lfo, reverb: rev, out, analyser: an };
+      const o1 = new T.Oscillator(pr.osc1[1], pr.osc1[0]).start();
+      const o2 = pr.osc2 ? new T.Oscillator(pr.osc2[1], pr.osc2[0]).start() : null;
+      const vol = new T.Volume(5);
+      const fil = new T.Filter(pr.filter, 'lowpass');
+      fil.Q.value = pr.filterQ;
+      const lfo = new T.LFO(...pr.lfo).start();
+      const an = _createAnalyser(T);
+      const out = new T.Gain(0).toDestination(); // FIX: Initialize silent and connect to destination
+
+      // Simplified graph:
+      lfo.connect(fil.frequency);
+      o2 && lfo.connect(o2.detune);
+      o1.connect(vol);
+      o2?.connect(vol);
+      vol.connect(fil);
+      fil.connect(out);
+      an && fil.connect(an);
+
+      C[shape] = { osc1: o1, osc2: o2, volume: vol, filter: fil, lfo, out, analyser: an };
     } catch (e) { console.error('Error buffering chain for shape', shape, e); delete app.state.chains[shape]; }
   };
 
   const setActiveChain = (shape, { updateCanvasShape: u = true, setStateCurrent: s = u, syncCanvasPlayState: y = true } = {}) => {
     const { Tone: T, chains: C, current } = app.state;
-    const d = SWITCH_FADE;
-    const prev = current ? C[current] : null;
-    try { if (current && current !== humKey(app)) applyVariant(current, null); } catch {}
-    if (prev?.reverb?.wet?.rampTo) { try { prev.reverb.wet.rampTo(0, d); } catch {} }
-    const nonce = (app.state._switchNonce = (app.state._switchNonce || 0) + 1);
-    const doSwitch = () => {
-      if (nonce !== app.state._switchNonce) return;
-      _eachChain(ch => ch.reverb?.disconnect?.()); // keep graph quiet while we route destination
-      const next = C[shape];
-      next?.reverb?.toDestination?.();
-      const patch = { isAudioStarted: true }; next?.analyser && (patch.analyser = next.analyser); y && (patch.isPlaying = app.state.isPlaying); _setCanvas(patch);
-      if (u) shape === humKey(app) ? _setCanvas({ shapeKey: humKey(app), preset: null }) : _setCanvas({ shapeKey: shape, preset: app.state.presets[shape] });
-      s && (app.state.current = shape);
-      if (next?.reverb?.wet) {
-        try {
-          const t = next.reverb.wet.value ?? .3, n = T?.now?.() ?? 0;
-          typeof next.reverb.wet.setValueAtTime == 'function' ? next.reverb.wet.setValueAtTime(0, n) : (next.reverb.wet.value = 0);
-          next.reverb.wet.rampTo ? next.reverb.wet.rampTo(t, d) : (next.reverb.wet.value = t);
-        } catch {}
-      }
-    };
-    setTimeout(doSwitch, Math.max(1, (d * 1000) | 0));
+    
+    // FIX: Perform a proper crossfade between the old and new chain.
+    const prev = C[current];
+    const next = C[shape];
+    
+    if (prev && prev !== next) _rampLinear(prev.out.gain, 0, SWITCH_FADE, T);
+    if (next) _rampLinear(next.out.gain, 1, SWITCH_FADE, T);
+
+    const patch = { isAudioStarted: true };
+    if (next?.analyser) patch.analyser = next.analyser;
+    if (y) patch.isPlaying = app.state.isPlaying;
+    _setCanvas(patch);
+    
+    if (u) {
+        shape === humKey(app) ? _setCanvas({ shapeKey: humKey(app), preset: null }) : _setCanvas({ shapeKey: shape, preset: app.state.presets[shape] });
+    }
+    if (s) {
+        app.state.current = shape;
+    }
   };
 
   const disposeAllChains = () => { _eachChain(_disposeChain); app.state.chains = {}; app.state.current = null; };
@@ -132,76 +146,85 @@ export function Engine(app) {
   const stopAudioSignature = () => { app.sig?.stopAudioSignature?.(); };
 
   const resetState = () => {
-    disposeAllChains(); app.state.sequencePlaying && stopSequence(); app.state.audioSignaturePlaying && stopAudioSignature?.();
-    const { seed, Tone: T } = app.state; app.state = app.defaultState(seed); app.state.Tone = T; loadPresets(seed); bufferHumChain();
+    disposeAllChains();
+    app.state.sequencePlaying && stopSequence();
+    app.state.audioSignaturePlaying && stopAudioSignature?.();
+    const { seed, Tone: T } = app.state;
+    app.state = app.defaultState(seed);
+    app.state.Tone = T;
+    loadPresets(seed);
+    bufferHumChain();
     const list = shapeList(app), r = _rng(seed), first = list.length ? list[(r() * list.length) | 0] : humKey(app);
     _setCanvas({ preset: app.state.presets[first] ?? null, shapeKey: first, mode: 'seed', isAudioStarted: false, isPlaying: false });
     app.state.current = humKey(app);
     app._updateControls({ isAudioStarted: true, isPlaying: false, isMuted: false, shapeKey: humKey(app) });
-    app.state.isSequencerMode = false; app._sequencerComponent.style.display = 'none'; app._main.style.overflow = 'hidden';
-    app.state.sequence = Array(8).fill(null); updateSequencerState?.();
+    app.state.isSequencerMode = false;
+    app._sequencerComponent.style.display = 'none';
+    app._main.style.overflow = 'hidden';
+    app.state.sequence = Array(8).fill(null);
+    updateSequencerState?.();
   };
 
-  // --- Variant FX (seed-linked) ---
-  const _ensureDelay = (ch, T) => {
-    if (ch._delay) return ch._delay;
-    try {
-      const d = new T.FeedbackDelay(0.25, 0.4);
-      try { ch.filter.disconnect?.(ch.reverb); } catch {}
-      ch.filter.connect(d); d.connect(ch.reverb);
-      ch._delay = d;
-      return d;
-    } catch { return null; }
-  };
-
-  const _resetVariant = (ch, T) => {
-    if (!ch) return;
-    if (ch._origRevWet == null) ch._origRevWet = ch?.reverb?.wet?.value ?? 0.3;
-    try { ch.reverb?.wet?.rampTo?.(ch._origRevWet, .06); } catch {}
-    if (ch._delay) {
-      try {
-        ch.filter.disconnect?.(ch._delay);
-        ch._delay.disconnect?.(ch.reverb);
-        ch.filter.connect?.(ch.reverb);
-      } catch {}
-      try { ch._delay.dispose?.(); } catch {}
-      ch._delay = null;
-    }
-    if (typeof ch._origLfoFreq === 'number' && ch.lfo?.frequency?.value != null) {
-      try { ch.lfo.frequency.rampTo(ch._origLfoFreq, .06); } catch {}
-    }
-  };
 
   const unlockAudioAndBufferInitial = async () => {
     const s = app.state;
     if (s.initialBufferingStarted && !s.initialShapeBuffered) { app._loader.textContent = 'Still preparing initial synth, please wait...'; return; }
     if (s.isPlaying) return stopAudioAndDraw();
     if (s.contextUnlocked) {
-      if (s.initialShapeBuffered) { setActiveChain(humKey(app)); s.isPlaying = true; app._updateControls({ isAudioStarted: true, isPlaying: true }); app._loader.textContent = 'Audio resumed (hum).'; app._canvas.isPlaying = true; return; }
-      app._loader.textContent = 'Audio context unlocked, but synth not ready. Click again.'; return;
+      if (s.initialShapeBuffered) {
+        setActiveChain(humKey(app));
+        s.isPlaying = true;
+        app._updateControls({ isAudioStarted: true, isPlaying: true });
+        app._loader.textContent = 'Audio resumed (hum).';
+        app._canvas.isPlaying = true;
+        return;
+      }
+      app._loader.textContent = 'Audio context unlocked, but synth not ready. Click again.';
+      return;
     }
     app._loader.textContent = 'Unlocking AudioContext...';
     try {
-      const T = s.Tone; if (!T) throw new Error('Tone.js not available');
-      const ctx = T.getContext?.() || T.context; let ok = false;
+      const T = s.Tone;
+      if (!T) throw new Error('Tone.js not available');
+      const ctx = T.getContext?.() || T.context;
+      let ok = false;
       if (ctx?.resume) { await ctx.resume(); ok = true; } else if (T.start) { await T.start(); ok = true; }
       if (!ok) throw new Error('Could not resume AudioContext');
-      s.contextUnlocked = true; s.initialBufferingStarted = true; app._loader.textContent = `Preparing ${app.humLabel} synth...`;
-      await bufferHumChain(); setActiveChain(humKey(app)); s.initialShapeBuffered = true; s.isPlaying = true; s.contextUnlocked = true; app._canvas.isPlaying = true;
-      app._updateControls({ isAudioStarted: true, isPlaying: true }); app._loader.textContent = 'Ready. Audio: ' + app.humLabel;
-      for (const sh of shapeList(app)) { if (!s.contextUnlocked) break; try { await bufferShapeChain(sh); } catch (e) { console.error('Error buffering', sh, e); } await _sleep(0); }
+
+      s.contextUnlocked = true;
+      s.initialBufferingStarted = true;
+      app._loader.textContent = `Preparing ${app.humLabel} synth...`;
+      await bufferHumChain();
+      setActiveChain(humKey(app));
+      s.initialShapeBuffered = true;
+      s.isPlaying = true;
+      app._canvas.isPlaying = true;
+      app._updateControls({ isAudioStarted: true, isPlaying: true });
+      app._loader.textContent = 'Ready. Audio: ' + app.humLabel;
+      for (const sh of shapeList(app)) {
+        if (!s.contextUnlocked) break;
+        try { await bufferShapeChain(sh); } catch (e) { console.error('Error buffering', sh, e); }
+        await _sleep(0);
+      }
     } catch (e) {
       console.error('Failed to unlock AudioContext:', e);
       app._loader.textContent = 'Failed to unlock AudioContext.';
-      s.contextUnlocked = false; s.initialBufferingStarted = false; s.initialShapeBuffered = false;
+      s.contextUnlocked = false;
+      s.initialBufferingStarted = false;
+      s.initialShapeBuffered = false;
     }
   };
 
   const stopAudioAndDraw = () => {
-    const s = app.state; if (!s.isPlaying && !s.initialBufferingStarted) return;
+    const s = app.state;
+    if (!s.isPlaying && !s.initialBufferingStarted) return;
     s.isPlaying = s.initialBufferingStarted = s.initialShapeBuffered = false;
-    disposeAllChains(); s.sequencePlaying && stopSequence?.(); s.audioSignaturePlaying && stopAudioSignature?.();
-    app._canvas.isPlaying = false; app._canvas.isAudioStarted = false; resetState();
+    disposeAllChains();
+    s.sequencePlaying && stopSequence?.();
+    s.audioSignaturePlaying && stopAudioSignature?.();
+    app._canvas.isPlaying = false;
+    app._canvas.isAudioStarted = false;
+    resetState();
   };
 
   const _onStartRequest = () => unlockAudioAndBufferInitial();
@@ -212,9 +235,16 @@ export function Engine(app) {
     const k = e?.detail?.shapeKey; if (!k) return;
     const s = app.state, HUM = humKey(app);
     if (!s.audioSignaturePlaying && !s.signatureSequencerRunning) s._uiReturnShapeKey = k !== HUM ? k : s._uiReturnShapeKey;
-    if (!s.contextUnlocked || !s.initialShapeBuffered) { k === HUM ? _setCanvas({ shapeKey: HUM, preset: null, mode: 'seed' }) : _setCanvas({ shapeKey: k, preset: s.presets[k], mode: 'seed' }); app._updateControls({ shapeKey: k }); return; }
-    setActiveChain(k); k !== HUM && _setCanvas({ shapeKey: k, preset: s.presets[k], mode: 'live' });
-    app._canvas.isPlaying = !app.state.Tone?.Destination?.mute; app._updateControls({ shapeKey: k }); s.current = k;
+    if (!s.contextUnlocked || !s.initialShapeBuffered) {
+      k === HUM ? _setCanvas({ shapeKey: HUM, preset: null, mode: 'seed' }) : _setCanvas({ shapeKey: k, preset: s.presets[k], mode: 'seed' });
+      app._updateControls({ shapeKey: k });
+      return;
+    }
+    setActiveChain(k);
+    k !== HUM && _setCanvas({ shapeKey: k, preset: s.presets[k], mode: 'live' });
+    app._canvas.isPlaying = !app.state.Tone?.Destination?.mute;
+    app._updateControls({ shapeKey: k });
+    s.current = k;
   };
 
   return {
@@ -316,10 +346,10 @@ export function Signatures(app) {
         if (loop) { s.audioSignatureStepIndex = 0; s.audioSignatureTimer = setTimeout(tick, stepTime); }
         else {
           const ret = s._uiReturnShapeKey || HUM();
-          try { app.setActiveChain(HUM(), { updateCanvasShape: false, setStateCurrent: false }); } catch {}
-          app._canvas && (app._canvas.isPlaying = false);
-          ret === HUM() ? app._setCanvas({ shapeKey: HUM(), preset: null, mode: 'seed' }) : app._setCanvas({ shapeKey: ret, preset: s.presets[ret], mode: 'live' });
-          s.current = ret; app._updateControls({ shapeKey: ret }); s.audioSignatureTimer = setTimeout(finishOnce, stepTime);
+          app.setActiveChain(ret); // Simplified return to shape
+          s.current = ret;
+          app._updateControls({ shapeKey: ret });
+          s.audioSignatureTimer = setTimeout(finishOnce, stepTime);
         }
         return;
       }
@@ -327,79 +357,20 @@ export function Signatures(app) {
     };
     tick();
   };
-
-  const applyVariant = (shape, variant) => {
-    const s = app.state, T = s.Tone; if (!T) return;
-    if (!shape || shape === humKey(app)) return;
-
-    const ch = s.chains?.[shape];
-    if (!ch) return;
-
-    const ensureDelay = () => {
-      if (ch._delay) return ch._delay;
-      try {
-        const d = new T.FeedbackDelay(0.25, 0.4);
-        try { ch.filter.disconnect?.(ch.reverb); } catch {}
-        ch.filter.connect(d); d.connect(ch.reverb);
-        ch._delay = d;
-        return d;
-      } catch { return null; }
-    };
-
-    const resetVariant = () => {
-      if (!ch) return;
-      if (ch._origRevWet == null) ch._origRevWet = ch?.reverb?.wet?.value ?? 0.3;
-      try { ch.reverb?.wet?.rampTo?.(ch._origRevWet, .06); } catch {}
-      if (ch._delay) {
-        try { ch.filter.disconnect?.(ch._delay); ch._delay.disconnect?.(ch.reverb); ch.filter.connect?.(ch.reverb); } catch {}
-        try { ch._delay.dispose?.(); } catch {}
-        ch._delay = null;
-      }
-      if (typeof ch._origLfoFreq === 'number' && ch.lfo?.frequency?.value != null) {
-        try { ch.lfo.frequency.rampTo(ch._origLfoFreq, .06); } catch {}
-      }
-    };
-
-    if (ch._origRevWet == null) ch._origRevWet = ch?.reverb?.wet?.value ?? .3;
-    if (ch.lfo && ch.lfo.frequency && ch._origLfoFreq == null) ch._origLfoFreq = ch.lfo.frequency.value ?? 1;
-
-    if (!variant) { resetVariant(); return; }
-
-    const r = app._rng(`${s.seed}_${shape}_fx_${variant}`);
-    resetVariant();
-
-    if (variant === 'reverb' || variant === 'both') {
-      const target = Math.min(0.95, Math.max(0.35, ch._origRevWet + 0.25 + r()*0.35));
-      try { ch.reverb?.wet?.rampTo?.(target, .08); } catch {}
-    }
-    if (variant === 'delay' || variant === 'both') {
-      const d = ensureDelay();
-      if (d) {
-        const dt = 0.15 + r()*0.35;  // 150–500ms
-        const fb = 0.25 + r()*0.45;  // 0.25–0.7
-        const wet = 0.18 + r()*0.2;  // 0.18–0.38
-        try {
-          d.delayTime?.rampTo?.(dt, .06);
-          d.feedback?.linearRampToValueAtTime?.(fb, (T?.now?.() ?? 0)+.06);
-          d.wet?.rampTo?.(wet, .06);
-        } catch {}
-      }
-    }
-    if (ch.lfo?.frequency) {
-      const mult = (variant==='delay') ? 0.85 + r()*0.3 : (variant==='reverb' ? 0.75 + r()*0.2 : 0.65 + r()*0.4);
-      const tgt = Math.max(0.01, (ch._origLfoFreq||1) * mult);
-      try { ch.lfo.frequency.rampTo(tgt, .1); } catch {}
-    }
-  };
+  
+  // NOTE: The applyVariant function has been completely removed as it only handled effects.
 
   const stopAudioSignature = () => {
-    const s = app.state; s.audioSignatureTimer && (clearTimeout(s.audioSignatureTimer), s.audioSignatureTimer = null);
-    s.audioSignaturePlaying = false; s.audioSignatureStepIndex = 0; app._updateControls({ isAudioSignaturePlaying: false });
+    const s = app.state;
+    s.audioSignatureTimer && (clearTimeout(s.audioSignatureTimer), s.audioSignatureTimer = null);
+    s.audioSignaturePlaying = false;
+    s.audioSignatureStepIndex = 0;
+    app._updateControls({ isAudioSignaturePlaying: false });
     const ret = s._uiReturnShapeKey || HUM();
-    try { app.setActiveChain(HUM(), { updateCanvasShape: false, setStateCurrent: false }); } catch {}
-    app._canvas && (app._canvas.isPlaying = false);
-    ret === HUM() ? app._setCanvas({ shapeKey: HUM(), preset: null, mode: 'seed' }) : app._setCanvas({ shapeKey: ret, preset: s.presets[ret], mode: 'live' });
-    s.current = ret; app._updateControls({ shapeKey: ret }); s.audioSignatureOnComplete = null;
+    app.setActiveChain(ret); // Simplified return to shape
+    s.current = ret;
+    app._updateControls({ shapeKey: ret });
+    s.audioSignatureOnComplete = null;
   };
 
   const _onSeqRecordStart = e => { const i = e?.detail?.slotIndex ?? -1; app.state.isRecording = true; app.state.currentRecordSlot = i; app._updateControls(); };
@@ -498,7 +469,7 @@ export function Signatures(app) {
   return {
     _onToggleSequencer, _onLoopToggle, _onSignatureModeToggle,
     _getUniqueAlgorithmMapping, generateAudioSignature, _generateSignatureWithConstraints,
-    _onAudioSignature, _triggerSignatureFor, playAudioSignature, stopAudioSignature, applyVariant,
+    _onAudioSignature, _triggerSignatureFor, playAudioSignature, stopAudioSignature,
     _onSeqRecordStart, _onSeqStepCleared, _onSeqStepRecorded, _onSeqPlayStarted, _onSeqPlayStopped, _onSeqStepAdvance, _onSeqStepTimeChanged, _onSeqStepsChanged,
     _startSignatureSequencer, _stopSignatureSequencer, updateSequencerState,
     recordStep, playSequence, stopSequence
@@ -518,5 +489,3 @@ class ToneLoader extends HTMLElement {
   }
 }
 customElements.define('tone-loader', ToneLoader);
-
-// 
