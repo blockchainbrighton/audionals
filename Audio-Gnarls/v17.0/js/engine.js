@@ -372,30 +372,40 @@ export function Signatures(app) {
       s.audioSignatureStepIndex++;
       if (s.audioSignatureStepIndex >= sequence.length) {
         const finishOnce = () => { s.audioSignaturePlaying = false; s.audioSignatureTimer = null; app._updateControls({ isAudioSignaturePlaying: false }); const cb = s.audioSignatureOnComplete; s.audioSignatureOnComplete = null; typeof cb == 'function' ? cb() : (app._loader.textContent = 'Audio Signature complete.'); };
-        if (s.isLoopEnabled) { // <-- This was the previous fix, and it remains correct
+        if (s.isLoopEnabled) { 
           s.audioSignatureStepIndex = 0;
           s.audioSignatureTimer = setTimeout(tick, stepTime);
         } else {
-          if (!s.isLatchOn) { app.setActiveChain(HUM()); }
+          if (!s.isLatchOn) { 
+            const humShapeKey = HUM();
+            app.setActiveChain(humShapeKey);
+            s._uiReturnShapeKey = humShapeKey; // FIX: Reset the return shape key to hum
+          }
           s.audioSignatureTimer = setTimeout(finishOnce, stepTime);
         }
         return;
       }
       s.audioSignatureTimer = setTimeout(tick, stepTime);
     };
-    tick();
-  };
 
-  const stopAudioSignature = () => {
-    const s = app.state;
-    s.audioSignatureTimer && (clearTimeout(s.audioSignatureTimer), s.audioSignatureTimer = null);
-    s.audioSignaturePlaying = false;
-    s.audioSignatureStepIndex = 0;
-    app._updateControls({ isAudioSignaturePlaying: false });
-    
-    app.setActiveChain(HUM());
-    s.audioSignatureOnComplete = null;
-  };
+    tick(); // FIX: Call tick() to start the signature playback.
+
+  }; // FIX: Add the missing closing brace for playAudioSignature.
+
+
+const stopAudioSignature = () => {
+  const s = app.state;
+  s.audioSignatureTimer && (clearTimeout(s.audioSignatureTimer), s.audioSignatureTimer = null);
+  s.audioSignaturePlaying = false;
+  s.audioSignatureStepIndex = 0;
+  app._updateControls({ isAudioSignaturePlaying: false });
+
+  const humShapeKey = HUM();
+  app.setActiveChain(humShapeKey);
+  s._uiReturnShapeKey = humShapeKey; // FIX: Reset the return shape key to hum
+
+  s.audioSignatureOnComplete = null;
+};
 
   const _onSeqRecordStart = e => { const i = e?.detail?.slotIndex ?? -1; app.state.isRecording = true; app.state.currentRecordSlot = i; app._updateControls(); };
   const _onSeqStepCleared = e => {
