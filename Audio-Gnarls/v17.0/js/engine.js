@@ -1,5 +1,5 @@
 // engine.js
-// Corrected to handle loop disabling during playback.
+// Corrected state management for all toggle functions.
 // Public API preserved: export { Engine, Signatures }; registers <tone-loader>.
 
 import { humKey, shapeList, shapeCount, allKeys } from './shapes.js';
@@ -14,7 +14,6 @@ export function Engine(app) {
   const _createAnalyser = T => { const n = T?.context?.createAnalyser?.(); if (n) { n.fftSize = 2048; try { n.smoothingTimeConstant = .06; } catch {} } return n || null; };
   const _linToDb = v => v <= 0 ? -60 : Math.max(-60, Math.min(0, 20 * Math.log10(Math.min(1, Math.max(1e-4, v)))));
 
-  // --- Platform-aware fades ---
   const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const FADE = isiOS ? 0.028 : 0.012;
   const SWITCH_FADE = isiOS ? 0.028 : 0.008;
@@ -223,9 +222,30 @@ export function Engine(app) {
   };
 
   const _onStartRequest = () => unlockAudioAndBufferInitial();
-  const _onMuteToggle = () => { const T = app.state.Tone; if (!T?.Destination) return; const m = !T.Destination.mute; T.Destination.mute = m; app._updateControls({ isMuted: m }); _setCanvas({ isPlaying: app.state.isPlaying && !m }); app._loader.textContent = m ? 'Muted.' : 'Unmuted.'; };
-  const _onVolumeChange = e => { const v = e?.detail?.value; if (typeof v == 'number') { app.state.volume = Math.min(1, Math.max(0, v)); const T = app.state.Tone; T?.Destination?.volume && (T.Destination.volume.value = _linToDb(app.state.volume)); app._updateControls({ volume: app.state.volume }); } };
+// --- FIX: Correct state management for Mute toggle ---
+  const _onMuteToggle = () => {
+    const s = app.state;
+    const T = s.Tone;
+    if (!T?.Destination) return;
+    
+    // 1. Determine the new state
+    const newMutedState = !s.isMuted;
+    
+    // 2. Update the actual audio engine
+    T.Destination.mute = newMutedState;
 
+    // 3. Update the single source of truth (the app's state)
+    s.isMuted = newMutedState;
+    
+    // 4. Update all UI from the new state
+    app._updateControls(); // Call without a patch to use the updated app.state
+
+    // 5. Update canvas and loader text
+    _setCanvas({ isPlaying: s.isPlaying && !s.isMuted });
+    app._loader.textContent = s.isMuted ? 'Muted.' : 'Unmuted.';
+  };
+  
+  const _onVolumeChange = e => { const v = e?.detail?.value; if (typeof v == 'number') { app.state.volume = Math.min(1, Math.max(0, v)); const T = app.state.Tone; T?.Destination?.volume && (T.Destination.volume.value = _linToDb(app.state.volume)); app._updateControls({ volume: app.state.volume }); } };
   const _onShapeChange = e => {
     const k = e?.detail?.shapeKey; if (!k) return;
     const s = app.state, HUM = humKey(app);
@@ -262,12 +282,26 @@ export function Signatures(app) {
     app._updateControls({ sequencerVisible: s.isSequencerMode }); typeof app._fitLayout == 'function' && app._fitLayout();
   };
 
-  const _onLoopToggle = () => { const s = app.state; s.isLoopEnabled = !s.isLoopEnabled; app._updateControls({ isLoopEnabled: s.isLoopEnabled }); s.audioSignaturePlaying && !s.isSequenceSignatureMode && (app._loader.textContent = s.isLoopEnabled ? 'Loop enabled.' : 'Loop disabled.'); };
-  const _onSignatureModeToggle = () => {
-    const s = app.state; s.isSequenceSignatureMode = !s.isSequenceSignatureMode; app._updateControls({ isSequenceSignatureMode: s.isSequenceSignatureMode });
-    s.sequencePlaying && stopSequence(); s.audioSignaturePlaying && stopAudioSignature();
-    app._loader.textContent = s.isSequenceSignatureMode ? 'Sequencer Signature Mode enabled. Press Play to run signatures per step.' : 'Sequencer Signature Mode disabled. Press Play for normal step timing.';
+// --- FIX: Correct state management for Loop toggle ---
+  const _onLoopToggle = () => {
+    const s = app.state;
+    s.isLoopEnabled = !s.isLoopEnabled;
+    app._updateControls(); // Update UI from the single source of truth
+    if (s.audioSignaturePlaying && !s.isSequenceSignatureMode) {
+        app._loader.textContent = s.isLoopEnabled ? 'Loop enabled.' : 'Loop disabled.';
+    }
   };
+
+  // --- FIX: Correct state management for Signature Mode toggle ---
+  const _onSignatureModeToggle = () => {
+    const s = app.state;
+    s.isSequenceSignatureMode = !s.isSequenceSignatureMode;
+    app._updateControls(); // Update UI from the single source of truth
+    s.sequencePlaying && stopSequence();
+    s.audioSignaturePlaying && stopAudioSignature();
+    app._loader.textContent = s.isSequenceSignatureMode ? 'Sequencer Signature Mode enabled.' : 'Sequencer Signature Mode disabled.';
+  };
+
 
   const _getUniqueAlgorithmMapping = seed => {
     const r = app._rng(`${seed}_unique_algo_mapping`), keys = ALL(), n = keys.length, base = [1,2,3,4,5,6,7,8,9,10], pool = [];
@@ -333,20 +367,16 @@ export function Signatures(app) {
       const i = s.audioSignatureStepIndex, val = sequence[i];
       if (val !== null) {
         const sk = val === 0 ? HUM() : LIST()[val - 1];
-        if (sk) { app._updateControls({ shapeKey: sk }); app._onShapeChange({ detail: { shapeKey: sk } }); }
+        if (sk) { app._onShapeChange({ detail: { shapeKey: sk } }); }
       }
       s.audioSignatureStepIndex++;
       if (s.audioSignatureStepIndex >= sequence.length) {
         const finishOnce = () => { s.audioSignaturePlaying = false; s.audioSignatureTimer = null; app._updateControls({ isAudioSignaturePlaying: false }); const cb = s.audioSignatureOnComplete; s.audioSignatureOnComplete = null; typeof cb == 'function' ? cb() : (app._loader.textContent = 'Audio Signature complete.'); };
-        
-        // --- LOGIC FIX: Check the live app state for looping ---
-        if (s.isLoopEnabled) {
+        if (s.isLoopEnabled) { // <-- This was the previous fix, and it remains correct
           s.audioSignatureStepIndex = 0;
           s.audioSignatureTimer = setTimeout(tick, stepTime);
         } else {
-          if (!s.isLatchOn) {
-            app.setActiveChain(HUM());
-          }
+          if (!s.isLatchOn) { app.setActiveChain(HUM()); }
           s.audioSignatureTimer = setTimeout(finishOnce, stepTime);
         }
         return;

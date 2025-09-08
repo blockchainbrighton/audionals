@@ -151,6 +151,7 @@ class OscApp extends HTMLElement {
   defaultState(seed='default'){
     return {
       isPlaying:false,contextUnlocked:false,initialBufferingStarted:false,initialShapeBuffered:false,Tone:null,chains:{},current:null,
+      isMuted: false, // <-- FIX: Initialize isMuted in the state object
       isLoopEnabled:false,volume:0.2,
       isSequencerMode:false,isRecording:false,currentRecordSlot:-1,
       sequence:Array(8).fill(null),velocities:Array(8).fill(1),sequencePlaying:false,sequenceIntervalId:null,
@@ -182,14 +183,12 @@ class OscApp extends HTMLElement {
       ['hk-toggle-loop',this._onHotkeyLoopToggle],
       ['hk-toggle-signature',this._onHotkeySignatureToggle],  // Shift+S (Signature Mode)
       ['hk-shape-step',this._onShapeStep],
-      // NEW:
       ['hk-toggle-mute', this._onMuteToggle],                 // M
       ['hk-toggle-sequencer', this._onToggleSequencer],       // C
       ['hk-audio-signature', this._onAudioSignature],         // s
       ['hk-toggle-latch', this._onLatchToggle],               // Shift+L
       ['hk-toggle-seq-play', this._onHotkeyToggleSeqPlay],    // P
       ['hk-toggle-power', this._onHotkeyTogglePower],         // O
-
     ]);
 
     // 5x5 map:
@@ -291,6 +290,7 @@ class OscApp extends HTMLElement {
     }catch{}
   }
 
+
   // Hide controls at startup and toggle them when 'hk-toggle-controls' fires.
   _onToggleControls(){
     const c = this._controls;
@@ -319,39 +319,13 @@ class OscApp extends HTMLElement {
   }
 
    _updateControls(patch = {}) {
-    const c = this._controls;
-    if (!c) return;
-
-    // --- FIX: Create a complete state object for every UI update ---
-    // This merges the full current state with any specific changes (the 'patch').
-    const fullState = { ...this.state, ...patch };
-
-    // Pass the complete state to the controls component.
-    if (typeof c.updateState === 'function') {
-      c.updateState(fullState);
-    } else if (typeof c.setState === 'function') {
-      c.setState(fullState);
-    } else if (typeof c.update === 'function') {
-      c.update(fullState);
-    } else {
-      // Fallback for older component structure
-      ('shapeKey' in fullState) && (c.dataset.shape = String(fullState.shapeKey || ''));
-      ('isAudioStarted' in fullState) && (c.dataset.ready = String(!!fullState.isAudioStarted));
-      ('isPlaying' in fullState) && (c.dataset.playing = String(!!fullState.isPlaying));
-      ('isMuted' in fullState) && (c.dataset.muted = String(!!fullState.isMuted));
-      ('sequencerVisible' in fullState) && (c.dataset.sequencer = String(!!fullState.sequencerVisible));
-      ('volume' in fullState) && (c.dataset.volume = String(fullState.volume));
+      const c = this._controls;
+      if (!c) return;
+      const fullState = { ...this.state, ...patch };
+      if (typeof c.updateState === 'function') { c.updateState(fullState); }
+      this.updateHkIcons?.(fullState);
+      if (Object.prototype.hasOwnProperty.call(patch, 'sequencerVisible')) { this._fitLayout(); }
     }
-
-    // Also pass the complete state to the hotkey icons updater.
-    this.updateHkIcons?.(fullState);
-
-    // Trigger layout adjustments if visibility changed.
-    if (Object.prototype.hasOwnProperty.call(patch, 'sequencerVisible')) {
-      this._fitLayout();
-    }
-  }
-
 
   _style(){
     return `
@@ -405,7 +379,7 @@ class OscApp extends HTMLElement {
     this._setCanvas({preset:s.presets[initial],shapeKey:initial,mode:'seed'});
     s.current=this.humKey; this._controls.disableAll?.(false);
     const D=s.Tone?.Destination?.volume; D&&(D.value=this._linToDb(s.volume));
-    this._updateControls({isAudioStarted:true,isPlaying:false,isMuted:false,shapeKey:this.humKey,sequencerVisible:false,volume:s.volume});
+    this._updateControls(); // Call with no args to sync UI with initial state
     this._loader.textContent='Tone.js loaded. Click “POWER ON” or the image to begin.'; this._fitLayout();
   }
 
@@ -540,11 +514,7 @@ class OscApp extends HTMLElement {
 
   _onHotkeyLoopToggle(){this._onLoopToggle();}
 
-  _onHotkeySignatureToggle(){
-    
-    // this.state.isSequencerMode&&this._onSignatureModeToggle();}
-    this._onSignatureModeToggle();
-  }
+  _onHotkeySignatureToggle(){ this._onSignatureModeToggle(); }
 
     _onHotkeyPress({detail}){
     const s=this.state; const {key,idx,shapeKey,variant}=detail||{}; if(!shapeKey)return;
@@ -603,21 +573,14 @@ class OscApp extends HTMLElement {
 
   // In osc-app.js, replace the entire _onLatchToggle method with this:
   _onLatchToggle() {
-    // 1. Update the state
     this.state.isLatchOn = !this.state.isLatchOn;
-    
-    // 2. Propagate the full state change to all UI components
     this._updateControls();
-
-    // 3. Apply audio logic if latch is turned off
     const s = this.state;
     if (!s.isLatchOn && !s.isSequencerMode && !this._heldKeys?.size && s.contextUnlocked && s.initialShapeBuffered) {
       this.setActiveChain(this.humKey, { updateCanvasShape: false, setStateCurrent: false });
       this._canvas.isPlaying = false;
     }
   }
-
-  // Engine wires _onStartRequest/_onMuteToggle/_onShapeChange/_onToggleSequencer/_onAudioSignature/_onLoopToggle/_onSignatureModeToggle/_onVolumeChange.
 }
 customElements.define('osc-app',OscApp);
 export { OscApp };
