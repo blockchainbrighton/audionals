@@ -192,81 +192,60 @@ class OscApp extends HTMLElement {
 
     ]);
 
-    // Build 5x5 cell map:
-    // - outer ring (16 cells): shapes[0..15]
-    // - two inner-edge: shapes[16], shapes[17]
-    // - all other inner cells (including central 2x2): hum
+    // 5x5 map:
+    // - HUM at the four corners: (0,0), (0,4), (4,0), (4,4)
+    // - All other 21 cells: shapes spread deterministically by cycling shapes[0..17]
     this._buildGridMap = () => {
-      const rng = this._rng(this.state.seed + '_grid25');
-      const pick = (arr, n) => {
-        const out = [];
-        const pool = arr.slice();
-        for (let i = 0; i < n && pool.length; i++) {
-          const j = (rng() * pool.length) | 0;
-          out.push(pool.splice(j, 1)[0]);
-        }
-        return out;
-      };
+      const key = (r,c) => `${r},${c}`;
 
-      // 5x5 coordinates (r,c) with 0-based indices
-      const isBorder = (r,c) => r===0||c===0||r===4||c===4;
-      // central 2x2 block: rows 1..2, cols 1..2
-      const isHumCore = (r,c) => (r===1||r===2) && (c===1||c===2);
+      // Four corners hum
+      const humCells = [[0,0],[0,4],[4,0],[4,4]];
+      const humSet = new Set(humCells.map(([r,c]) => key(r,c)));
 
-      // collect coordinates by bands (excluding the core for now)
-      const borderCells = [];
-      const innerCells = [];
-      for (let r=0;r<5;r++){
-        for (let c=0;c<5;c++){
-          if (isBorder(r,c)) borderCells.push([r,c]);
-          else innerCells.push([r,c]);
-        }
-      }
+      // Border clockwise (includes corners; we'll filter them)
+      const borderCW = [];
+      for (let c=0;c<5;c++) borderCW.push([0,c]);        // top
+      for (let r=1;r<5;r++) borderCW.push([r,4]);        // right
+      for (let c=3;c>=0;c--) borderCW.push([4,c]);       // bottom
+      for (let r=3;r>=1;r--) borderCW.push([r,0]);       // left
 
-      // order border clockwise starting at top-left
-      const cw = [];
-      for (let c=0;c<5;c++) cw.push([0,c]);          // top
-      for (let r=1;r<5;r++) cw.push([r,4]);          // right
-      for (let c=3;c>=0;c--) cw.push([4,c]);         // bottom
-      for (let r=3;r>=1;r--) cw.push([r,0]);         // left
-      const seen = new Set();
-      const borderCW = cw.filter(([r,c])=>{
-        const k=`${r},${c}`; if (seen.has(k)) return false; seen.add(k); return true;
-      }).slice(0,16); // 16 unique border cells
-
-      // assign the 18 sounds
-      const sounds = this.shapes.slice(0,18);
-      const map = new Map();
-
-      // 16 border -> shapes[0..15]
-      sounds.slice(0,16).forEach((shape,i)=>{
-        const [r,c]=borderCW[i];
-        map.set(`${r},${c}`, { type:'shape', shapeKey: shape });
-      });
-
-      // choose two inner-edge cells to hold shapes[16], shapes[17]
-      // prefer the midpoints/near-edges inside the border (rows/cols 1 or 3)
-      const innerEdgeCandidates = innerCells.filter(([r,c])=>{
-        const nearEdge = (r===1||r===3||c===1||c===3);
-        return nearEdge && !isHumCore(r,c);
-      });
-      const twoInner = pick(innerEdgeCandidates, 2);
-      if (twoInner[0]) map.set(`${twoInner[0][0]},${twoInner[0][1]}`, { type:'shape', shapeKey: sounds[16] });
-      if (twoInner[1]) map.set(`${twoInner[1][0]},${twoInner[1][1]}`, { type:'shape', shapeKey: sounds[17] });
-
-      // fill all remaining inner cells with hum (this includes the central 2x2)
+      // Inner cells row-major
+      const innerRowMajor = [];
       for (let r=1;r<=3;r++){
         for (let c=1;c<=3;c++){
-          const key = `${r},${c}`;
-          if (!map.has(key)) {
-            map.set(key, { type:'hum', shapeKey: this.humKey });
-          }
+          innerRowMajor.push([r,c]);
         }
       }
+
+      // Deterministic ordering for non-hum cells
+      const seen = new Set();
+      const orderedNonHum = []
+        .concat(borderCW, innerRowMajor)
+        .filter(([r,c]) => {
+          const k = key(r,c);
+          if (humSet.has(k)) return false;
+          if (seen.has(k)) return false;
+          seen.add(k);
+          return true;
+        });
+
+      const shapes = this.shapes.slice(0,18);
+      const map = new Map();
+
+      // Fill non-hum cells by cycling shapes[0..17]
+      for (let i=0;i<orderedNonHum.length;i++){
+        const [r,c] = orderedNonHum[i];
+        map.set(key(r,c), { type:'shape', shapeKey: shapes[i % shapes.length] });
+      }
+
+      // Place the 4 HUMs at the corners
+      humCells.forEach(([r,c]) => {
+        map.set(key(r,c), { type:'hum', shapeKey: this.humKey });
+      });
 
       this._grid25 = {
         map,
-        cellInfo: (r,c)=> map.get(`${r},${c}`) || null
+        cellInfo: (r,c)=> map.get(key(r,c)) || null
       };
     };
 
