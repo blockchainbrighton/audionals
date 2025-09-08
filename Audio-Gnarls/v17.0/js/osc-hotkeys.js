@@ -52,8 +52,15 @@ class OscHotkeys extends HTMLElement {
     if (this._downKeys.size) this._releaseAll();
   }
 
+  // js/osc-hotkeys.js
+
   _onKeyDown(ev) {
-    const t = ev.target?.tagName || '';
+    // START: MODIFICATION
+    // Use composedPath to find the true event target, even inside a Shadow DOM.
+    const trueTarget = ev.composedPath && ev.composedPath().length ? ev.composedPath()[0] : ev.target;
+    const t = trueTarget.tagName || '';
+    // END: MODIFICATION
+
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(t)) return;
 
     const k = ev.key;
