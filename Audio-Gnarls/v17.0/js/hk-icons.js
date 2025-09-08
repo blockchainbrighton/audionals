@@ -1,6 +1,6 @@
 // js/hk-icons.js
 // On-screen round badges for the most useful hotkeys.
-// Implements tooltips, active states, and edge-snapped positioning.
+// Implements tooltips, active states, and correct edge-snapped positioning.
 
 (() => {
   // --- Data for each badge ---
@@ -10,7 +10,7 @@
     ['m','M','hk-toggle-mute',       null,  -45, 'Mute',           'mute'],
     ['c','C','hk-toggle-controls',   null,  -15, 'Controls',       'controls'],
     ['q','Q','hk-toggle-sequencer',  null,   10, 'Sequencer',      'sequencer'],
-    ['p','P','hk-toggle-seq-play',   null,   35, 'Play/Pause Sequence',     'seq-play'],
+    ['p','P','hk-toggle-seq-play',   null,   35, 'Play/Pause',     'seq-play'],
     ['s','s','hk-audio-signature',   null,   90, 'Signature',      'signature'],
     ['S','S','hk-toggle-signature',  null,  135, 'Signature Mode', 'sig-mode'],
     ['l','l','hk-toggle-loop',       null,  180, 'Loop',           'loop'],
@@ -32,38 +32,16 @@
     .hk-badge:hover{background:#101010;border-color:#bcd;box-shadow:0 0 0 1px #000,0 0 12px #223a}
     .hk-badge:active{transform:translate(-50%,-50%) rotate(var(--ang,0deg)) translateX(var(--r,56px)) scale(.96)}
     .hk-badge[data-shift="1"]{border-color:#7aa2ff}
-
-    /* --- Active State Styles --- */
-    .hk-badge.is-power[data-active="true"] {
-      background:#c12231; color:#fff; border-color:#ff4e6a;
-      box-shadow:0 0 16px 3px #ff2a3999, 0 0 4px #ff7484cc;
-      text-shadow: 0 0 5px #fff;
+    .hk-badge span {
+      display: inline-block;
+      transform: rotate(calc(var(--ang, 0deg) * -1));
+      transition: transform .08s ease;
     }
-    .hk-badge.is-mute[data-active="true"] {
-      background:#a51427; color:#fff; border-color:#ff506e;
-      box-shadow: 0 0 10px #ff506e66;
-    }
-    .hk-badge[data-active="true"] {
-      background:#1f3a26; color:#9df5c2; border-color:#46ad6d;
-      box-shadow: 0 0 8px #46ad6d55;
-    }
-    .hk-badge[data-id="sig-mode"][data-active="true"] {
-        background: #1f2a3f; border-color: #7aa2ff; color: #cfe0ff;
-        box-shadow: 0 0 12px #7aa2ff55;
-    }
-
-    /* --- Custom Tooltip Styles --- */
-    .hk-tooltip{
-      position:absolute; top:0; left:0;
-      background: #111; color: #eee; border: 1px solid #889;
-      padding: 4px 8px; border-radius: 4px; font-size: 13px; font-family: sans-serif;
-      z-index: 50;
-      opacity: 0;
-      transform: translate(-50%, -100%);
-      transition: opacity 0.1s ease-in-out, transform 0.1s ease-in-out;
-      pointer-events: none;
-      white-space: nowrap;
-    }
+    .hk-badge.is-power[data-active="true"] { background:#c12231; color:#fff; border-color:#ff4e6a; box-shadow:0 0 16px 3px #ff2a3999, 0 0 4px #ff7484cc; text-shadow: 0 0 5px #fff; }
+    .hk-badge.is-mute[data-active="true"] { background:#a51427; color:#fff; border-color:#ff506e; box-shadow: 0 0 10px #ff506e66; }
+    .hk-badge[data-active="true"] { background:#1f3a26; color:#9df5c2; border-color:#46ad6d; box-shadow: 0 0 8px #46ad6d55; }
+    .hk-badge[data-id="sig-mode"][data-active="true"] { background: #1f2a3f; border-color: #7aa2ff; color: #cfe0ff; box-shadow: 0 0 12px #7aa2ff55; }
+    .hk-tooltip{ position:absolute; top:0; left:0; background: #111; color: #eee; border: 1px solid #889; padding: 4px 8px; border-radius: 4px; font-size: 13px; font-family: sans-serif; z-index: 50; opacity: 0; transform: translate(-50%, -100%); transition: opacity 0.1s ease-in-out, transform 0.1s ease-in-out; pointer-events: none; white-space: nowrap; }
   `;
 
   const ready = (fn) => (document.readyState !== 'loading' ? fn() : document.addEventListener('DOMContentLoaded', fn));
@@ -98,12 +76,13 @@
         const el = document.createElement('div');
         el.className='hk-badge';
         el.dataset.id = id;
-        el.textContent=label;
+        const textSpan = document.createElement('span');
+        textSpan.textContent = label;
+        el.appendChild(textSpan);
         if (id === 'power') el.classList.add('is-power');
         if (id === 'mute') el.classList.add('is-mute');
         if(label==='S'||label==='L') el.dataset.shift='1';
         el.style.setProperty('--ang',`${ang}deg`);
-        
         el.addEventListener('mouseenter', () => {
             tooltip.textContent = title;
             tooltip.style.opacity = '1';
@@ -161,39 +140,54 @@
       };
 
       const adjust = () => {
-        const rect=canvasContainer.getBoundingClientRect();
-        const cx=rect.left+rect.width/2, cy=rect.top+rect.height/2;
-        const vw=innerWidth, vh=innerHeight, inset=getSafe();
-        const PAD=10, SZ=30, HALF=SZ/2, OUT=28; // Increased OUT for better spacing
-        
-        // --- POSITIONING FIX ---
-        // 1. Calculate the base radius from the canvas size.
+        const rect = canvasContainer.getBoundingClientRect();
+        if (!rect || rect.width < 100) return; // Guard against premature execution
+
+        const cx = rect.left + rect.width / 2;
+        const cy = rect.top + rect.height / 2;
+        const vw = innerWidth;
+        const vh = innerHeight;
+        const inset = getSafe();
+        const PAD = 10;
+        const SZ = 30;
+        const HALF = SZ / 2;
+        const OUT = 28; // Space between canvas edge and button center
+
+        // This is the ideal radius based on the canvas size
         const baseR = (Math.min(rect.width, rect.height) / 2) + OUT;
 
         const controls = sr.querySelector('osc-controls');
-        const cr = (controls && controls.offsetParent!==null) ? controls.getBoundingClientRect() : null;
+        const cr = (controls && controls.offsetParent !== null) ? controls.getBoundingClientRect() : null;
 
-        const minX=inset.left + PAD + HALF;
-        const maxX=vw - inset.right - PAD - HALF;
-        const minY=inset.top + PAD + HALF;
-        const capBottom = cr ? (cr.top - PAD - HALF) : (vh - inset.bottom - PAD - HALF);
-        const maxY=Math.max(minY, capBottom);
+        // Calculate the actual on-screen safe boundaries
+        const minX = inset.left + PAD + HALF;
+        const maxX = vw - inset.right - PAD + HALF;
+        const minY = inset.top + PAD + HALF;
+        const capBottom = cr ? (cr.top - PAD - HALF) : (vh - inset.bottom - PAD + HALF);
+        const maxY = Math.max(minY, capBottom);
 
-        ring.querySelectorAll('.hk-badge').forEach(el=>{
-          const ang=parseFloat(el.style.getPropertyValue('--ang'))||0;
-          const rad=ang*Math.PI/180, ux=Math.cos(rad), uy=Math.sin(rad);
-          
-          // 2. Start with the canvas-based radius.
+        ring.querySelectorAll('.hk-badge').forEach(el => {
+          const ang = parseFloat(el.style.getPropertyValue('--ang')) || 0;
+          const rad = ang * Math.PI / 180;
+          const ux = Math.cos(rad);
+          const uy = Math.sin(rad);
+
+          // Start with the ideal radius calculated from the canvas size.
           let r = baseR;
-
-          // 3. Clamp this radius only if it would go off-screen.
-          if(ux > 0) r = Math.min(r, (maxX - cx) / ux);
-          if(ux < 0) r = Math.min(r, (cx - minX) / -ux);
-          if(uy > 0) r = Math.min(r, (maxY - cy) / uy);
-          if(uy < 0) r = Math.min(r, (cy - minY) / -uy);
           
+          // Now, calculate the maximum possible radius before a button would go off-screen.
+          let screenMaxR = Infinity;
+          if (ux > 0) screenMaxR = Math.min(screenMaxR, (maxX - cx) / ux);
+          if (ux < 0) screenMaxR = Math.min(screenMaxR, (cx - minX) / -ux);
+          if (uy > 0) screenMaxR = Math.min(screenMaxR, (maxY - cy) / uy);
+          if (uy < 0) screenMaxR = Math.min(screenMaxR, (cy - minY) / -uy);
+          
+          // The final radius is the SMALLER of the two constraints.
+          // This keeps it around the canvas, but pulls it in if the screen is too small.
+          r = Math.min(r, screenMaxR);
+
           r = Math.max(HALF + 4, Math.floor(r));
-          el.style.setProperty('--r', `${r}px`);
+          el.style.setProperty('--r', `${r}px`); // Store for :active state
           el.style.transform = `translate(-50%,-50%) rotate(${ang}deg) translateX(${r}px)`;
         });
       };
