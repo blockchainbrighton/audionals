@@ -318,21 +318,40 @@ class OscApp extends HTMLElement {
     off(window,'resize',this._onWindowResize); off(window,'orientationchange',this._onWindowResize);
   }
 
-  _updateControls(patch={}){
-    const c=this._controls; if(!c)return;
-    const e={isLatchOn:this.state?.isLatchOn,isSequencerMode:this.state?.isSequencerMode,...patch};
-    typeof c.updateState==='function'?c.updateState(e):
-    typeof c.setState==='function'?c.setState(e):
-    typeof c.update==='function'?c.update(e):(
-      ('shapeKey'in e)&&(c.dataset.shape=String(e.shapeKey||'')),
-      ('isAudioStarted'in e)&&(c.dataset.ready=String(!!e.isAudioStarted)),
-      ('isPlaying'in e)&&(c.dataset.playing=String(!!e.isPlaying)),
-      ('isMuted'in e)&&(c.dataset.muted=String(!!e.isMuted)),
-      ('sequencerVisible'in e)&&(c.dataset.sequencer=String(!!e.sequencerVisible)),
-      ('volume'in e)&&(c.dataset.volume=String(e.volume))
-    );
-    Object.prototype.hasOwnProperty.call(patch,'sequencerVisible')&&this._fitLayout();
+   _updateControls(patch = {}) {
+    const c = this._controls;
+    if (!c) return;
+
+    // --- FIX: Create a complete state object for every UI update ---
+    // This merges the full current state with any specific changes (the 'patch').
+    const fullState = { ...this.state, ...patch };
+
+    // Pass the complete state to the controls component.
+    if (typeof c.updateState === 'function') {
+      c.updateState(fullState);
+    } else if (typeof c.setState === 'function') {
+      c.setState(fullState);
+    } else if (typeof c.update === 'function') {
+      c.update(fullState);
+    } else {
+      // Fallback for older component structure
+      ('shapeKey' in fullState) && (c.dataset.shape = String(fullState.shapeKey || ''));
+      ('isAudioStarted' in fullState) && (c.dataset.ready = String(!!fullState.isAudioStarted));
+      ('isPlaying' in fullState) && (c.dataset.playing = String(!!fullState.isPlaying));
+      ('isMuted' in fullState) && (c.dataset.muted = String(!!fullState.isMuted));
+      ('sequencerVisible' in fullState) && (c.dataset.sequencer = String(!!fullState.sequencerVisible));
+      ('volume' in fullState) && (c.dataset.volume = String(fullState.volume));
+    }
+
+    // Also pass the complete state to the hotkey icons updater.
+    this.updateHkIcons?.(fullState);
+
+    // Trigger layout adjustments if visibility changed.
+    if (Object.prototype.hasOwnProperty.call(patch, 'sequencerVisible')) {
+      this._fitLayout();
+    }
   }
+
 
   _style(){
     return `
@@ -582,12 +601,19 @@ class OscApp extends HTMLElement {
     }
   }
 
-  _onLatchToggle(){
-    this.state.isLatchOn=!this.state.isLatchOn; this._updateControls({});
-    const s=this.state;
-    if(!s.isLatchOn&&!s.isSequencerMode&&!this._heldKeys?.size&&s.contextUnlocked&&s.initialShapeBuffered){
-      this.setActiveChain(this.humKey,{updateCanvasShape:false,setStateCurrent:false});
-      this._canvas.isPlaying=false; this._updateControls({});
+  // In osc-app.js, replace the entire _onLatchToggle method with this:
+  _onLatchToggle() {
+    // 1. Update the state
+    this.state.isLatchOn = !this.state.isLatchOn;
+    
+    // 2. Propagate the full state change to all UI components
+    this._updateControls();
+
+    // 3. Apply audio logic if latch is turned off
+    const s = this.state;
+    if (!s.isLatchOn && !s.isSequencerMode && !this._heldKeys?.size && s.contextUnlocked && s.initialShapeBuffered) {
+      this.setActiveChain(this.humKey, { updateCanvasShape: false, setStateCurrent: false });
+      this._canvas.isPlaying = false;
     }
   }
 

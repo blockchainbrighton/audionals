@@ -1,6 +1,5 @@
 // engine.js
-// Corrected, simplified, and streamlined version.
-// All references to effects have been removed and audio routing is fixed.
+// Corrected to handle loop disabling during playback.
 // Public API preserved: export { Engine, Signatures }; registers <tone-loader>.
 
 import { humKey, shapeList, shapeCount, allKeys } from './shapes.js';
@@ -77,9 +76,8 @@ export function Engine(app) {
       filter.Q.value = .5;
       const volume = new T.Volume(-25);
       const analyser = _createAnalyser(T);
-      const out = new T.Gain(0).toDestination(); // FIX: Initialize silent and connect to destination
+      const out = new T.Gain(0).toDestination();
       
-      // Simplified graph:
       osc.connect(volume);
       volume.connect(filter);
       filter.connect(out);
@@ -101,9 +99,8 @@ export function Engine(app) {
       fil.Q.value = pr.filterQ;
       const lfo = new T.LFO(...pr.lfo).start();
       const an = _createAnalyser(T);
-      const out = new T.Gain(0).toDestination(); // FIX: Initialize silent and connect to destination
+      const out = new T.Gain(0).toDestination();
 
-      // Simplified graph:
       lfo.connect(fil.frequency);
       o2 && lfo.connect(o2.detune);
       o1.connect(vol);
@@ -119,7 +116,6 @@ export function Engine(app) {
   const setActiveChain = (shape, { updateCanvasShape: u = true, setStateCurrent: s = u, syncCanvasPlayState: y = true } = {}) => {
     const { Tone: T, chains: C, current } = app.state;
     
-    // FIX: Perform a proper crossfade between the old and new chain.
     const prev = C[current];
     const next = C[shape];
     
@@ -164,7 +160,6 @@ export function Engine(app) {
     app.state.sequence = Array(8).fill(null);
     updateSequencerState?.();
   };
-
 
   const unlockAudioAndBufferInitial = async () => {
     const s = app.state;
@@ -323,10 +318,10 @@ export function Signatures(app) {
     s.sequencePlaying && stopSequence(); s.audioSignaturePlaying && stopAudioSignature();
     s._uiReturnShapeKey = shapeKey || s._uiReturnShapeKey || HUM();
     const map = _getUniqueAlgorithmMapping(s.seed), alg = map[shapeKey] || 1, seq = generateAudioSignature(s.seed, alg);
-    playAudioSignature(seq, alg, { loop }); app._loader.textContent = loop ? `Playing ${shapeKey} Audio Signature (Loop).` : `Playing ${shapeKey} Audio Signature...`;
+    playAudioSignature(seq, alg); app._loader.textContent = s.isLoopEnabled ? `Playing ${shapeKey} Audio Signature (Loop).` : `Playing ${shapeKey} Audio Signature...`;
   };
 
-  const playAudioSignature = (sequence, alg = 1, { loop = false, onComplete = null } = {}) => {
+  const playAudioSignature = (sequence, alg = 1, { onComplete = null } = {}) => {
     const s = app.state; s.audioSignaturePlaying && stopAudioSignature();
     const cur = (typeof s.current === 'string' && s.current) ? s.current : null;
     s._uiReturnShapeKey = cur || s._uiReturnShapeKey || HUM(); s.audioSignaturePlaying = true; s.audioSignatureStepIndex = 0; s.audioSignatureOnComplete = onComplete;
@@ -343,12 +338,15 @@ export function Signatures(app) {
       s.audioSignatureStepIndex++;
       if (s.audioSignatureStepIndex >= sequence.length) {
         const finishOnce = () => { s.audioSignaturePlaying = false; s.audioSignatureTimer = null; app._updateControls({ isAudioSignaturePlaying: false }); const cb = s.audioSignatureOnComplete; s.audioSignatureOnComplete = null; typeof cb == 'function' ? cb() : (app._loader.textContent = 'Audio Signature complete.'); };
-        if (loop) { s.audioSignatureStepIndex = 0; s.audioSignatureTimer = setTimeout(tick, stepTime); }
-        else {
-          const ret = s._uiReturnShapeKey || HUM();
-          app.setActiveChain(ret); // Simplified return to shape
-          s.current = ret;
-          app._updateControls({ shapeKey: ret });
+        
+        // --- LOGIC FIX: Check the live app state for looping ---
+        if (s.isLoopEnabled) {
+          s.audioSignatureStepIndex = 0;
+          s.audioSignatureTimer = setTimeout(tick, stepTime);
+        } else {
+          if (!s.isLatchOn) {
+            app.setActiveChain(HUM());
+          }
           s.audioSignatureTimer = setTimeout(finishOnce, stepTime);
         }
         return;
@@ -357,8 +355,6 @@ export function Signatures(app) {
     };
     tick();
   };
-  
-  // NOTE: The applyVariant function has been completely removed as it only handled effects.
 
   const stopAudioSignature = () => {
     const s = app.state;
@@ -366,10 +362,8 @@ export function Signatures(app) {
     s.audioSignaturePlaying = false;
     s.audioSignatureStepIndex = 0;
     app._updateControls({ isAudioSignaturePlaying: false });
-    const ret = s._uiReturnShapeKey || HUM();
-    app.setActiveChain(ret); // Simplified return to shape
-    s.current = ret;
-    app._updateControls({ shapeKey: ret });
+    
+    app.setActiveChain(HUM());
     s.audioSignatureOnComplete = null;
   };
 
@@ -429,12 +423,15 @@ export function Signatures(app) {
         let sk = null; if (v === 0) sk = HUM(); else if (v >= 1 && v <= COUNT()) sk = LIST()[v - 1];
         if (!sk) { await app._sleep(Math.max(50, s.stepTime)); continue; }
         const alg = map[sk] || 1, seq = generateAudioSignature(s.seed, alg);
-        await new Promise(res => { if (!s.signatureSequencerRunning) { res(); return; } playAudioSignature(seq, alg, { loop: false, onComplete: () => res() }); });
+        await new Promise(res => { if (!s.signatureSequencerRunning) { res(); return; } playAudioSignature(seq, alg, { onComplete: () => res() }); });
         if (!s.signatureSequencerRunning) return; await app._sleep(Math.max(30, s.stepTime));
       }
     };
     await pass(); if (!s.signatureSequencerRunning) return;
-    if (s.isLoopEnabled && s.sequencePlaying) { while (s.signatureSequencerRunning && s.sequencePlaying) await pass(); }
+    // --- LOGIC FIX: Check live state for looping ---
+    if (s.isLoopEnabled && s.sequencePlaying) { 
+        while (s.signatureSequencerRunning && s.sequencePlaying && s.isLoopEnabled) await pass(); 
+    }
     _stopSignatureSequencer(); app._sequencerComponent?.stopSequence?.();
   };
 
