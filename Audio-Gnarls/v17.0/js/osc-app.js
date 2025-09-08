@@ -127,7 +127,7 @@ class OscApp extends HTMLElement {
     this.attachShadow({mode:'open'});
     this._heldKeys=new Set();
     this.humKey='hum'; this.humLabel='Power Hum';
-    this.shapes=['circle','square','butterfly','lissajous','spiro','harmonograph','rose','hypocycloid','epicycloid','spiral','star','flower','wave','mandala','infinity','dna','tornado'];
+    this.shapes=['circle','square','butterfly','Bowditch','spiro','harmonograph','rose','hypocycloid','epicycloid','spiral','star','flower','wave','mandala','infinity','dna','tornado'];
     this.shapeLabels=Object.fromEntries(this.shapes.map(k=>[k,k[0].toUpperCase()+k.slice(1)]));
     Object.assign(this,Engine(this),Signatures(this)); // public API
     const attrSeed=(this.getAttribute('seed')||'').trim(), htmlSeed=(document.documentElement?.dataset?.seed||'').trim();

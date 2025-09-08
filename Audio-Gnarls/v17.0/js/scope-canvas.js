@@ -7,7 +7,7 @@
     circle:{freq:1,harmonics:[1,.5,.25],complexity:.3},
     square:{freq:1.5,harmonics:[1,.3,.7,.2],complexity:.6},
     butterfly:{freq:2.2,harmonics:[1,.4,.6,.3,.2],complexity:.8},
-    lissajous:{freq:1.8,harmonics:[1,.6,.4],complexity:.5},
+    Bowditch:{freq:1.8,harmonics:[1,.6,.4],complexity:.5},
     spiro:{freq:3.1,harmonics:[1,.3,.5,.2,.4],complexity:.9},
     harmonograph:{freq:2.5,harmonics:[1,.7,.5,.3,.2,.1],complexity:1},
     rose:{freq:1.7,harmonics:[1,.4,.3,.2],complexity:.4},
@@ -111,7 +111,7 @@
           )
         ),
 
-        lissajous:(d,t)=>this._withCtx((_,cw,c)=>{ const S=.8*cw/3, avg=this._avgAbs(d), fx=3+sin(t*.0003)*1.5, fy=2+cos(t*.0004)*1.5, ph=t*.0005;
+        Bowditch:(d,t)=>this._withCtx((_,cw,c)=>{ const S=.8*cw/3, avg=this._avgAbs(d), fx=3+sin(t*.0003)*1.5, fy=2+cos(t*.0004)*1.5, ph=t*.0005;
           this._traceParam(d,(i,n)=>{ const th=theta(i,n), r=avg*(.5+.5*this._samp(d,i));
             return [c+sin(fx*th+ph)*S*r, c+sin(fy*th)*S*r]; });
         }),

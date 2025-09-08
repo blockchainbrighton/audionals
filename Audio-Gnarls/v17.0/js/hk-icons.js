@@ -12,7 +12,7 @@
     ['c','C','hk-toggle-controls',   null,  -15, 'Controls',       'controls'],
     ['q','Q','hk-toggle-sequencer',  null,   10, 'Sequencer',      'sequencer'],
     ['p','P','hk-toggle-seq-play',   null,   35, 'Play/Pause',     'seq-play'],
-    ['s','SIG','hk-audio-signature', null,   0, 'Signature',       'signature'], // Changed label to 'SIG' and angle to 0
+    ['s','SIGN','hk-audio-signature', null,   0, 'Signature',       'signature'], // Changed label to 'SIGN' and angle to 0
     ['S','S','hk-toggle-signature',  null,  135, 'Signature Mode', 'sig-mode'],
     ['l','l','hk-toggle-loop',       null,  180, 'Loop',           'loop'],
     ['L','L','hk-toggle-latch',      null, -135, 'Latch',          'latch'],
@@ -30,13 +30,13 @@
       position: absolute;
       left: 50%;
       top: 50%;
-      width: 30px;
-      height: 30px;
+      width: 60px;
+      height: 60px;
       margin: -15px 0 0 -15px;
       display: flex;
       align-items: center;
       justify-content: center;
-      font: 700 14px/1 "Courier New", monospace;
+      font: 700 28px/1 "Courier New", monospace;
       color: #888;
       background: rgba(0, 0, 0, 0.5);
       border: 1px solid #555;
@@ -154,15 +154,15 @@
 
     .hk-badge.is-visible[data-id="signature"] {
       /* Horizontal pill shape */
-      width: 80px;
-      height: 36px;
+      width: 160px;
+      height: 72px;
       margin: 0;
       padding: 0;
       border-radius: 18px;
       background: rgba(0, 0, 0, 0.2);
       border: 1px solid rgba(255, 255, 255, 0.3);
       color: transparent;
-      font-size: 15px;
+      font-size: 40px;
       font-weight: bold;
       letter-spacing: 0.05em;
       box-shadow: 0 0 6px rgba(255, 255, 255, 0.1);
