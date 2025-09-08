@@ -322,10 +322,17 @@ class OscApp extends HTMLElement {
       const c = this._controls;
       if (!c) return;
       const fullState = { ...this.state, ...patch };
+
+      // If the audio context is unlocked, the power-on message is obsolete.
+      if (fullState.contextUnlocked) {
+        this._removePowerOverlay();
+      }
+
       if (typeof c.updateState === 'function') { c.updateState(fullState); }
       this.updateHkIcons?.(fullState);
       if (Object.prototype.hasOwnProperty.call(patch, 'sequencerVisible')) { this._fitLayout(); }
     }
+
 
   _style(){
     return `
@@ -432,14 +439,16 @@ class OscApp extends HTMLElement {
       Object.assign(inner.style,{padding:'14px 18px',border:'1px dashed rgba(255,255,255,.65)',borderRadius:'8px',fontSize:'18px',letterSpacing:'.06em',color:'#fff',background:'rgba(0,0,0,.25)',textShadow:'0 1px 2px rgba(0,0,0,.5)'}); overlay.appendChild(inner);
       const parent=this._canvasContainer||this._main; parent&&getComputedStyle(parent).position==='static'&&(parent.style.position='relative');
       (this._canvasContainer||this._main||container).appendChild(overlay); this._powerOverlay=overlay;
-      const onClick=async ev=>{
+      
+      // Unify the power-on trigger to use the main start request handler.
+      const onClick=ev=>{
         ev?.preventDefault?.();
-        try{await this.unlockAudioAndBufferInitial?.();}catch(e){console.error('Power-on unlock failed:',e);}
-        finally{setTimeout(()=>{this.state?.contextUnlocked?this._removePowerOverlay():this._renderPowerOverlay();},0);}
+        this._onStartRequest?.();
       };
       overlay.addEventListener('click',onClick);
     }catch(e){console.error('overlay error',e);}
   }
+
   _removePowerOverlay(){this._powerOverlay?.parentNode?.removeChild(this._powerOverlay); this._powerOverlay=null;}
 
     _setupCanvasClickGrid(){
