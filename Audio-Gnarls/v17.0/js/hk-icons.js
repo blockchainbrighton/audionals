@@ -10,7 +10,7 @@
     ['m','M','hk-toggle-mute',       null,  -45, 'Mute',           'mute'],
     ['c','C','hk-toggle-controls',   null,  -15, 'Controls',       'controls'],
     ['q','Q','hk-toggle-sequencer',  null,   10, 'Sequencer',      'sequencer'],
-    ['p','P','hk-toggle-seq-play',   null,   35, 'Play/Pause',     'seq-play'],
+    ['p','P','hk-toggle-seq-play',   null,   35, 'Play/Pause Sequence',     'seq-play'],
     ['s','s','hk-audio-signature',   null,   90, 'Signature',      'signature'],
     ['S','S','hk-toggle-signature',  null,  135, 'Signature Mode', 'sig-mode'],
     ['l','l','hk-toggle-loop',       null,  180, 'Loop',           'loop'],
