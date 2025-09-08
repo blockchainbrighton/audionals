@@ -217,7 +217,7 @@
       const data=this._selectData(), hue=(now*(this.preset?.colorSpeed ?? .06))%360;
       this._prepareStroke(hue); (this.drawFuncs[this.shapeKey]||this.drawFuncs.circle)(data, now, this.preset ?? {});
       if (typeof this.onIndicatorUpdate==='function'){ const started=this.isAudioStarted, active=started && this.isPlaying;
-        this.onIndicatorUpdate(started ? (active?'Audio Live':'Muted') : 'Silent Mode', !!active);
+        // this.onIndicatorUpdate(started ? (active?'Audio Live':'Muted') : 'Silent Mode', !!active);
       }
       this._animId = requestAnimationFrame(this._animate);
     }

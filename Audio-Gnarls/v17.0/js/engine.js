@@ -176,7 +176,7 @@ export function Engine(app) {
       app._loader.textContent = 'Audio context unlocked, but synth not ready. Click again.';
       return;
     }
-    app._loader.textContent = 'Unlocking AudioContext...';
+    // app._loader.textContent = 'Unlocking AudioContext...';
     try {
       const T = s.Tone;
       if (!T) throw new Error('Tone.js not available');
@@ -187,14 +187,14 @@ export function Engine(app) {
 
       s.contextUnlocked = true;
       s.initialBufferingStarted = true;
-      app._loader.textContent = `Preparing ${app.humLabel} synth...`;
+      // app._loader.textContent = `Preparing ${app.humLabel} synth...`;
       await bufferHumChain();
       setActiveChain(humKey(app));
       s.initialShapeBuffered = true;
       s.isPlaying = true;
       app._canvas.isPlaying = true;
       app._updateControls({ isAudioStarted: true, isPlaying: true });
-      app._loader.textContent = 'Ready. Audio: ' + app.humLabel;
+      // app._loader.textContent = 'Ready. Audio: ' + app.humLabel;
       for (const sh of shapeList(app)) {
         if (!s.contextUnlocked) break;
         try { await bufferShapeChain(sh); } catch (e) { console.error('Error buffering', sh, e); }
@@ -202,7 +202,7 @@ export function Engine(app) {
       }
     } catch (e) {
       console.error('Failed to unlock AudioContext:', e);
-      app._loader.textContent = 'Failed to unlock AudioContext.';
+      // app._loader.textContent = 'Failed to unlock AudioContext.';
       s.contextUnlocked = false;
       s.initialBufferingStarted = false;
       s.initialShapeBuffered = false;
@@ -288,7 +288,7 @@ export function Signatures(app) {
     s.isLoopEnabled = !s.isLoopEnabled;
     app._updateControls(); // Update UI from the single source of truth
     if (s.audioSignaturePlaying && !s.isSequenceSignatureMode) {
-        app._loader.textContent = s.isLoopEnabled ? 'Loop enabled.' : 'Loop disabled.';
+        // app._loader.textContent = s.isLoopEnabled ? 'Loop enabled.' : 'Loop disabled.';
     }
   };
 
@@ -299,7 +299,7 @@ export function Signatures(app) {
     app._updateControls(); // Update UI from the single source of truth
     s.sequencePlaying && stopSequence();
     s.audioSignaturePlaying && stopAudioSignature();
-    app._loader.textContent = s.isSequenceSignatureMode ? 'Sequencer Signature Mode enabled.' : 'Sequencer Signature Mode disabled.';
+    // app._loader.textContent = s.isSequenceSignatureMode ? 'Sequencer Signature Mode enabled.' : 'Sequencer Signature Mode disabled.';
   };
 
 
@@ -342,7 +342,9 @@ export function Signatures(app) {
 
   const _onAudioSignature = () => {
     const s = app.state;
-    if (s.audioSignaturePlaying) { stopAudioSignature(); app._loader.textContent = 'Audio Signature stopped.'; app._updateControls({ isAudioSignaturePlaying: false }); return; }
+    if (s.audioSignaturePlaying) { stopAudioSignature(); 
+    // app._loader.textContent = 'Audio Signature stopped.'; 
+    app._updateControls({ isAudioSignaturePlaying: false }); return; }
     if (!s.contextUnlocked || !s.initialShapeBuffered) return;
     const sel = s._uiReturnShapeKey || s.current || HUM(); _triggerSignatureFor(sel, { loop: s.isLoopEnabled }); app._updateControls({ isAudioSignaturePlaying: true });
   };

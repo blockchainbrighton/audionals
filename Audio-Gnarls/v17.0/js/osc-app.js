@@ -254,7 +254,7 @@ class OscApp extends HTMLElement {
 
 
     this._sequencerComponent=$('seq-app'); this._sequencerComponent.style.display='none';
-    this._loader=$('div',{id:'loader',textContent:'Initializing...'});
+    this._loader=$('div',{id:'loader',textContent:'...'});
     main.append(canvasContainer,this._controls,this._sequencerComponent,this._loader);
     wrapper.append(main);
     this.shadowRoot.append($('style',{textContent:this._style()}),$('tone-loader'),wrapper);
@@ -387,7 +387,8 @@ class OscApp extends HTMLElement {
     s.current=this.humKey; this._controls.disableAll?.(false);
     const D=s.Tone?.Destination?.volume; D&&(D.value=this._linToDb(s.volume));
     this._updateControls(); // Call with no args to sync UI with initial state
-    this._loader.textContent='Tone.js loaded. Click “POWER ON” or the image to begin.'; this._fitLayout();
+    // this._loader.textContent='Tone.js loaded. Click “POWER ON” or the image to begin.'; 
+    this._fitLayout();
   }
 
   _onHotkeyToggleSeqPlay(){
