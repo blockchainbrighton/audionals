@@ -137,7 +137,7 @@ class OscApp extends HTMLElement {
       '_onToneReady','_onStartRequest','_onMuteToggle','_onShapeChange','_onToggleSequencer','_onAudioSignature','_handleSeedSubmit',
       '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded','_onSeqPlayStarted','_onSeqPlayStopped','_onSeqStepAdvance',
       '_onSeqStepTimeChanged','_onSeqStepsChanged','_onLoopToggle','_onSignatureModeToggle','_onVolumeChange','_onHotkeyPress',
-      '_onHotkeyRelease','_onHotkeyLoopToggle','_onHotkeySignatureToggle','_onLatchToggle','_fitLayout','_onWindowResize','_onShapeStep'
+      '_onHotkeyRelease','_onHotkeyLoopToggle','_onHotkeySignatureToggle','_onLatchToggle','_fitLayout','_onWindowResize','_onShapeStep', '_onHotkeyToggleSeqPlay', '_onHotkeyTogglePower',
     ].forEach(fn=>this[fn]=this[fn].bind(this));
   }
 
@@ -174,10 +174,21 @@ class OscApp extends HTMLElement {
 
     this._hotkeys=$('osc-hotkeys'); this._hotkeys.setConfig({humKey:this.humKey,shapes:this.shapes});
     main.appendChild(this._hotkeys);
+
     addEvents(this._hotkeys,[
-      ['hk-press',this._onHotkeyPress],['hk-release',this._onHotkeyRelease],
-      ['hk-toggle-loop',this._onHotkeyLoopToggle],['hk-toggle-signature',this._onHotkeySignatureToggle],
+      ['hk-press',this._onHotkeyPress],
+      ['hk-release',this._onHotkeyRelease],
+      ['hk-toggle-loop',this._onHotkeyLoopToggle],
+      ['hk-toggle-signature',this._onHotkeySignatureToggle],  // Shift+S (Signature Mode)
       ['hk-shape-step',this._onShapeStep],
+      // NEW:
+      ['hk-toggle-mute', this._onMuteToggle],                 // M
+      ['hk-toggle-sequencer', this._onToggleSequencer],       // C
+      ['hk-audio-signature', this._onAudioSignature],         // s
+      ['hk-toggle-latch', this._onLatchToggle],               // Shift+L
+      ['hk-toggle-seq-play', this._onHotkeyToggleSeqPlay],    // P
+      ['hk-toggle-power', this._onHotkeyTogglePower],         // O
+
     ]);
 
     // Build 5x5 cell map:
@@ -398,6 +409,32 @@ class OscApp extends HTMLElement {
     this._loader.textContent='Tone.js loaded. Click “POWER ON” or the image to begin.'; this._fitLayout();
   }
 
+  _onHotkeyToggleSeqPlay(){
+    const s = this.state || {};
+
+    // Make sure the sequencer UI is visible so the user has context
+    if (!s.isSequencerMode) this._onToggleSequencer();
+
+    // Toggle using the public API provided by Signatures/SeqApp
+    if (s.sequencePlaying) {
+      if (typeof this.stopSequence === 'function') this.stopSequence();
+    } else {
+      if (typeof this.playSequence === 'function') this.playSequence();
+    }
+  }
+
+  _onHotkeyTogglePower(){
+    const s = this.state || {};
+    // If currently running, power off; otherwise unlock/start
+    if (s.isPlaying) {
+      if (typeof this.stopAudioAndDraw === 'function') this.stopAudioAndDraw();
+    } else {
+      if (typeof this._onStartRequest === 'function') this._onStartRequest();
+    }
+  }
+
+
+
   _handleSeedSubmit(e){
     const v=(e?.detail?.value&&String(e.detail.value).trim())||(this.getAttribute('seed')||'').trim()||(document.documentElement?.dataset?.seed||'').trim()||'default';
     (!v||v===this.state.seed)|| (this.resetToSeed(v), this._controls.setSeed?.(v));
@@ -502,7 +539,12 @@ class OscApp extends HTMLElement {
 
 
   _onHotkeyLoopToggle(){this._onLoopToggle();}
-  _onHotkeySignatureToggle(){this.state.isSequencerMode&&this._onSignatureModeToggle();}
+
+  _onHotkeySignatureToggle(){
+    
+    // this.state.isSequencerMode&&this._onSignatureModeToggle();}
+    this._onSignatureModeToggle();
+  }
 
     _onHotkeyPress({detail}){
     const s=this.state; const {key,idx,shapeKey,variant}=detail||{}; if(!shapeKey)return;

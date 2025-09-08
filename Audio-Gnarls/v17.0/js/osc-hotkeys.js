@@ -55,13 +55,44 @@ class OscHotkeys extends HTMLElement {
   _onKeyDown(ev) {
     const t = ev.target?.tagName || '';
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(t)) return;
+
     const k = ev.key;
 
-    if (k === 'l' || k === 'L') { this._emit('hk-toggle-loop'); ev.preventDefault(); return; }
-    if (k === 'm' || k === 'M') { this._emit('hk-toggle-signature'); ev.preventDefault(); return; }
+    // ---- Global control hotkeys (non-repeating) ----
+    // Uppercase implies Shift is held
+    if (k === 'o' || k === 'O') {             // o/O => Power On/Off
+      this._emit('hk-toggle-power'); ev.preventDefault(); return;
+    }
+    if (k === 'L' && ev.shiftKey) {           // Shift+L => Latch
+      this._emit('hk-toggle-latch'); ev.preventDefault(); return;
+    }
+    if (k === 'l' && !ev.shiftKey) {          // l => Loop
+      this._emit('hk-toggle-loop'); ev.preventDefault(); return;
+    }
+    if (k === 'm' || k === 'M') {             // m/M => Mute
+      this._emit('hk-toggle-mute'); ev.preventDefault(); return;
+    }
+    if (k === 'c' || k === 'C') {             // c/C => Create/Hide Sequence
+      this._emit('hk-toggle-sequencer'); ev.preventDefault(); return;
+    }
+    if (k === 'S' && ev.shiftKey) {           // Shift+S => Signature Mode
+      this._emit('hk-toggle-signature'); ev.preventDefault(); return;
+    }
+    if (k === 's' && !ev.shiftKey) {          // s => Audio Signature
+      this._emit('hk-audio-signature'); ev.preventDefault(); return;
+    }
+    if (k === 'p' || k === 'P') {             // p/P => Play/Stop Sequence
+      this._emit('hk-toggle-seq-play'); ev.preventDefault(); return;
+    }
 
-    if (k === 'ArrowUp' || k === 'ArrowDown') { ev.preventDefault(); this._emit('hk-shape-step', { direction: k === 'ArrowDown' ? 1 : -1 }); return; }
+    // Shape stepper
+    if (k === 'ArrowUp' || k === 'ArrowDown') {
+      ev.preventDefault();
+      this._emit('hk-shape-step', { direction: k === 'ArrowDown' ? 1 : -1 });
+      return;
+    }
 
+    // Prevent repeats for held keys
     if (this._downKeys.has(k)) { ev.preventDefault(); return; }
     this._downKeys.add(k);
 
@@ -70,6 +101,7 @@ class OscHotkeys extends HTMLElement {
     this._emit('hk-press', m);
     ev.preventDefault();
   }
+
 
   _onKeyUp(ev) {
     const k = ev.key;
