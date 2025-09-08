@@ -75,7 +75,7 @@ export function Engine(app) {
     const { Tone: T, chains: C } = app.state; if (!T) return;
     const key = humKey(app); if (C[key]) { await _disposeChain(C[key]); delete C[key]; }
     try {
-      const osc = new T.Oscillator('A0', 'sine').start(), filter = new T.Filter(80, 'lowpass'); filter.Q.value = .5;
+      const osc = new T.Oscillator('A0', 'sine').start(), filter = new T.Filter(150, 'lowpass'); filter.Q.value = .5;
       const volume = new T.Volume(-25), reverb = new T.Freeverb().set({ wet: .3, roomSize: .9 }), out = new T.Gain(0), analyser = _createAnalyser(T);
       // Keep graph stable: connect once, gate with gains
       osc.connect(volume); volume.connect(filter); filter.connect(reverb); analyser && filter.connect(analyser); reverb.connect(out);
