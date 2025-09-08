@@ -138,6 +138,7 @@ class OscApp extends HTMLElement {
       '_onSeqRecordStart','_onSeqStepCleared','_onSeqStepRecorded','_onSeqPlayStarted','_onSeqPlayStopped','_onSeqStepAdvance',
       '_onSeqStepTimeChanged','_onSeqStepsChanged','_onLoopToggle','_onSignatureModeToggle','_onVolumeChange','_onHotkeyPress',
       '_onHotkeyRelease','_onHotkeyLoopToggle','_onHotkeySignatureToggle','_onLatchToggle','_fitLayout','_onWindowResize','_onShapeStep', '_onHotkeyToggleSeqPlay', '_onHotkeyTogglePower',
+      '_onToggleControls','_initControlsVisibility',
     ].forEach(fn=>this[fn]=this[fn].bind(this));
   }
 
@@ -326,6 +327,23 @@ class OscApp extends HTMLElement {
       const loader=this.shadowRoot.getElementById('loader'); loader&&this._resizeObserver.observe(loader);
     }catch{}
   }
+
+  // Hide controls at startup and toggle them when 'hk-toggle-controls' fires.
+  _onToggleControls(){
+    const c = this._controls;
+    if (!c) return;
+    const show = (c.style.display === 'none');
+    c.style.display = show ? 'block' : 'none';
+    try { this._fitLayout(); } catch {}
+    try { c.dispatchEvent(new Event('controls-resize')); } catch {}
+  }
+
+  // Call once after hotkeys/controls exist; also hooks the event.
+  _initControlsVisibility(){
+    if (this._controls) this._controls.style.display = 'none'; // hidden on load
+    if (this._hotkeys)  this._hotkeys.addEventListener('hk-toggle-controls', this._onToggleControls);
+  }
+
 
   disconnectedCallback(){
     removeEvents(this._hotkeys,[
