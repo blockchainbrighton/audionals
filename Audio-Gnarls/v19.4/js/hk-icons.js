@@ -1,3 +1,4 @@
+
 // js/hk-icons.js
 // On-screen round badges for the most useful hotkeys.
 // Simplified: badges are always upright circles with letters, only positioned radially.
@@ -17,7 +18,7 @@
 
     ['s','SIGN','hk-audio-signature',null,    0, 'Signature',           'signature'],
     ['S','S','hk-toggle-signature',  null,  135, 'Signature Mode',      'sig-mode'],
-    ['l','l','hk-toggle-loop',       null,  180, 'Loop',                'loop'],
+    ['l','L','hk-toggle-loop',       null,  180, 'Loop',                'loop'],
     ['L','L','hk-toggle-latch',      null, -135, 'Latch',               'latch'],
   ];
 
@@ -267,7 +268,41 @@
       ring.appendChild(frag);
       ring.appendChild(tooltip);
       canvasContainer.appendChild(ring);
-      
+
+      // --- Sequence presence tracking (for showing P only when recorded) ---
+      const seqFilled = new Set();
+      let seqHasData = false;
+      const recomputeSeqHasData = () => {
+        const prev = seqHasData;
+        seqHasData = seqFilled.size > 0;
+        if (seqHasData !== prev) {
+          try { app.updateHkIcons?.(app.state); } catch {}
+        }
+      };
+
+      // Listen high in the tree so we catch bubbled events from <seq-app>
+      const onSeqRecorded = (e) => {
+        const idx = e?.detail?.slotIndex;
+        if (Number.isInteger(idx)) {
+          seqFilled.add(idx);
+          recomputeSeqHasData();
+        }
+      };
+      const onSeqCleared = (e) => {
+        const idx = e?.detail?.slotIndex;
+        if (Number.isInteger(idx)) {
+          seqFilled.delete(idx);
+          recomputeSeqHasData();
+        }
+      };
+      const onSeqStepsChanged = () => {
+        seqFilled.clear();
+        recomputeSeqHasData();
+      };
+
+      sr.addEventListener('seq-step-recorded', onSeqRecorded);
+      sr.addEventListener('seq-step-cleared', onSeqCleared);
+      sr.addEventListener('seq-steps-changed', onSeqStepsChanged);
 
       // Remove all tour artifacts (labels + highlights)
       const cleanupTourArtifacts = () => {
@@ -279,81 +314,86 @@
       };
       app.cleanupHotkeyTour = cleanupTourArtifacts;
 
-    
-   // Tour order uses the BADGES list as-is
-    const TOUR_ITEMS = BADGES.map(b => ({ id: b[6], title: b[5] })).filter(x => !!x.id);
+      // Tour order uses the BADGES list as-is
+      const TOUR_ITEMS = BADGES.map(b => ({ id: b[6], title: b[5] })).filter(x => !!x.id);
 
-    // Public method: light badges one-by-one (stack), hold, then clear
-    // Public method: light badges one-by-one (stack), hold, then clear
-  const runHotkeyTour = async (opts = {}) => {
-    // If a tour is running or artifacts exist, clear first
-    if (app._hkTourRunning) return;
-    cleanupTourArtifacts();
-    app._hkTourRunning = true;
+      // Public method: light badges one-by-one (stack), hold, then clear
+      const runHotkeyTour = async (opts = {}) => {
+        if (app._hkTourRunning) return;
+        cleanupTourArtifacts();
+        app._hkTourRunning = true;
 
-    const step = Math.max(120, Math.min(900, opts.stepMs ?? 260)); // per-badge delay
-    const hold = Math.max(500, opts.holdMs ?? 1000);               // all-on hold
-    const delay = ms => new Promise(r => setTimeout(r, ms));
+        const step = Math.max(120, Math.min(900, opts.stepMs ?? 260)); // per-badge delay
+        const hold = Math.max(500, opts.holdMs ?? 1000);               // all-on hold
+        const delay = ms => new Promise(r => setTimeout(r, ms));
 
-    const items = TOUR_ITEMS
-      .map(({ id, title }) => {
-        const el = ring.querySelector(`.hk-badge[data-id="${id}"]`);
-        return el && el.classList.contains('is-visible') ? { el, title } : null;
-      })
-      .filter(Boolean);
+        const items = TOUR_ITEMS
+          .map(({ id, title }) => {
+            const el = ring.querySelector(`.hk-badge[data-id="${id}"]`);
+            return el && el.classList.contains('is-visible') ? { el, title } : null;
+          })
+          .filter(Boolean);
 
-    const makeTourLabel = (el, title) => {
-      const tip = document.createElement('div');
-      tip.className = 'hk-tooltip hk-tour is-visible';
-      tip.textContent = title;
+        const makeTourLabel = (el, title) => {
+          const tip = document.createElement('div');
+          tip.className = 'hk-tooltip hk-tour is-visible';
+          tip.textContent = title;
 
-      const badgeRect = el.getBoundingClientRect();
-      const ringRect = ring.getBoundingClientRect();
-      const leftPos = badgeRect.left - ringRect.left + badgeRect.width / 2;
-      tip.style.left = `${leftPos}px`;
+          const badgeRect = el.getBoundingClientRect();
+          const ringRect = ring.getBoundingClientRect();
+          const leftPos = badgeRect.left - ringRect.left + badgeRect.width / 2;
+          tip.style.left = `${leftPos}px`;
 
-      const id = el.dataset.id;
-      const label = el.textContent?.trim();
-      if (['signature','fr-ready','fr-playback'].includes(id)) {
-        tip.style.top = `${badgeRect.top - ringRect.top - 12}px`;
-        tip.style.setProperty('--tooltip-transform','translate(-50%,-100%)');
-      } else if (label === 'O') {
-        tip.style.top = `${badgeRect.top - ringRect.top + badgeRect.height + 8}px`;
-        tip.style.setProperty('--tooltip-transform','translate(-50%, 0)');
-      } else {
-        tip.style.top = `${badgeRect.top - ringRect.top - 8}px`;
-        tip.style.setProperty('--tooltip-transform','translate(-50%,-100%)');
-      }
+          const id = el.dataset.id;
+          const label = el.textContent?.trim();
+          if (['signature','fr-ready','fr-playback'].includes(id)) {
+            tip.style.top = `${badgeRect.top - ringRect.top - 12}px`;
+            tip.style.setProperty('--tooltip-transform','translate(-50%,-100%)');
+          } else if (label === 'O') {
+            tip.style.top = `${badgeRect.top - ringRect.top + badgeRect.height + 8}px`;
+            tip.style.setProperty('--tooltip-transform','translate(-50%, 0)');
+          } else {
+            tip.style.top = `${badgeRect.top - ringRect.top - 8}px`;
+            tip.style.setProperty('--tooltip-transform','translate(-50%,-100%)');
+          }
 
-      ring.appendChild(tip);
-      (app._hkTourTips ||= []).push(tip);
-      return tip;
-    };
+          ring.appendChild(tip);
+          (app._hkTourTips ||= []).push(tip);
+          return tip;
+        };
 
-    try {
-      for (const { el, title } of items) {
-        el.classList.add('is-tour');
-        makeTourLabel(el, title);
-        await delay(step);
-      }
-      await delay(hold);
-    } finally {
-      cleanupTourArtifacts();
-    }
-  };
+        try {
+          for (const { el, title } of items) {
+            el.classList.add('is-tour');
+            makeTourLabel(el, title);
+            await delay(step);
+          }
+          await delay(hold);
+        } finally {
+          cleanupTourArtifacts();
+        }
+      };
 
-    // expose to engine
-    app.runHotkeyTour = runHotkeyTour;
-
+      // expose to engine
+      app.runHotkeyTour = runHotkeyTour;
 
       const updateIcons = (state = {}) => {
-      const isOn = !!state.isPlaying;
+        const isOn = !!state.isPlaying;
 
-      // if turning off, remove any tour artifacts to avoid orphaned labels
-      if (!isOn) { try { app.cleanupHotkeyTour?.(); } catch {} }
+        // if turning off, remove any tour artifacts to avoid orphaned labels
+        if (!isOn) { try { app.cleanupHotkeyTour?.(); } catch {} }
 
-      ring.querySelectorAll('.hk-badge:not([data-id="power"])')
-        .forEach(b => b.classList.toggle('is-visible', isOn));
+        // Show all non-power, non-seq-play badges when on
+        ring.querySelectorAll('.hk-badge:not([data-id="power"]):not([data-id="seq-play"])')
+          .forEach(b => b.classList.toggle('is-visible', isOn));
+
+        // P (seq-play) only when there's recorded sequence data (and power on)
+        const pBadge = ring.querySelector('.hk-badge[data-id="seq-play"]');
+        if (pBadge) {
+          const showP = isOn && seqHasData;
+          pBadge.classList.toggle('is-visible', showP);
+          pBadge.dataset.disabled = showP ? '' : '1';
+        }
 
         const setActive = (id,v)=>{ const b=ring.querySelector(`[data-id="${id}"]`); if(b) b.dataset.active=!!v; };
         const setDisabled=(id,v)=>{ const b=ring.querySelector(`[data-id="${id}"]`); if(b) b.dataset.disabled=v?'1':''; };
@@ -373,6 +413,7 @@
         setActive('fr-playback', !!state.freestylePlayback);
         setDisabled('fr-playback', !state.freestyleRecording);
       };
+
       app.updateHkIcons = updateIcons;
       if (app.state) updateIcons(app.state);
 
@@ -432,3 +473,4 @@
     })();
   });
 })();
+
