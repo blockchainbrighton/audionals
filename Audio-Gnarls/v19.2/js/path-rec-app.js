@@ -8,6 +8,7 @@ class PathRecApp extends HTMLElement {
   constructor() {
     super();
     this.attachShadow({ mode: 'open' }).innerHTML = '<style>:host{display:none}</style>';
+    this._showOverlay = true;   // NEW: controls whether lines are drawn
     // internal state
     this._armed = false;
     this._isRecording = false;
@@ -35,6 +36,7 @@ class PathRecApp extends HTMLElement {
   arm() {
     if (this._armed) return;
     this._armed = true;
+    this._showOverlay = true;   // show lines while record-ready
     this._dispatch('fr-armed');
   }
 
@@ -42,6 +44,7 @@ class PathRecApp extends HTMLElement {
     if (!this._armed) return;
     this.stop();
     this._armed = false;
+    this._showOverlay = false;  // hide lines when record-ready is off
     this._dispatch('fr-disarmed');
   }
 
@@ -147,9 +150,11 @@ class PathRecApp extends HTMLElement {
   }
 
   renderOverlay(ctx, now = performance.now()) {
-    // no overlay if no recording and not recording
+    if (!this._showOverlay) return;   // <- skip drawing when hidden
+
     const rec = this._isRecording ? { points: this._points } : this._recording;
     if (!rec || !rec.points || !rec.points.length) return;
+
     ctx.save();
     ctx.lineWidth = 2;
     ctx.lineJoin = 'round';
@@ -161,10 +166,12 @@ class PathRecApp extends HTMLElement {
       const p = pts[i];
       const cx = p.x * ctx.canvas.width;
       const cy = p.y * ctx.canvas.height;
-      if (i === 0) ctx.moveTo(cx, cy); else ctx.lineTo(cx, cy);
+      if (i === 0) ctx.moveTo(cx, cy);
+      else ctx.lineTo(cx, cy);
     }
     ctx.stroke();
-    // draw playback cursor
+
+    // keep playback cursor (optional: you can also guard this with _showOverlay if you want it hidden too)
     if (this._isPlaying && this._recording) {
       const et = now - this._playT0;
       const pos = this._interpAtTime(this._recording, et);
@@ -179,6 +186,7 @@ class PathRecApp extends HTMLElement {
     }
     ctx.restore();
   }
+
 
   // private helpers
   _beginRecording(tAbs) {

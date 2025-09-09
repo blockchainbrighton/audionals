@@ -620,14 +620,19 @@ class OscApp extends HTMLElement {
     this._updateControls();
   }
 
+
   /**
    * Handle the Play/Stop button for freestyle recordings.
    */
   _onFreestylePlay() {
     const s = this.state || {};
     try {
-      if (s.freestylePlayback) this._pathRec?.stop?.();
-      else if (s.freestyleRecording) this._pathRec?.play?.(s.freestyleRecording);
+      if (s.freestylePlayback) {
+        this._pathRec?.stop?.();
+      } else if (s.freestyleRecording) {
+        // FIX: respect global loop toggle
+        this._pathRec?.play?.(s.freestyleRecording, { loop: !!s.isLoopEnabled });
+      }
     } catch {}
   }
 
