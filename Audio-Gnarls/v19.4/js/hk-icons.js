@@ -55,11 +55,18 @@
   }
 
   .hk-badge.is-visible{opacity:.6; visibility:visible; pointer-events:auto;}
-  .hk-badge.is-visible:hover{
+  .hk-badge.is-visible:hover:not([data-active="true"]){
     opacity:1; color:#ddd; background:rgba(25,25,25,.75); border-color:#aaa;
     box-shadow:0 0 0 1px #000,0 0 10px rgba(200,200,200,.3);
     transform:translate(-50%,-50%) scale(1.1);
   }
+    .hk-badge[data-active="true"]:hover{
+      opacity:1;
+      /* keep transform/box-shadow tweak without changing colors */
+      transform:translate(-50%,-50%) scale(1.1);
+      box-shadow:0 0 0 1px #000, 0 0 10px rgba(200,200,200,.15), var(--extra-glow, 0 0 0 transparent);
+    }
+      
   .hk-badge.is-visible:active{ transform:translate(-50%,-50%) scale(1.05); }
 
   .hk-badge[data-shift="1"]{ border-color:#6b7fad; }
