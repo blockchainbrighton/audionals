@@ -262,7 +262,19 @@ class PathRecApp extends HTMLElement {
     this._recording = { points: this._points.slice(), duration };
     this._isRecording = false;
     this._dispatch('fr-record-stopped', { duration });
+
+    // Auto-exit record-ready: hide overlay + disarm so playback view is clean.
+    if (this._armed) {
+      this._armed = false;
+      this._showOverlay = false;
+      this._dispatch('fr-disarmed');
+    }
+
+    // Instantly audition what was just recorded.
+    // Important: pass { loop: this._loop } so we respect the existing loop setting.
+    this.play(this._recording, { loop: this._loop });
   }
+
 
   _drawPath(ctx, points, canvas) {
     for (let i = 0; i < points.length; i++) {
