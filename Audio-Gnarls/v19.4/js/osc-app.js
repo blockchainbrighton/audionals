@@ -442,11 +442,56 @@ class OscApp extends HTMLElement {
     this._fitLayout();
   }
 
-  _onHotkeyToggleSeqPlay(){
+  // MODIFIED START: Corrected playback logic
+  _onHotkeyToggleSeqPlay() {
     const s = this.state || {};
-    if (!s.isSequencerMode) this._onToggleSequencer();
-    if (s.sequencePlaying) this.stopSequence?.(); else this.playSequence?.();
+    // This function should ONLY toggle playback, not UI visibility.
+    // The line that showed the sequencer has been removed.
+    if (s.sequencePlaying) {
+      this.stopSequence?.();
+    } else {
+      this.playSequence?.();
+    }
   }
+
+  _onSeqPlayStarted(e) {
+    const t = e?.detail?.stepTime;
+    const s = this.state;
+    s.sequencePlaying = true;
+    s.sequenceStepIndex = 0;
+    s._seqFirstCycleStarted = false;
+    // This should only update playback state, NOT UI visibility state.
+    // The line `s.isSequencerMode = true;` has been removed.
+    if (typeof t === 'number') {
+      s.stepTime = t;
+    }
+    this._updateControls();
+    if (s.isSequenceSignatureMode) {
+      this._sequencerComponent?.stopSequence();
+      this._startSignatureSequencer();
+    }
+  }
+
+  _onSeqPlayStopped() {
+    const s = this.state;
+    s.sequencePlaying = false;
+    s.sequenceStepIndex = 0;
+    s._seqFirstCycleStarted = false;
+    // Stopping playback should not automatically hide the sequencer.
+    // The line `s.isSequencerMode = false;` has been removed.
+    if (s.signatureSequencerRunning) {
+      this._stopSignatureSequencer();
+    }
+    if (!s.isLatchOn) {
+      try {
+        const h = this.humKey;
+        this._updateControls({ shapeKey: h });
+        this._onShapeChange({ detail: { shapeKey: h } });
+      } catch {}
+    }
+    this._updateControls();
+  }
+  // MODIFIED END
 
   _onHotkeyTogglePower(){
     const s = this.state || {};
@@ -588,11 +633,10 @@ class OscApp extends HTMLElement {
       (shapeKey!==this.humKey)&&(s._uiReturnShapeKey=shapeKey);
     };
     if(s.isSequencerMode){
-      if(s.isRecording){
-        this._recordedThisHold=this._recordedThisHold||new Set();
-        if(!this._recordedThisHold.has(key)){ this.recordStep((idx>=0)?(idx+1):0); this._recordedThisHold.add(key); }
+      if (s.contextUnlocked && s.initialShapeBuffered) {
+        enter();
       }
-      (s.contextUnlocked&&s.initialShapeBuffered)&&enter(); return;
+      return;
     }
     (s.contextUnlocked&&s.initialShapeBuffered)&&enter();
   }

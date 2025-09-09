@@ -74,8 +74,17 @@ class SeqApp extends HTMLElement {
     this.updateSequenceUI();
   }
 
+  // MODIFIED START: Added fix for keyboard input overwriting issue
   #recordAt(i, n) {
     if (!this.state.isRecording || i < 0 || i >= this.#len()) return;
+    
+    // FIX: Before recording the new value from the keyboard, remove any pending
+    // paint/clear edits for this slot that were queued by the initial mouse click.
+    // This ensures keyboard input takes priority.
+    if (this._pendingEdits) {
+      this._pendingEdits = this._pendingEdits.filter(edit => edit.i !== i);
+    }
+
     this.#setSeq(i, n);
     const nx = this.#next(i);
     this.state.currentRecordSlot = nx;
@@ -83,6 +92,7 @@ class SeqApp extends HTMLElement {
     this.updateSequenceUI();
     this.#dispatch("seq-step-recorded", { slotIndex: i, value: n, nextSlot: nx, isRecording: this.state.isRecording });
   }
+  // MODIFIED END
 
   #clearAt(i) {
     this.#setSeq(i, null);
@@ -163,15 +173,23 @@ class SeqApp extends HTMLElement {
     this._slotListeners = [];
   }
 
+  // MODIFIED START: Added fix for missing keydown listener
   connectedCallback() {
     const a = Number(this.getAttribute("steps")) || SeqApp.DEFAULT_STEPS;
     this.#initStateForSteps(SeqApp.VALID_SIZES.includes(a) ? a : SeqApp.DEFAULT_STEPS);
     this.render();
     this.updateSequenceUI();
     this.#attachUIEvents();
+
+    // FIX: Restore the global event listeners for keyboard input and pointer release.
+    window.addEventListener("keydown", this._onWindowKeyDown);
     window.addEventListener("pointerup", this._onPointerUpGlobal);
-    this._globalListeners = [["pointerup", this._onPointerUpGlobal]];
+    this._globalListeners = [
+      ["keydown", this._onWindowKeyDown],
+      ["pointerup", this._onPointerUpGlobal]
+    ];
   }
+  // MODIFIED END
 
   disconnectedCallback() {
     (this._globalListeners || []).forEach(([e, h]) => window.removeEventListener(e, h));
@@ -194,14 +212,16 @@ class SeqApp extends HTMLElement {
         #stepControls button:hover{background:#323}
         #stepControls button:disabled{opacity:.5;cursor:not-allowed}
         #stepInfo{color:#aaa;font-size:.85em}
-        .step-slot{position:relative;width:37px;height:37px;border:1px solid #555;border-radius:6px;background:#232325;display:grid;place-items:center;cursor:pointer;font-weight:700;font-size:1.12rem;user-select:none;transition:background .15s,box-shadow .16s}
+        .step-slot{position:relative;width:37px;height:37px;border:1px solid #555;border-radius:6px;background:#232325;display:grid;place-items:center;cursor:pointer;font-weight:700;font-size:1.12rem;user-select:none;transition:background .15s,box-shadow .16s, border-color .16s}
         .step-slot.record-mode{background:#343;box-shadow:0 0 7px #f7c46988}
+        .step-slot.active { border-color: #7af6ff; box-shadow: 0 0 8px #7af6ff88; }
         .step-slot.record-mode.active{background:#575;box-shadow:0 0 12px #f7c469d6}
         .digit{position:relative;z-index:2;color:#eee}
         .vel-bar{position:absolute;bottom:0;left:0;width:100%;height:0%;background:#7af6ff55;border-bottom-left-radius:6px;border-bottom-right-radius:6px;pointer-events:none;transition:height .05s linear;z-index:1}
         #sequenceControls{display:flex;align-items:center;justify-content:center;gap:1.1rem;margin:1.1em 0 0;width:100%}
         #playBtn{min-width:150px;font-size:1.09rem;padding:.44em 1.4em;border-radius:7px;margin:0;background:#181818;color:#fff;border:2px solid #7af6ff;transition:background .19s,color .19s;box-shadow:0 2px 10px #7af6ff22}
         #playBtn:hover{background:#212d3d;color:#fff;border-color:#fff}
+        #playBtn:disabled{opacity:.5;cursor:not-allowed;background:#181818;border-color:#555;color:#888}
         #stepTimeInput{width:60px;margin-left:.7em}
       </style>
       <div id="sequencer">
@@ -253,7 +273,10 @@ class SeqApp extends HTMLElement {
       if (b) b.style.height = `${Math.round(vel * 100)}%`;
       if (!s.title?.startsWith("Velocity:")) this.#setTooltip(s, vel);
     }
-    if (this._playBtn) this._playBtn.textContent = sp ? "Stop Sequence" : "Play Sequence";
+    if (this._playBtn) {
+      this._playBtn.textContent = sp ? "Stop Sequence" : "Play Sequence";
+      this._playBtn.disabled = !sp && !this.hasPopulatedSteps();
+    }
     if (this._stepTimeInput && !sp) this._stepTimeInput.value = st;
     this.updateStepControls();
   }
@@ -267,10 +290,8 @@ class SeqApp extends HTMLElement {
 
   handleStepRightClick(e, i) {
     e.preventDefault();
-    // queue clear for next tick
     this._pendingEdits ||= [];
     this._pendingEdits.push({ type: 'clear', i });
-    // optimistic UI
     this.#setSeq(i, null);
     this.updateSequenceUI();
   }
@@ -314,24 +335,24 @@ class SeqApp extends HTMLElement {
 
   recordStep(n) { this.#recordAt(this.state.currentRecordSlot, n); }
 
+  hasPopulatedSteps() {
+    return this.state.sequence.some(step => step !== null);
+  }
+
   playSequence() {
-    if (this.state.sequencePlaying) return;
+    if (this.state.sequencePlaying || !this.hasPopulatedSteps()) return;
     this.state.sequencePlaying = true;
     this.state.sequenceStepIndex = 0;
-    this.updateSequenceUI();
     this.#dispatch("seq-play-started", { stepTime: this.state.stepTime });
 
     const tick = () => {
       if (!this.state.sequencePlaying) return;
-
-      // Commit any queued UI edits exactly at step boundary
       this._applyPendingEdits(false);
-
-      const i = this.state.sequenceStepIndex, v = this.state.sequence[i], vel = this.#velAt(i), last = this.#next(i) === 0;
-      this.#dispatch("seq-step-advance", { stepIndex: i, index: i, value: v, velocity: vel, isLastStep: last });
-
-      this.state.sequenceStepIndex = this.#next(i);
+      const i = this.state.sequenceStepIndex;
       this.updateSequenceUI();
+      const v = this.state.sequence[i], vel = this.#velAt(i), last = this.#next(i) === 0;
+      this.#dispatch("seq-step-advance", { stepIndex: i, index: i, value: v, velocity: vel, isLastStep: last });
+      this.state.sequenceStepIndex = this.#next(i);
       this._seqTimer = this.state.sequencePlaying ? setTimeout(tick, this.state.stepTime) : null;
     };
     tick();
@@ -341,8 +362,8 @@ class SeqApp extends HTMLElement {
     this.state.sequencePlaying = false;
     this._seqTimer && (clearTimeout(this._seqTimer), (this._seqTimer = null));
     this._tailTimer && (clearTimeout(this._tailTimer), (this._tailTimer = null));
-    // If user made edits while stopped, apply them now
     this._applyPendingEdits(true);
+    this.state.sequenceStepIndex = 0;
     this.updateSequenceUI();
     this.#dispatch("seq-play-stopped", {});
     const d = Math.max(20, Math.min(this.state.stepTime, 200));
