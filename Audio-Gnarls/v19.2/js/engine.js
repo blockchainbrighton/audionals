@@ -161,53 +161,90 @@ export function Engine(app) {
   };
 
   const unlockAudioAndBufferInitial = async () => {
-    const s = app.state;
-    if (s.initialBufferingStarted && !s.initialShapeBuffered) { app._loader.textContent = 'Still preparing initial synth, please wait...'; return; }
-    if (s.isPlaying) return stopAudioAndDraw();
-    if (s.contextUnlocked) {
-      if (s.initialShapeBuffered) {
-        setActiveChain(humKey(app));
-        s.isPlaying = true;
-        app._updateControls({ isAudioStarted: true, isPlaying: true });
-        app._loader.textContent = 'Audio resumed (hum).';
-        app._canvas.isPlaying = true;
-        return;
-      }
-      app._loader.textContent = 'Audio context unlocked, but synth not ready. Click again.';
-      return;
-    }
-    // app._loader.textContent = 'Unlocking AudioContext...';
-    try {
-      const T = s.Tone;
-      if (!T) throw new Error('Tone.js not available');
-      const ctx = T.getContext?.() || T.context;
-      let ok = false;
-      if (ctx?.resume) { await ctx.resume(); ok = true; } else if (T.start) { await T.start(); ok = true; }
-      if (!ok) throw new Error('Could not resume AudioContext');
+  const s = app.state;
 
-      s.contextUnlocked = true;
-      s.initialBufferingStarted = true;
-      // app._loader.textContent = `Preparing ${app.humLabel} synth...`;
-      await bufferHumChain();
+  // If we already started but haven't finished, avoid double work.
+  if (s.initialBufferingStarted && !s.initialShapeBuffered) {
+    app._loader.textContent = 'Still preparing initial synth, please wait...';
+    return;
+  }
+
+  // If currently playing, treat POWER as Off.
+  if (s.isPlaying) return stopAudioAndDraw();
+
+  // If AudioContext already unlocked
+  if (s.contextUnlocked) {
+    if (s.initialShapeBuffered) {
+      // Bring up hum and (once) the startup signature.
       setActiveChain(humKey(app));
-      s.initialShapeBuffered = true;
       s.isPlaying = true;
       app._canvas.isPlaying = true;
       app._updateControls({ isAudioStarted: true, isPlaying: true });
-      // app._loader.textContent = 'Ready. Audio: ' + app.humLabel;
-      for (const sh of shapeList(app)) {
-        if (!s.contextUnlocked) break;
-        try { await bufferShapeChain(sh); } catch (e) { console.error('Error buffering', sh, e); }
-        await _sleep(0);
+
+      if (!s._startupSigDone) {
+        try {
+          await app._sleep(200);
+          app._triggerSignatureFor?.(humKey(app), { loop: s.isLoopEnabled });
+        } catch {}
+        s._startupSigDone = true;
       }
-    } catch (e) {
-      console.error('Failed to unlock AudioContext:', e);
-      // app._loader.textContent = 'Failed to unlock AudioContext.';
-      s.contextUnlocked = false;
-      s.initialBufferingStarted = false;
-      s.initialShapeBuffered = false;
+
+      app._loader.textContent = 'Audio resumed (hum).';
+      return;
     }
-  };
+    app._loader.textContent = 'Audio context unlocked, but synth not ready. Click again.';
+    return;
+  }
+
+  // First-time unlock path
+  try {
+    const T = s.Tone;
+    if (!T) throw new Error('Tone.js not available');
+
+    const ctx = T.getContext?.() || T.context;
+    let ok = false;
+    if (ctx?.resume) { await ctx.resume(); ok = true; }
+    else if (T.start) { await T.start(); ok = true; }
+    if (!ok) throw new Error('Could not resume AudioContext');
+
+    s.contextUnlocked = true;
+    s.initialBufferingStarted = true;
+
+    // 1) Buffer HUM and bring it up immediately (so power-on always hums)
+    await bufferHumChain();
+    setActiveChain(humKey(app));
+
+    // 2) Prebuffer ALL playable shapes BEFORE firing the first signature,
+    //    so step #1 never targets a missing chain.
+    for (const sh of shapeList(app)) {
+      if (!s.contextUnlocked) break;
+      try { await bufferShapeChain(sh); } catch (e) { console.error('Error buffering', sh, e); }
+      await _sleep(0);
+    }
+    s.initialShapeBuffered = true;
+
+    // 3) Mark playing and update UI/canvas
+    s.isPlaying = true;
+    app._canvas.isPlaying = true;
+    app._updateControls({ isAudioStarted: true, isPlaying: true });
+
+    // 4) Fire the startup signature (once), after a tiny settle
+    if (!s._startupSigDone) {
+      try {
+        await app._sleep(200);
+        app._triggerSignatureFor?.(humKey(app), { loop: s.isLoopEnabled });
+      } catch {}
+      s._startupSigDone = true;
+    }
+
+  } catch (e) {
+    console.error('Failed to unlock AudioContext:', e);
+    s.contextUnlocked = false;
+    s.initialBufferingStarted = false;
+    s.initialShapeBuffered = false;
+  }
+};
+
 
   const stopAudioAndDraw = () => {
     const s = app.state;

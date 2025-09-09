@@ -423,6 +423,7 @@ class OscApp extends HTMLElement {
   _onToneReady(){
     const s=this.state; s.Tone=window.Tone; this.loadPresets(s.seed); this.bufferHumChain();
     const initial=this.shapes[(this._rng(s.seed)()*this.shapes.length)|0];
+    s.uiHomeShapeKey = initial; // remember the default non-hum start shape
     this._setCanvas({preset:s.presets[initial],shapeKey:initial,mode:'seed'});
     s.current=this.humKey; this._controls.disableAll?.(false);
     const D=s.Tone?.Destination?.volume; D&&(D.value=this._linToDb(s.volume));
