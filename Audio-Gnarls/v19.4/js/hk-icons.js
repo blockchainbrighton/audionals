@@ -15,7 +15,7 @@
     ['r','FR','fr-toggle',            null,   60, 'Freestyle Recording',      'fr-ready'],
     ['R','PF','fr-play',              null,   85, 'Play Freestyle Recording', 'fr-playback'],
 
-    ['s','SIGN','hk-audio-signature', null,    0, 'Signature',           'signature'],
+    ['s','CALL SIGN','hk-audio-signature', null,    0, 'Signature',           'signature'],
     ['S','S','hk-toggle-signature',   null,  135, 'Signature Mode',      'sig-mode'],
     ['l','L','hk-toggle-loop',        null,  180, 'Loop',                'loop'],
     ['L','L','hk-toggle-latch',       null, -135, 'Latch',               'latch'],
