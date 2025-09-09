@@ -164,7 +164,7 @@ class OscApp extends HTMLElement {
   defaultState(seed='default'){
     return {
       isPlaying:false,contextUnlocked:false,initialBufferingStarted:false,initialShapeBuffered:false,Tone:null,chains:{},current:null,
-      isMuted: false, // <-- FIX: Initialize isMuted in the state object
+      isMuted: false,
       isLoopEnabled:false,volume:0.2,
       isSequencerMode:false,isRecording:false,currentRecordSlot:-1,
       sequence:Array(8).fill(null),velocities:Array(8).fill(1),sequencePlaying:false,sequenceIntervalId:null,
@@ -178,7 +178,11 @@ class OscApp extends HTMLElement {
   }
 
   connectedCallback(){
-    const $=this._el.bind(this);
+    const $=this._el?.bind(this) ?? ((tag,attrs={})=>{
+      const el=document.createElement(tag); for(const k in attrs){
+        if(k==='textContent') el.textContent=attrs[k]; else el.setAttribute(k,attrs[k]);
+      } return el;
+    });
     const wrapper=$('div',{id:'appWrapper'});
     const main=(this._main=$('div',{id:'main'}));
     const canvasContainer=(this._canvasContainer=$('div',{id:'canvasContainer'}));
@@ -196,7 +200,7 @@ class OscApp extends HTMLElement {
       ['hk-press',this._onHotkeyPress],
       ['hk-release',this._onHotkeyRelease],
       ['hk-toggle-loop',this._onHotkeyLoopToggle],
-      ['hk-toggle-signature',this._onHotkeySignatureToggle],  // Shift+S (Signature Mode)
+      ['hk-toggle-signature',this._onHotkeySignatureToggle],  // Shift+S
       ['hk-shape-step',this._onShapeStep],
       ['hk-toggle-mute', this._onMuteToggle],                 // M
       ['hk-toggle-sequencer', this._onToggleSequencer],       // C
@@ -205,91 +209,54 @@ class OscApp extends HTMLElement {
       ['hk-toggle-seq-play', this._onHotkeyToggleSeqPlay],    // P
       ['hk-toggle-power', this._onHotkeyTogglePower],         // O
       ['fr-toggle', this._onFreestyleReadyToggle],            // R
-      ['fr-play', this._onFreestylePlay],                    // Shift+R
+      ['fr-play', this._onFreestylePlay],                     // Shift+R
     ]);
 
-    // 5x5 map:
-    // - HUM at the four corners: (0,0), (0,4), (4,0), (4,4)
-    // - All other 21 cells: shapes spread deterministically by cycling shapes[0..17]
+    // 5x5 grid mapping
     this._buildGridMap = () => {
       const key = (r,c) => `${r},${c}`;
-
-      // Four corners hum
       const humCells = [[0,0],[0,4],[4,0],[4,4]];
       const humSet = new Set(humCells.map(([r,c]) => key(r,c)));
-
-      // Border clockwise (includes corners; we'll filter them)
       const borderCW = [];
-      for (let c=0;c<5;c++) borderCW.push([0,c]);        // top
-      for (let r=1;r<5;r++) borderCW.push([r,4]);        // right
-      for (let c=3;c>=0;c--) borderCW.push([4,c]);       // bottom
-      for (let r=3;r>=1;r--) borderCW.push([r,0]);       // left
-
-      // Inner cells row-major
+      for (let c=0;c<5;c++) borderCW.push([0,c]);
+      for (let r=1;r<5;r++) borderCW.push([r,4]);
+      for (let c=3;c>=0;c--) borderCW.push([4,c]);
+      for (let r=3;r>=1;r--) borderCW.push([r,0]);
       const innerRowMajor = [];
-      for (let r=1;r<=3;r++){
-        for (let c=1;c<=3;c++){
-          innerRowMajor.push([r,c]);
-        }
-      }
-
-      // Deterministic ordering for non-hum cells
+      for (let r=1;r<=3;r++) for (let c=1;c<=3;c++) innerRowMajor.push([r,c]);
       const seen = new Set();
-      const orderedNonHum = []
-        .concat(borderCW, innerRowMajor)
-        .filter(([r,c]) => {
-          const k = key(r,c);
-          if (humSet.has(k)) return false;
-          if (seen.has(k)) return false;
-          seen.add(k);
-          return true;
-        });
-
+      const orderedNonHum = [].concat(borderCW, innerRowMajor).filter(([r,c])=>{
+        const k=key(r,c); if (humSet.has(k) || seen.has(k)) return false; seen.add(k); return true;
+      });
       const shapes = this.shapes.slice(0,18);
       const map = new Map();
-
-      // Fill non-hum cells by cycling shapes[0..17]
       for (let i=0;i<orderedNonHum.length;i++){
         const [r,c] = orderedNonHum[i];
         map.set(key(r,c), { type:'shape', shapeKey: shapes[i % shapes.length] });
       }
-
-      // Place the 4 HUMs at the corners
-      humCells.forEach(([r,c]) => {
-        map.set(key(r,c), { type:'hum', shapeKey: this.humKey });
-      });
-
-      this._grid25 = {
-        map,
-        cellInfo: (r,c)=> map.get(key(r,c)) || null
-      };
+      humCells.forEach(([r,c]) => map.set(key(r,c), { type:'hum', shapeKey: this.humKey }));
+      this._grid25 = { map, cellInfo: (r,c)=> map.get(key(r,c)) || null };
     };
-
     this._buildGridMap();
 
-    // Freestyle path recorder and overlay setup
-    // Create recorder custom element and overlay canvas to draw the path over the scope canvas
+    // Freestyle path recorder + overlay
     this._pathRec = document.createElement('path-rec-app');
     this.shadowRoot.appendChild(this._pathRec);
     this._frLastCell = null;
-    // overlay canvas positioned absolutely over the main canvas
+
     this._frCanvas = document.createElement('canvas');
-    this._frCanvas.style.position = 'absolute';
-    this._frCanvas.style.top = '0';
-    this._frCanvas.style.left = '0';
-    this._frCanvas.style.width = '100%';
-    this._frCanvas.style.height = '100%';
-    this._frCanvas.style.pointerEvents = 'none';
+    Object.assign(this._frCanvas.style, {
+      position:'absolute', top:'0', left:'0', width:'100%', height:'100%', pointerEvents:'none'
+    });
     canvasContainer.appendChild(this._frCanvas);
     this._frCtx = this._frCanvas.getContext('2d');
+
     // overlay drawing loop
     this._drawFrOverlay = () => {
       const ctx = this._frCtx;
       if (ctx) {
-        // Clear canvas first
         ctx.clearRect(0, 0, this._frCanvas.width, this._frCanvas.height);
         try {
-          // Only draw overlay when freestyle mode is armed or playing/recording
           if (this.state?.isFreestyleMode || this.state?.freestylePlayback || this.state?.isFreestyleRecording) {
             this._pathRec?.renderOverlay(ctx);
           }
@@ -297,50 +264,29 @@ class OscApp extends HTMLElement {
       }
       requestAnimationFrame(this._drawFrOverlay);
     };
+    this._resizeFrCanvas();            // initial size
     requestAnimationFrame(this._drawFrOverlay);
-    // recorder event handlers to update state
-    this._pathRec.addEventListener('fr-armed', () => {
-      this.state.isFreestyleMode = true;
-      this._updateControls();
-    });
-    this._pathRec.addEventListener('fr-disarmed', () => {
-      this.state.isFreestyleMode = false;
-      this._updateControls();
-    });
-    this._pathRec.addEventListener('fr-record-started', () => {
-      this.state.isFreestyleRecording = true;
-      this._updateControls();
-    });
+
+    // FR events
+    this._pathRec.addEventListener('fr-armed', () => { this.state.isFreestyleMode = true;  this._updateControls(); });
+    this._pathRec.addEventListener('fr-disarmed', () => { this.state.isFreestyleMode = false; this._updateControls(); });
+    this._pathRec.addEventListener('fr-record-started', () => { this.state.isFreestyleRecording = true; this._updateControls(); });
     this._pathRec.addEventListener('fr-record-stopped', () => {
       this.state.isFreestyleRecording = false;
       this.state.freestyleRecording = this._pathRec.getRecording();
       this._updateControls();
     });
-    this._pathRec.addEventListener('fr-cleared', () => {
-      this.state.freestyleRecording = null;
-      this._updateControls();
-    });
-    this._pathRec.addEventListener('fr-play-started', () => {
-      this.state.freestylePlayback = true;
-      this._updateControls();
-    });
+    this._pathRec.addEventListener('fr-cleared', () => { this.state.freestyleRecording = null; this._updateControls(); });
+    this._pathRec.addEventListener('fr-play-started', () => { this.state.freestylePlayback = true; this._updateControls(); });
     this._pathRec.addEventListener('fr-play-stopped', () => {
-      this.state.freestylePlayback = false;
-      this._updateControls();
-      if (this._frLastCell) {
-        this._releaseCell(this._frLastCell);
-        this._frLastCell = null;
-      }
+      this.state.freestylePlayback = false; this._updateControls();
+      if (this._frLastCell) { this._releaseCell(this._frLastCell); this._frLastCell = null; }
     });
     this._pathRec.addEventListener('fr-play-input', (ev) => {
-      const det = ev.detail || {};
-      const { x, y, type } = det;
+      const { x, y, type } = ev.detail || {};
       const cell = this._cellFromNorm(x, y);
       this._handleFreestyleInput(cell, type);
     });
-
-
-
 
     this._sequencerComponent=$('seq-app'); this._sequencerComponent.style.display='none';
     this._loader=$('div',{id:'loader',textContent:'...'});
@@ -380,7 +326,6 @@ class OscApp extends HTMLElement {
     }catch{}
   }
 
-
   // Hide controls at startup and toggle them when 'hk-toggle-controls' fires.
   _onToggleControls(){
     const c = this._controls;
@@ -391,12 +336,10 @@ class OscApp extends HTMLElement {
     try { c.dispatchEvent(new Event('controls-resize')); } catch {}
   }
 
-  // Call once after hotkeys/controls exist; also hooks the event.
   _initControlsVisibility(){
-    if (this._controls) this._controls.style.display = 'none'; // hidden on load
+    if (this._controls) this._controls.style.display = 'none';
     if (this._hotkeys)  this._hotkeys.addEventListener('hk-toggle-controls', this._onToggleControls);
   }
-
 
   disconnectedCallback(){
     removeEvents(this._hotkeys,[
@@ -408,37 +351,27 @@ class OscApp extends HTMLElement {
     off(window,'resize',this._onWindowResize); off(window,'orientationchange',this._onWindowResize);
   }
 
-   _updateControls(patch = {}) {
-      const c = this._controls;
-      if (!c) return;
-      const fullState = { ...this.state, ...patch };
+  _updateControls(patch = {}) {
+    const c = this._controls;
+    if (!c) return;
+    const fullState = { ...this.state, ...patch };
 
-      // If the audio context is unlocked, the power-on message is obsolete.
-      if (fullState.contextUnlocked) {
-        this._removePowerOverlay();
+    if (fullState.contextUnlocked) this._removePowerOverlay();
+
+    if (typeof c.updateState === 'function') { c.updateState(fullState); }
+    this.updateHkIcons?.(fullState);
+    if (Object.prototype.hasOwnProperty.call(patch, 'sequencerVisible')) { this._fitLayout(); }
+
+    // Freestyle buttons
+    try {
+      const { isFreestyleMode, freestyleRecording, freestylePlayback } = fullState;
+      if (c._frReadyBtn) setPressed(c._frReadyBtn, !!isFreestyleMode);
+      if (c._frPlayBtn) {
+        c._frPlayBtn.disabled = !freestyleRecording;
+        setText(c._frPlayBtn, freestylePlayback ? 'Stop' : 'FR Play');
       }
-
-      if (typeof c.updateState === 'function') { c.updateState(fullState); }
-      this.updateHkIcons?.(fullState);
-      if (Object.prototype.hasOwnProperty.call(patch, 'sequencerVisible')) { this._fitLayout(); }
-
-      // Update Freestyle Recorder controls: pressed state for FR Ready and enable state/text for FR Play
-      try {
-        const { isFreestyleMode, freestyleRecording, freestylePlayback } = fullState;
-        // Update FR Ready button pressed state
-        if (c._frReadyBtn) {
-          setPressed(c._frReadyBtn, !!isFreestyleMode);
-        }
-        // Update FR Play button disabled and text (use 'Stop' when playing)
-        if (c._frPlayBtn) {
-          // Disable the play button unless there is a recording available
-          c._frPlayBtn.disabled = !freestyleRecording;
-          // Set button label based on playback state
-          setText(c._frPlayBtn, freestylePlayback ? 'Stop' : 'FR Play');
-        }
-      } catch {}
-    }
-
+    } catch {}
+  }
 
   _style(){
     return `
@@ -482,8 +415,7 @@ class OscApp extends HTMLElement {
         aspectRatio:'1 / 1',boxSizing:'border-box',left:'',transform:''
       });
       Object.assign(sc.style,{width:'100%',height:'100%',aspectRatio:'1 / 1',display:'block',touchAction:'none'});
-      // Resize overlay canvas for freestyle recorder
-      try { this._resizeFrCanvas?.(); } catch {}
+      this._resizeFrCanvas?.();  // keep overlay in sync
     }catch(e){console.warn('fitLayout failed',e);}
   }
   _onWindowResize(){this._fitLayout();}
@@ -494,36 +426,20 @@ class OscApp extends HTMLElement {
     this._setCanvas({preset:s.presets[initial],shapeKey:initial,mode:'seed'});
     s.current=this.humKey; this._controls.disableAll?.(false);
     const D=s.Tone?.Destination?.volume; D&&(D.value=this._linToDb(s.volume));
-    this._updateControls(); // Call with no args to sync UI with initial state
-    // this._loader.textContent='Tone.js loaded. Click “POWER ON” or the image to begin.'; 
+    this._updateControls();
     this._fitLayout();
   }
 
   _onHotkeyToggleSeqPlay(){
     const s = this.state || {};
-
-    // Make sure the sequencer UI is visible so the user has context
     if (!s.isSequencerMode) this._onToggleSequencer();
-
-    // Toggle using the public API provided by Signatures/SeqApp
-    if (s.sequencePlaying) {
-      if (typeof this.stopSequence === 'function') this.stopSequence();
-    } else {
-      if (typeof this.playSequence === 'function') this.playSequence();
-    }
+    if (s.sequencePlaying) this.stopSequence?.(); else this.playSequence?.();
   }
 
   _onHotkeyTogglePower(){
     const s = this.state || {};
-    // If currently running, power off; otherwise unlock/start
-    if (s.isPlaying) {
-      if (typeof this.stopAudioAndDraw === 'function') this.stopAudioAndDraw();
-    } else {
-      if (typeof this._onStartRequest === 'function') this._onStartRequest();
-    }
+    if (s.isPlaying) this.stopAudioAndDraw?.(); else this._onStartRequest?.();
   }
-
-
 
   _handleSeedSubmit(e){
     const v=(e?.detail?.value&&String(e.detail.value).trim())||(this.getAttribute('seed')||'').trim()||(document.documentElement?.dataset?.seed||'').trim()||'default';
@@ -548,19 +464,12 @@ class OscApp extends HTMLElement {
       Object.assign(inner.style,{padding:'14px 18px',border:'1px dashed rgba(255,255,255,.65)',borderRadius:'8px',fontSize:'18px',letterSpacing:'.06em',color:'#fff',background:'rgba(0,0,0,.25)',textShadow:'0 1px 2px rgba(0,0,0,.5)'}); overlay.appendChild(inner);
       const parent=this._canvasContainer||this._main; parent&&getComputedStyle(parent).position==='static'&&(parent.style.position='relative');
       (this._canvasContainer||this._main||container).appendChild(overlay); this._powerOverlay=overlay;
-      
-      // Unify the power-on trigger to use the main start request handler.
-      const onClick=ev=>{
-        ev?.preventDefault?.();
-        this._onStartRequest?.();
-      };
-      overlay.addEventListener('click',onClick);
+      overlay.addEventListener('click',()=>this._onStartRequest?.());
     }catch(e){console.error('overlay error',e);}
   }
-
   _removePowerOverlay(){this._powerOverlay?.parentNode?.removeChild(this._powerOverlay); this._powerOverlay=null;}
 
-    _setupCanvasClickGrid(){
+  _setupCanvasClickGrid(){
     const el=this._canvas; if(!el||this._canvasClickGridSetup)return; this._canvasClickGridSetup=true;
 
     const cellFromEvent=(ev)=>{
@@ -571,41 +480,28 @@ class OscApp extends HTMLElement {
       const col=Math.min(cols-1,Math.max(0,Math.floor(x/(rct.width/cols))));
       const row=Math.min(rows-1,Math.max(0,Math.floor(y/(rct.height/rows))));
       const info=this._grid25?.cellInfo(row,col);
-      // Normalized coordinates [0,1] for freestyle recorder integration
-      const xNorm = rct.width > 0 ? (x / rct.width) : 0;
+      const xNorm = rct.width  > 0 ? (x / rct.width)  : 0;
       const yNorm = rct.height > 0 ? (y / rct.height) : 0;
       return { row, col, info, xNorm, yNorm };
     };
 
     const pressCell=(row,col,info)=>{
-      // synth the same detail shape hotkeys would send, plus a stable key for hold-tracking
       const key=`r${row}c${col}`;
       const shapeKey=info?.shapeKey || this.humKey;
       const idx=(shapeKey===this.humKey)?-1:this.shapes.indexOf(shapeKey);
-      // remember the last pressed logical key so release works
       this._heldKeys.add(key);
-      // carry variant if present
       const detail={ key, idx, shapeKey, variant: info?.variant || null };
       this._onHotkeyPress({ detail });
     };
-
-    const releaseCell=(key)=>{
-      // tell release with the same key id
-      this._onHotkeyRelease({ detail:{ key } });
-    };
+    const releaseCell=(key)=>{ this._onHotkeyRelease({ detail:{ key } }); };
 
     this._onCanvasPointerDown=ev=>{
       if(!this.state?.contextUnlocked){ try{ this.unlockAudioAndBufferInitial?.(); }catch{} ev?.preventDefault?.(); return; }
       try{
         this._isCanvasPointerDown=true; try{ev.target?.setPointerCapture?.(ev.pointerId);}catch{}
         const {row,col,info,xNorm,yNorm}=cellFromEvent(ev);
-        // Freestyle recorder: if armed and not in sequencer mode, start recording and send pointer down
         if (this.state?.isFreestyleMode && !this.state?.isSequencerMode) {
-          try {
-            // Ensure recorder is armed; arm() is idempotent
-            this._pathRec?.arm?.();
-            this._pathRec?.inputPointer?.('down', xNorm, yNorm, performance.now());
-          } catch {}
+          try { this._pathRec?.arm?.(); this._pathRec?.inputPointer?.('down', xNorm, yNorm, performance.now()); } catch {}
         }
         this._lastPointerKey=`r${row}c${col}`; this._lastPointerInfo=info||null;
         pressCell(row,col,info);
@@ -616,11 +512,8 @@ class OscApp extends HTMLElement {
       if(!this._isCanvasPointerDown||!this.state?.contextUnlocked)return;
       try{
         const {row,col,info,xNorm,yNorm}=cellFromEvent(ev);
-        // Freestyle recorder: send pointer move samples if in freestyle mode and not in sequencer mode
         if (this.state?.isFreestyleMode && !this.state?.isSequencerMode) {
-          try {
-            this._pathRec?.inputPointer?.('move', xNorm, yNorm, performance.now());
-          } catch {}
+          try { this._pathRec?.inputPointer?.('move', xNorm, yNorm, performance.now()); } catch {}
         }
         const key=`r${row}c${col}`;
         if(key!==this._lastPointerKey){
@@ -633,10 +526,8 @@ class OscApp extends HTMLElement {
 
     this._onCanvasPointerUp=ev=>{
       try{ this._isCanvasPointerDown=false; ev?.target?.releasePointerCapture?.(ev.pointerId);}catch{}
-      // Freestyle recorder: send pointer up event if in freestyle mode
       if (this.state?.isFreestyleMode && !this.state?.isSequencerMode) {
         try {
-          // Compute normalized coords from event
           const rct=el.getBoundingClientRect();
           const x=Math.max(0,Math.min(rct.width,(ev?.clientX??0)-rct.left));
           const y=Math.max(0,Math.min(rct.height,(ev?.clientY??0)-rct.top));
@@ -647,13 +538,11 @@ class OscApp extends HTMLElement {
       }
       if(!this._lastPointerKey)return; const k=this._lastPointerKey; this._lastPointerKey=null; this._lastPointerInfo=null; releaseCell(k);
     };
+
     this._onCanvasPointerCancel=()=>{
       this._isCanvasPointerDown=false;
-      // For freestyle mode, send a pointer up to finish recording
       if (this.state?.isFreestyleMode && !this.state?.isSequencerMode) {
-        try {
-          this._pathRec?.inputPointer?.('up', 0, 0, performance.now());
-        } catch {}
+        try { this._pathRec?.inputPointer?.('up', 0, 0, performance.now()); } catch {}
       }
       if(this._lastPointerKey){
         const k=this._lastPointerKey;
@@ -671,29 +560,21 @@ class OscApp extends HTMLElement {
     on(window,'pointerup',this._onCanvasPointerUp);
   }
 
-
   _onHotkeyLoopToggle(){this._onLoopToggle();}
-
   _onHotkeySignatureToggle(){ this._onSignatureModeToggle(); }
 
-    _onHotkeyPress({detail}){
+  _onHotkeyPress({detail}){
     const s=this.state; const {key,idx,shapeKey,variant}=detail||{}; if(!shapeKey)return;
-
-    // NEW: remember requested variant for this press
     s._transientOverride = variant || null;
-
     if(s.isSequenceSignatureMode){ this._triggerSignatureFor(shapeKey,{loop:s.isLoopEnabled}); return; }
     this._heldKeys.add(key);
-
     const enter=()=>{
       this.setActiveChain(shapeKey);
-      if (s._transientOverride) { this.applyVariant?.(shapeKey, s._transientOverride); } // <— NEW
-
+      if (s._transientOverride) { this.applyVariant?.(shapeKey, s._transientOverride); }
       (idx>=0)&&this._setCanvas({shapeKey,preset:s.presets[shapeKey],mode:'live'});
       this._canvas.isPlaying=true; this._updateControls({shapeKey}); s.current=shapeKey;
       (shapeKey!==this.humKey)&&(s._uiReturnShapeKey=shapeKey);
     };
-
     if(s.isSequencerMode){
       if(s.isRecording){
         this._recordedThisHold=this._recordedThisHold||new Set();
@@ -707,8 +588,6 @@ class OscApp extends HTMLElement {
   _onHotkeyRelease({detail}){
     const s=this.state; const {key}=detail||{}; if(!this._heldKeys?.has(key))return;
     this._heldKeys.delete(key); this._recordedThisHold?.delete?.(key);
-
-    // NEW: reset any variant we applied
     if (s._transientOverride && s.current && s.current!==this.humKey) {
       this.applyVariant?.(s.current, null);
     }
@@ -720,7 +599,6 @@ class OscApp extends HTMLElement {
       s._uiReturnShapeKey?this._updateControls({shapeKey:s._uiReturnShapeKey}):this._updateControls();
     }
   }
-
 
   _onShapeStep({detail}){
     const d=detail?.direction; if(!d||!this.shapes.length)return;
@@ -738,13 +616,7 @@ class OscApp extends HTMLElement {
     const s = this.state || {};
     const newMode = !s.isFreestyleMode;
     s.isFreestyleMode = newMode;
-    try {
-      if (newMode) {
-        this._pathRec?.arm?.();
-      } else {
-        this._pathRec?.disarm?.();
-      }
-    } catch {}
+    try { newMode ? this._pathRec?.arm?.() : this._pathRec?.disarm?.(); } catch {}
     this._updateControls();
   }
 
@@ -753,26 +625,14 @@ class OscApp extends HTMLElement {
    */
   _onFreestylePlay() {
     const s = this.state || {};
-    // If currently playing, stop; otherwise play the current recording
     try {
-      if (s.freestylePlayback) {
-        this._pathRec?.stop?.();
-      } else {
-        const rec = s.freestyleRecording;
-        if (rec) {
-          this._pathRec?.play?.(rec, { loop: !!s.isLoopEnabled });
-        }
-      }
+      if (s.freestylePlayback) this._pathRec?.stop?.();
+      else if (s.freestyleRecording) this._pathRec?.play?.(s.freestyleRecording);
     } catch {}
   }
 
   // ================== Freestyle Recorder Helpers ==================
-  /**
-   * Given normalized coordinates (0-1), map to grid cell row/col and cell info.
-   * @param {number} x Normalized x coordinate
-   * @param {number} y Normalized y coordinate
-   * @returns {{row:number,col:number,info:any}}
-   */
+
   _cellFromNorm(x, y) {
     const row = Math.min(4, Math.max(0, Math.floor(y * 5)));
     const col = Math.min(4, Math.max(0, Math.floor(x * 5)));
@@ -780,10 +640,23 @@ class OscApp extends HTMLElement {
     return { row, col, info };
   }
 
-  /**
-   * Simulate a press on a cell for freestyle playback. Equivalent to pressCell in the grid setup.
-   * @param {{row:number,col:number,info:any}} cell
-   */
+  // Ensure the freestyle overlay canvas matches the visible square (incl. DPR)
+  _resizeFrCanvas() {
+    const c = this._frCanvas;
+    if (!c) return;
+    const host = this._canvasContainer || this._canvas || c.parentElement;
+    const r = host.getBoundingClientRect();
+    const dpr = Math.max(1, Math.round(window.devicePixelRatio || 1));
+    const W = Math.max(1, Math.round(r.width  * dpr));
+    const H = Math.max(1, Math.round(r.height * dpr));
+    if (c.width !== W || c.height !== H) {
+      c.width  = W;
+      c.height = H;
+      c.style.width  = '100%';
+      c.style.height = '100%';
+    }
+  }
+
   _pressCell(cell) {
     if (!cell) return;
     const { row, col, info } = cell;
@@ -794,34 +667,16 @@ class OscApp extends HTMLElement {
     const detail = { key, idx, shapeKey, variant: info?.variant || null };
     this._onHotkeyPress({ detail });
   }
-
-  /**
-   * Simulate a release on a previously pressed cell for freestyle playback.
-   * @param {{row:number,col:number}|string|null} cell
-   */
   _releaseCell(cell) {
     if (!cell) return;
-    let key;
-    if (typeof cell === 'string') {
-      key = cell;
-    } else {
-      key = `r${cell.row}c${cell.col}`;
-    }
+    const key = typeof cell === 'string' ? cell : `r${cell.row}c${cell.col}`;
     this._onHotkeyRelease({ detail: { key } });
   }
-
-  /**
-   * Handle playback inputs from the path recorder: map to grid cells and trigger press/move/up events.
-   * @param {{row:number,col:number,info:any}} cell
-   * @param {'down'|'move'|'up'} type
-   */
   _handleFreestyleInput(cell, type) {
     if (!cell) return;
     if (type === 'down') {
-      if (this._frLastCell) {
-        if (this._frLastCell.row !== cell.row || this._frLastCell.col !== cell.col) {
-          this._releaseCell(this._frLastCell);
-        }
+      if (this._frLastCell && (this._frLastCell.row !== cell.row || this._frLastCell.col !== cell.col)) {
+        this._releaseCell(this._frLastCell);
       }
       this._pressCell(cell);
       this._frLastCell = cell;
@@ -832,35 +687,10 @@ class OscApp extends HTMLElement {
         this._frLastCell = cell;
       }
     } else if (type === 'up') {
-      if (this._frLastCell) {
-        this._releaseCell(this._frLastCell);
-        this._frLastCell = null;
-      }
+      if (this._frLastCell) { this._releaseCell(this._frLastCell); this._frLastCell = null; }
     }
   }
 
-  /**
-   * Resize the overlay canvas to match the current canvas size and device pixel ratio.
-   */
-  _resizeFrCanvas() {
-    try {
-      const cv = this._frCanvas;
-      const ctx = this._frCtx;
-      if (!cv || !ctx) return;
-      const dpr = window.devicePixelRatio || 1;
-      const w = cv.clientWidth * dpr;
-      const h = cv.clientHeight * dpr;
-      if (cv.width !== w || cv.height !== h) {
-        cv.width = w;
-        cv.height = h;
-        // reset transform: use setTransform if available, else scale
-        if (typeof ctx.setTransform === 'function') ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-        else ctx.scale(dpr, dpr);
-      }
-    } catch {}
-  }
-
-  // In osc-app.js, replace the entire _onLatchToggle method with this:
   _onLatchToggle() {
     this.state.isLatchOn = !this.state.isLatchOn;
     this._updateControls();
