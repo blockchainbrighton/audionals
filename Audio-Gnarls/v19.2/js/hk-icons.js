@@ -22,116 +22,121 @@
   ];
 
   const STYLE = `
-    .hk-ring { position:absolute; inset:0; pointer-events:none; z-index:40; }
+  .hk-ring{
+    position:absolute; inset:0; pointer-events:none; z-index:40;
+    /* Fluid sizing (JS sets --scale in adjust()) */
+    --scale:1;
+    --badge:calc(60px * var(--scale));
+    --badge-font:calc(28px * var(--scale));
+    --gap:calc(10px * var(--scale));
+    --ring-outset:calc(28px * var(--scale));
+    --cluster-x1:calc(150px * var(--scale));
+    --cluster-x2:calc(208px * var(--scale));
+  }
 
-    .hk-badge {
-      position:absolute; left:50%; top:50%;
-      width:60px; height:60px; margin:-15px 0 0 -15px;
-      display:flex; align-items:center; justify-content:center;
-      font:700 28px/1 "Courier New", monospace; color:#888;
-      background:rgba(0,0,0,0.5); border:1px solid #555; border-radius:999px;
-      box-shadow:0 0 0 1px #000; backdrop-filter:blur(4px);
-      user-select:none; cursor:pointer; letter-spacing:.02em;
-      transition:transform .15s ease-out, box-shadow .15s ease-out,
-                 background .15s ease-out, border-color .15s ease-out,
-                 opacity .25s ease-out, color .15s ease-out, visibility .25s;
-      transform:translate(-50%,-50%) scale(1);
-      touch-action:manipulation; opacity:0; visibility:hidden; pointer-events:none;
-    }
+  .hk-badge{
+    position:absolute; left:50%; top:50%;
+    width:var(--badge); height:var(--badge);
+    display:flex; align-items:center; justify-content:center;
+    font:700 var(--badge-font)/1 "Courier New", monospace; color:#888;
+    background:rgba(0,0,0,0.5); border:1px solid #555; border-radius:999px;
+    box-shadow:0 0 0 1px #000; backdrop-filter:blur(4px);
+    user-select:none; cursor:pointer; letter-spacing:.02em;
+    transition:transform .15s ease-out, box-shadow .15s ease-out,
+               background .15s ease-out, border-color .15s ease-out,
+               opacity .25s ease-out, color .15s ease-out, visibility .25s;
+    transform:translate(-50%,-50%) scale(1);
+    touch-action:manipulation; opacity:0; visibility:hidden; pointer-events:none;
+  }
 
-    .hk-badge.is-visible { opacity:.6; visibility:visible; pointer-events:auto; }
-    .hk-badge.is-visible:hover {
-      opacity:1; color:#ddd; background:rgba(25,25,25,.75); border-color:#aaa;
-      box-shadow:0 0 0 1px #000,0 0 10px rgba(200,200,200,.3);
-      transform:translate(-50%,-50%) scale(1.1);
-    }
-    .hk-badge.is-visible:active {
-      transform:translate(-50%,-50%) scale(1.05);
-    }
+  .hk-badge.is-visible{opacity:.6; visibility:visible; pointer-events:auto;}
+  .hk-badge.is-visible:hover{
+    opacity:1; color:#ddd; background:rgba(25,25,25,.75); border-color:#aaa;
+    box-shadow:0 0 0 1px #000,0 0 10px rgba(200,200,200,.3);
+    transform:translate(-50%,-50%) scale(1.1);
+  }
+  .hk-badge.is-visible:active{ transform:translate(-50%,-50%) scale(1.05); }
 
-    .hk-badge[data-shift="1"] { border-color:#6b7fad; }
-    .hk-badge span { display:inline-block; }
+  .hk-badge[data-shift="1"]{ border-color:#6b7fad; }
+  .hk-badge span{ display:inline-block; }
 
-    .hk-badge.is-power[data-active="true"] {
-      opacity:1; background:#a11221; color:#f0f0f0; border-color:#d34e5a;
-      box-shadow:0 0 12px 2px #d32a3988,0 0 3px #ff7484cc; text-shadow:0 0 4px #ddd;
-    }
-    .hk-badge.is-mute[data-active="true"] {
-      opacity:1; background:#851020; color:#e0e0e0; border-color:#d0405e;
-      box-shadow:0 0 8px #d0405e55;
-    }
-    .hk-badge[data-active="true"] {
-      opacity:1; background:#1a2f21; color:#ade5c2; border-color:#409060;
-      box-shadow:0 0 8px #40906055;
-    }
-    .hk-badge[data-id="sig-mode"][data-active="true"] {
-      opacity:1; background:#1a253a; border-color:#6a82cc; color:#ced5e0;
-      box-shadow:0 0 12px #6a82cc55;
-    }
-    .hk-badge[data-disabled="1"] {
-      opacity:.25!important; pointer-events:none!important; filter:grayscale(.4);
-    }
+  .hk-badge.is-power[data-active="true"]{
+    opacity:1; background:#a11221; color:#f0f0f0; border-color:#d34e5a;
+    box-shadow:0 0 12px 2px #d32a3988,0 0 3px #ff7484cc; text-shadow:0 0 4px #ddd;
+  }
+  .hk-badge.is-mute[data-active="true"]{
+    opacity:1; background:#851020; color:#e0e0e0; border-color:#d0405e;
+    box-shadow:0 0 8px #d0405e55;
+  }
+  .hk-badge[data-active="true"]{
+    opacity:1; background:#1a2f21; color:#ade5c2; border-color:#409060;
+    box-shadow:0 0 8px #40906055;
+  }
+  .hk-badge[data-id="sig-mode"][data-active="true"]{
+    opacity:1; background:#1a253a; border-color:#6a82cc; color:#ced5e0;
+    box-shadow:0 0 12px #6a82cc55;
+  }
+  .hk-badge[data-disabled="1"]{
+    opacity:.25!important; pointer-events:none!important; filter:grayscale(.4);
+  }
 
-    /* Tooltip */
-    .hk-tooltip {
-      position:absolute; top:0; left:0;
-      color:#ccc; background:rgba(20,20,20,.6);
-      border:1px solid rgba(255,255,255,.15);
-      padding:6px 12px; border-radius:6px;
-      font-size:13px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
-      z-index:50; opacity:0; white-space:nowrap; pointer-events:none;
-      box-shadow:0 5px 15px rgba(0,0,0,.6);
-      backdrop-filter:blur(12px); transform-origin:center;
-      transform:var(--tooltip-transform,translate(-50%,-100%)) scale(.9);
-      transition:opacity .2s cubic-bezier(.4,0,.2,1),
-                 transform .2s cubic-bezier(.4,0,.2,1);
-    }
-    .hk-tooltip.is-visible {
-      opacity:1; transform:var(--tooltip-transform,translate(-50%,-100%)) scale(1);
-    }
+  /* Tooltip */
+  .hk-tooltip{
+    position:absolute; top:0; left:0;
+    color:#ccc; background:rgba(20,20,20,.6);
+    border:1px solid rgba(255,255,255,.15);
+    padding:6px 12px; border-radius:6px;
+    font-size:13px; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;
+    z-index:50; opacity:0; white-space:nowrap; pointer-events:none;
+    box-shadow:0 5px 15px rgba(0,0,0,.6);
+    backdrop-filter:blur(12px); transform-origin:center;
+    transform:var(--tooltip-transform,translate(-50%,-100%)) scale(.9);
+    transition:opacity .2s cubic-bezier(.4,0,.2,1),
+               transform .2s cubic-bezier(.4,0,.2,1);
+  }
+  .hk-tooltip.is-visible{
+    opacity:1; transform:var(--tooltip-transform,translate(-50%,-100%)) scale(1);
+  }
 
-    /* SIGN special */
-    @keyframes shimmer-text {0%{background-position:-200% center;}100%{background-position:200% center;}}
-    .hk-badge.is-visible[data-id="signature"] {
-      width:160px; height:72px; margin:0; padding:0; border-radius:18px;
-      background:rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.3);
-      color:transparent; font-size:40px; font-weight:bold; letter-spacing:.05em;
-      box-shadow:0 0 6px rgba(255,255,255,.1); backdrop-filter:blur(6px);
-      overflow:hidden; opacity:.7; z-index:41;
-      position:absolute; left:50%; top:100%;
-      transform:translate(-50%,calc(-100% - 10px));
-      transition:all .2s ease;
-    }
-    .hk-badge.is-visible[data-id="signature"] span {
-      background:linear-gradient(90deg,#ff00de 0%,#00f7ff 25%,#ff00de 50%,#00f7ff 75%,#ff00de 100%);
-      background-size:200% auto; background-clip:text; -webkit-background-clip:text;
-      color:transparent; animation:shimmer-text 4s linear infinite;
-      display:inline-block; width:100%; text-align:center; text-shadow:none;
-    }
-    .hk-badge.is-visible[data-id="signature"][data-active="true"] {
-      opacity:1; border-color:#fff;
-      box-shadow:0 0 12px rgba(255,255,255,.4),0 0 20px rgba(150,100,255,.5);
-    }
-    .hk-badge.is-visible[data-id="signature"][data-active="true"] span {
-      animation-duration:1.5s;
-      background:linear-gradient(90deg,#ff00de 0%,#00f7ff 30%,#f0f 50%,#00f7ff 70%,#ff00de 100%);
-      background-size:150% auto;
-    }
+  /* SIGN special */
+  @keyframes shimmer-text{0%{background-position:-200% center;}100%{background-position:200% center;}}
+  .hk-badge.is-visible[data-id="signature"]{
+    width:calc(160px * var(--scale));
+    height:calc(72px * var(--scale));
+    margin:0; padding:0; border-radius:calc(18px * var(--scale));
+    background:rgba(0,0,0,.2); border:1px solid rgba(255,255,255,.3);
+    color:transparent; font-size:calc(40px * var(--scale)); font-weight:bold; letter-spacing:.05em;
+    box-shadow:0 0 6px rgba(255,255,255,.1); backdrop-filter:blur(6px);
+    overflow:hidden; opacity:.7; z-index:41;
+    position:absolute; left:50%; top:100%;
+    transform:translate(-50%,calc(-100% - var(--gap)));
+    transition:all .2s ease;
+  }
+  .hk-badge.is-visible[data-id="signature"] span{
+    background:linear-gradient(90deg,#ff00de 0%,#00f7ff 25%,#ff00de 50%,#00f7ff 75%,#ff00de 100%);
+    background-size:200% auto; background-clip:text; -webkit-background-clip:text;
+    color:transparent; animation:shimmer-text 4s linear infinite;
+    display:inline-block; width:100%; text-align:center; text-shadow:none;
+  }
+  .hk-badge.is-visible[data-id="signature"][data-active="true"]{
+    opacity:1; border-color:#fff;
+    box-shadow:0 0 12px rgba(255,255,255,.4),0 0 20px rgba(150,100,255,.5);
+  }
+  .hk-badge.is-visible[data-id="signature"][data-active="true"] span{
+    animation-duration:1.5s;
+    background:linear-gradient(90deg,#ff00de 0%,#00f7ff 30%,#f0f 50%,#00f7ff 70%,#ff00de 100%);
+    background-size:150% auto;
+  }
 
-    /* FR badges cluster */
-    .hk-badge.is-visible[data-id="fr-ready"],
-    .hk-badge.is-visible[data-id="fr-playback"] {
-      left:50%; top:100%; margin:0;
-      transform:translate(calc(-50% + var(--x,0px)),calc(-100% - 14px));
-    }
-    .hk-badge.is-visible[data-id="fr-ready"] { --x:150px; }
-    .hk-badge.is-visible[data-id="fr-playback"] { --x:208px; }
-
-    @media (max-width:520px) {
-      .hk-badge.is-visible[data-id="fr-ready"] { --x:120px; }
-      .hk-badge.is-visible[data-id="fr-playback"] { --x:172px; }
-    }
-  `;
+  /* FR badges cluster (follows scale) */
+  .hk-badge.is-visible[data-id="fr-ready"],
+  .hk-badge.is-visible[data-id="fr-playback"]{
+    left:50%; top:100%; margin:0;
+    transform:translate(calc(-50% + var(--x,0px)),calc(-100% - calc(var(--gap) + 4px)));
+  }
+  .hk-badge.is-visible[data-id="fr-ready"]{ --x:var(--cluster-x1); }
+  .hk-badge.is-visible[data-id="fr-playback"]{ --x:var(--cluster-x2); }
+`;
 
   const ready = fn =>
     document.readyState !== 'loading'
