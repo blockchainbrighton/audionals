@@ -47,6 +47,15 @@ class OscControls extends HTMLElement {
         #loopBtn.toggle[aria-pressed="true"]{background:#173a2a;border-color:#35d08e;box-shadow:0 0 12px #35d08e55,inset 0 0 0 1px #35d08e33}
         #sigModeBtn.toggle[aria-pressed="true"]{background:#1f2a3f;border-color:#7aa2ff;color:#cfe0ff;box-shadow:0 0 12px #7aa2ff55,inset 0 0 0 1px #7aa2ff33}
         #latchBtn.toggle[aria-pressed="true"]{background:#1f3a26;border-color:#46ad6d;color:#9df5c2;box-shadow:0 0 10px #46ad6d55,inset 0 0 0 1px #46ad6d33}
+        /* Auditioning Controls Styles */
+        #auditionControls{display:flex;gap:.5rem;border-left:2px solid #555;padding-left:1rem;margin-left:.5rem}
+        #approveBtn{background:#141;color:#8f8;border-color:#383}
+        #approveBtn:hover{background:#252}
+        #rejectBtn{background:#411;color:#f88;border-color:#833}
+        #rejectBtn:hover{background:#522}
+        #approvedSeedsWrapper{width:100%;margin-top:.8rem;display:none}
+        #approvedSeedsWrapper label{color:#ffe7b3;font-size:.9rem;display:block;margin-bottom:.3rem}
+        #approvedSeedsList{width:100%;box-sizing:border-box;height:80px;background:#1c1d22;border:1px solid #3c3f48;color:#9f8;font-family:monospace;resize:vertical;padding:.4rem .6rem;border-radius:6px}
         @media (max-width:430px){#controls{gap:.5rem;padding:.55rem .8rem}button,select{padding:.42em .8em;font-size:.93rem}.vol{min-width:160px}.vol input[type="range"]{width:120px}.seed input{width:11ch}}
         @media (max-width:380px){#controls{gap:.45rem;padding:.5rem .7rem}button,select{padding:.4em .72em;font-size:.9rem}.vol{min-width:150px}.vol input[type="range"]{width:110px}.seed label{display:none}}
         button:disabled,select:disabled{opacity:.5;pointer-events:none}
@@ -71,13 +80,26 @@ class OscControls extends HTMLElement {
           <input id="seedInput" name="seedInput" maxlength="32" spellcheck="false"/>
           <button id="seedSetBtn" type="submit">Set Seed</button>
         </form>
+        <!-- MODIFIED START: Seed Auditioning Controls -->
+        <div id="auditionControls">
+            <button id="nextSeedBtn" title="Generate a new random seed and play its power-on signature">Next Seed</button>
+            <button id="approveBtn" title="Save this seed to the list and play the next one">✅</button>
+            <button id="rejectBtn" title="Discard this seed and play the next one">❌</button>
+        </div>
+        <!-- MODIFIED END -->
         <!-- Freestyle Path Recorder Buttons -->
         <button id="frReadyBtn" class="toggle" aria-pressed="false" title="Freestyle Record-Ready (R)">FR Ready</button>
         <button id="frPlayBtn" disabled title="Play Freestyle Recording (Shift+R)">FR Play</button>
         <!-- Save/Load Buttons -->
         <button id="saveBtn" title="Save entire sequencer state to clipboard as JSON">Save State</button>
         <button id="loadBtn" title="Load sequencer state from JSON data">Load State</button>
-      </div>`;
+      </div>
+      <!-- MODIFIED START: Approved Seeds List Display -->
+      <div id="approvedSeedsWrapper">
+        <label for="approvedSeedsList">Approved Seeds:</label>
+        <textarea id="approvedSeedsList" readonly spellcheck="false"></textarea>
+      </div>
+      <!-- MODIFIED END -->`;
     // refs
     this._startBtn=byId(root,'startBtn');
     this._muteBtn=byId(root,'muteBtn');
@@ -91,6 +113,13 @@ class OscControls extends HTMLElement {
     this._volVal=byId(root,'volVal');
     this._seedForm=byId(root,'seedForm');
     this._seedInput=byId(root,'seedInput');
+    // MODIFIED START: Auditioning Controls Refs
+    this._nextSeedBtn = byId(root, 'nextSeedBtn');
+    this._approveBtn = byId(root, 'approveBtn');
+    this._rejectBtn = byId(root, 'rejectBtn');
+    this._approvedSeedsWrapper = byId(root, 'approvedSeedsWrapper');
+    this._approvedSeedsList = byId(root, 'approvedSeedsList');
+    // MODIFIED END
     this._allControls=[this._startBtn,this._muteBtn,this._shapeSelect,this._seqBtn,this._audioSigBtn,this._latchBtn,this._loopBtn,this._sigModeBtn,this._vol];
     // Freestyle Recorder buttons
     this._frReadyBtn = byId(root, 'frReadyBtn');
@@ -99,6 +128,9 @@ class OscControls extends HTMLElement {
     this._saveBtn = byId(root, 'saveBtn');
     this._loadBtn = byId(root, 'loadBtn');
     this._allControls.push(this._frReadyBtn, this._frPlayBtn, this._saveBtn, this._loadBtn);
+    // MODIFIED START: Add auditioning buttons to allControls
+    this._allControls.push(this._nextSeedBtn, this._approveBtn, this._rejectBtn);
+    // MODIFIED END
     // dispatch custom events to osc-app
     addEvents(this._frReadyBtn, [['click', () => dispatch('fr-toggle')]]);
     addEvents(this._frPlayBtn, [['click', () => dispatch('fr-play')]]);
@@ -116,11 +148,32 @@ class OscControls extends HTMLElement {
     addEvents(this._sigModeBtn,[['click',()=>dispatch('signature-mode-toggle')]]);
     addEvents(this._vol,[['input',()=>dispatch('volume-change',{value:Number(this._vol.value)})]]);
     addEvents(this._seedForm,[['submit',e=>(e.preventDefault(),dispatch('seed-set',{value:(this._seedInput?.value||'').trim()}))]]);
+    // MODIFIED START: Auditioning events
+    addEvents(this._nextSeedBtn, [['click', () => dispatch('next-seed')]]);
+    addEvents(this._approveBtn, [['click', () => dispatch('approve-seed')]]);
+    addEvents(this._rejectBtn, [['click', () => dispatch('reject-seed')]]);
+    // MODIFIED END
     this._helpers={setPressed,setText};
   }
   setShapes(shapes){const f=document.createDocumentFragment();for(const {value,label} of shapes??[])f.appendChild(Object.assign(document.createElement('option'),{value,textContent:label}));this._shapeSelect.replaceChildren(f);}
   setSeed(seed){this._seedInput&&(this._seedInput.value=seed??'');}
   disableAll(disabled){setDisabledAll(this._allControls,disabled);}
+
+  // MODIFIED START: New method to update the approved seeds list
+  updateApprovedSeeds(seeds = []) {
+      if (this._approvedSeedsWrapper && this._approvedSeedsList) {
+        const hasSeeds = seeds.length > 0;
+        this._approvedSeedsWrapper.style.display = hasSeeds ? 'block' : 'none';
+        this._approvedSeedsList.value = hasSeeds ? seeds.join('\n') : '';
+        // Auto-scroll to the bottom
+        if (hasSeeds) {
+            this._approvedSeedsList.scrollTop = this._approvedSeedsList.scrollHeight;
+        }
+        this.dispatchEvent(new Event('controls-resize'));
+      }
+  }
+  // MODIFIED END
+
   updateState(o={}){
     const {setPressed:setP,setText:sT}=this._helpers, T=(btn,on,a,b)=>(setP(btn,on),sT(btn,on?a:b));
     isBool(o.isAudioSignaturePlaying)&&T(this._audioSigBtn,o.isAudioSignaturePlaying,'Stop Signature','Audio Signature');
@@ -162,6 +215,9 @@ class OscApp extends HTMLElement {
       '_onToggleControls','_initControlsVisibility',
       '_onFreestyleReadyToggle','_onFreestylePlay',
       '_onSaveState','_onLoadState',
+      // MODIFIED START: Add new handlers for auditioning
+      '_onNextSeed', '_onApproveSeed', '_onRejectSeed',
+      // MODIFIED END
     ].forEach(fn=>this[fn]=this[fn].bind(this));
   }
 
@@ -184,6 +240,9 @@ class OscApp extends HTMLElement {
       isLatchOn:false,seed,presets:{},uiHomeShapeKey:null,_transientOverride:false,
       // Freestyle Path Recorder state
       isFreestyleMode:false,isFreestyleRecording:false,freestyleRecording:null,freestylePlayback:false,
+      // MODIFIED START: State for approved seeds
+      approvedSeeds: [],
+      // MODIFIED END
     };
   }
 
@@ -315,6 +374,11 @@ class OscApp extends HTMLElement {
       ['seed-set',this._handleSeedSubmit],['controls-resize',this._fitLayout],
       ['fr-toggle', this._onFreestyleReadyToggle], ['fr-play', this._onFreestylePlay],
       ['save-state', this._onSaveState], ['load-state', this._onLoadState],
+      // MODIFIED START: Add listeners for auditioning controls
+      ['next-seed', this._onNextSeed],
+      ['approve-seed', this._onApproveSeed],
+      ['reject-seed', this._onRejectSeed],
+      // MODIFIED END
     ]);
 
     this._canvas.onIndicatorUpdate=(text)=>{this._loader.textContent=(!this.state.isPlaying&&!this.state.contextUnlocked)?'Initializing...':text;this._fitLayout();};
@@ -342,7 +406,7 @@ class OscApp extends HTMLElement {
     const c = this._controls;
     if (!c) return;
     const show = (c.style.display === 'none');
-    c.style.display = show ? 'block' : 'none';
+    c.style.display = show ? 'flex' : 'none'; // Use flex for proper layout
     try { this._fitLayout(); } catch {}
     try { c.dispatchEvent(new Event('controls-resize')); } catch {}
   }
@@ -442,56 +506,22 @@ class OscApp extends HTMLElement {
     this._fitLayout();
   }
 
-  // MODIFIED START: Corrected playback logic
-  _onHotkeyToggleSeqPlay() {
-    const s = this.state || {};
-    // This function should ONLY toggle playback, not UI visibility.
-    // The line that showed the sequencer has been removed.
-    if (s.sequencePlaying) {
-      this.stopSequence?.();
-    } else {
-      this.playSequence?.();
-    }
+  _onHotkeyToggleSeqPlay(){
+    if(this.state.sequencePlaying)this.stopSequence?.(); else this.playSequence?.();
   }
 
-  _onSeqPlayStarted(e) {
-    const t = e?.detail?.stepTime;
-    const s = this.state;
-    s.sequencePlaying = true;
-    s.sequenceStepIndex = 0;
-    s._seqFirstCycleStarted = false;
-    // This should only update playback state, NOT UI visibility state.
-    // The line `s.isSequencerMode = true;` has been removed.
-    if (typeof t === 'number') {
-      s.stepTime = t;
-    }
-    this._updateControls();
-    if (s.isSequenceSignatureMode) {
-      this._sequencerComponent?.stopSequence();
-      this._startSignatureSequencer();
-    }
+  _onSeqPlayStarted(e){
+    const t=e?.detail?.stepTime,s=this.state; s.sequencePlaying=true; s.sequenceStepIndex=0; s._seqFirstCycleStarted=false;
+    typeof t==='number'&&(s.stepTime=t); this._updateControls();
+    if(s.isSequenceSignatureMode){this._sequencerComponent?.stopSequence();this._startSignatureSequencer();}
   }
 
-  _onSeqPlayStopped() {
-    const s = this.state;
-    s.sequencePlaying = false;
-    s.sequenceStepIndex = 0;
-    s._seqFirstCycleStarted = false;
-    // Stopping playback should not automatically hide the sequencer.
-    // The line `s.isSequencerMode = false;` has been removed.
-    if (s.signatureSequencerRunning) {
-      this._stopSignatureSequencer();
-    }
-    if (!s.isLatchOn) {
-      try {
-        const h = this.humKey;
-        this._updateControls({ shapeKey: h });
-        this._onShapeChange({ detail: { shapeKey: h } });
-      } catch {}
-    }
+  _onSeqPlayStopped(){
+    const s=this.state; s.sequencePlaying=false; s.sequenceStepIndex=0; s._seqFirstCycleStarted=false;
+    if(s.signatureSequencerRunning)this._stopSignatureSequencer();
+    if(!s.isLatchOn){try{const h=this.humKey; this._updateControls({shapeKey:h}); this._onShapeChange({detail:{shapeKey:h}});}catch{}}
     this._updateControls();
   }
-  // MODIFIED END
 
   _onHotkeyTogglePower(){
     const s = this.state || {};
@@ -507,8 +537,44 @@ class OscApp extends HTMLElement {
     this.stopAudioAndDraw(); this.state.seed=newSeed; this.setAttribute('seed',newSeed);
     document?.documentElement&&(document.documentElement.dataset.seed=newSeed);
     this.loadPresets(newSeed); this.resetState();
+    this._controls.setSeed?.(newSeed); // Ensure UI updates
     this._loader.textContent='Seed updated. Click POWER ON.'; this._fitLayout();
   }
+
+  // MODIFIED START: Seed Auditioning Logic
+  _generateRandomSeed() {
+    // Generates an 8-character alphanumeric seed.
+    return Math.random().toString(36).substring(2, 10);
+  }
+
+  _onNextSeed() {
+    const newSeed = this._generateRandomSeed();
+    this._loader.textContent = `Loading new seed: ${newSeed}...`;
+
+    // resetToSeed stops audio and re-initializes state for the new seed.
+    this.resetToSeed(newSeed);
+
+    // Automatically power on after a short delay to allow the reset to complete.
+    setTimeout(() => {
+        this._onStartRequest();
+    }, 150);
+  }
+
+  _onApproveSeed() {
+    const { seed, approvedSeeds } = this.state;
+    if (seed && !approvedSeeds.includes(seed)) {
+      this.state.approvedSeeds.push(seed);
+      this._controls.updateApprovedSeeds(this.state.approvedSeeds);
+      console.log('Approved seeds:', this.state.approvedSeeds);
+    }
+    this._onNextSeed(); // Move to the next seed
+  }
+
+  _onRejectSeed() {
+    // Simply move to the next seed without saving.
+    this._onNextSeed();
+  }
+  // MODIFIED END
 
   _renderPowerOverlay(){
     try{
@@ -665,9 +731,6 @@ class OscApp extends HTMLElement {
     }
   }
 
-  /**
-   * Toggle the freestyle record-ready state. Arms or disarms the path recorder.
-   */
   _onFreestyleReadyToggle() {
     const s = this.state || {};
     const newMode = !s.isFreestyleMode;
@@ -676,23 +739,16 @@ class OscApp extends HTMLElement {
     this._updateControls();
   }
 
-
-  /**
-   * Handle the Play/Stop button for freestyle recordings.
-   */
   _onFreestylePlay() {
     const s = this.state || {};
     try {
       if (s.freestylePlayback) {
         this._pathRec?.stop?.();
       } else if (s.freestyleRecording) {
-        // FIX: respect global loop toggle
         this._pathRec?.play?.(s.freestyleRecording, { loop: !!s.isLoopEnabled });
       }
     } catch {}
   }
-
-  // ================== Freestyle Recorder Helpers ==================
 
   _cellFromNorm(x, y) {
     const row = Math.min(4, Math.max(0, Math.floor(y * 5)));
@@ -701,7 +757,6 @@ class OscApp extends HTMLElement {
     return { row, col, info };
   }
 
-  // Ensure the freestyle overlay canvas matches the visible square (incl. DPR)
   _resizeFrCanvas() {
     const c = this._frCanvas;
     if (!c) return;
@@ -762,56 +817,38 @@ class OscApp extends HTMLElement {
     }
   }
 
-  // ================== Save/Load State Functionality ==================
-
-  /**
-   * Save the complete application state to JSON and copy to clipboard
-   */
   async _onSaveState() {
     try {
-      // Collect complete application state
       const appState = {
-        // Main application state
         ...this.state,
-        // Remove non-serializable properties
         Tone: undefined,
         chains: undefined,
         audioSignatureTimer: undefined,
         sequenceIntervalId: undefined,
-        
-        // Sequencer state from the sequencer component
         sequencerState: this._sequencerComponent ? {
           steps: this._sequencerComponent.steps,
           state: this._sequencerComponent.state
         } : null,
-        
-        // Path recorder state
         pathRecorderState: this._pathRec ? {
           recording: this._pathRec.getRecording(),
           isArmed: this._pathRec._armed,
           loop: this._pathRec._loop
         } : null,
-        
-        // UI state
         uiState: {
           sequencerVisible: this._sequencerComponent?.style.display !== 'none',
           currentShapeKey: this.state.current,
           volume: this.state.volume
         },
-        
-        // Metadata
         saveTimestamp: new Date().toISOString(),
         version: 'v19.3'
       };
 
       const jsonData = JSON.stringify(appState, null, 2);
       
-      // Copy to clipboard
       if (navigator.clipboard && navigator.clipboard.writeText) {
         await navigator.clipboard.writeText(jsonData);
         this._showNotification('State saved to clipboard successfully!', 'success');
       } else {
-        // Fallback for older browsers
         const textArea = document.createElement('textarea');
         textArea.value = jsonData;
         document.body.appendChild(textArea);
@@ -820,7 +857,6 @@ class OscApp extends HTMLElement {
         document.body.removeChild(textArea);
         this._showNotification('State saved to clipboard (fallback method)', 'success');
       }
-      
       console.log('Saved state:', appState);
     } catch (error) {
       console.error('Error saving state:', error);
@@ -828,24 +864,19 @@ class OscApp extends HTMLElement {
     }
   }
 
-  /**
-   * Load application state from JSON data via dialog
-   */
   async _onLoadState() {
     try {
       const jsonData = prompt('Paste the JSON state data to load:');
       if (!jsonData || jsonData.trim() === '') {
-        return; // User cancelled or provided empty input
+        return;
       }
 
       const loadedState = JSON.parse(jsonData);
       
-      // Validate the loaded state
       if (!loadedState || typeof loadedState !== 'object') {
         throw new Error('Invalid state data format');
       }
 
-      // Stop any current playback
       if (this.state.sequencePlaying) {
         this._sequencerComponent?.stopSequence();
       }
@@ -853,15 +884,13 @@ class OscApp extends HTMLElement {
         this._pathRec?.stop();
       }
 
-      // Restore main application state
       const newState = { ...this.state };
       
-      // Restore basic state properties
       const stateProps = [
         'isMuted', 'isLoopEnabled', 'volume', 'isSequencerMode', 'isRecording',
         'currentRecordSlot', 'sequence', 'velocities', 'sequenceStepIndex', 
         'stepTime', 'sequenceSteps', 'isSequenceSignatureMode', 'isLatchOn',
-        'seed', 'uiHomeShapeKey', 'isFreestyleMode', 'freestyleRecording'
+        'seed', 'uiHomeShapeKey', 'isFreestyleMode', 'freestyleRecording', 'approvedSeeds'
       ];
       
       stateProps.forEach(prop => {
@@ -870,10 +899,8 @@ class OscApp extends HTMLElement {
         }
       });
 
-      // Update the main state
       Object.assign(this.state, newState);
 
-      // Restore sequencer state
       if (loadedState.sequencerState && this._sequencerComponent) {
         const seqState = loadedState.sequencerState;
         if (seqState.steps) {
@@ -886,7 +913,6 @@ class OscApp extends HTMLElement {
         }
       }
 
-      // Restore path recorder state
       if (loadedState.pathRecorderState && this._pathRec) {
         const prState = loadedState.pathRecorderState;
         if (prState.recording) {
@@ -897,28 +923,26 @@ class OscApp extends HTMLElement {
         }
       }
 
-      // Restore UI state
       if (loadedState.uiState) {
         const uiState = loadedState.uiState;
         
-        // Show/hide sequencer
         if (uiState.sequencerVisible !== undefined && this._sequencerComponent) {
           this._sequencerComponent.style.display = uiState.sequencerVisible ? 'block' : 'none';
           this.state.isSequencerMode = uiState.sequencerVisible;
         }
         
-        // Set volume
         if (uiState.volume !== undefined) {
           this.state.volume = uiState.volume;
         }
       }
 
-      // Update seed if provided
       if (loadedState.seed && loadedState.seed !== this.state.seed) {
         this.resetToSeed(loadedState.seed);
       }
+      
+      // MODIFIED: update the approved seeds list on load
+      this._controls.updateApprovedSeeds(this.state.approvedSeeds);
 
-      // Update all UI controls
       this._updateControls();
       this._fitLayout();
 
@@ -931,15 +955,10 @@ class OscApp extends HTMLElement {
     }
   }
 
-  /**
-   * Show a temporary notification to the user
-   */
   _showNotification(message, type = 'info') {
-    // Create notification element
     const notification = document.createElement('div');
     notification.textContent = message;
     
-    // Style the notification
     Object.assign(notification.style, {
       position: 'fixed',
       top: '20px',
@@ -956,10 +975,8 @@ class OscApp extends HTMLElement {
       background: type === 'success' ? '#4CAF50' : type === 'error' ? '#f44336' : '#2196F3'
     });
 
-    // Add to page
     document.body.appendChild(notification);
 
-    // Remove after 3 seconds
     setTimeout(() => {
       if (notification.parentNode) {
         notification.parentNode.removeChild(notification);
