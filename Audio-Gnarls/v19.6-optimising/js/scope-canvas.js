@@ -1,4 +1,4 @@
-/* ScopeCanvas – Oscilloscope Visual Renderer (public API unchanged) */
+/* ScopeCanvas – Oscilloscope Visual Renderer (hum color weighted) */
 (() => {
   const { sin, cos, abs, PI, pow, SQRT2, imul } = Math;
   const TAU = PI * 2, theta = (i, n, ph = 0) => (i / n) * TAU + ph, norm = v => (v + 1) * 0.5;
@@ -67,8 +67,10 @@
       this._tracePolar = (data, rFn, {phase=0, close=false}={}) =>
         this._traceParam(data,(i,n,cw,c)=>{ const th=theta(i,n,phase), r=rFn(i,n,th,cw,c); return [c+cos(th)*r, c+sin(th)*r]; },{close});
 
-      this._prepareStroke = hue => { const { _ctx:ctx } = this;
-        ctx.clearRect(0,0,this._cssW,this._cssH); ctx.strokeStyle=`hsl(${hue},85%,60%)`;
+      this._prepareStroke = strokeStyle => {
+        const { _ctx:ctx } = this;
+        ctx.clearRect(0,0,this._cssW,this._cssH);
+        ctx.strokeStyle = strokeStyle;
         ctx.lineWidth=2; ctx.lineJoin=ctx.lineCap='round';
       };
 
@@ -110,7 +112,6 @@
             { close:true }
           )
         ),
-
         Bowditch:(d,t)=>this._withCtx((_,cw,c)=>{ const S=.8*cw/3, avg=this._avgAbs(d), fx=3+sin(t*.0003)*1.5, fy=2+cos(t*.0004)*1.5, ph=t*.0005;
           this._traceParam(d,(i,n)=>{ const th=theta(i,n), r=avg*(.5+.5*this._samp(d,i));
             return [c+sin(fx*th+ph)*S*r, c+sin(fy*th)*S*r]; });
@@ -159,6 +160,21 @@
           this._traceParam(d,(i,n)=>{ const p=i/n, th=p*TAU*6+t*.0005, r=S*(1-p)*(.6+.4*this._ampAt(d,i)); return [c+cos(th)*r, c+(p-.5)*cw*.7]; });
         }),
       };
+
+      this.STATIC_COLORS = [
+        'hsl(3, 85%, 60%)', 'hsl(25, 85%, 60%)', 'hsl(52, 85%, 60%)',
+        'hsl(85, 85%, 60%)', 'hsl(130, 85%, 60%)', 'hsl(175, 85%, 60%)',
+        'hsl(200, 85%, 60%)', 'hsl(230, 85%, 60%)', 'hsl(265, 85%, 60%)',
+        'hsl(290, 85%, 60%)', 'hsl(320, 85%, 60%)', 'hsl(345, 85%, 60%)',
+      ];
+      this.SHIFTING_COLORS = {
+        'shift_slow': 0.015, 'shift_medium': 0.06,
+        'shift_fast': 0.12, 'shift_hyper': 0.8
+      };
+      this.COLOR_PALETTE = [...this.STATIC_COLORS, ...Object.keys(this.SHIFTING_COLORS)];
+      this._lastColorSeed = null;
+      this._globalColorOverride = null;
+      this._shapeColorCache = {};
     }
 
     listShapes(){ return Object.keys(this.drawFuncs).filter(k => k!=='hum'); }
@@ -187,10 +203,65 @@
     _getSeed(){
       return this.preset?.seed ?? this.closest?.('osc-app')?.getAttribute?.('seed') ?? document.documentElement?.dataset?.seed ?? 'default';
     }
+    
+    _createPrng(str) {
+      let a = 0; for (let i = 0; i < str.length; i++) { a = (a << 5) - a + str.charCodeAt(i); }
+      let s = a | 0;
+      return () => {
+        s = (s + 0x6D2B79F5) | 0;
+        let t = imul(s ^ (s >>> 15), 1 | s);
+        t = (t + imul(t ^ (t >>> 7), 61 | t)) ^ t;
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    // --- MODIFIED CODE START: Special logic for "hum" shape color ---
+    _getColorChoice(seed, shapeKey) {
+      if (this._lastColorSeed !== seed) {
+        this._lastColorSeed = seed;
+        const mainRng = this._createPrng(seed);
+        this._globalColorOverride = null;
+
+        // 1% chance for all shapes to have the same color for this seed
+        if (mainRng() < 0.01) {
+          const colorIdx = Math.floor(mainRng() * this.COLOR_PALETTE.length);
+          this._globalColorOverride = this.COLOR_PALETTE[colorIdx];
+        }
+        this._shapeColorCache = {};
+      }
+
+      if (this._globalColorOverride) {
+        return this._globalColorOverride;
+      }
+      
+      if (!this._shapeColorCache[shapeKey]) {
+        const shapeRng = this._createPrng(`${seed}_${shapeKey}`);
+        let colorChoice;
+
+        if (shapeKey === 'hum') {
+          // Special weighting for 'hum' shape to make shifting colors rare
+          if (shapeRng() < 0.05) { // 5% chance for a shifting color
+            const keys = Object.keys(this.SHIFTING_COLORS);
+            const idx = Math.floor(shapeRng() * keys.length);
+            colorChoice = keys[idx];
+          } else { // 95% chance for a static color
+            const idx = Math.floor(shapeRng() * this.STATIC_COLORS.length);
+            colorChoice = this.STATIC_COLORS[idx];
+          }
+        } else {
+          // Original logic for all other shapes
+          const colorIdx = Math.floor(shapeRng() * this.COLOR_PALETTE.length);
+          colorChoice = this.COLOR_PALETTE[colorIdx];
+        }
+        this._shapeColorCache[shapeKey] = colorChoice;
+      }
+
+      return this._shapeColorCache[shapeKey];
+    }
+    // --- MODIFIED CODE END ---
 
     _makeSeedBuffer(shape, seed, len=2048){
-      const str = `${seed}_${shape}`; let a=0; for(let i=0;i<str.length;i++) a=(a<<5)-a+str.charCodeAt(i); let s=a|0;
-      const rng = () => { s=(s+0x6D2B79F5)|0; let t=imul(s^(s>>>15),1|s); t=(t+imul(t^(t>>>7),61|t))^t; return ((t^(t>>>14))>>>0)/4294967296; };
+      const rng = this._createPrng(`${seed}_${shape}_buffer`);
       const out=new Float32Array(len), p=SHAPE_PARAMS[shape]||SHAPE_PARAMS.circle;
       for(let i=0;i<len;i++){ const tt=i/len; let sig=0;
         for(let h=0;h<p.harmonics.length;h++){ const f=p.freq*(h+1); sig+=p.harmonics[h]*sin(TAU*f*tt+rng()*TAU); }
@@ -213,9 +284,27 @@
     }
 
     _animate(){
-      const now=performance.now(); this._resizeCanvas();
-      const data=this._selectData(), hue=(now*(this.preset?.colorSpeed ?? .06))%360;
-      this._prepareStroke(hue); (this.drawFuncs[this.shapeKey]||this.drawFuncs.circle)(data, now, this.preset ?? {});
+      const now = performance.now();
+      this._resizeCanvas();
+      
+      const data = this._selectData();
+      const seed = this._getSeed();
+      const shape = this.shapeKey || 'circle';
+
+      const colorChoice = this._getColorChoice(seed, shape);
+      const shiftSpeed = this.SHIFTING_COLORS[colorChoice];
+      let strokeStyle;
+
+      if (shiftSpeed !== undefined) {
+        const hue = (now * shiftSpeed) % 360;
+        strokeStyle = `hsl(${hue}, 85%, 60%)`;
+      } else {
+        strokeStyle = colorChoice;
+      }
+      
+      this._prepareStroke(strokeStyle);
+      (this.drawFuncs[shape]||this.drawFuncs.circle)(data, now, this.preset ?? {});
+      
       if (typeof this.onIndicatorUpdate==='function'){ const started=this.isAudioStarted, active=started && this.isPlaying;
         // this.onIndicatorUpdate(started ? (active?'Audio Live':'Muted') : 'Silent Mode', !!active);
       }
