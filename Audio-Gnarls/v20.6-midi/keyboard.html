@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polyphonic Synthesizer</title>
+    <!-- <link rel="stylesheet" href="style.css"> -->
+     <style>
+        body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    background-color: #1e1e1e;
+    color: #f0f0f0;
+    display: flex;
+    justify-content: center;
+    align-items: flex-start;
+    margin: 0;
+    padding: 20px;
+    min-height: 100vh;
+}
+
+#app-container {
+    width: 100%;
+    max-width: 1200px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+h1 {
+    text-align: center;
+    color: #00aaff;
+}
+
+#controls {
+    display: flex;
+    flex-wrap: wrap;
+    justify-content: center;
+    align-items: center;
+    gap: 20px;
+    background-color: #2a2a2a;
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid #444;
+}
+
+.control-group {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+label {
+    font-weight: bold;
+}
+
+input[type="text"], select, button {
+    font-size: 16px;
+    padding: 8px 12px;
+    border-radius: 5px;
+    border: 1px solid #555;
+    background-color: #333;
+    color: #f0f0f0;
+}
+
+button {
+    cursor: pointer;
+    background-color: #0077cc;
+    border-color: #005fa3;
+    transition: background-color 0.2s;
+}
+
+button:hover {
+    background-color: #0088e6;
+}
+
+button:disabled {
+    background-color: #444;
+    cursor: not-allowed;
+}
+
+.loader-text {
+    font-style: italic;
+    color: #aaa;
+}
+
+#keyboard-container {
+    display: flex;
+    position: relative;
+    width: 100%;
+    height: 200px;
+    background-color: #111;
+    border: 2px solid #444;
+    border-radius: 8px;
+    overflow-x: auto;
+    padding-top: 5px; /* Space for black keys to overflow */
+}
+
+.key {
+    cursor: pointer;
+    border: 1px solid #333;
+    box-sizing: border-box;
+}
+
+.key.white {
+    width: calc(100% / 52); /* 52 white keys on an 88-key piano */
+    height: 100%;
+    background-color: #f5f5f5;
+    z-index: 1;
+}
+
+.key.black {
+    width: calc((100% / 52) * 0.6);
+    height: 60%;
+    background-color: #222;
+    color: white;
+    position: absolute;
+    z-index: 2;
+    margin-left: calc((100% / 52) * -0.3);
+}
+
+/* Specific positioning for black keys */
+[data-note^="C#"], [data-note^="F#"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 1); }
+[data-note^="D#"], [data-note^="G#"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 2); }
+[data-note^="A#"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 4); }
+[data-note^="C#2"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 2); } /* Adjusting for A0 start */
+[data-note^="D#2"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 3); }
+[data-note^="F#1"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 5); }
+[data-note^="G#1"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 6); }
+[data-note^="A#0"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 1); }
+[data-note^="C#1"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 3); }
+[data-note^="D#1"] { margin-left: calc((100% / 52) * -0.3 + (100% / 52) * 4); }
+
+.key.active {
+    background-color: #00aaff;
+}
+
+.instructions {
+    text-align: center;
+    color: #888;
+    margin-top: 10px;
+}
+     </style>
+</head>
+<body>
+    <div id="app-container">
+        <h1>Web Synthesizer</h1>
+        <div id="controls">
+            <div class="control-group">
+                <label for="seed-input">Seed:</label>
+                <input type="text" id="seed-input" value="WelcomeToMySynth">
+                <button id="load-seed-btn">Load New Seed</button>
+            </div>
+            <div class="control-group">
+                <label for="instrument-selector">Sound Preset:</label>
+                <select id="instrument-selector">
+                    <!-- Options will be populated by JavaScript -->
+                </select>
+            </div>
+            <div class="control-group">
+                 <button id="start-audio-btn">Click to Start Audio</button>
+                 <span id="loader" class="loader-text">Audio not started.</span>
+            </div>
+        </div>
+
+        <div id="keyboard-container">
+            <!-- The 88-key piano keyboard will be generated here by keyboard.js -->
+        </div>
+
+        <div class="instructions">
+            <p>Once audio is started, you can play notes using your mouse or computer keyboard (the 'A' and 'W' rows correspond to white and black keys).</p>
+        </div>
+    </div>
+
+    <!-- This custom element is defined in engine.js and loads Tone.js -->
+    <tone-loader></tone-loader>
+
+    <!-- Main application logic that connects the engine and keyboard -->
+    <script type="module">
+        // Import the modules from the same directory
+        import { Engine } from './js/engine.js';
+        import { Keyboard } from './js/keyboard.js';
+
+        // --- Mock Application Object ---
+        // This object simulates the main 'app' that engine.js expects to be passed,
+        // providing the necessary properties and methods for it to function.
+        const app = {
+            state: {},
+            defaultState: (seed) => ({
+                seed: seed || 'default',
+                Tone: window.Tone,
+                chains: {},
+                presets: {},
+                current: null,
+                volume: 0.75,
+                isMuted: false,
+                isPlaying: false,
+                contextUnlocked: false,
+                initialBufferingStarted: false,
+                initialShapeBuffered: false,
+                // Mock properties to prevent errors from other engine features
+                sequence: [],
+                velocities: [],
+                sequencePlaying: false,
+                audioSignaturePlaying: false,
+            }),
+            _canvas: {}, // Mock canvas object, not used by keyboard
+            _loader: document.getElementById('loader'),
+            _sequencerComponent: { style: {} }, // Mock component to prevent errors
+            _main: { style: {} }, // Mock main element to prevent errors
+            // A simple mock for the control update function
+            _updateControls: (props) => {
+                // You could add logic here to update other UI elements if needed
+                // console.log('Updating controls:', props);
+            },
+            // Provide the sleep utility the engine requires
+            _sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms))
+        };
+
+        // Initialize the application state with the default seed
+        app.state = app.defaultState(document.getElementById('seed-input').value);
+
+        // --- Initialize Engine and Keyboard ---
+        let engine;
+        let keyboard;
+
+        // The <tone-loader> element from engine.js will dispatch this event
+        // once the Tone.js library has been successfully loaded.
+        document.addEventListener('tone-ready', () => {
+            app.state.Tone = window.Tone; // Ensure Tone.js is assigned
+            if (!app.state.Tone) {
+                app._loader.textContent = 'Error: Tone.js failed to load.';
+                return;
+            }
+
+            // Now that Tone.js is ready, we can initialize our engine and keyboard.
+            engine = Engine(app);
+            keyboard = Keyboard(engine);
+
+            // --- Connect UI Elements to the Engine ---
+            const startBtn = document.getElementById('start-audio-btn');
+            const seedInput = document.getElementById('seed-input');
+            const loadSeedBtn = document.getElementById('load-seed-btn');
+            const instrumentSelector = document.getElementById('instrument-selector');
+
+            // The Web Audio API requires a user interaction to start.
+            // This button handles that initial "unlock".
+            startBtn.addEventListener('click', async () => {
+                startBtn.disabled = true;
+                startBtn.textContent = 'Loading...';
+                await engine.unlockAudioAndBufferInitial();
+                
+                const state = engine.getSynthState();
+                if (state.isReady) {
+                    startBtn.textContent = 'Audio is Active';
+                    app._loader.textContent = 'Synthesizer is ready to play!';
+                    populateInstrumentSelector();
+                } else {
+                    app._loader.textContent = 'Failed to start audio. Please try again.';
+                    startBtn.disabled = false;
+                    startBtn.textContent = 'Click to Start Audio';
+                }
+            });
+
+            // This allows the user to generate a new set of 18 sounds.
+            loadSeedBtn.addEventListener('click', () => {
+                const newSeed = seedInput.value.trim();
+                if (newSeed && newSeed !== app.state.seed) {
+                    app.state.seed = newSeed;
+                    // Resetting the engine clears all sounds and state.
+                    engine.resetState();
+                    
+                    // The UI must be reset to its initial state, requiring audio to be started again.
+                    startBtn.textContent = 'Click to Start Audio';
+                    startBtn.disabled = false;
+                    instrumentSelector.innerHTML = '<option>Load a seed first</option>';
+                    app._loader.textContent = `New seed "${newSeed}" loaded. Click to start audio.`;
+                }
+            });
+
+            // This changes the active instrument in the engine.
+            instrumentSelector.addEventListener('change', (e) => {
+                engine.setInstrument(e.target.value);
+            });
+
+            // This helper function gets the list of generated sound presets from the engine
+            // and populates the dropdown menu.
+            function populateInstrumentSelector() {
+                const state = engine.getSynthState();
+                instrumentSelector.innerHTML = ''; // Clear existing options
+                
+                state.presets.forEach(presetName => {
+                    const option = document.createElement('option');
+                    option.value = presetName;
+                    option.textContent = presetName;
+                    instrumentSelector.appendChild(option);
+                });
+
+                // Automatically select and load the first preset as the active sound.
+                if (state.presets.length > 0) {
+                    instrumentSelector.value = state.presets[0];
+                    engine.setInstrument(state.presets[0]);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en" data-seed="aabbccdd">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Seeded Keyboard • Oscilloscope Synth</title>
+  <style>
+    :root { --bg:#0e1116; --panel:#161a22; --muted:#9fb3c8; --fg:#e7eef5; --acc:#35d08e; --acc2:#7aa2ff; }
+    *{box-sizing:border-box}
+    html,body{height:100%}
+    body{margin:0;background:var(--bg);color:var(--fg);font:16px/1.4 system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial}
+    header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #222;background:#0b0e13;position:sticky;top:0;z-index:5}
+    .seed{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;color:var(--muted)}
+    main{max-width:1200px;margin:0 auto;padding:18px}
+    .grid{display:grid;grid-template-columns:260px 1fr 360px;gap:16px} /* bank | keyboard | head */
+    .card{background:var(--panel);border:1px solid #202633;border-radius:14px;padding:14px}
+
+    /* bank buttons */
+    .bank{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+    .bank button{border:1px solid #2a3242;border-radius:12px;padding:10px 12px;background:#151922;color:#cfe3ff;cursor:pointer}
+    .bank button.active{outline:2px solid var(--acc2);background:#1b2230}
+    .bank button:hover{background:#1a2130}
+
+    /* piano */
+    #keyboard-container{user-select:none;touch-action:none;background:#0c0f15;border:1px solid #1e2430;border-radius:14px;padding:12px;overflow:hidden}
+    .kb-row{white-space:nowrap;position:relative;display:block}
+    .key{display:inline-block;border-radius:6px;border:1px solid #2a3242;margin:1px;vertical-align:bottom}
+    .key.white{width:28px;height:150px;background:#f7f9ff}
+    .key.black{width:20px;height:95px;background:#111;border-color:#3a4256;margin-left:-10px;margin-right:-10px;position:relative;z-index:2}
+    .key.active{box-shadow:0 0 12px #7aa2ff88, inset 0 0 0 2px #7aa2ff55}
+
+    /* head */
+    .head h4{margin:.2rem 0 .8rem}
+    .row{display:flex;gap:8px;align-items:center;margin-bottom:8px}
+    .row label{flex:0 0 110px;color:#bcd}
+    .row input[type="range"]{flex:1}
+    .row input[type="number"], .row select {width:100px;background:#0f1420;border:1px solid #263042;color:#e7eef5;border-radius:8px;padding:6px}
+    .switch{display:inline-flex;gap:8px;align-items:center}
+    .pill{padding:6px 10px;border-radius:999px;background:#0f1420;border:1px solid #263042;color:#a9bed3;font-size:.85rem}
+    #startBtn{background:#173a2a;border:1px solid #225c3e;color:#bff5d5;border-radius:10px;padding:8px 12px;cursor:pointer}
+    #startBtn[disabled]{opacity:.6;cursor:not-allowed}
+    #status{font-size:.95rem;color:var(--muted);margin-top:8px}
+  </style>
+</head>
+<body>
+  <header>
+    <div class="row">
+      <strong>Keyboard</strong>
+      <span class="pill">Seeded Bank</span>
+    </div>
+    <div class="seed">seed: <span id="seedText"></span></div>
+  </header>
+
+  <main>
+    <div class="grid">
+      <!-- Bank -->
+      <section class="card">
+        <h3 style="margin:.2rem 0 .8rem">Seed Bank <small style="color:var(--muted)">18 sounds</small></h3>
+        <div id="bank" class="bank" role="listbox" aria-label="Seeded Sounds"></div>
+        <div id="status"></div>
+        <div style="margin-top:10px"><button id="startBtn">Click to Start Audio</button></div>
+      </section>
+
+      <!-- Keyboard -->
+      <section class="card">
+        <h3 style="margin:.2rem 0 .8rem">Keyboard</h3>
+        <div id="keyboard-container" aria-label="Piano Keyboard">
+          <div class="kb-row" id="kbRow"></div>
+        </div>
+      </section>
+
+      <!-- Head (Patch Editor) -->
+      <section class="card head">
+        <h3 style="margin:.2rem 0 .8rem">Patch Head</h3>
+
+        <h4>Oscillators</h4>
+        <div class="row">
+          <label>Osc1 Type</label>
+          <select id="osc1_type">
+            <option>sine</option><option>triangle</option><option>square</option><option>sawtooth</option>
+          </select>
+        </div>
+        <div class="row">
+          <label>Osc2 Enabled</label>
+          <label class="switch">
+            <input type="checkbox" id="osc2_enabled" />
+            <span>enable</span>
+          </label>
+        </div>
+        <div class="row">
+          <label>Osc2 Type</label>
+          <select id="osc2_type">
+            <option>sine</option><option>triangle</option><option>square</option><option>sawtooth</option>
+          </select>
+        </div>
+
+        <h4>Filter</h4>
+        <div class="row">
+          <label>Cutoff</label>
+          <input type="range" id="filter_freq" min="40" max="8000" step="1"><input type="number" id="filter_freq_num" min="40" max="8000" step="1">
+        </div>
+        <div class="row">
+          <label>Resonance Q</label>
+          <input type="range" id="filter_q" min="0.1" max="20" step="0.01"><input type="number" id="filter_q_num" min="0.1" max="20" step="0.01">
+        </div>
+
+        <h4>Envelope (ADSR)</h4>
+        <div class="row"><label>Attack</label> <input type="range" id="env_a" min="0" max="5" step="0.001"><input type="number" id="env_a_num" min="0" max="5" step="0.001"></div>
+        <div class="row"><label>Decay</label>  <input type="range" id="env_d" min="0" max="5" step="0.001"><input type="number" id="env_d_num" min="0" max="5" step="0.001"></div>
+        <div class="row"><label>Sustain</label><input type="range" id="env_s" min="0" max="1" step="0.001"><input type="number" id="env_s_num" min="0" max="1" step="0.001"></div>
+        <div class="row"><label>Release</label><input type="range" id="env_r" min="0" max="10" step="0.001"><input type="number" id="env_r_num" min="0" max="10" step="0.001"></div>
+
+        <h4>LFO</h4>
+        <div class="row"><label>Rate (Hz)</label> <input type="range" id="lfo_rate" min="0" max="60" step="0.01"><input type="number" id="lfo_rate_num" min="0" max="60" step="0.01"></div>
+        <div class="row"><label>Min</label>       <input type="range" id="lfo_min"  min="20" max="5000" step="1"><input type="number" id="lfo_min_num" min="20" max="5000" step="1"></div>
+        <div class="row"><label>Max</label>       <input type="range" id="lfo_max"  min="20" max="8000" step="1"><input type="number" id="lfo_max_num" min="20" max="8000" step="1"></div>
+      </section>
+    </div>
+  </main>
+
+  <tone-loader id="toneLoader"></tone-loader>
+
+  <script type="module">
+    import { Engine } from './js/engine.js';
+    import './js/scope-canvas.js';
+
+    const seed = document.documentElement.dataset.seed || 'aabbccdd';
+    document.getElementById('seedText').textContent = seed;
+
+    // Hidden scope-canvas to provide the shape list
+    const sc = document.createElement('scope-canvas');
+    sc.style.display = 'none';
+    document.body.appendChild(sc);
+
+    // Minimal app facade
+    const app = {
+      humKey: 'hum', _canvas: sc, _loader: { textContent: '' },
+      _sequencerComponent: { style: {} }, _main: { style: {} },
+      _updateControls(){}, _sleep: ms => new Promise(r=>setTimeout(r,ms)),
+      state: {},
+      defaultState(seedStr){ return {
+        seed: seedStr, Tone: window.Tone, chains: {}, presets: {},
+        current: null, isMuted:false, isPlaying:false, contextUnlocked:false,
+        initialBufferingStarted:false, initialShapeBuffered:false, volume:0.8, approvedSeeds:[]
+      }; }
+    };
+
+    const engine = Engine(app);
+    const startBtn = document.getElementById('startBtn');
+    const statusEl = document.getElementById('status');
+    const bankEl = document.getElementById('bank');
+
+    let currentKey = null;
+
+    // ---------- Patch head helpers ----------
+    const $ = id => document.getElementById(id);
+    const linkPair = (range, num, getter, setter) => {
+      const sync = v => { range.value = v; num.value = v; };
+      range.addEventListener('input', e => setter(parseFloat(e.target.value)));
+      num.addEventListener('change', e => setter(parseFloat(e.target.value)));
+      return { set: v => sync(getter(v)) };
+    };
+
+    function loadHeadFromPatch(p) {
+      if (!p) return;
+
+      // Oscs
+      $('osc1_type').value = p.osc1.type;
+      $('osc2_enabled').checked = !!p.osc2.enabled;
+      $('osc2_type').value = p.osc2.type;
+
+      // Filter
+      $('filter_freq').value = $('filter_freq_num').value = p.filter.freq;
+      $('filter_q').value   = $('filter_q_num').value   = p.filter.Q;
+
+      // Env
+      $('env_a').value = $('env_a_num').value = p.envelope.attack;
+      $('env_d').value = $('env_d_num').value = p.envelope.decay;
+      $('env_s').value = $('env_s_num').value = p.envelope.sustain;
+      $('env_r').value = $('env_r_num').value = p.envelope.release;
+
+      // LFO
+      $('lfo_rate').value = $('lfo_rate_num').value = p.lfo.rate;
+      $('lfo_min').value  = $('lfo_min_num').value  = p.lfo.min;
+      $('lfo_max').value  = $('lfo_max_num').value  = p.lfo.max;
+
+      // enable/disable osc2 type
+      $('osc2_type').disabled = !$('osc2_enabled').checked;
+    }
+
+    function bindHead() {
+      $('osc1_type').addEventListener('change', e => engine.setParam('osc1.type', e.target.value));
+      $('osc2_enabled').addEventListener('change', e => {
+        $('osc2_type').disabled = !e.target.checked;
+        engine.setParam('osc2.enabled', e.target.checked);
+      });
+      $('osc2_type').addEventListener('change', e => engine.setParam('osc2.type', e.target.value));
+
+      // Filter pairs
+      const fx = (v)=>v, fq = (v)=>v;
+      linkPair($('filter_freq'), $('filter_freq_num'), fx, v => engine.setParam('filter.freq', v));
+      linkPair($('filter_q'), $('filter_q_num'), fq, v => engine.setParam('filter.Q', v));
+
+      // Envelope
+      linkPair($('env_a'), $('env_a_num'), fx, v => engine.setParam('envelope.attack', v));
+      linkPair($('env_d'), $('env_d_num'), fx, v => engine.setParam('envelope.decay', v));
+      linkPair($('env_s'), $('env_s_num'), fx, v => engine.setParam('envelope.sustain', v));
+      linkPair($('env_r'), $('env_r_num'), fx, v => engine.setParam('envelope.release', v));
+
+      // LFO
+      linkPair($('lfo_rate'), $('lfo_rate_num'), fx, v => engine.setParam('lfo.rate', v));
+      linkPair($('lfo_min'),  $('lfo_min_num'),  fx, v => engine.setParam('lfo.min',  v));
+      linkPair($('lfo_max'),  $('lfo_max_num'),  fx, v => engine.setParam('lfo.max',  v));
+    }
+
+    // Update head whenever a patch changes (preset switch or any param edit)
+    engine.onPatchChange((shape, patch) => {
+      if (shape === currentKey) loadHeadFromPatch(patch);
+    });
+
+    // ---------- Bank ----------
+    function renderBank() {
+      bankEl.innerHTML = '';
+      const keys = Object.keys(app.state.presets || {});
+      keys.forEach((k) => {
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = k;
+        btn.dataset.key = k;
+        if (k === currentKey) btn.classList.add('active');
+        btn.addEventListener('click', () => {
+          currentKey = k;
+          engine.setInstrumentSilent(k); // NO LATCH
+          [...bankEl.children].forEach(c => c.classList.toggle('active', c.dataset.key === k));
+          loadHeadFromPatch(engine.getPatch(k));
+        });
+        bankEl.appendChild(btn);
+      });
+    }
+
+    // ---------- Audio boot + init ----------
+    async function init(){
+      app.state = app.defaultState(seed);
+      engine.loadPresets(seed);
+      currentKey = Object.keys(app.state.presets)[0] || null;
+      renderBank();
+
+      startBtn.disabled = true;
+      startBtn.textContent = 'Starting...';
+      try {
+        await engine.unlockAudioAndBufferInitial(currentKey || app.humKey);
+        statusEl.textContent = 'Ready. Select a sound, then play.';
+        startBtn.textContent = 'Audio Active';
+        if (currentKey) engine.setInstrumentSilent(currentKey);
+        loadHeadFromPatch(engine.getPatch(currentKey));
+      } catch (err) {
+        console.error(err);
+        statusEl.textContent = 'Unable to start audio. See console.';
+        startBtn.disabled = false;
+        startBtn.textContent = 'Click to Start Audio';
+      }
+    }
+
+    startBtn.addEventListener('click', () => {
+      if (!window.Tone) return;
+      init();
+    }, { once:true });
+
+    document.getElementById('toneLoader').addEventListener('tone-ready', () => {
+      if (!startBtn.disabled) statusEl.textContent = 'Tone ready. Click "Start Audio" to unlock.';
+    });
+
+    // ---------- Build the visual keyboard ----------
+    (function buildKeyboard(){
+      const container = document.getElementById('keyboard-container');
+      const row = document.getElementById('kbRow');
+      const notes = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+      let oct = 1, idx = 0;
+      for (let i=0;i<88;i++){
+        const name = notes[idx]; const full = `${name}${oct}`;
+        const key = document.createElement('div'); key.dataset.note = full;
+        key.className = name.includes('#') ? 'key black' : 'key white';
+        row.appendChild(key);
+        idx++; if (idx>=notes.length){ idx=0; oct++; }
+      }
+      const down = new Set();
+      const play = el => { if (!el || el.classList.contains('active')) return; engine.playNote(el.dataset.note); el.classList.add('active'); }
+      const stop = el => { if (!el) return; engine.stopNote(el.dataset.note); el.classList.remove('active'); }
+
+      row.querySelectorAll('.key').forEach(k => {
+        k.addEventListener('mousedown', () => play(k));
+        k.addEventListener('mouseup',   () => stop(k));
+        k.addEventListener('mouseleave',() => stop(k));
+        k.addEventListener('touchstart',(e)=>{ e.preventDefault(); play(k); });
+        k.addEventListener('touchend',  (e)=>{ e.preventDefault(); stop(k); });
+      });
+
+      const map = { 'a':'C4','w':'C#4','s':'D4','e':'D#4','d':'E4','f':'F4','t':'F#4','g':'G4','y':'G#4','h':'A4','u':'A#4','j':'B4','k':'C5','o':'C#5','l':'D5','p':'D#5',';':'E5' };
+      window.addEventListener('keydown', e => {
+        if (down.has(e.key)) return;
+        const nt = map[e.key]; if (!nt) return;
+        const el = row.querySelector(`[data-note="${nt}"]`); if (!el) return;
+        down.add(e.key); play(el);
+      });
+      window.addEventListener('keyup', e => {
+        const nt = map[e.key]; if (!nt) return;
+        down.delete(e.key);
+        const el = row.querySelector(`[data-note="${nt}"]`); if (!el) return;
+        stop(el);
+      });
+    })();
+
+    // Bind head controls once
+    bindHead();
+  </script>
+</body>
+</html>

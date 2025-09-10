@@ -1,0 +1,479 @@
+<!DOCTYPE html>
+<html lang="en" data-seed="aabbccdd">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Polyphonic Synthesizer - 18 Sounds</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: #1e1e1e;
+            color: #f0f0f0;
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
+            margin: 0;
+            padding: 20px;
+            min-height: 100vh;
+        }
+
+        #app-container {
+            width: 100%;
+            max-width: 1200px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        h1 {
+            text-align: center;
+            color: #00aaff;
+        }
+
+        #controls {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #444;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        label {
+            font-weight: bold;
+        }
+
+        input[type="text"], select, button {
+            font-size: 16px;
+            padding: 8px 12px;
+            border-radius: 5px;
+            border: 1px solid #555;
+            background-color: #333;
+            color: #f0f0f0;
+        }
+
+        button {
+            cursor: pointer;
+            background-color: #0077cc;
+            border-color: #005fa3;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #0088e6;
+        }
+
+        button:disabled {
+            background-color: #444;
+            cursor: not-allowed;
+        }
+
+        button.active {
+            background-color: #00aaff;
+            border-color: #0088cc;
+        }
+
+        .loader-text {
+            font-style: italic;
+            color: #aaa;
+        }
+
+        #sound-selector {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+            gap: 10px;
+            background-color: #2a2a2a;
+            padding: 15px;
+            border-radius: 8px;
+            border: 1px solid #444;
+            margin-bottom: 20px;
+        }
+
+        .sound-button {
+            padding: 10px;
+            font-size: 14px;
+            border-radius: 5px;
+            border: 1px solid #555;
+            background-color: #333;
+            color: #f0f0f0;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .sound-button:hover {
+            background-color: #444;
+        }
+
+        .sound-button.active {
+            background-color: #00aaff;
+            border-color: #0088cc;
+            color: white;
+        }
+
+        #keyboard-container {
+            display: flex;
+            position: relative;
+            width: 100%;
+            height: 200px;
+            background-color: #111;
+            border: 2px solid #444;
+            border-radius: 8px;
+            overflow-x: auto;
+            padding-top: 5px;
+        }
+
+        .key {
+            cursor: pointer;
+            border: 1px solid #333;
+            box-sizing: border-box;
+            display: flex;
+            align-items: flex-end;
+            justify-content: center;
+            font-size: 10px;
+            padding-bottom: 5px;
+        }
+
+        .key.white {
+            width: calc(100% / 52);
+            height: 100%;
+            background-color: #f5f5f5;
+            color: #333;
+            z-index: 1;
+        }
+
+        .key.black {
+            width: calc((100% / 52) * 0.6);
+            height: 60%;
+            background-color: #222;
+            color: white;
+            position: absolute;
+            z-index: 2;
+            margin-left: calc((100% / 52) * -0.3);
+        }
+
+        .key.active {
+            background-color: #00aaff;
+            color: white;
+        }
+
+        .instructions {
+            text-align: center;
+            color: #888;
+            margin-top: 10px;
+        }
+
+        /* Hidden scope canvas for shape access */
+        #hidden-scope {
+            display: none;
+        }
+    </style>
+</head>
+<body>
+    <div id="app-container">
+        <h1>Web Synthesizer - 18 Sounds (Seed: aabbccdd)</h1>
+        
+        <div id="controls">
+            <div class="control-group">
+                <button id="start-audio-btn">Click to Start Audio</button>
+                <span id="loader" class="loader-text">Audio not started.</span>
+            </div>
+        </div>
+
+        <div id="sound-selector">
+            <!-- Sound selection buttons will be populated here -->
+        </div>
+
+        <div id="keyboard-container">
+            <!-- The 88-key piano keyboard will be generated here -->
+        </div>
+
+        <div class="instructions">
+            <p>1. Click "Start Audio" to initialize the synthesizer</p>
+            <p>2. Select a sound from the 18 available sounds above</p>
+            <p>3. Play notes using your mouse or computer keyboard (ASDF... keys for white notes, QWER... for black notes)</p>
+        </div>
+    </div>
+
+    <!-- Hidden scope canvas to access shapes -->
+    <div id="hidden-scope">
+        <scope-canvas></scope-canvas>
+    </div>
+
+    <!-- Tone.js loader -->
+    <tone-loader></tone-loader>
+
+    <!-- Import required modules -->
+    <script type="module" src="./js/setup.js"></script>
+    <script type="module" src="./js/worklet/aw-bridge.js"></script>
+    <script type="module" src="./js/engine.js"></script>
+    <script type="module" src="./js/shapes.js"></script>
+    <script type="module" src="./js/scope-canvas.js"></script>
+    <script type="module" src="./js/utils.js"></script>
+
+    <script type="module">
+        import { Engine } from './js/engine.js';
+        import { shapeList, humKey, allKeys } from './js/shapes.js';
+
+        // Get seed from HTML data attribute
+        const SEED = document.documentElement.getAttribute('data-seed') || 'aabbccdd';
+
+        // Mock application object for the engine
+        const app = {
+            state: {},
+            defaultState: (seed) => ({
+                seed: seed || SEED,
+                Tone: window.Tone,
+                chains: {},
+                presets: {},
+                current: null,
+                volume: 0.75,
+                isMuted: false,
+                isPlaying: false,
+                contextUnlocked: false,
+                initialBufferingStarted: false,
+                initialShapeBuffered: false,
+                keyboardSynth: null,
+                sequence: [],
+                velocities: [],
+                sequencePlaying: false,
+                audioSignaturePlaying: false,
+            }),
+            _canvas: {}, // Will be populated with scope canvas
+            _loader: document.getElementById('loader'),
+            _sequencerComponent: { style: {} },
+            _main: { style: {} },
+            _updateControls: (props) => {
+                // Update UI controls if needed
+            },
+            _sleep: (ms) => new Promise(resolve => setTimeout(resolve, ms)),
+            // Add the humKey for compatibility
+            humKey: 'hum'
+        };
+
+        // Initialize state
+        app.state = app.defaultState(SEED);
+
+        let engine;
+        let currentSound = null;
+        let availableSounds = [];
+
+        // Piano keyboard setup
+        const notes = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+        const keyboardContainer = document.getElementById('keyboard-container');
+        const soundSelector = document.getElementById('sound-selector');
+        
+        // Computer keyboard mapping
+        const keyMap = {
+            // White keys (bottom row)
+            'a': 'C4', 's': 'D4', 'd': 'E4', 'f': 'F4', 'g': 'G4', 'h': 'A4', 'j': 'B4',
+            'k': 'C5', 'l': 'D5', ';': 'E5', "'": 'F5',
+            // Black keys (top row)
+            'q': 'C#4', 'w': 'D#4', 'e': 'F#4', 'r': 'G#4', 't': 'A#4',
+            'y': 'C#5', 'u': 'D#5', 'i': 'F#5', 'o': 'G#5', 'p': 'A#5'
+        };
+        const pressedKeys = new Set();
+
+        function createKeyboard() {
+            keyboardContainer.innerHTML = '';
+            const totalKeys = 88;
+            let currentOctave = 0; // Starting from A0
+            let noteIndex = 9; // A is index 9 in notes array
+
+            for (let i = 0; i < totalKeys; i++) {
+                const noteName = notes[noteIndex];
+                const fullNoteName = `${noteName}${currentOctave}`;
+                const key = document.createElement('div');
+                key.dataset.note = fullNoteName;
+                key.textContent = fullNoteName;
+
+                if (noteName.includes('#')) {
+                    key.className = 'key black';
+                } else {
+                    key.className = 'key white';
+                }
+
+                // Position black keys correctly
+                if (noteName.includes('#')) {
+                    const whiteKeyWidth = keyboardContainer.clientWidth / 52;
+                    const blackKeyOffset = whiteKeyWidth * 0.7;
+                    key.style.left = `${(i - Math.floor(i * 7/12)) * whiteKeyWidth + blackKeyOffset}px`;
+                }
+
+                keyboardContainer.appendChild(key);
+
+                // Move to next note
+                noteIndex++;
+                if (noteIndex >= notes.length) {
+                    noteIndex = 0;
+                    currentOctave++;
+                }
+            }
+
+            // Add event listeners
+            keyboardContainer.querySelectorAll('.key').forEach(key => {
+                key.addEventListener('mousedown', () => playNote(key));
+                key.addEventListener('mouseup', () => stopNote(key));
+                key.addEventListener('mouseleave', () => stopNote(key));
+                key.addEventListener('touchstart', (e) => { e.preventDefault(); playNote(key); });
+                key.addEventListener('touchend', (e) => { e.preventDefault(); stopNote(key); });
+            });
+        }
+
+        function createSoundSelector() {
+            soundSelector.innerHTML = '';
+            
+            availableSounds.forEach((soundName, index) => {
+                const button = document.createElement('button');
+                button.className = 'sound-button';
+                button.textContent = soundName.charAt(0).toUpperCase() + soundName.slice(1);
+                button.dataset.sound = soundName;
+                
+                button.addEventListener('click', () => {
+                    // Remove active class from all buttons
+                    soundSelector.querySelectorAll('.sound-button').forEach(btn => 
+                        btn.classList.remove('active'));
+                    
+                    // Add active class to clicked button
+                    button.classList.add('active');
+                    
+                    // Set the instrument
+                    if (engine && engine.setInstrument) {
+                        engine.setInstrument(soundName);
+                        currentSound = soundName;
+                        app._loader.textContent = `Playing with: ${soundName}`;
+                    }
+                });
+
+                soundSelector.appendChild(button);
+            });
+
+            // Select first sound by default
+            if (availableSounds.length > 0) {
+                const firstButton = soundSelector.querySelector('.sound-button');
+                if (firstButton) {
+                    firstButton.click();
+                }
+            }
+        }
+
+        function playNote(keyElement) {
+            if (!keyElement || keyElement.classList.contains('active') || !engine) return;
+            
+            const note = keyElement.dataset.note;
+            if (engine.playNote) {
+                engine.playNote(note, 0.8);
+                keyElement.classList.add('active');
+            }
+        }
+
+        function stopNote(keyElement) {
+            if (!keyElement || !engine) return;
+            
+            const note = keyElement.dataset.note;
+            if (engine.stopNote) {
+                engine.stopNote(note);
+                keyElement.classList.remove('active');
+            }
+        }
+
+        // Computer keyboard event handlers
+        function handleKeyDown(e) {
+            if (pressedKeys.has(e.key)) return;
+            
+            const note = keyMap[e.key.toLowerCase()];
+            if (note) {
+                pressedKeys.add(e.key);
+                const keyElement = keyboardContainer.querySelector(`[data-note="${note}"]`);
+                if (keyElement) playNote(keyElement);
+            }
+        }
+
+        function handleKeyUp(e) {
+            const note = keyMap[e.key.toLowerCase()];
+            if (note) {
+                pressedKeys.delete(e.key);
+                const keyElement = keyboardContainer.querySelector(`[data-note="${note}"]`);
+                if (keyElement) stopNote(keyElement);
+            }
+        }
+
+        // Wait for tone-ready event
+        document.addEventListener('tone-ready', async () => {
+            app.state.Tone = window.Tone;
+            if (!app.state.Tone) {
+                app._loader.textContent = 'Error: Tone.js failed to load.';
+                return;
+            }
+
+            // Wait for scope canvas to be ready and get shapes
+            const scopeCanvas = document.querySelector('scope-canvas');
+            if (scopeCanvas) {
+                // Set up the canvas mock for the app
+                app._canvas.listShapes = () => scopeCanvas.listShapes ? scopeCanvas.listShapes() : [];
+                
+                // Wait a bit for the scope canvas to initialize
+                await new Promise(resolve => setTimeout(resolve, 100));
+            }
+
+            // Initialize engine
+            engine = Engine(app);
+
+            // Get available sounds (shapes)
+            availableSounds = allKeys(app).filter(key => key !== humKey(app));
+            console.log('Available sounds:', availableSounds);
+
+            // Set up UI
+            createKeyboard();
+            createSoundSelector();
+
+            // Set up start button
+            const startBtn = document.getElementById('start-audio-btn');
+            startBtn.addEventListener('click', async () => {
+                startBtn.disabled = true;
+                startBtn.textContent = 'Loading...';
+                
+                try {
+                    await engine.unlockAudioAndBufferInitial();
+                    
+                    const state = engine.getSynthState();
+                    if (state.isReady) {
+                        startBtn.textContent = 'Audio is Active';
+                        app._loader.textContent = 'Synthesizer ready! Select a sound and play.';
+                        
+                        // Enable keyboard events
+                        window.addEventListener('keydown', handleKeyDown);
+                        window.addEventListener('keyup', handleKeyUp);
+                        
+                        // Auto-select first sound if available
+                        if (availableSounds.length > 0) {
+                            const firstButton = soundSelector.querySelector('.sound-button');
+                            if (firstButton && !firstButton.classList.contains('active')) {
+                                firstButton.click();
+                            }
+                        }
+                    } else {
+                        app._loader.textContent = 'Failed to start audio. Please try again.';
+                        startBtn.disabled = false;
+                        startBtn.textContent = 'Click to Start Audio';
+                    }
+                } catch (error) {
+                    console.error('Error starting audio:', error);
+                    app._loader.textContent = 'Error starting audio. Please try again.';
+                    startBtn.disabled = false;
+                    startBtn.textContent = 'Click to Start Audio';
+                }
+            });
+        });
+    </script>
+</body>
+</html>
+
