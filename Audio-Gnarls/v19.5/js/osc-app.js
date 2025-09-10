@@ -82,7 +82,7 @@ class OscControls extends HTMLElement {
         </form>
         <!-- MODIFIED START: Seed Auditioning Controls -->
         <div id="auditionControls">
-            <button id="nextSeedBtn" title="Generate a new random seed and play its power-on signature">Next Seed</button>
+            <button id="nextSeedBtn" title="Load the next seed from the CSV list">Next Seed</button>
             <button id="approveBtn" title="Save this seed to the list and play the next one">✅</button>
             <button id="rejectBtn" title="Discard this seed and play the next one">❌</button>
         </div>
@@ -221,6 +221,17 @@ class OscApp extends HTMLElement {
     ].forEach(fn=>this[fn]=this[fn].bind(this));
   }
 
+   _onToneReady(){
+    const s=this.state; s.Tone=window.Tone; this.loadPresets(s.seed); this.bufferHumChain();
+    const initial=this.shapes[(this._rng(s.seed)()*this.shapes.length)|0];
+    s.uiHomeShapeKey = initial; // remember the default non-hum start shape
+    this._setCanvas({preset:s.presets[initial],shapeKey:initial,mode:'seed'});
+    s.current=this.humKey; this._controls.disableAll?.(false);
+    const D=s.Tone?.Destination?.volume; D&&(D.value=this._linToDb(s.volume));
+    this._updateControls();
+    this._fitLayout();
+  }
+
   attributeChangedCallback(name,_o,nv){
     if(name!=='seed')return;
     const next=(nv||'').trim();
@@ -240,8 +251,11 @@ class OscApp extends HTMLElement {
       isLatchOn:false,seed,presets:{},uiHomeShapeKey:null,_transientOverride:false,
       // Freestyle Path Recorder state
       isFreestyleMode:false,isFreestyleRecording:false,freestyleRecording:null,freestylePlayback:false,
-      // MODIFIED START: State for approved seeds
+      // MODIFIED START: State for seed auditioning
       approvedSeeds: [],
+      seedList: [],
+      seedListIndex: 0,
+      seedListLoaded: false,
       // MODIFIED END
     };
   }
@@ -366,6 +380,9 @@ class OscApp extends HTMLElement {
     this._main.style.overflow='hidden';
     this._controls.setSeed?.(this.state.seed);
     this.shadowRoot.querySelector('tone-loader').addEventListener('tone-ready',this._onToneReady);
+
+    // MODIFIED: Load seed list from CSV file
+    this._loadSeedList();
 
     addEvents(this._controls,[
       ['start-request',this._onStartRequest],['mute-toggle',this._onMuteToggle],['shape-change',this._onShapeChange],
@@ -495,16 +512,7 @@ class OscApp extends HTMLElement {
   }
   _onWindowResize(){this._fitLayout();}
 
-  _onToneReady(){
-    const s=this.state; s.Tone=window.Tone; this.loadPresets(s.seed); this.bufferHumChain();
-    const initial=this.shapes[(this._rng(s.seed)()*this.shapes.length)|0];
-    s.uiHomeShapeKey = initial; // remember the default non-hum start shape
-    this._setCanvas({preset:s.presets[initial],shapeKey:initial,mode:'seed'});
-    s.current=this.humKey; this._controls.disableAll?.(false);
-    const D=s.Tone?.Destination?.volume; D&&(D.value=this._linToDb(s.volume));
-    this._updateControls();
-    this._fitLayout();
-  }
+ 
 
   _onHotkeyToggleSeqPlay(){
     if(this.state.sequencePlaying)this.stopSequence?.(); else this.playSequence?.();
@@ -533,23 +541,106 @@ class OscApp extends HTMLElement {
     (!v||v===this.state.seed)|| (this.resetToSeed(v), this._controls.setSeed?.(v));
   }
 
+  // =========================================================================
+  // ===== THIS IS THE CORRECTED FUNCTION ====================================
+  // =========================================================================
   resetToSeed(newSeed){
-    this.stopAudioAndDraw(); this.state.seed=newSeed; this.setAttribute('seed',newSeed);
-    document?.documentElement&&(document.documentElement.dataset.seed=newSeed);
-    this.loadPresets(newSeed); this.resetState();
+    // --- PRESERVE SEED LIST STATE ---
+    const { seedList, seedListIndex, seedListLoaded, approvedSeeds } = this.state;
+
+    this.stopAudioAndDraw();
+    this.state.seed = newSeed;
+    this.setAttribute('seed', newSeed);
+    document?.documentElement && (document.documentElement.dataset.seed = newSeed);
+    this.loadPresets(newSeed);
+    
+    // Call the method that resets the state (we are assuming it's called resetState)
+    // If no such method exists, it might be an inline `this.state = this.defaultState(...)`
+    if (this.resetState) {
+        this.resetState();
+    } else {
+        // Fallback if resetState is not a dedicated method
+        this.state = this.defaultState(newSeed);
+    }
+
+    // --- RESTORE SEED LIST STATE ---
+    this.state.seedList = seedList;
+    this.state.seedListIndex = seedListIndex;
+    this.state.seedListLoaded = seedListLoaded;
+    this.state.approvedSeeds = approvedSeeds;
+
     this._controls.setSeed?.(newSeed); // Ensure UI updates
-    this._loader.textContent='Seed updated. Click POWER ON.'; this._fitLayout();
+    this._loader.textContent = 'Seed updated. Click POWER ON.';
+    this._fitLayout();
   }
+  // =========================================================================
+  // ===== END OF CORRECTED FUNCTION =========================================
+  // =========================================================================
+
 
   // MODIFIED START: Seed Auditioning Logic
+  async _loadSeedList() {
+    try {
+      // Correct path to the CSV file inside the 'js' folder
+      const response = await fetch('./js/top_1000_seeds.csv');
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const csvText = await response.text();
+      const lines = csvText.trim().split('\n');
+      
+      if (lines.length < 2) {
+        console.warn('Seed CSV is empty or has no data rows.');
+        return; // Fallback to random seeds will be used
+      }
+
+      // Get header to find the 'seed' column index
+      const headers = lines[0].split(',').map(h => h.trim().replace(/"/g, ''));
+      const seedIndex = headers.indexOf('seed');
+
+      if (seedIndex === -1) {
+        console.error('Could not find "seed" column in top_1000_seeds.csv. Will use random seeds.');
+        return;
+      }
+      
+      const seeds = lines.slice(1).map(line => {
+        // Simple split is okay as the seed column doesn't contain commas
+        const columns = line.split(',');
+        return columns[seedIndex]?.trim().replace(/"/g, '') || null;
+      }).filter(Boolean); // Filter out any parsing errors
+
+      if (seeds.length > 0) {
+        this.state.seedList = seeds;
+        this.state.seedListLoaded = true;
+        console.log(`Successfully loaded ${seeds.length} seeds from CSV file.`);
+      } else {
+        console.warn('No valid seeds found in CSV file. Will use random seeds.');
+      }
+    } catch (e) {
+      console.error('Failed to load or parse top_1000_seeds.csv. Will use random seeds.', e);
+    }
+  }
+
   _generateRandomSeed() {
     // Generates an 8-character alphanumeric seed.
     return Math.random().toString(36).substring(2, 10);
   }
 
   _onNextSeed() {
-    const newSeed = this._generateRandomSeed();
-    this._loader.textContent = `Loading new seed: ${newSeed}...`;
+    let newSeed;
+    // If the seed list is loaded and contains seeds, use it
+    if (this.state.seedListLoaded && this.state.seedList.length > 0) {
+      const { seedList, seedListIndex } = this.state;
+      newSeed = seedList[seedListIndex];
+      // Update the loader text to show progress through the list
+      this._loader.textContent = `Loading seed ${seedListIndex + 1}/${seedList.length}: ${newSeed}...`;
+      // Increment and wrap the index for the next click
+      this.state.seedListIndex = (seedListIndex + 1) % seedList.length;
+    } else {
+      // Otherwise, fall back to generating a random seed
+      newSeed = this._generateRandomSeed();
+      this._loader.textContent = `Loading new random seed: ${newSeed}...`;
+    }
 
     // resetToSeed stops audio and re-initializes state for the new seed.
     this.resetToSeed(newSeed);
