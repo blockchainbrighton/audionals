@@ -4,37 +4,84 @@
   const TAU = PI * 2, theta = (i, n, ph = 0) => (i / n) * TAU + ph, norm = v => (v + 1) * 0.5;
 
   // --- Seeded color/effect config + helpers ---------------------------------
-  const DEFAULT_MONOCHROME_PROB = 0.01;       // ~1 in 100 → all shapes same color
-  const DEFAULT_HALF_DOMINANT_PROB = 0.05;    // ~1 in 20 → ~half shapes share one color
-  const DEFAULT_GROUP_STROBE_PROB = 0.05;     // ~1 in 20 → many/all shapes strobe
-  const HALF_DOMINANT_RATIO = 0.5;            // target fraction for half-dominant mode
+  const DEFAULT_MONOCHROME_PROB     = 0.02; // ~1 in 50 → all shapes same color
+  const DEFAULT_HALF_DOMINANT_PROB  = 0.05; // ~1 in 20 → ~half shapes share one color
+  const DEFAULT_GROUP_STROBE_PROB   = 0.01; // ~1 in 20 → many/all shapes strobe
+  const DEFAULT_DARK_PALETTE_PROB   = 0.01; // sometimes bias palette to darker colors
+  const DEFAULT_NEUTRAL_PALETTE_PROB= 0.05; // sometimes bias palette to neutrals (mono-ish but multicolor)
+
+  const HALF_DOMINANT_RATIO = 0.5;          // target fraction for half-dominant mode
 
   // Hue-cycler speed options (hue per ms). Order: slow, medium (~original), fast, lightning
   const CYCLER_SPEEDS = { slow:0.03, medium:0.06, fast:0.12, lightning:0.6 };
 
-  // Defaults (edit these or override via element attributes as JSON)
+  // Base weights (can override via element attributes)
+  // Keep bright/brand palette here; dark/neutral variants are managed in the special-mode tables below.
   const COLOR_WEIGHTS_DEFAULT = {
-    // less common / brand
+    // brand / requested hues (bright set)
     bitcoin_orange: 3,
-    stacks_purple:  3,
+    stacks_purple:  2,   // keep, but darker variant lives in dark palette
     deep_purple:    2,
     light_magenta:  3,
     shocking_pink:  4,
+    royal_blue:    10,   // extra for variety
+    dark_green:   3,
+
+
     // common heroes
-    bright_pink:    10,
+    bright_pink:    6,
     bright_red:     12,
+
     // supporting reds
-    dark_red:       4,
+    dark_red:       6,
+
     // vivid accents tuned for dark bg
-    bright_yellow:  8,
-    bright_green:   8,
-    gold:           3,
-    // neutrals
-    white:          7,
-    off_white:      6,
+    bright_yellow:  1,
+    gold:           1,
+
+    // neutrals (bright/standard)
+    white:          3,
+
+    // subtle baseline options
     dark_gray:      2,
+    near_black:     1,
+
     // special
     cycler:         3
+  };
+
+  // Optional special-mode overrides (only keys listed are used in that mode)
+  // Strongly dark-biased palette: truly dark tones across several hues
+  const DARK_COLOR_WEIGHTS_DEFAULT = {
+    // very dark hues
+    extra_dark_purple:  2,
+    very_dark_blue:     2,
+    very_dark_green:    3,
+    dark_red:           5,
+
+    // very dark neutrals
+    extra_dark_gray:    3,
+    charcoal:           2,
+    near_black:         1,
+
+    // tiny chance of a metallic pop
+    gold:               1
+    // (no cycler here by default; add "cycler": N via attribute to allow it)
+  };
+
+  // Neutral/monochrome-biased palette with more stops between black and white
+  const NEUTRAL_COLOR_WEIGHTS_DEFAULT = {
+    near_black:      4,
+    extra_dark_gray: 5,
+    charcoal:        5,
+    dark_gray:       5,
+    slate_gray:      4,
+    dim_gray:        4,
+    silver:          3,
+    gainsboro:       3,
+    off_white:       4,
+    white:           3
+    // (no cycler here by default)
   };
 
   const EFFECT_WEIGHTS_DEFAULT = {
@@ -48,26 +95,50 @@
     slow: 25, medium: 40, fast: 25, lightning: 10
   };
 
+  // Named color registry — ensure every key used above is defined here.
   const NAMED_COLORS = {
-    // brand / requested hues
-    bitcoin_orange: '#F7931A',
-    stacks_purple:  '#5546FF',
-    deep_purple:    '#4B1EFF',
-    light_magenta:  '#FF4FD8',
-    shocking_pink:  '#FF00A8',
-    bright_pink:    '#FF1493',
-    bright_red:     '#FF1A1A',
-    dark_red:       '#6A0000',
+    // brand / requested hues (bright set)
+    bitcoin_orange:    '#F7931A',
+    stacks_purple:     '#5546FF', // bright; dark variant below for dark palette
+    deep_purple:       '#4B1EFF',
+    light_magenta:     '#FF4FD8',
+    shocking_pink:     '#FF00A8',
+    bright_pink:       '#FF1493',
+    bright_red:        '#FF1A1A',
+    dark_red:          '#6A0000',
+    royal_blue:        '#0726a2ff',
+    dark_green:      '#017210ff',
+
+
     // vivid accents
-    bright_yellow:  '#FFD400',
-    bright_green:   '#00FF66',
-    gold:           '#FFD700',
-    // neutrals
-    white:          '#FFFFFF',
-    off_white:      '#F4F4F8',
-    // subtle: only-just-visible against dark bg
-    dark_gray:      'rgba(16,16,24,0.40)'
+    bright_yellow:     '#FFD400',
+    gold:              '#FFD700',
+
+    // neutrals (baseline)
+    white:             '#FFFFFF',
+    dark_gray:         'rgba(16,16,24,0.40)',
+    near_black:        '#0A0A10',
+
+    // --- new very-dark hues for the dark palette ---
+    stacks_purple_dark:'#241E72', // deepened Stacks tone (less luminous)
+    extra_dark_purple: '#1C0033', // near-black purple
+    very_dark_blue:    '#0B1E3A', // midnight/navy blue
+    very_dark_green:   '#012B1B', // deep teal/green
+
+    // --- additional neutral stops for the neutral palette ---
+    extra_dark_gray:   '#0F1014', // darker than dark_gray, still RGB hex for crisp edges
+    charcoal:          '#14161C',
+    slate_gray:        '#2A2F3A',
+    dim_gray:          '#6E6E73',
+    silver:            '#C0C0C8',
+    gainsboro:         '#DDDEE3'
   };
+
+
+
+  // Palettes for special modes
+  const DARK_COLOR_KEYS    = Object.keys(DARK_COLOR_WEIGHTS_DEFAULT);
+  const NEUTRAL_COLOR_KEYS = Object.keys(NEUTRAL_COLOR_WEIGHTS_DEFAULT);
 
   const _hash32 = (str) => { let a = 0; for (let i=0;i<str.length;i++) a = (a<<5) - a + str.charCodeAt(i); return a|0; };
   const _rngFrom = (str) => {
@@ -98,8 +169,13 @@
     return keys[keys.length - 1];
   };
 
+  const _filterWeightsToKeys = (weights, allowedKeys) => {
+    const out = {};
+    for (const k of allowedKeys) if (k in weights) out[k] = weights[k];
+    return out;
+  };
+
   const _chooseSubset = (rand, items, k) => {
-    // Fisher–Yates shuffle seeded, return first k items
     const arr = items.slice();
     for (let i = arr.length - 1; i > 0; i--) {
       const j = (rand() * (i + 1)) | 0;
@@ -150,9 +226,10 @@
 
       // Seeded look planning state
       // plan: {
-      //   seed, monoProb, halfDomProb, groupStrobeProb,
-      //   isMono, isHalf, colorUniformKey?, halfDominantKey?, halfDominantSet (Set),
-      //   colorWeights, effectWeights, speedWeights,
+      //   seed, monoProb, halfDomProb, groupStrobeProb, darkProb, neutralProb,
+      //   isMono, isHalf, isDarkPalette, isNeutralPalette,
+      //   colorUniformKey?, halfDominantKey?, halfDominantSet (Set),
+      //   colorWeights, effectWeights, speedWeights, darkWeights, neutralWeights,
       //   perShapeColorKey, perShapeCyclerSpeedKey, perShapeEffectKey,
       //   isGroupStrobe, groupStrobeAll, groupStrobeSet (Set)
       // }
@@ -201,7 +278,7 @@
           ctx.globalCompositeOperation = 'lighter';
           ctx.lineWidth = 2.6;
         } else if (effect === 'strobe') {
-          // flash ~8-12 Hz with a bit of seedless jitter; visible but simple
+          // flash ~8-12 Hz with a bit of jitter
           const hz = 10 + (now % 1000) * 0.002; // 10..12 Hz
           const phase = ((now * hz / 1000) % 1) < 0.5;
           ctx.globalAlpha = phase ? 1 : 0.22;
@@ -373,10 +450,28 @@
       const p = Number.isFinite(pAttr) ? pAttr : DEFAULT_GROUP_STROBE_PROB;
       return min(1, max(0, p));
     }
+    _getDarkPaletteProb(){
+      const pAttr = parseFloat(this.getAttribute?.('dark-palette-prob') || '');
+      const p = Number.isFinite(pAttr) ? pAttr : DEFAULT_DARK_PALETTE_PROB;
+      return min(1, max(0, p));
+    }
+    _getNeutralPaletteProb(){
+      const pAttr = parseFloat(this.getAttribute?.('neutral-palette-prob') || '');
+      const p = Number.isFinite(pAttr) ? pAttr : DEFAULT_NEUTRAL_PALETTE_PROB;
+      return min(1, max(0, p));
+    }
 
     _getColorWeights(){
       const w = _parseJSONAttr(this, 'color-weights', COLOR_WEIGHTS_DEFAULT);
       return { ...COLOR_WEIGHTS_DEFAULT, ...w };
+    }
+    _getDarkColorWeights(){
+      const w = _parseJSONAttr(this, 'dark-color-weights', DARK_COLOR_WEIGHTS_DEFAULT);
+      return { ...DARK_COLOR_WEIGHTS_DEFAULT, ...w };
+    }
+    _getNeutralColorWeights(){
+      const w = _parseJSONAttr(this, 'neutral-color-weights', NEUTRAL_COLOR_WEIGHTS_DEFAULT);
+      return { ...NEUTRAL_COLOR_WEIGHTS_DEFAULT, ...w };
     }
     _getEffectWeights(){
       const w = _parseJSONAttr(this, 'effect-weights', EFFECT_WEIGHTS_DEFAULT);
@@ -389,28 +484,45 @@
 
     _ensurePlan(){
       const seed = this.preset?.seed ?? this._getSeed();
-      const monoProb       = this._getMonoProb();
-      const halfDomProb    = this._getHalfDomProb();
-      const groupStrobeProb= this._getGroupStrobeProb();
-      const colorWeights   = this._getColorWeights();
-      const effectWeights  = this._getEffectWeights();
-      const speedWeights   = this._getSpeedWeights();
+
+      const monoProb        = this._getMonoProb();
+      const halfDomProb     = this._getHalfDomProb();
+      const groupStrobeProb = this._getGroupStrobeProb();
+      const darkProb        = this._getDarkPaletteProb();
+      const neutralProb     = this._getNeutralPaletteProb();
+
+      const colorWeights    = this._getColorWeights();
+      const effectWeights   = this._getEffectWeights();
+      const speedWeights    = this._getSpeedWeights();
+
+      const darkWeights     = this._getDarkColorWeights();
+      const neutralWeights  = this._getNeutralColorWeights();
 
       const stale =
         !this._plan ||
         this._plan.seed !== seed ||
-        JSON.stringify(this._plan.colorWeights) !== JSON.stringify(colorWeights) ||
-        JSON.stringify(this._plan.effectWeights) !== JSON.stringify(effectWeights) ||
-        JSON.stringify(this._plan.speedWeights)  !== JSON.stringify(speedWeights)  ||
-        this._plan.monoProb !== monoProb ||
-        this._plan.halfDomProb !== halfDomProb ||
-        this._plan.groupStrobeProb !== groupStrobeProb;
+        JSON.stringify(this._plan.colorWeights)   !== JSON.stringify(colorWeights)  ||
+        JSON.stringify(this._plan.effectWeights)  !== JSON.stringify(effectWeights) ||
+        JSON.stringify(this._plan.speedWeights)   !== JSON.stringify(speedWeights)  ||
+        JSON.stringify(this._plan.darkWeights)    !== JSON.stringify(darkWeights)   ||
+        JSON.stringify(this._plan.neutralWeights) !== JSON.stringify(neutralWeights)||
+        this._plan.monoProb        !== monoProb        ||
+        this._plan.halfDomProb     !== halfDomProb     ||
+        this._plan.groupStrobeProb !== groupStrobeProb ||
+        this._plan.darkProb        !== darkProb        ||
+        this._plan.neutralProb     !== neutralProb;
 
       if (!stale) return;
 
       // Mode picks
       const rMono = _rngFrom(`${seed}::mode::mono`);
       const isMono = rMono() < monoProb;
+
+      const rNeutral = _rngFrom(`${seed}::mode::neutral`);
+      const isNeutralPalette = !isMono && (rNeutral() < neutralProb);
+
+      const rDark = _rngFrom(`${seed}::mode::dark`);
+      const isDarkPalette = !isMono && !isNeutralPalette && (rDark() < darkProb);
 
       const rHalf = _rngFrom(`${seed}::mode::half`);
       const isHalf = !isMono && (rHalf() < halfDomProb); // mono takes precedence
@@ -420,21 +532,34 @@
       const rGroupMode = _rngFrom(`${seed}::mode::gStrobeType`);
       const groupStrobeAll = isGroupStrobe && (rGroupMode() < 0.5); // 50% chance all vs subset
 
-      // Mono-day color
+      // Choose which weight table is active for colors
+      let activeColorWeights;
+      if (isNeutralPalette) {
+        // restrict to neutral keys only
+        activeColorWeights = _filterWeightsToKeys(neutralWeights, NEUTRAL_COLOR_KEYS);
+      } else if (isDarkPalette) {
+        // restrict to dark palette (plus any extra keys you add to dark-color-weights)
+        activeColorWeights = _filterWeightsToKeys(darkWeights, Object.keys(darkWeights));
+      } else {
+        activeColorWeights = { ...colorWeights };
+      }
+      // safety: if filtered result is empty, fall back to base
+      if (!Object.keys(activeColorWeights).length) activeColorWeights = { ...colorWeights };
+
+      // Mono-day color (picked from the active palette)
       let colorUniformKey = null;
       if (isMono) {
         const rUniform = _rngFrom(`${seed}::monoColorPick`);
-        colorUniformKey = _pickWeightedKey(rUniform, colorWeights);
+        colorUniformKey = _pickWeightedKey(rUniform, activeColorWeights);
       }
 
-      // Half-dominant planning
+      // Half-dominant planning (also uses the active palette)
       let halfDominantKey = null;
       let halfDominantSet = new Set();
       if (isHalf) {
         const rHalfKey = _rngFrom(`${seed}::halfColorPick`);
-        halfDominantKey = _pickWeightedKey(rHalfKey, colorWeights);
+        halfDominantKey = _pickWeightedKey(rHalfKey, activeColorWeights);
 
-        // choose ~50% of shapes deterministically
         const shapesAll = Object.keys(this.drawFuncs); // includes 'hum'
         const targetCount = Math.max(1, Math.round(shapesAll.length * HALF_DOMINANT_RATIO));
         const subset = _chooseSubset(_rngFrom(`${seed}::halfSubset`), shapesAll, targetCount);
@@ -448,7 +573,7 @@
 
       const shapes = Object.keys(this.drawFuncs); // include 'hum'
       for (const k of shapes) {
-        // Color
+        // Color decision
         let key;
         if (isMono) {
           key = colorUniformKey;
@@ -456,7 +581,7 @@
           key = halfDominantKey;
         } else {
           const rColor = _rngFrom(`${seed}::color::${k}`);
-          key = _pickWeightedKey(rColor, colorWeights);
+          key = _pickWeightedKey(rColor, activeColorWeights);
         }
         perShapeColorKey[k] = key;
 
@@ -468,7 +593,10 @@
 
         // Effects (base)
         const rEff = _rngFrom(`${seed}::effect::${k}`);
-        perShapeEffectKey[k] = _pickWeightedKey(rEff, effectWeights);
+        perShapeEffectKey[k] = _pickWeightedKey(rEff, EFFECT_WEIGHTS_DEFAULT);
+        // allow overriding via attribute weights too
+        const effOverride = _pickWeightedKey(rEff, this._getEffectWeights());
+        if (effOverride) perShapeEffectKey[k] = effOverride;
       }
 
       // Group strobe override
@@ -490,11 +618,12 @@
 
       this._plan = {
         seed,
-        monoProb, halfDomProb, groupStrobeProb,
-        isMono, isHalf,
+        monoProb, halfDomProb, groupStrobeProb, darkProb, neutralProb,
+        isMono, isHalf, isDarkPalette, isNeutralPalette,
         colorUniformKey,
         halfDominantKey, halfDominantSet,
         colorWeights, effectWeights, speedWeights,
+        darkWeights, neutralWeights,
         perShapeColorKey,
         perShapeCyclerSpeedKey,
         perShapeEffectKey,
