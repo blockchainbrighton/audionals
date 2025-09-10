@@ -52,52 +52,36 @@ class OscHotkeys extends HTMLElement {
     if (this._downKeys.size) this._releaseAll();
   }
 
-  // js/osc-hotkeys.js
-
   _onKeyDown(ev) {
-    // START: MODIFICATION
-    // Use composedPath to find the true event target, even inside a Shadow DOM.
-    const trueTarget = ev.composedPath && ev.composedPath().length ? ev.composedPath()[0] : ev.target;
-    const t = trueTarget.tagName || '';
-    // END: MODIFICATION
-
+    // Respect inputs, including within shadow roots
+    const t = (ev.composedPath?.()[0] || ev.target).tagName || '';
     if (/^(INPUT|TEXTAREA|SELECT)$/.test(t)) return;
 
-    const k = ev.key;
+    const k = ev.key, KU = k?.toUpperCase?.() || '';
+    const emit = (type, detail) => { this._emit(type, detail); ev.preventDefault(); };
 
-    // Non-repeating global hotkeys
-    if (k === 'o' || k === 'O') { this._emit('hk-toggle-power'); ev.preventDefault(); return; }
-    if (k === 'L' && ev.shiftKey) { this._emit('hk-toggle-latch'); ev.preventDefault(); return; }
-    if (k === 'l' && !ev.shiftKey) { this._emit('hk-toggle-loop'); ev.preventDefault(); return; }
-    if (k === 'm' || k === 'M') { this._emit('hk-toggle-mute'); ev.preventDefault(); return; }
+    // Global hotkeys (non-repeating)
+    const simple = { O: 'hk-toggle-power', M: 'hk-toggle-mute', C: 'hk-toggle-controls', Q: 'hk-toggle-sequencer', P: 'hk-toggle-seq-play' };
+    if (simple[KU]) return emit(simple[KU]);
 
-    // CHANGE: C now toggles CONTROLS, not sequencer
-    if (k === 'c' || k === 'C') { this._emit('hk-toggle-controls'); ev.preventDefault(); return; }
+    if (k === 'L' && ev.shiftKey) return emit('hk-toggle-latch');
+    if (k === 'l' && !ev.shiftKey) return emit('hk-toggle-loop');
+    if (k === 'S' && ev.shiftKey) return emit('hk-toggle-signature');
+    if (k === 's' && !ev.shiftKey) return emit('hk-audio-signature');
 
-    // CHANGE: Q now toggles the sequencer UI
-    if (k === 'q' || k === 'Q') { this._emit('hk-toggle-sequencer'); ev.preventDefault(); return; }
+    // Freestyle recorder
+    if ((KU === 'R') && ev.shiftKey) return emit('fr-play');
+    if ((KU === 'R') && !ev.shiftKey) return emit('fr-toggle');
 
-    if (k === 'S' && ev.shiftKey) { this._emit('hk-toggle-signature'); ev.preventDefault(); return; }
-    if (k === 's' && !ev.shiftKey) { this._emit('hk-audio-signature'); ev.preventDefault(); return; }
-    if (k === 'p' || k === 'P') { this._emit('hk-toggle-seq-play'); ev.preventDefault(); return; }
+    // Shape step
+    if (k === 'ArrowUp' || k === 'ArrowDown') return emit('hk-shape-step', { direction: k === 'ArrowDown' ? 1 : -1 });
 
-    // Freestyle recorder hotkeys: R to toggle record-ready, Shift+R to play/stop freestyle
-    if ((k === 'r' || k === 'R') && ev.shiftKey) { this._emit('fr-play'); ev.preventDefault(); return; }
-    if ((k === 'r' || k === 'R') && !ev.shiftKey) { this._emit('fr-toggle'); ev.preventDefault(); return; }
-
-    if (k === 'ArrowUp' || k === 'ArrowDown') {
-      ev.preventDefault();
-      this._emit('hk-shape-step', { direction: k === 'ArrowDown' ? 1 : -1 });
-      return;
-    }
-
-    if (this._downKeys.has(k)) { ev.preventDefault(); return; }
+    if (this._downKeys.has(k)) return ev.preventDefault();
     this._downKeys.add(k);
 
     const m = this._mapKey(k);
     if (!m) return;
-    this._emit('hk-press', m);
-    ev.preventDefault();
+    emit('hk-press', m);
   }
 
   _onKeyUp(ev) {
@@ -113,9 +97,7 @@ class OscHotkeys extends HTMLElement {
   _onPageHide() { this._releaseAll(); }
 
   _releaseAll() {
-    for (const k of Array.from(this._downKeys)) {
-      const m = this._mapKey(k); if (m) this._emit('hk-release', m);
-    }
+    for (const k of this._downKeys) { const m = this._mapKey(k); if (m) this._emit('hk-release', m); }
     this._downKeys.clear();
   }
 
@@ -124,10 +106,8 @@ class OscHotkeys extends HTMLElement {
 
   _mapKey(k) {
     if (k === '0') return { key: k, idx: -1, shapeKey: this._config.humKey };
-    const c = k?.charCodeAt?.(0) ?? 0, i = c - 49; // '1' => 0
-    return i >= 0 && i < this._config.shapes.length
-      ? { key: k, idx: i, shapeKey: this._config.shapes[i] }
-      : null;
+    const i = (k?.charCodeAt?.(0) ?? 0) - 49; // '1' => 0
+    return i >= 0 && i < this._config.shapes.length ? { key: k, idx: i, shapeKey: this._config.shapes[i] } : null;
   }
 
   _emit(type, detail) { this.dispatchEvent(new CustomEvent(type, { detail, bubbles: true, composed: true })); }
