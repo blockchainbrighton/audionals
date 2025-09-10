@@ -5,14 +5,18 @@
 import { humKey, shapeList, shapeCount, allKeys } from './shapes.js';
 
 export function Engine(app) {
-  const _el = (t, o) => Object.assign(document.createElement(t), o);
-  const _eachChain = f => { const c = app.state.chains; for (const k in c) f(c[k], k); };
+  // --------- tiny helpers (pure / side-effect-light) ----------
+  const A = Object.assign;
+  const _el = (t, o) => A(document.createElement(t), o);
+  const _eachChain = f => { const cs = app.state.chains; for (const k in cs) f(cs[k], k); };
   const _sleep = ms => new Promise(r => setTimeout(r, ms));
   const _timeNow = T => T?.now?.() ?? 0;
-  const _setCanvas = p => Object.assign(app._canvas, p);
+  const _setCanvas = p => A(app._canvas, p);
   const _rng = s => { let a = 0x6d2b79f5 ^ s.length; for (let i = 0; i < s.length; i++) a = Math.imul(a ^ s.charCodeAt(i), 2654435761); return () => (a = Math.imul(a ^ (a >>> 15), 1 | a), ((a >>> 16) & 0xffff) / 0x10000); };
   const _createAnalyser = T => { const n = T?.context?.createAnalyser?.(); if (n) { n.fftSize = 2048; try { n.smoothingTimeConstant = .06; } catch {} } return n || null; };
   const _linToDb = v => v <= 0 ? -60 : Math.max(-60, Math.min(0, 20 * Math.log10(Math.min(1, Math.max(1e-4, v)))));
+  const tryDo = f => { try { f?.(); } catch {} };
+  const tryAwait = async f => { try { await f?.(); } catch {} };
 
   const isiOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
   const FADE = isiOS ? 0.028 : 0.012;
@@ -21,42 +25,42 @@ export function Engine(app) {
   const _rampLinear = (p, t, s = FADE, T) => {
     if (!p || !T) return;
     const n = _timeNow(T);
-    try {
-      p.cancelScheduledValues?.(n);
-      const cur = p.value;
-      p.setValueAtTime?.(cur ?? 0, n);
-      p.linearRampToValueAtTime?.(t, n + Math.max(.001, s));
-    } catch {}
+    tryDo(() => p.cancelScheduledValues?.(n));
+    const cur = p.value ?? 0;
+    tryDo(() => p.setValueAtTime?.(cur, n));
+    tryDo(() => p.linearRampToValueAtTime?.(t, n + Math.max(.001, s)));
   };
 
   const _silenceAllChains = async (f = FADE) => {
     const T = app.state?.Tone; if (!T) return;
-    _eachChain(ch => {
-      if (ch?.out?.gain) _rampLinear(ch.out.gain, 0, f, T);
-    });
+    _eachChain(ch => ch?.out?.gain && _rampLinear(ch.out.gain, 0, f, T));
     await app._sleep(Math.ceil((f + .002) * 1e3));
   };
 
+  const _disposeNode = n => { tryDo(() => n.stop?.()); tryDo(() => n.dispose?.()); tryDo(() => n.disconnect?.()); };
   const _disposeChain = async ch => {
     const T = app.state?.Tone;
-    try {
-      if (T && ch?.out?.gain) {
-        _rampLinear(ch.out.gain, 0, FADE, T);
-        await app._sleep(Math.ceil((FADE + .002) * 1e3));
-      }
-    } catch {}
-    for (const n of Object.values(ch || {})) { try { n.stop?.(); } catch {} try { n.dispose?.(); } catch {} try { n.disconnect?.(); } catch {} }
+    if (T && ch?.out?.gain) {
+      _rampLinear(ch.out.gain, 0, FADE, T);
+      await app._sleep(Math.ceil((FADE + .002) * 1e3));
+    }
+    for (const n of Object.values(ch || {})) _disposeNode(n);
   };
 
   const deterministicPreset = (seed, shape) => {
-    const r = _rng(`${seed}_${shape}`), types = ['sine','triangle','square','sawtooth'], notes = ['C1','C2','E2','G2','A2','C3','E3','G3','B3','D4','F#4','A4','C5'];
-    const m = r(), mode = m < .18 ? 0 : m < .56 ? 1 : m < .85 ? 2 : 3, cnt = mode === 3 ? 2 + (r() > .7 ? 1 : 0) : 1 + (r() > .6 ? 1 : 0);
-    const oscs = Array.from({ length: cnt }, () => [types[(r() * types.length) | 0], notes[(r() * notes.length) | 0]]);
-    let lfoRate, lfoMin, lfoMax, filterBase, env;
+    const r = _rng(`${seed}_${shape}`);
+    const types = ['sine','triangle','square','sawtooth'];
+    const notes = ['C1','C2','E2','G2','A2','C3','E3','G3','B3','D4','F#4','A4','C5'];
+    const m = r();
+    const mode = m < .18 ? 0 : m < .56 ? 1 : m < .85 ? 2 : 3;
+    const cnt = mode === 3 ? 2 + (r() > .7 ? 1 : 0) : 1 + (r() > .6 ? 1 : 0);
+    const pick = arr => arr[(r() * arr.length) | 0];
+    const oscs = Array.from({ length: cnt }, () => [pick(types), pick(notes)]);
+    let env, lfoRate, lfoMin, lfoMax, filterBase;
     if (mode === 0) { lfoRate = .07 + r() * .3; lfoMin = 400 + r() * 400; lfoMax = 900 + r() * 600; filterBase = 700 + r() * 500; env = { attack: .005 + r() * .03, decay: .04 + r() * .08, sustain: .1 + r() * .2, release: .03 + r() * .1 }; }
-    else if (mode === 1) { lfoRate = .25 + r() * 8; lfoMin = 120 + r() * 700; lfoMax = 1200 + r() * 1400; filterBase = 300 + r() * 2400; env = { attack: .03 + r() * .4, decay: .1 + r() * .7, sustain: .2 + r() * .5, release: .2 + r() * 3 }; }
-    else if (mode === 2) { lfoRate = 6 + r() * 20; lfoMin = 80 + r() * 250; lfoMax = 1500 + r() * 3500; filterBase = 300 + r() * 2400; env = { attack: .03 + r() * .4, decay: .1 + r() * .7, sustain: .2 + r() * .5, release: .2 + r() * 3 }; }
-    else { lfoRate = 24 + r() * 36; lfoMin = 80 + r() * 250; lfoMax = 1500 + r() * 3500; filterBase = 300 + r() * 2400; env = { attack: 2 + r() * 8, decay: 4 + r() * 20, sustain: .7 + r() * .2, release: 8 + r() * 24 }; }
+    else if (mode === 1) { lfoRate = .25 + r() * 8;  lfoMin = 120 + r() * 700; lfoMax = 1200 + r() * 1400; filterBase = 300 + r() * 2400; env = { attack: .03 + r() * .4, decay: .1 + r() * .7, sustain: .2 + r() * .5, release: .2 + r() * 3 }; }
+    else if (mode === 2) { lfoRate = 6 + r() * 20;  lfoMin = 80 + r() * 250;  lfoMax = 1500 + r() * 3500; filterBase = 300 + r() * 2400; env = { attack: .03 + r() * .4, decay: .1 + r() * .7, sustain: .2 + r() * .5, release: .2 + r() * 3 }; }
+    else               { lfoRate = 24 + r() * 36; lfoMin = 80 + r() * 250;  lfoMax = 1500 + r() * 3500; filterBase = 300 + r() * 2400; env = { attack: 2 + r() * 8,   decay: 4 + r() * 20, sustain: .7 + r() * .2, release: 8 + r() * 24 }; }
     return {
       osc1: oscs[0], osc2: oscs[1] || null, filter: filterBase, filterQ: .6 + r() * .7,
       lfo: [lfoRate, lfoMin, lfoMax], envelope: env,
@@ -68,20 +72,15 @@ export function Engine(app) {
 
   const bufferHumChain = async () => {
     const { Tone: T, chains: C } = app.state; if (!T) return;
-    const key = humKey(app); if (C[key]) { await _disposeChain(C[key]); delete C[key]; }
+    const key = humKey(app);
+    if (C[key]) { await _disposeChain(C[key]); delete C[key]; }
     try {
       const osc = new T.Oscillator('A0', 'sine').start();
-      const filter = new T.Filter(150, 'lowpass');
-      filter.Q.value = .5;
+      const filter = new T.Filter(150, 'lowpass'); filter.Q.value = .5;
       const volume = new T.Volume(-25);
       const analyser = _createAnalyser(T);
       const out = new T.Gain(0).toDestination();
-      
-      osc.connect(volume);
-      volume.connect(filter);
-      filter.connect(out);
-      analyser && filter.connect(analyser);
-
+      osc.connect(volume); volume.connect(filter); filter.connect(out); analyser && filter.connect(analyser);
       C[key] = { osc, volume, filter, out, analyser };
     } catch (e) { console.error('Error buffering hum chain', e); delete app.state.chains[key]; }
   };
@@ -94,46 +93,31 @@ export function Engine(app) {
       const o1 = new T.Oscillator(pr.osc1[1], pr.osc1[0]).start();
       const o2 = pr.osc2 ? new T.Oscillator(pr.osc2[1], pr.osc2[0]).start() : null;
       const vol = new T.Volume(5);
-      const fil = new T.Filter(pr.filter, 'lowpass');
-      fil.Q.value = pr.filterQ;
+      const fil = new T.Filter(pr.filter, 'lowpass'); fil.Q.value = pr.filterQ;
       const lfo = new T.LFO(...pr.lfo).start();
       const an = _createAnalyser(T);
       const out = new T.Gain(0).toDestination();
-
-      lfo.connect(fil.frequency);
-      o2 && lfo.connect(o2.detune);
-      o1.connect(vol);
-      o2?.connect(vol);
-      vol.connect(fil);
-      fil.connect(out);
-      an && fil.connect(an);
-
+      lfo.connect(fil.frequency); o2 && lfo.connect(o2.detune);
+      o1.connect(vol); o2?.connect(vol); vol.connect(fil); fil.connect(out); an && fil.connect(an);
       C[shape] = { osc1: o1, osc2: o2, volume: vol, filter: fil, lfo, out, analyser: an };
     } catch (e) { console.error('Error buffering chain for shape', shape, e); delete app.state.chains[shape]; }
   };
 
   const setActiveChain = (shape, { updateCanvasShape: u = true, setStateCurrent: s = u, syncCanvasPlayState: y = true } = {}) => {
     const { Tone: T, chains: C, current } = app.state;
-    
-    const prev = C[current];
-    const next = C[shape];
-    
+    const prev = C[current], next = C[shape];
     if (prev && prev !== next) _rampLinear(prev.out.gain, 0, SWITCH_FADE, T);
     if (next) _rampLinear(next.out.gain, 1, SWITCH_FADE, T);
 
     const patch = { isAudioStarted: true };
-    if (next?.analyser) patch.analyser = next.analyser;
-    if (y) patch.isPlaying = app.state.isPlaying;
+    next?.analyser && (patch.analyser = next.analyser);
+    y && (patch.isPlaying = app.state.isPlaying);
     _setCanvas(patch);
-    
-    if (u) {
-      shape === humKey(app)
-        ? _setCanvas({ shapeKey: humKey(app), preset: null })
-        : _setCanvas({ shapeKey: shape, preset: app.state.presets[shape] });
-    }
-    if (s) {
-      app.state.current = shape;
-    }
+
+    if (u) shape === humKey(app)
+      ? _setCanvas({ shapeKey: humKey(app), preset: null })
+      : _setCanvas({ shapeKey: shape, preset: app.state.presets[shape] });
+    if (s) app.state.current = shape;
   };
 
   const disposeAllChains = () => { _eachChain(_disposeChain); app.state.chains = {}; app.state.current = null; };
@@ -146,16 +130,11 @@ export function Engine(app) {
     disposeAllChains();
     app.state.sequencePlaying && stopSequence();
     app.state.audioSignaturePlaying && stopAudioSignature?.();
-    
-    // Preserve the approved seeds list across resets
-    const { seed, Tone: T, approvedSeeds } = app.state;
-    
-    // Reset the state to its default
-    app.state = app.defaultState(seed);
-    
-    // Restore the essential persistent properties
-    app.state.Tone = T;
-    app.state.approvedSeeds = approvedSeeds || []; // Restore the list
+
+    const { seed, Tone: T, approvedSeeds } = app.state;          // persist
+    app.state = app.defaultState(seed);                           // reset
+    app.state.Tone = T;                                           // restore
+    app.state.approvedSeeds = approvedSeeds || [];
 
     loadPresets(seed);
     bufferHumChain();
@@ -173,47 +152,29 @@ export function Engine(app) {
   const unlockAudioAndBufferInitial = async () => {
     const s = app.state;
 
-    // If we already started but haven't finished, avoid double work.
-    if (s.initialBufferingStarted && !s.initialShapeBuffered) {
-      app._loader.textContent = 'Still preparing initial synth, please wait...';
-      return;
-    }
-
-    // If currently playing, treat POWER as Off.
+    if (s.initialBufferingStarted && !s.initialShapeBuffered) { app._loader.textContent = 'Still preparing initial synth, please wait...'; return; }
     if (s.isPlaying) return stopAudioAndDraw();
 
-    // If AudioContext already unlocked
     if (s.contextUnlocked) {
-      if (s.initialShapeBuffered) {
-        // Bring up hum and (once) the startup signature.
-        setActiveChain(humKey(app));
-        s.isPlaying = true;
-        app._canvas.isPlaying = true;
-        app._updateControls({ isAudioStarted: true, isPlaying: true });
+      if (!s.initialShapeBuffered) { app._loader.textContent = 'Audio context unlocked, but synth not ready. Click again.'; return; }
 
-        if (!s._startupSigDone) {
-        try {
-          await app._sleep(200);
-          app._triggerSignatureFor?.(humKey(app), { loop: s.isLoopEnabled });
-          // kick the quick hotkey tour during the same cycle
-          setTimeout(() => { 
-            try { app.cleanupHotkeyTour?.(); app.runHotkeyTour?.({ stepMs: 260, holdMs: 1000 }); } catch {} 
-          }, 60);        } catch {}
+      setActiveChain(humKey(app));
+      s.isPlaying = true; app._canvas.isPlaying = true;
+      app._updateControls({ isAudioStarted: true, isPlaying: true });
+
+      if (!s._startupSigDone) {
+        await tryAwait(() => app._sleep(200));
+        tryDo(() => app._triggerSignatureFor?.(humKey(app), { loop: s.isLoopEnabled }));
+        setTimeout(() => tryDo(() => { app.cleanupHotkeyTour?.(); app.runHotkeyTour?.({ stepMs: 260, holdMs: 1000 }); }), 60);
         s._startupSigDone = true;
       }
-
-        app._loader.textContent = 'Audio resumed (hum).';
-        return;
-      }
-      app._loader.textContent = 'Audio context unlocked, but synth not ready. Click again.';
+      app._loader.textContent = 'Audio resumed (hum).';
       return;
     }
 
-    // First-time unlock path
+    // First unlock
     try {
-      const T = s.Tone;
-      if (!T) throw new Error('Tone.js not available');
-
+      const T = s.Tone; if (!T) throw new Error('Tone.js not available');
       const ctx = T.getContext?.() || T.context;
       let ok = false;
       if (ctx?.resume) { await ctx.resume(); ok = true; }
@@ -223,37 +184,29 @@ export function Engine(app) {
       s.contextUnlocked = true;
       s.initialBufferingStarted = true;
 
-      // 1) Buffer HUM and bring it up immediately (so power-on always hums)
+      // 1) HUM first
       await bufferHumChain();
       setActiveChain(humKey(app));
 
-      // 2) Prebuffer ALL playable shapes BEFORE firing the first signature,
-      //    so step #1 never targets a missing chain.
+      // 2) Prebuffer all shapes
       for (const sh of shapeList(app)) {
         if (!s.contextUnlocked) break;
-        try { await bufferShapeChain(sh); } catch (e) { console.error('Error buffering', sh, e); }
+        await tryAwait(() => bufferShapeChain(sh));
         await _sleep(0);
       }
       s.initialShapeBuffered = true;
 
-      // 3) Mark playing and update UI/canvas
-      s.isPlaying = true;
-      app._canvas.isPlaying = true;
+      // 3) Mark playing + UI
+      s.isPlaying = true; app._canvas.isPlaying = true;
       app._updateControls({ isAudioStarted: true, isPlaying: true });
 
-      // 4) Fire the startup signature (once), after a tiny settle
+      // 4) Startup signature once
       if (!s._startupSigDone) {
-        try {
-          await app._sleep(200);
-          app._triggerSignatureFor?.(humKey(app), { loop: s.isLoopEnabled });
-          // show a brief, sequential label/glow for all hotkeys during power-on
-          setTimeout(() => { 
-            try { app.cleanupHotkeyTour?.(); app.runHotkeyTour?.({ stepMs: 260, holdMs: 1000 }); } catch {} 
-          }, 60);
-        } catch {}
+        await tryAwait(() => app._sleep(200));
+        tryDo(() => app._triggerSignatureFor?.(humKey(app), { loop: s.isLoopEnabled }));
+        setTimeout(() => tryDo(() => { app.cleanupHotkeyTour?.(); app.runHotkeyTour?.({ stepMs: 260, holdMs: 1000 }); }), 60);
         s._startupSigDone = true;
       }
-
     } catch (e) {
       console.error('Failed to unlock AudioContext:', e);
       s.contextUnlocked = false;
@@ -263,77 +216,58 @@ export function Engine(app) {
   };
 
   // --- DROP-IN: replaces stopAudioAndDraw entirely ---
-    const stopAudioAndDraw = () => {
-      const s = app.state;
-      if (!s.isPlaying && !s.initialBufferingStarted) return;
+  const stopAudioAndDraw = () => {
+    const s = app.state;
+    if (!s.isPlaying && !s.initialBufferingStarted) return;
 
-      // Proactively clean up any onboarding tour artifacts
-      try { app.cleanupHotkeyTour?.(); } catch {}
+    tryDo(() => app.cleanupHotkeyTour?.());                 // cleanup tour
+    if (s.audioSignatureTimer) { tryDo(() => clearTimeout(s.audioSignatureTimer)); s.audioSignatureTimer = null; }
 
-      // Stop any in-flight signature timer
-      if (s.audioSignatureTimer) {
-        try { clearTimeout(s.audioSignatureTimer); } catch {}
-        s.audioSignatureTimer = null;
-      }
+    s.isPlaying = s.initialBufferingStarted = s.initialShapeBuffered = false;
+    disposeAllChains();
+    s.sequencePlaying && stopSequence?.();
+    s.audioSignaturePlaying && stopAudioSignature?.();
 
-      s.isPlaying = s.initialBufferingStarted = s.initialShapeBuffered = false;
-      disposeAllChains();
-      s.sequencePlaying && stopSequence?.();
-      s.audioSignaturePlaying && stopAudioSignature?.();
-
-      if (app._canvas) {
-        app._canvas.isPlaying = false;
-        app._canvas.isAudioStarted = false;
-      }
-
-      resetState();
-    };
-
+    if (app._canvas) { app._canvas.isPlaying = false; app._canvas.isAudioStarted = false; }
+    resetState();
+  };
 
   const _onStartRequest = () => unlockAudioAndBufferInitial();
 
   // --- FIX: Correct state management for Mute toggle ---
   const _onMuteToggle = () => {
-    const s = app.state;
-    const T = s.Tone;
+    const s = app.state, T = s.Tone;
     if (!T?.Destination) return;
-    
-    // 1. Determine the new state
     const newMutedState = !s.isMuted;
-    
-    // 2. Update the actual audio engine
     T.Destination.mute = newMutedState;
-
-    // 3. Update the single source of truth (the app's state)
     s.isMuted = newMutedState;
-    
-    // 4. Update all UI from the new state
-    app._updateControls(); // Call without a patch to use the updated app.state
-
-    // 5. Update canvas and loader text
+    app._updateControls();
     _setCanvas({ isPlaying: s.isPlaying && !s.isMuted });
     app._loader.textContent = s.isMuted ? 'Muted.' : 'Unmuted.';
   };
-  
+
   const _onVolumeChange = e => {
     const v = e?.detail?.value;
-    if (typeof v == 'number') {
-      app.state.volume = Math.min(1, Math.max(0, v));
-      const T = app.state.Tone;
-      T?.Destination?.volume && (T.Destination.volume.value = _linToDb(app.state.volume));
-      app._updateControls({ volume: app.state.volume });
-    }
+    if (typeof v !== 'number') return;
+    const s = app.state; s.volume = Math.min(1, Math.max(0, v));
+    const T = s.Tone;
+    T?.Destination?.volume && (T.Destination.volume.value = _linToDb(s.volume));
+    app._updateControls({ volume: s.volume });
   };
 
   const _onShapeChange = e => {
     const k = e?.detail?.shapeKey; if (!k) return;
     const s = app.state, HUM = humKey(app);
     if (!s.audioSignaturePlaying && !s.signatureSequencerRunning) s._uiReturnShapeKey = k !== HUM ? k : s._uiReturnShapeKey;
+
     if (!s.contextUnlocked || !s.initialShapeBuffered) {
-      k === HUM ? _setCanvas({ shapeKey: HUM, preset: null, mode: 'seed' }) : _setCanvas({ shapeKey: k, preset: s.presets[k], mode: 'seed' });
+      k === HUM
+        ? _setCanvas({ shapeKey: HUM, preset: null, mode: 'seed' })
+        : _setCanvas({ shapeKey: k, preset: s.presets[k], mode: 'seed' });
       app._updateControls({ shapeKey: k });
       return;
     }
+
     setActiveChain(k);
     k !== HUM && _setCanvas({ shapeKey: k, preset: s.presets[k], mode: 'live' });
     app._canvas.isPlaying = !app.state.Tone?.Destination?.mute;
@@ -352,20 +286,28 @@ export function Engine(app) {
 
 export function Signatures(app) {
   const HUM = () => humKey(app), LIST = () => shapeList(app), COUNT = () => shapeCount(app), ALL = () => allKeys(app);
-  const rInt = (r, a, b) => a + Math.floor(r() * (b - a + 1)), rVal = r => { const N = COUNT(); return rInt(r, 0, N); }, rNon = r => { const N = COUNT(); return N > 0 ? rInt(r, 1, N) : 0; };
+  const rInt = (r, a, b) => a + Math.floor(r() * (b - a + 1));
+  const rVal = r => rInt(r, 0, COUNT());
+  const rNon = r => { const N = COUNT(); return N > 0 ? rInt(r, 1, N) : 0; };
 
   const _onToggleSequencer = () => {
-    const s = app.state; s.isSequencerMode = !s.isSequencerMode;
+    const s = app.state;
+    s.isSequencerMode = !s.isSequencerMode;
     app._sequencerComponent && (app._sequencerComponent.style.display = s.isSequencerMode ? 'block' : 'none');
-    if (!s.isSequencerMode) { s.isRecording = false; s.currentRecordSlot = -1; s.sequencePlaying && stopSequence(); s.signatureSequencerRunning && _stopSignatureSequencer(); } else updateSequencerState();
-    app._updateControls({ sequencerVisible: s.isSequencerMode }); typeof app._fitLayout == 'function' && app._fitLayout();
+    if (!s.isSequencerMode) {
+      s.isRecording = false; s.currentRecordSlot = -1;
+      s.sequencePlaying && stopSequence();
+      s.signatureSequencerRunning && _stopSignatureSequencer();
+    } else updateSequencerState();
+    app._updateControls({ sequencerVisible: s.isSequencerMode });
+    typeof app._fitLayout == 'function' && app._fitLayout();
   };
 
   // --- FIX: Correct state management for Loop toggle ---
   const _onLoopToggle = () => {
     const s = app.state;
     s.isLoopEnabled = !s.isLoopEnabled;
-    app._updateControls(); // Update UI from the single source of truth
+    app._updateControls();
     try { app._pathRec?.setLoop?.(s.isLoopEnabled); } catch {}
   };
 
@@ -373,27 +315,42 @@ export function Signatures(app) {
   const _onSignatureModeToggle = () => {
     const s = app.state;
     s.isSequenceSignatureMode = !s.isSequenceSignatureMode;
-    app._updateControls(); // Update UI from the single source of truth
+    app._updateControls();
     s.sequencePlaying && stopSequence();
     s.audioSignaturePlaying && stopAudioSignature();
   };
 
   const _getUniqueAlgorithmMapping = seed => {
-    const r = app._rng(`${seed}_unique_algo_mapping`), keys = ALL(), n = keys.length, base = [1,2,3,4,5,6,7,8,9,10], pool = [];
-    while (pool.length < n) pool.push(...base); pool.length = n;
+    const r = app._rng(`${seed}_unique_algo_mapping`);
+    const keys = ALL(), n = keys.length;
+    const base = [1,2,3,4,5,6,7,8,9,10];
+    const pool = [];
+    while (pool.length < n) pool.push(...base);
+    pool.length = n;
     for (let i = pool.length - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
     const m = {}; keys.forEach((k, i) => m[k] = pool[i]); return m;
   };
 
-  const _generateSignatureWithConstraints = (seed, { steps = 32, paletteSize = 6, pRepeat = .35, pHum = .15, pSilence = .2, avoidBackAndForth = true } = {}) => {
-    const r = app._rng(`${seed}_audio_signature_constrained`), N = COUNT(), seq = [], pal = Math.max(1, Math.min(N, paletteSize)); let last = null, prev = null;
+  const _generateSignatureWithConstraints = (
+    seed,
+    { steps = 32, paletteSize = 6, pRepeat = .35, pHum = .15, pSilence = .2, avoidBackAndForth = true } = {}
+  ) => {
+    const r = app._rng(`${seed}_audio_signature_constrained`);
+    const N = COUNT(), pal = Math.max(1, Math.min(N, paletteSize));
+    const seq = []; let last = null, prev = null;
     for (let i = 0; i < steps; i++) {
       if (r() < pSilence) { seq.push(null); continue; }
       const roll = r(); let next;
       if (roll < pHum) next = 0;
       else if (roll < pHum + pRepeat && prev !== null) next = prev;
-      else { do { next = rInt(r, 1, pal); if (avoidBackAndForth && last !== null && last >= 1 && next >= 1 && seq.length >= 2 && seq[seq.length - 2] === next) next = null; } while (next === null); }
-      seq.push(next); if (next !== null) { if (next >= 1) prev = next; last = next; }
+      else {
+        do {
+          next = rInt(r, 1, pal);
+          if (avoidBackAndForth && last !== null && last >= 1 && next >= 1 && seq.length >= 2 && seq.at(-2) === next) next = null;
+        } while (next === null);
+      }
+      seq.push(next);
+      if (next !== null) { if (next >= 1) prev = next; last = next; }
     }
     return seq;
   };
@@ -410,18 +367,14 @@ export function Signatures(app) {
       case 7: { const a = new Array(S).fill(0); let pos = 0, x = 1, y = 1; while (pos < S) { a[pos] = rNon(r); const n = x + y; x = y; y = n; pos += n; } return a; }
       case 8: { const a = rVal(r), b = rVal(r); return Array.from({ length: S }, (_, i) => i % 2 === 0 ? a : b); }
       case 9: { let v = rNon(r); const a = []; for (let i = 0; i < S; i++) { if (r() < .2 || v === 0) v = rVal(r); a.push(v); if (r() > .7) v = Math.max(0, v - 1); } return a; }
-      case 10: { let c = rVal(r); const a = []; for (let i = 0; i < S; i++) { if (i % 8 === 0 || r() > .6) c = rVal(r); a.push(c); } return a; }
+      case 10:{ let c = rVal(r); const a = []; for (let i = 0; i < S; i++) { if (i % 8 === 0 || r() > .6) c = rVal(r); a.push(c); } return a; }
       default: return _generateSignatureWithConstraints(seed);
     }
   };
 
   const _onAudioSignature = () => {
     const s = app.state;
-    if (s.audioSignaturePlaying) {
-      stopAudioSignature();
-      app._updateControls({ isAudioSignaturePlaying: false });
-      return;
-    }
+    if (s.audioSignaturePlaying) { stopAudioSignature(); app._updateControls({ isAudioSignaturePlaying: false }); return; }
     if (!s.contextUnlocked || !s.initialShapeBuffered) return;
     const sel = s._uiReturnShapeKey || s.current || HUM();
     _triggerSignatureFor(sel, { loop: s.isLoopEnabled });
@@ -433,8 +386,6 @@ export function Signatures(app) {
     s.sequencePlaying && stopSequence();
     s.audioSignaturePlaying && stopAudioSignature();
     s._uiReturnShapeKey = shapeKey || s._uiReturnShapeKey || HUM();
-
-    // Remember which shape we started the signature from (e.g., "square")
     s._sigStartShapeKey = s._uiReturnShapeKey;
 
     const map = _getUniqueAlgorithmMapping(s.seed), alg = map[shapeKey] || 1, seq = generateAudioSignature(s.seed, alg);
@@ -447,7 +398,6 @@ export function Signatures(app) {
     s.audioSignaturePlaying && stopAudioSignature();
 
     const cur = (typeof s.current === 'string' && s.current) ? s.current : null;
-    // Determine and remember where we started from (UI-facing)
     s._uiReturnShapeKey = cur || s._uiReturnShapeKey || HUM();
     s._sigStartShapeKey = s._uiReturnShapeKey;
 
@@ -461,18 +411,14 @@ export function Signatures(app) {
     // --- DROP-IN: replaces finishAndReturn entirely ---
     const finishAndReturn = () => {
       const s = app.state;
-
-      // 0) Clean up any onboarding tour artifacts first (labels/glow)
       try { app.cleanupHotkeyTour?.(); } catch {}
 
-      // 1) Force de-latch
       if (s.isLatchOn) {
         s.isLatchOn = false;
         try { app._pathRec?.setLatch?.(false); } catch {}
         app._updateControls();
       }
 
-      // 2) Audio -> HUM (no canvas sync), UI -> start shape; stop canvas anim
       const hum = HUM();
       const startKey = s._sigStartShapeKey || s._uiReturnShapeKey || hum;
 
@@ -518,7 +464,6 @@ export function Signatures(app) {
           s.audioSignatureStepIndex = 0;
           s.audioSignatureTimer = setTimeout(tick, stepTime);
         } else {
-          // Ensure UI/tour cleanup happens before final callback
           finishAndReturn();
           s.audioSignatureTimer = setTimeout(finishOnce, stepTime);
         }
@@ -528,52 +473,42 @@ export function Signatures(app) {
       s.audioSignatureTimer = setTimeout(tick, stepTime);
     };
 
-    // keep this call at the end of playAudioSignature
-    tick();
-
+    tick(); // keep at end
   };
 
   // --- DROP-IN: replaces stopAudioSignature entirely ---
-    const stopAudioSignature = () => {
-      const s = app.state;
+  const stopAudioSignature = () => {
+    const s = app.state;
 
-      // Clean up any pending timers first
-      if (s.audioSignatureTimer) {
-        clearTimeout(s.audioSignatureTimer);
-        s.audioSignatureTimer = null;
-      }
+    if (s.audioSignatureTimer) { clearTimeout(s.audioSignatureTimer); s.audioSignatureTimer = null; }
+    try { app.cleanupHotkeyTour?.(); } catch {}
 
-      // Stop the tour artifacts as well (labels/glow)
-      try { app.cleanupHotkeyTour?.(); } catch {}
+    s.audioSignaturePlaying = false;
+    s.audioSignatureStepIndex = 0;
+    app._updateControls({ isAudioSignaturePlaying: false });
 
-      s.audioSignaturePlaying = false;
-      s.audioSignatureStepIndex = 0;
-      app._updateControls({ isAudioSignaturePlaying: false });
+    if (s.isLatchOn) {
+      s.isLatchOn = false;
+      try { app._pathRec?.setLatch?.(false); } catch {}
+      app._updateControls();
+    }
 
-      // Apply the same de-latch + decoupled return on manual stop
-      if (s.isLatchOn) {
-        s.isLatchOn = false;
-        try { app._pathRec?.setLatch?.(false); } catch {}
-        app._updateControls();
-      }
+    const hum = HUM();
+    const startKey = s._sigStartShapeKey || s._uiReturnShapeKey || hum;
 
-      const hum = HUM();
-      const startKey = s._sigStartShapeKey || s._uiReturnShapeKey || hum;
+    try { app.setActiveChain(hum, { updateCanvasShape: false, setStateCurrent: true, syncCanvasPlayState: false }); } catch {}
+    try { if (app._canvas) app._canvas.isPlaying = false; } catch {}
 
-      try { app.setActiveChain(hum, { updateCanvasShape: false, setStateCurrent: true, syncCanvasPlayState: false }); } catch {}
-      try { if (app._canvas) app._canvas.isPlaying = false; } catch {}
+    try {
+      const preset = (startKey === hum) ? null : (s.presets?.[startKey] || null);
+      if (app._canvas) Object.assign(app._canvas, { shapeKey: startKey, preset, mode: 'live' });
+      app._updateControls({ shapeKey: startKey });
+    } catch {}
 
-      try {
-        const preset = (startKey === hum) ? null : (s.presets?.[startKey] || null);
-        if (app._canvas) Object.assign(app._canvas, { shapeKey: startKey, preset, mode: 'live' });
-        app._updateControls({ shapeKey: startKey });
-      } catch {}
-
-      s._uiReturnShapeKey = startKey;
-      s._sigStartShapeKey = null;
-      s.audioSignatureOnComplete = null;
-    };
-
+    s._uiReturnShapeKey = startKey;
+    s._sigStartShapeKey = null;
+    s.audioSignatureOnComplete = null;
+  };
 
   const _onSeqRecordStart = e => { const i = e?.detail?.slotIndex ?? -1; app.state.isRecording = true; app.state.currentRecordSlot = i; app._updateControls(); };
 
@@ -616,7 +551,8 @@ export function Signatures(app) {
   const _onSeqStepAdvance = e => {
     if (app.state.isSequenceSignatureMode) return;
     const d = e?.detail || {}, s = app.state;
-    const i = typeof d.stepIndex == 'number' ? d.stepIndex : typeof d.index == 'number' ? d.index : s.sequenceStepIndex, v = d.value;
+    const i = typeof d.stepIndex == 'number' ? d.stepIndex : typeof d.index == 'number' ? d.index : s.sequenceStepIndex;
+    const v = d.value;
     if (s.sequencePlaying) {
       if (i === 0) {
         if (s._seqFirstCycleStarted) { if (!s.isLoopEnabled) { stopSequence(); return; } }
@@ -657,6 +593,7 @@ export function Signatures(app) {
     const s = app.state; if (s.signatureSequencerRunning) return; s.signatureSequencerRunning = true;
     stopAudioSignature();
     const map = _getUniqueAlgorithmMapping(s.seed);
+
     const pass = async () => {
       if (!s.signatureSequencerRunning) return;
       for (let i = 0; i < s.sequence.length; i++) {
@@ -671,10 +608,11 @@ export function Signatures(app) {
         if (!s.signatureSequencerRunning) return; await app._sleep(Math.max(30, s.stepTime));
       }
     };
+
     await pass(); if (!s.signatureSequencerRunning) return;
     // --- LOGIC FIX: Check live state for looping ---
-    if (s.isLoopEnabled && s.sequencePlaying) { 
-      while (s.signatureSequencerRunning && s.sequencePlaying && s.isLoopEnabled) await pass(); 
+    if (s.isLoopEnabled && s.sequencePlaying) {
+      while (s.signatureSequencerRunning && s.sequencePlaying && s.isLoopEnabled) await pass();
     }
     _stopSignatureSequencer(); app._sequencerComponent?.stopSequence?.();
   };
