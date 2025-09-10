@@ -350,105 +350,9 @@ export function Engine(app) {
   };
 }
 
-// export function Signatures(app) {
-//   const HUM = () => humKey(app), LIST = () => shapeList(app), COUNT = () => shapeCount(app), ALL = () => allKeys(app);
-//   const rInt = (r, a, b) => a + Math.floor(r() * (b - a + 1)), rVal = r => { const N = COUNT(); return rInt(r, 0, N); }, rNon = r => { const N = COUNT(); return N > 0 ? rInt(r, 1, N) : 0; };
-
-//   const _onToggleSequencer = () => {
-//     const s = app.state; s.isSequencerMode = !s.isSequencerMode;
-//     app._sequencerComponent && (app._sequencerComponent.style.display = s.isSequencerMode ? 'block' : 'none');
-//     if (!s.isSequencerMode) { s.isRecording = false; s.currentRecordSlot = -1; s.sequencePlaying && stopSequence(); s.signatureSequencerRunning && _stopSignatureSequencer(); } else updateSequencerState();
-//     app._updateControls({ sequencerVisible: s.isSequencerMode }); typeof app._fitLayout == 'function' && app._fitLayout();
-//   };
-
-//   // --- FIX: Correct state management for Loop toggle ---
-//   const _onLoopToggle = () => {
-//     const s = app.state;
-//     s.isLoopEnabled = !s.isLoopEnabled;
-//     app._updateControls(); // Update UI from the single source of truth
-//     try { app._pathRec?.setLoop?.(s.isLoopEnabled); } catch {}
-//   };
-
-//   // --- FIX: Correct state management for Signature Mode toggle ---
-//   const _onSignatureModeToggle = () => {
-//     const s = app.state;
-//     s.isSequenceSignatureMode = !s.isSequenceSignatureMode;
-//     app._updateControls(); // Update UI from the single source of truth
-//     s.sequencePlaying && stopSequence();
-//     s.audioSignaturePlaying && stopAudioSignature();
-//   };
-
-//   const _getUniqueAlgorithmMapping = seed => {
-//     const r = app._rng(`${seed}_unique_algo_mapping`), keys = ALL(), n = keys.length, base = [1,2,3,4,5,6,7,8,9,10], pool = [];
-//     while (pool.length < n) pool.push(...base); pool.length = n;
-//     for (let i = pool.length - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
-//     const m = {}; keys.forEach((k, i) => m[k] = pool[i]); return m;
-//   };
-
-//   const _generateSignatureWithConstraints = (seed, { steps = 32, paletteSize = 6, pRepeat = .35, pHum = .15, pSilence = .2, avoidBackAndForth = true } = {}) => {
-//     const r = app._rng(`${seed}_audio_signature_constrained`), N = COUNT(), seq = [], pal = Math.max(1, Math.min(N, paletteSize)); let last = null, prev = null;
-//     for (let i = 0; i < steps; i++) {
-//       if (r() < pSilence) { seq.push(null); continue; }
-//       const roll = r(); let next;
-//       if (roll < pHum) next = 0;
-//       else if (roll < pHum + pRepeat && prev !== null) next = prev;
-//       else { do { next = rInt(r, 1, pal); if (avoidBackAndForth && last !== null && last >= 1 && next >= 1 && seq.length >= 2 && seq[seq.length - 2] === next) next = null; } while (next === null); }
-//       seq.push(next); if (next !== null) { if (next >= 1) prev = next; last = next; }
-//     }
-//     return seq;
-//   };
-
-//   const generateAudioSignature = (seed, alg = 1) => {
-//     const r = app._rng(`${seed}_audio_signature_v${alg}`), S = 32, N = COUNT();
-//     switch (alg) {
-//       case 1: { const a = []; for (let i = 0; i < S; i++) a.push(rVal(r)); return a; }
-//       case 2: return _generateSignatureWithConstraints(seed, { steps: S, paletteSize: Math.min(6, Math.max(1, N)), pRepeat: .35, pHum: .15, pSilence: .2, avoidBackAndForth: true });
-//       case 3: { const L = 8, p = Array.from({ length: L }, () => rVal(r)); return Array.from({ length: S }, (_, i) => p[i % L]); }
-//       case 4: { const a = [0]; let cur = 0; for (let i = 1; i < S; i++) { const dir = r() > .5 ? 1 : -1, step = ((r() * 3) | 0) + 1; cur = Math.max(0, Math.min(N, cur + dir * step)); a.push(cur); } return a; }
-//       case 5: { const a = []; let c = rVal(r); for (let i = 0; i < S;) { const len = Math.min(((r() * 6) | 0) + 2, S - i); for (let j = 0; j < len; j++, i++) a.push(c); c = rVal(r); } return a; }
-//       case 6: { const a = []; for (let i = 0; i < S; i++) a.push(r() > .7 ? rNon(r) : 0); return a; }
-//       case 7: { const a = new Array(S).fill(0); let pos = 0, x = 1, y = 1; while (pos < S) { a[pos] = rNon(r); const n = x + y; x = y; y = n; pos += n; } return a; }
-//       case 8: { const a = rVal(r), b = rVal(r); return Array.from({ length: S }, (_, i) => i % 2 === 0 ? a : b); }
-//       case 9: { let v = rNon(r); const a = []; for (let i = 0; i < S; i++) { if (r() < .2 || v === 0) v = rVal(r); a.push(v); if (r() > .7) v = Math.max(0, v - 1); } return a; }
-//       case 10: { let c = rVal(r); const a = []; for (let i = 0; i < S; i++) { if (i % 8 === 0 || r() > .6) c = rVal(r); a.push(c); } return a; }
-//       default: return _generateSignatureWithConstraints(seed);
-//     }
-//   };
-
 export function Signatures(app) {
   const HUM = () => humKey(app), LIST = () => shapeList(app), COUNT = () => shapeCount(app), ALL = () => allKeys(app);
   const rInt = (r, a, b) => a + Math.floor(r() * (b - a + 1)), rVal = r => { const N = COUNT(); return rInt(r, 0, N); }, rNon = r => { const N = COUNT(); return N > 0 ? rInt(r, 1, N) : 0; };
-
-  // --- NEW HELPER FUNCTIONS FOR HARMONIC ANALYSIS ---
-  const NOTE_BASE = { 'C':0, 'D':2, 'E':4, 'F':5, 'G':7, 'A':9, 'B':11 };
-  const toMidi = (note) => {
-    if (!note || typeof note !== 'string') return null;
-    const m = note.match(/^([A-G])([#b]?)(-?\d+)$/i);
-    if (!m) return null;
-    const [, L, acc, octStr] = m;
-    let semitone = NOTE_BASE[L.toUpperCase()];
-    if (acc === '#') semitone += 1;
-    if (acc === 'b') semitone -= 1;
-    const octave = parseInt(octStr, 10);
-    return 12 * (octave + 1) + semitone;
-  };
-  
-  const MAJOR = [0,2,4,5,7,9,11];
-  const MINOR = [0,2,3,5,7,8,10];
-  const rotatePC = (pcs, t) => pcs.map(x => (x + t) % 12);
-  const scaleFitScore = (pcs, tmpl) => {
-  let best = -Infinity, bestKey = 0;
-  for (let t = 0; t < 12; t++) {
-    const set = new Set(rotatePC(tmpl, t));
-    let hits = 0, misses = 0;
-    for (const p of pcs) set.has(p) ? (hits++) : (misses++);
-    // keep it simple/robust
-    const s = hits - 0.35 * misses;
-    if (s > best) { best = s; bestKey = t; }
-  }
-  return { score: best, key: bestKey, template: tmpl };
-};
-  // --- END OF NEW HELPER FUNCTIONS ---
 
   const _onToggleSequencer = () => {
     const s = app.state; s.isSequencerMode = !s.isSequencerMode;
@@ -457,23 +361,25 @@ export function Signatures(app) {
     app._updateControls({ sequencerVisible: s.isSequencerMode }); typeof app._fitLayout == 'function' && app._fitLayout();
   };
 
+  // --- FIX: Correct state management for Loop toggle ---
   const _onLoopToggle = () => {
     const s = app.state;
     s.isLoopEnabled = !s.isLoopEnabled;
-    app._updateControls();
+    app._updateControls(); // Update UI from the single source of truth
     try { app._pathRec?.setLoop?.(s.isLoopEnabled); } catch {}
   };
 
+  // --- FIX: Correct state management for Signature Mode toggle ---
   const _onSignatureModeToggle = () => {
     const s = app.state;
     s.isSequenceSignatureMode = !s.isSequenceSignatureMode;
-    app._updateControls();
+    app._updateControls(); // Update UI from the single source of truth
     s.sequencePlaying && stopSequence();
     s.audioSignaturePlaying && stopAudioSignature();
   };
 
   const _getUniqueAlgorithmMapping = seed => {
-    const r = app._rng(`${seed}_unique_algo_mapping`), keys = ALL(), n = keys.length, base = [1,2,3,4,5,6,7,8,9,10,11], pool = []; // Added 11 to the pool
+    const r = app._rng(`${seed}_unique_algo_mapping`), keys = ALL(), n = keys.length, base = [1,2,3,4,5,6,7,8,9,10], pool = [];
     while (pool.length < n) pool.push(...base); pool.length = n;
     for (let i = pool.length - 1; i > 0; i--) { const j = (r() * (i + 1)) | 0; [pool[i], pool[j]] = [pool[j], pool[i]]; }
     const m = {}; keys.forEach((k, i) => m[k] = pool[i]); return m;
@@ -482,8 +388,7 @@ export function Signatures(app) {
   const _generateSignatureWithConstraints = (seed, { steps = 32, paletteSize = 6, pRepeat = .35, pHum = .15, pSilence = .2, avoidBackAndForth = true } = {}) => {
     const r = app._rng(`${seed}_audio_signature_constrained`), N = COUNT(), seq = [], pal = Math.max(1, Math.min(N, paletteSize)); let last = null, prev = null;
     for (let i = 0; i < steps; i++) {
-      // MODIFICATION: Set pSilence to 0 to ensure it's fully populated
-      if (pSilence > 0 && r() < pSilence) { seq.push(null); continue; }
+      if (r() < pSilence) { seq.push(null); continue; }
       const roll = r(); let next;
       if (roll < pHum) next = 0;
       else if (roll < pHum + pRepeat && prev !== null) next = prev;
@@ -495,84 +400,22 @@ export function Signatures(app) {
 
   const generateAudioSignature = (seed, alg = 1) => {
     const r = app._rng(`${seed}_audio_signature_v${alg}`), S = 32, N = COUNT();
-    const { deterministicPreset } = app; // Get reference to the function from the app object
-    
     switch (alg) {
       case 1: { const a = []; for (let i = 0; i < S; i++) a.push(rVal(r)); return a; }
-      // This case is now denser and more harmonious, with no silence.
-      case 2: return _generateSignatureWithConstraints(seed, { steps: S, paletteSize: Math.min(8, Math.max(2, N)), pRepeat: .3, pHum: .1, pSilence: 0, avoidBackAndForth: false });
+      case 2: return _generateSignatureWithConstraints(seed, { steps: S, paletteSize: Math.min(6, Math.max(1, N)), pRepeat: .35, pHum: .15, pSilence: .2, avoidBackAndForth: true });
       case 3: { const L = 8, p = Array.from({ length: L }, () => rVal(r)); return Array.from({ length: S }, (_, i) => p[i % L]); }
       case 4: { const a = [0]; let cur = 0; for (let i = 1; i < S; i++) { const dir = r() > .5 ? 1 : -1, step = ((r() * 3) | 0) + 1; cur = Math.max(0, Math.min(N, cur + dir * step)); a.push(cur); } return a; }
       case 5: { const a = []; let c = rVal(r); for (let i = 0; i < S;) { const len = Math.min(((r() * 6) | 0) + 2, S - i); for (let j = 0; j < len; j++, i++) a.push(c); c = rVal(r); } return a; }
-      case 6: { const a = []; for (let i = 0; i < S; i++) a.push(r() > .2 ? rNon(r) : 0); return a; } // Made less sparse
+      case 6: { const a = []; for (let i = 0; i < S; i++) a.push(r() > .7 ? rNon(r) : 0); return a; }
       case 7: { const a = new Array(S).fill(0); let pos = 0, x = 1, y = 1; while (pos < S) { a[pos] = rNon(r); const n = x + y; x = y; y = n; pos += n; } return a; }
       case 8: { const a = rVal(r), b = rVal(r); return Array.from({ length: S }, (_, i) => i % 2 === 0 ? a : b); }
       case 9: { let v = rNon(r); const a = []; for (let i = 0; i < S; i++) { if (r() < .2 || v === 0) v = rVal(r); a.push(v); if (r() > .7) v = Math.max(0, v - 1); } return a; }
       case 10: { let c = rVal(r); const a = []; for (let i = 0; i < S; i++) { if (i % 8 === 0 || r() > .6) c = rVal(r); a.push(c); } return a; }
-      
-      // --- NEW HARMONIOUS FILL ALGORITHM ---
-      case 11: {
-        const shapes = LIST();
-        const presets = shapes.map(shape => deterministicPreset(seed, shape));
-
-        // Gather pitch classes from both oscillators
-        const pcsAll = new Set();
-        for (const p of presets) {
-          const m1 = toMidi(p.osc1?.[1]); if (m1 != null) pcsAll.add(m1 % 12);
-          const m2 = toMidi(p.osc2?.[1]); if (m2 != null) pcsAll.add(m2 % 12);
-        }
-        if (pcsAll.size === 0) return Array.from({ length: S }, () => rVal(r));
-
-        // Pick best Major/Minor fit over the *whole* palette
-        const pcs = Array.from(pcsAll);
-        const fitMaj = scaleFitScore(pcs, MAJOR);
-        const fitMin = scaleFitScore(pcs, MINOR);
-        const best = (fitMaj.score >= fitMin.score) ? fitMaj : fitMin;
-        const scaleSet = new Set(rotatePC(best.template, best.key));
-
-        // Build melodic palette: admit a shape if ANY of its oscs is in-scale
-        const pal = [];
-        presets.forEach((p, idx) => {
-          const in1 = (() => { const m = toMidi(p.osc1?.[1]); return m != null && scaleSet.has(m % 12); })();
-          const in2 = (() => { const m = toMidi(p.osc2?.[1]); return m != null && scaleSet.has(m % 12); })();
-          if (in1 || in2) pal.push(idx + 1); // 1..N (0=HUM)
-        });
-
-        // If palette is tiny, fall back to dense non-HUM
-        if (pal.length < 2) return Array.from({ length: S }, () => rNon(r));
-
-        // Fill all 32: keep motifs, avoid A–B–A–B jitter, allow rare HUM for breath
-        const seq = [];
-        let prev = null;
-        for (let i = 0; i < S; i++) {
-          let next;
-          const roll = r();
-
-          if (roll < 0.45 && prev != null) {
-            next = prev;                          // motif repeat
-          } else if (roll < 0.52) {
-            next = 0;                              // small chance of HUM (dense but not relentless)
-          } else {
-            // pick from palette; avoid immediate back-and-forth
-            let tries = 0;
-            do {
-              next = pal[(r() * pal.length) | 0];
-              if (seq.length >= 2 && seq[seq.length - 2] === next && tries < 3) next = null;
-            } while (next == null && ++tries < 4);
-            if (next == null) next = pal[(r() * pal.length) | 0];
-          }
-
-          seq.push(next);
-          if (next >= 1) prev = next;
-        }
-        return seq;
-      }
-
-      default: return _generateSignatureWithConstraints(seed, { pSilence: 0 }); // Default to a dense version
+      default: return _generateSignatureWithConstraints(seed);
     }
   };
 
-   const _onAudioSignature = () => {
+  const _onAudioSignature = () => {
     const s = app.state;
     if (s.audioSignaturePlaying) {
       stopAudioSignature();
@@ -591,13 +434,10 @@ export function Signatures(app) {
     s.audioSignaturePlaying && stopAudioSignature();
     s._uiReturnShapeKey = shapeKey || s._uiReturnShapeKey || HUM();
 
+    // Remember which shape we started the signature from (e.g., "square")
     s._sigStartShapeKey = s._uiReturnShapeKey;
 
-    const map = _getUniqueAlgorithmMapping(s.seed);
-    // You could force algorithm 11 here for testing, like so:
-    // const alg = 11; 
-    const alg = map[shapeKey] || 1;
-    const seq = generateAudioSignature(s.seed, alg);
+    const map = _getUniqueAlgorithmMapping(s.seed), alg = map[shapeKey] || 1, seq = generateAudioSignature(s.seed, alg);
     playAudioSignature(seq, alg);
     app._loader.textContent = s.isLoopEnabled ? `Playing ${shapeKey} Audio Signature (Loop).` : `Playing ${shapeKey} Audio Signature...`;
   };
@@ -607,6 +447,7 @@ export function Signatures(app) {
     s.audioSignaturePlaying && stopAudioSignature();
 
     const cur = (typeof s.current === 'string' && s.current) ? s.current : null;
+    // Determine and remember where we started from (UI-facing)
     s._uiReturnShapeKey = cur || s._uiReturnShapeKey || HUM();
     s._sigStartShapeKey = s._uiReturnShapeKey;
 
@@ -617,37 +458,52 @@ export function Signatures(app) {
 
     const stepTime = (alg === 3 || alg === 7) ? 100 : alg === 5 ? 150 : alg === 10 ? 200 : 125;
 
+    // --- DROP-IN: replaces finishAndReturn entirely ---
     const finishAndReturn = () => {
       const s = app.state;
+
+      // 0) Clean up any onboarding tour artifacts first (labels/glow)
       try { app.cleanupHotkeyTour?.(); } catch {}
+
+      // 1) Force de-latch
       if (s.isLatchOn) {
         s.isLatchOn = false;
         try { app._pathRec?.setLatch?.(false); } catch {}
         app._updateControls();
       }
+
+      // 2) Audio -> HUM (no canvas sync), UI -> start shape; stop canvas anim
       const hum = HUM();
       const startKey = s._sigStartShapeKey || s._uiReturnShapeKey || hum;
+
       try { app.setActiveChain(hum, { updateCanvasShape: false, setStateCurrent: true, syncCanvasPlayState: false }); } catch {}
       try { if (app._canvas) app._canvas.isPlaying = false; } catch {}
+
       try {
         const preset = (startKey === hum) ? null : (s.presets?.[startKey] || null);
         if (app._canvas) Object.assign(app._canvas, { shapeKey: startKey, preset, mode: 'live' });
         app._updateControls({ shapeKey: startKey });
       } catch {}
+
       s._uiReturnShapeKey = startKey;
       s._sigStartShapeKey = null;
     };
 
+    // --- DROP-IN: replaces tick entirely ---
     const tick = () => {
       const s = app.state;
       if (!s.audioSignaturePlaying) return;
+
       const i = s.audioSignatureStepIndex;
       const val = sequence[i];
+
       if (val !== null) {
         const sk = val === 0 ? HUM() : LIST()[val - 1];
         if (sk) app._onShapeChange({ detail: { shapeKey: sk } });
       }
+
       s.audioSignatureStepIndex++;
+
       if (s.audioSignatureStepIndex >= sequence.length) {
         const finishOnce = () => {
           s.audioSignaturePlaying = false;
@@ -657,62 +513,84 @@ export function Signatures(app) {
           s.audioSignatureOnComplete = null;
           typeof cb === 'function' ? cb() : (app._loader.textContent = 'Audio Signature complete.');
         };
+
         if (s.isLoopEnabled) {
           s.audioSignatureStepIndex = 0;
           s.audioSignatureTimer = setTimeout(tick, stepTime);
         } else {
+          // Ensure UI/tour cleanup happens before final callback
           finishAndReturn();
           s.audioSignatureTimer = setTimeout(finishOnce, stepTime);
         }
         return;
       }
+
       s.audioSignatureTimer = setTimeout(tick, stepTime);
     };
+
+    // keep this call at the end of playAudioSignature
     tick();
+
   };
 
-  const stopAudioSignature = () => {
-    const s = app.state;
-    if (s.audioSignatureTimer) {
-      clearTimeout(s.audioSignatureTimer);
-      s.audioSignatureTimer = null;
-    }
-    try { app.cleanupHotkeyTour?.(); } catch {}
-    s.audioSignaturePlaying = false;
-    s.audioSignatureStepIndex = 0;
-    app._updateControls({ isAudioSignaturePlaying: false });
-    if (s.isLatchOn) {
-      s.isLatchOn = false;
-      try { app._pathRec?.setLatch?.(false); } catch {}
-      app._updateControls();
-    }
-    const hum = HUM();
-    const startKey = s._sigStartShapeKey || s._uiReturnShapeKey || hum;
-    try { app.setActiveChain(hum, { updateCanvasShape: false, setStateCurrent: true, syncCanvasPlayState: false }); } catch {}
-    try { if (app._canvas) app._canvas.isPlaying = false; } catch {}
-    try {
-      const preset = (startKey === hum) ? null : (s.presets?.[startKey] || null);
-      if (app._canvas) Object.assign(app._canvas, { shapeKey: startKey, preset, mode: 'live' });
-      app._updateControls({ shapeKey: startKey });
-    } catch {}
-    s._uiReturnShapeKey = startKey;
-    s._sigStartShapeKey = null;
-    s.audioSignatureOnComplete = null;
-  };
+  // --- DROP-IN: replaces stopAudioSignature entirely ---
+    const stopAudioSignature = () => {
+      const s = app.state;
+
+      // Clean up any pending timers first
+      if (s.audioSignatureTimer) {
+        clearTimeout(s.audioSignatureTimer);
+        s.audioSignatureTimer = null;
+      }
+
+      // Stop the tour artifacts as well (labels/glow)
+      try { app.cleanupHotkeyTour?.(); } catch {}
+
+      s.audioSignaturePlaying = false;
+      s.audioSignatureStepIndex = 0;
+      app._updateControls({ isAudioSignaturePlaying: false });
+
+      // Apply the same de-latch + decoupled return on manual stop
+      if (s.isLatchOn) {
+        s.isLatchOn = false;
+        try { app._pathRec?.setLatch?.(false); } catch {}
+        app._updateControls();
+      }
+
+      const hum = HUM();
+      const startKey = s._sigStartShapeKey || s._uiReturnShapeKey || hum;
+
+      try { app.setActiveChain(hum, { updateCanvasShape: false, setStateCurrent: true, syncCanvasPlayState: false }); } catch {}
+      try { if (app._canvas) app._canvas.isPlaying = false; } catch {}
+
+      try {
+        const preset = (startKey === hum) ? null : (s.presets?.[startKey] || null);
+        if (app._canvas) Object.assign(app._canvas, { shapeKey: startKey, preset, mode: 'live' });
+        app._updateControls({ shapeKey: startKey });
+      } catch {}
+
+      s._uiReturnShapeKey = startKey;
+      s._sigStartShapeKey = null;
+      s.audioSignatureOnComplete = null;
+    };
+
 
   const _onSeqRecordStart = e => { const i = e?.detail?.slotIndex ?? -1; app.state.isRecording = true; app.state.currentRecordSlot = i; app._updateControls(); };
+
   const _onSeqStepCleared = e => {
     const i = e?.detail?.slotIndex; if (typeof i !== 'number') return;
     const s = app.state;
     s.sequence[i] = null;
     if (s.isRecording && s.currentRecordSlot === i) { s.currentRecordSlot = (i + 1) % 8; s.currentRecordSlot === 0 && (s.isRecording = false); }
   };
+
   const _onSeqStepRecorded = e => {
     const d = e?.detail ?? {};
     typeof d.slotIndex == 'number' && (app.state.sequence[d.slotIndex] = d.value);
     typeof d.nextSlot == 'number' && (app.state.currentRecordSlot = d.nextSlot);
     typeof d.isRecording == 'boolean' && (app.state.isRecording = d.isRecording);
   };
+
   const _onSeqPlayStarted = e => {
     const t = e?.detail?.stepTime, s = app.state;
     s.sequencePlaying = true; s.sequenceStepIndex = 0; s._seqFirstCycleStarted = false; s.isSequencerMode = true;
@@ -720,6 +598,7 @@ export function Signatures(app) {
     app._updateControls();
     s.isSequenceSignatureMode && (app._sequencerComponent?.stopSequence(), _startSignatureSequencer());
   };
+
   const _onSeqPlayStopped = () => {
     const s = app.state;
     s.sequencePlaying = false; s.sequenceStepIndex = 0; s._seqFirstCycleStarted = false; s.isSequencerMode = false;
@@ -733,6 +612,7 @@ export function Signatures(app) {
     }
     app._updateControls();
   };
+
   const _onSeqStepAdvance = e => {
     if (app.state.isSequenceSignatureMode) return;
     const d = e?.detail || {}, s = app.state;
@@ -758,7 +638,9 @@ export function Signatures(app) {
       app._onShapeChange({ detail: { shapeKey: sk } });
     }
   };
+
   const _onSeqStepTimeChanged = e => { const t = e?.detail?.stepTime; typeof t == 'number' && (app.state.stepTime = t); };
+
   const _onSeqStepsChanged = e => {
     const n = e?.detail?.steps; if (typeof n == 'number' && n > 0) {
       const s = app.state; s.sequenceSteps = n;
@@ -770,6 +652,7 @@ export function Signatures(app) {
       updateSequencerState();
     }
   };
+
   const _startSignatureSequencer = async () => {
     const s = app.state; if (s.signatureSequencerRunning) return; s.signatureSequencerRunning = true;
     stopAudioSignature();
@@ -789,11 +672,13 @@ export function Signatures(app) {
       }
     };
     await pass(); if (!s.signatureSequencerRunning) return;
+    // --- LOGIC FIX: Check live state for looping ---
     if (s.isLoopEnabled && s.sequencePlaying) { 
       while (s.signatureSequencerRunning && s.sequencePlaying && s.isLoopEnabled) await pass(); 
     }
     _stopSignatureSequencer(); app._sequencerComponent?.stopSequence?.();
   };
+
   const _stopSignatureSequencer = () => {
     const s = app.state;
     s.signatureSequencerRunning = false;
@@ -804,6 +689,7 @@ export function Signatures(app) {
     updateSequencerState();
     s._uiReturnShapeKey ? app._updateControls({ shapeKey: s._uiReturnShapeKey }) : app._updateControls();
   };
+
   const updateSequencerState = () => {
     if (!app._sequencerComponent) return;
     app._sequencerComponent.updateState?.({
@@ -819,6 +705,7 @@ export function Signatures(app) {
       steps: app.state.sequenceSteps
     });
   };
+
   const recordStep = n => { app._sequencerComponent?.recordStep(n); };
   const playSequence = () => { app._sequencerComponent?.playSequence(); };
   const stopSequence = () => {
