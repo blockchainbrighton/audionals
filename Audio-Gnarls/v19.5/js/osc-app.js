@@ -582,7 +582,7 @@ class OscApp extends HTMLElement {
   async _loadSeedList() {
     try {
       // Correct path to the CSV file inside the 'js' folder
-      const response = await fetch('./js/top_1000_seeds.csv');
+      const response = await fetch('./js/sparse_tuneful_top.csv');
       if (!response.ok) {
         throw new Error(`HTTP error! status: ${response.status}`);
       }
