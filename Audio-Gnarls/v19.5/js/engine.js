@@ -146,9 +146,17 @@ export function Engine(app) {
     disposeAllChains();
     app.state.sequencePlaying && stopSequence();
     app.state.audioSignaturePlaying && stopAudioSignature?.();
-    const { seed, Tone: T } = app.state;
+    
+    // Preserve the approved seeds list across resets
+    const { seed, Tone: T, approvedSeeds } = app.state;
+    
+    // Reset the state to its default
     app.state = app.defaultState(seed);
+    
+    // Restore the essential persistent properties
     app.state.Tone = T;
+    app.state.approvedSeeds = approvedSeeds || []; // Restore the list
+
     loadPresets(seed);
     bufferHumChain();
     const list = shapeList(app), r = _rng(seed), first = list.length ? list[(r() * list.length) | 0] : humKey(app);
