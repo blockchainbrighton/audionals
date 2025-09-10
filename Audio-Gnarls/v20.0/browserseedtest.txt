@@ -1,0 +1,319 @@
+(async () => {
+  // Tuneful Seed Finder v1.6+ — "Populated alg-11" melodic palettes
+  // Essence preserved: fast, palette-only scoring; no sequence simulation.
+
+  // ----- Config you can tweak -----
+  const TOTAL_SEEDS = 100000;   // try more for finer results
+  const BATCH_SIZE  = 100;
+  const KEEP_TOP    = 1000;
+  const RNG_CHARS   = "0123456789abcdefghijklmnopqrstuvwxyz";
+
+  // We only care about shapes mapped to alg 11 (dense melodic generator)
+  const TARGET_ALGORITHMS = new Set([11]);
+
+  // Mapping hit-rate gate: require enough shapes using alg 11
+  const MIN_HITRATE = 0.50;         // 50% of playable shapes
+  const MIN_PALETTE_FRAC = 0.40;    // admitted palette must be ≥ 40% of shapes
+  const MIN_PALETTE_FALLBACK = 4;   // never require less than 4 shapes
+
+  // ----- Music helpers -----
+  const NOTE_BASE = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+  const toMidi = (note) => {
+    if (!note || typeof note !== 'string') return null;
+    const m = note.match(/^([A-G])([#b]?)(-?\d+)$/i); if (!m) return null;
+    const [, L, acc, octStr] = m;
+    let s = NOTE_BASE[L.toUpperCase()];
+    if (acc === '#') s += 1; else if (acc === 'b') s -= 1;
+    const octave = parseInt(octStr, 10);
+    return 12 * (octave + 1) + s;
+  };
+
+  const MAJOR=[0,2,4,5,7,9,11], MINOR=[0,2,3,5,7,8,10];
+  const rotatePC = (pcs, t) => pcs.map(x => (x + t) % 12);
+  const scaleFitScore = (pcs, tmpl) => {
+    let best = -Infinity, bestKey = 0;
+    for (let t=0; t<12; t++) {
+      const set = new Set(rotatePC(tmpl, t));
+      let hits = 0, misses = 0;
+      for (const p of pcs) set.has(p) ? hits++ : misses++;
+      const s = hits - 0.35 * misses;     // corrected (misses subtract)
+      if (s > best) { best = s; bestKey = t; }
+    }
+    return { score: best, key: bestKey, template: tmpl };
+  };
+
+  // step-chord consonance weights (interval class → score)
+  const INTERVAL_SCORE = {
+    0: 1.0,   1: -0.55, 2: -0.25, 3: 0.75, 4: 0.85, 5: 0.60,
+    6: -0.80, 7: 0.95,  8: 0.35,  9: 0.55, 10:-0.35,11:-0.55
+  };
+  const clamp01 = x => Math.max(0, Math.min(1, x));
+  const uniq = a => Array.from(new Set(a));
+  const sum  = a => a.reduce((x,y)=>x+y,0);
+
+  // ----- Shape keys from app (fallbacks if not present) -----
+  const safeGetShapeKeys = () => {
+    try {
+      if (window.app?.state?.presets && Object.keys(window.app.state.presets).length) return Object.keys(window.app.state.presets);
+      if (typeof window.allKeys === 'function') return window.allKeys(window.app);
+      if (typeof window.shapeList === 'function') return window.shapeList(window.app);
+      return ['circle','square','triangle','star','hex','wave','ring','burst','coil','loop','arc','petal'];
+    } catch {
+      return ['circle','square','triangle','star','hex','wave','ring','burst','coil','loop','arc','petal'];
+    }
+  };
+  const SHAPE_KEYS = safeGetShapeKeys();
+  const ALL_KEYS = SHAPE_KEYS.includes('hum') ? SHAPE_KEYS : ['hum', ...SHAPE_KEYS];
+
+  // ----- Engine-matching RNG + preset + mapping -----
+  const _rng = s => { let a = 0x6d2b79f5 ^ s.length; for (let i=0;i<s.length;i++) a = Math.imul(a ^ s.charCodeAt(i), 2654435761); return () => (a = Math.imul(a ^ (a >>> 15), 1 | a), ((a >>> 16) & 0xffff) / 0x10000); };
+  const deterministicPreset = (seed, shape) => {
+    const r = _rng(`${seed}_${shape}`), types = ['sine','triangle','square','sawtooth'], notes = ['C1','C2','E2','G2','A2','C3','E3','G3','B3','D4','F#4','A4','C5'];
+    const m = r(), mode = m < .18 ? 0 : m < .56 ? 1 : m < .85 ? 2 : 3;
+    const cnt = (mode === 3 ? 2 + (r() > .7 ? 1 : 0) : 1 + (r() > .6 ? 1 : 0));
+    const oscs = Array.from({ length: cnt }, () => [types[(r() * types.length) | 0], notes[(r() * notes.length) | 0]]);
+    return { osc1: oscs[0], osc2: oscs[1] || null };
+  };
+
+  const _getUniqueAlgorithmMapping = (seed) => {
+    const r = _rng(`${seed}_unique_algo_mapping`), keys = ALL_KEYS, n = keys.length;
+    const base = [1,2,3,4,5,6,7,8,9,10,11], pool = [];
+    while (pool.length < n) pool.push(...base);
+    pool.length = n;
+    for (let i = pool.length - 1; i > 0; i--) {
+      const j = (r() * (i + 1)) | 0; [pool[i], pool[j]] = [pool[j], pool[i]];
+    }
+    const m = {}; keys.forEach((k, i) => m[k] = pool[i]); return m;
+  };
+
+  // ----- Melody-focused scoring (palette-only; no playback) -----
+  function scoreAlgo11Melodicity(seed) {
+    const presets = SHAPE_KEYS.map(k => deterministicPreset(seed, k));
+
+    // Build pitch classes seen across all shapes (for robust scale choice)
+    const pcsAll = new Set();
+    for (const p of presets) {
+      const m1 = toMidi(p.osc1?.[1]); if (m1 != null) pcsAll.add(m1 % 12);
+      const m2 = toMidi(p.osc2?.[1]); if (m2 != null) pcsAll.add(m2 % 12);
+    }
+    if (!pcsAll.size) return { final: -1, details: null };
+
+    // Choose best major/minor key using full palette, then admit shapes to that scale
+    const pcs = Array.from(pcsAll);
+    const fitMaj = scaleFitScore(pcs, MAJOR);
+    const fitMin = scaleFitScore(pcs, MINOR);
+    const best   = (fitMaj.score >= fitMin.score) ? fitMaj : fitMin;
+    const scaleSet = new Set(rotatePC(best.template, best.key));
+    const scaleName = `${best.template===MAJOR?'Major':'Minor'} @ ${['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'][best.key]}`;
+
+    // Admit shapes: ANY osc in scale
+    const admitted = [];
+    const admittedPCs = new Set();
+    let dualOscCount = 0;
+    const stepIntervals = []; // for consonance across admitted shapes
+
+    const repPitches = [];    // representative pitches to compute spread
+    const repPitch = (p) => {
+      const mids = [toMidi(p.osc1?.[1]), toMidi(p.osc2?.[1])].filter(v => v != null);
+      if (!mids.length) return null;
+      return mids.length === 1 ? mids[0] : mids.sort((a,b)=>a-b)[Math.floor(mids.length/2)];
+    };
+
+    presets.forEach((p, idx) => {
+      const m1 = toMidi(p.osc1?.[1]); const pc1 = (m1!=null) ? m1%12 : null;
+      const m2 = toMidi(p.osc2?.[1]); const pc2 = (m2!=null) ? m2%12 : null;
+      const inScale = (pc1!=null && scaleSet.has(pc1)) || (pc2!=null && scaleSet.has(pc2));
+      if (inScale) {
+        admitted.push(idx + 1);
+        if (pc1!=null) admittedPCs.add(pc1);
+        if (pc2!=null) admittedPCs.add(pc2);
+        if (m1!=null && m2!=null) {
+          dualOscCount++;
+          stepIntervals.push(Math.abs(m2 - m1) % 12);
+        }
+        const rp = repPitch(p); if (rp != null) repPitches.push(rp);
+      }
+    });
+
+    // Gate: must be a "populated" palette (enough shapes to make melody lines)
+    const minPalette = Math.max(MIN_PALETTE_FALLBACK, Math.floor(SHAPE_KEYS.length * MIN_PALETTE_FRAC));
+    if (admitted.length < minPalette) return { final: -1, details: null };
+
+    // ----- Metrics -----
+
+    // 1) Consonance across admitted shapes (osc1 vs osc2)
+    const consRaw = stepIntervals.length
+      ? sum(stepIntervals.map(ic => INTERVAL_SCORE[ic] ?? 0)) / stepIntervals.length
+      : 0;
+    const cons01 = clamp01((consRaw + 0.8) / 1.8); // normalize [-0.8..1.0] → [0..1]
+
+    // 2) Scale fit of the admitted PCs (not the whole palette) – normalized
+    const pcsAdmitted = Array.from(admittedPCs);
+    const fitMaj2 = scaleFitScore(pcsAdmitted, MAJOR);
+    const fitMin2 = scaleFitScore(pcsAdmitted, MINOR);
+    const best2   = Math.max(fitMaj2.score, fitMin2.score);
+    const scale01 = clamp01(best2 / Math.max(4, pcsAdmitted.length));
+
+    // 3) Triad coverage (tonic, third, fifth present relative to best.key)
+    const degSet = new Set(pcsAdmitted.map(pc => (pc - best.key + 12) % 12));
+    const third = (best.template === MAJOR) ? 4 : 3;
+    const triadHits = [0, third, 7].filter(d => degSet.has(d)).length;
+    const triad01 = triadHits / 3;
+
+    // 4) Pitch-class diversity (sweet spot 5–7) with entropy bonus
+    const k = pcsAdmitted.length;
+    const sweet = Math.exp(-Math.pow((k - 6) / 2.5, 2)); // bell centered at 6
+    const entropy = (() => {
+      const map = new Map();
+      pcsAdmitted.forEach(pc => map.set(pc, (map.get(pc)||0) + 1));
+      const N = pcsAdmitted.length || 1;
+      let e = 0;
+      for (const c of map.values()) { const p = c / N; e += -p * Math.log2(p); }
+      return clamp01(e / Math.log2(Math.min(12, Math.max(1, map.size))));
+    })();
+    const diversity01 = clamp01(0.65*sweet + 0.35*entropy);
+
+    // 5) Pitch spread across admitted shapes (representative pitch per shape)
+    // Prefer a moderate span (e.g., ~12–24 semitones). Map to 0..1.
+    const spread01 = (() => {
+      if (repPitches.length < 2) return 0.4;
+      const min = Math.min(...repPitches), max = Math.max(...repPitches);
+      const span = max - min; // semitones
+      const target = 18, width = 10; // peak around 1.5 octaves
+      return clamp01(Math.exp(-Math.pow((span - target)/width, 2)));
+    })();
+
+    // 6) Polyphony ratio (more dual-osc shapes gives richer chords)
+    const poly01 = clamp01(dualOscCount / admitted.length);
+
+    // Final (palette-only) melodic score
+    const final =
+      0.30 * cons01     +  // consonance inside shapes
+      0.22 * scale01    +  // in-scale cohesion
+      0.18 * triad01    +  // basic functional harmony available
+      0.14 * diversity01+  // varied but not chaotic
+      0.10 * spread01   +  // usable melodic span
+      0.06 * poly01;       // chordal richness potential
+
+    return {
+      final,
+      details: {
+        scaleName,
+        admitted: admitted.length,
+        cons01, scale01, triad01, diversity01, spread01, poly01
+      }
+    };
+  }
+
+  function scoreSeed(seed) {
+    const map = _getUniqueAlgorithmMapping(seed);
+
+    // Hit-rate among playable shapes (exclude hum)
+    let hits = 0;
+    for (const key of SHAPE_KEYS) if (TARGET_ALGORITHMS.has(map[key])) hits++;
+    const hitRate = SHAPE_KEYS.length ? (hits / SHAPE_KEYS.length) : 0;
+
+    // Gate by mapping first
+    if (hitRate < MIN_HITRATE) {
+      return {
+        seed,
+        score: +(hitRate * 5).toFixed(3),
+        hitRate: (hitRate*100).toFixed(0)+'%',
+        alg11: `${hits}/${SHAPE_KEYS.length}`,
+        scale: 'n/a',
+        palette: 0,
+        melodic: '—'
+      };
+    }
+
+    // Melody/harmony score for populated alg-11 palettes
+    const mel = scoreAlgo11Melodicity(seed);
+    if (!mel.details) {
+      return {
+        seed,
+        score: +(hitRate * 5).toFixed(3),
+        hitRate: (hitRate*100).toFixed(0)+'%',
+        alg11: `${hits}/${SHAPE_KEYS.length}`,
+        scale: 'n/a',
+        palette: 0,
+        melodic: '—'
+      };
+    }
+
+    // Compose final score: strong mapping plus melodic quality
+    const final = 5.0 * hitRate + 2.0 * mel.final;
+
+    const d = mel.details;
+    const melStr =
+      `cons:${(d.cons01*100|0)}% triad:${(d.triad01*100|0)}% ` +
+      `scale:${(d.scale01*100|0)}% div:${(d.diversity01*100|0)}% ` +
+      `spread:${(d.spread01*100|0)}% poly:${(d.poly01*100|0)}%`;
+
+    return {
+      seed,
+      score: +final.toFixed(3),
+      hitRate: (hitRate*100).toFixed(0)+'%',
+      alg11: `${hits}/${SHAPE_KEYS.length}`,
+      scale: d.scaleName,
+      palette: d.admitted,
+      melodic: melStr
+    };
+  }
+  
+  function downloadCSV(data) {
+    const replacer = (key, value) => value === null ? '' : value; 
+    const header = Object.keys(data[0]);
+    let csv = data.map(row => header.map(fieldName => JSON.stringify(row[fieldName], replacer)).join(','));
+    csv.unshift(header.join(','));
+    csv = csv.join('\r\n');
+
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8,' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.setAttribute('href', url);
+    link.setAttribute('download', 'top_1000_seeds.csv');
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
+  // ----- Run (batched) -----
+  const results = [];
+  const seen = new Set();
+  const randSeed = () => Array.from({length:8}, () => RNG_CHARS[(Math.random()*36)|0]).join('');
+
+  const t0 = performance.now();
+  console.log(`Searching ${TOTAL_SEEDS} seeds for populated ALG-11 melodic palettes...`);
+  for (let i=0; i<TOTAL_SEEDS; i++) {
+    let s; do { s = randSeed(); } while (seen.has(s)); seen.add(s);
+    results.push(scoreSeed(s));
+    if ((i+1) % BATCH_SIZE === 0) await new Promise(r => setTimeout(r, 0));
+  }
+  const t1 = performance.now();
+
+  results.sort((a,b)=>b.score - a.score);
+  const top = results.slice(0, KEEP_TOP);
+
+  const bank = top.map(r => r.seed).join(' ');
+  console.log('%cALG 11 (Populated) Melodic Finder — Complete','font-weight:bold;');
+  console.log(`Tried ${TOTAL_SEEDS} seeds in ${(t1 - t0).toFixed(0)}ms.`);
+  console.log(`Top ${KEEP_TOP} seeds (a CSV file has been downloaded):`);
+  console.log(bank);
+
+  const table = top.map((r,i)=>({
+    '#': i+1,
+    seed: r.seed,
+    score: r.score,
+    hitRate: r.hitRate,
+    alg11: r.alg11,
+    pal: r.palette,
+    scale: r.scale,
+    melodic: r.melodic
+  }));
+  console.table(table);
+
+  downloadCSV(table);
+
+  return { top, bank };
+})();
