@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AudioGNARLS — The First On-Chain Synthesizer Collection</title>
+    <style>
+        :root {
+            --bg: #000;
+            --neon-pink: #ff00cc;
+            --neon-yellow: #ffff33;
+            --neon-red: #ff3300;
+            --neon-blue: #00ccff;
+            --neon-cyan: #00ffff;
+            --neon-purple: #a020f0;
+            --glow-strong: 0 0 20px rgba(255, 0, 204, 0.8), 0 0 40px rgba(255, 0, 204, 0.5);
+            --glow-blue: 0 0 20px rgba(0, 204, 255, 0.8), 0 0 40px rgba(0, 204, 255, 0.4);
+            --glow-yellow: 0 0 20px rgba(255, 255, 51, 0.8), 0 0 40px rgba(255, 255, 51, 0.4);
+            --border-glow: 0 0 15px var(--neon-pink);
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: var(--bg);
+            color: #e0f7ff;
+            line-height: 1.8;
+            overflow-x: hidden;
+            position: relative;
+            background-image: url('https://assets.codepen.io/2849238/noise.png');
+            background-size: 200px 200px;
+            background-blend-mode: overlay;
+            opacity: 0.96;
+        }
+
+        /* CRT Scanlines Overlay */
+        body::before {
+            content: '';
+            position: fixed;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            pointer-events: none;
+            background: repeating-linear-gradient(
+                0deg,
+                rgba(10, 15, 20, 0.05),
+                rgba(10, 15, 20, 0.05) 1px,
+                transparent 1px,
+                transparent 2px
+            );
+            z-index: 9999;
+            opacity: 0.2;
+            animation: scanline 2s linear infinite;
+            mix-blend-mode: overlay;
+            z-index: -1;
+        }
+
+        @keyframes scanline {
+            0% { transform: translateY(-100%); }
+            100% { transform: translateY(100vh); }
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 2rem;
+            position: relative;
+        }
+
+        header {
+            text-align: center;
+            padding: 5rem 0 3rem;
+            position: relative;
+            z-index: 10;
+        }
+
+        h1 {
+            font-size: 5rem;
+            font-weight: 900;
+            letter-spacing: -0.05em;
+            margin-bottom: 1rem;
+            background: linear-gradient(45deg, var(--neon-pink), var(--neon-cyan), var(--neon-yellow));
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+            text-shadow: 
+                0 0 10px var(--neon-pink),
+                0 0 20px var(--neon-pink),
+                0 0 30px var(--neon-pink),
+                0 0 40px var(--neon-pink);
+            animation: neonFlicker 3s infinite alternate, pulseGlow 2s ease-in-out infinite;
+            position: relative;
+            display: inline-block;
+        }
+
+        @keyframes neonFlicker {
+            0%, 18%, 22%, 25%, 53%, 57%, 100% {
+                text-shadow: 
+                    0 0 10px var(--neon-pink),
+                    0 0 20px var(--neon-pink),
+                    0 0 30px var(--neon-pink),
+                    0 0 40px var(--neon-pink);
+            }
+            20%, 24%, 55% {
+                text-shadow: none;
+            }
+        }
+
+        @keyframes pulseGlow {
+            0%, 100% { filter: brightness(1); }
+            50% { filter: brightness(1.2) contrast(1.1); }
+        }
+
+        .subtitle {
+            font-size: 1.4rem;
+            font-weight: 300;
+            max-width: 700px;
+            margin: 0 auto;
+            opacity: 0.9;
+            color: #e0f7ff;
+            text-shadow: 
+                0 0 8px var(--neon-blue),
+                0 0 15px var(--neon-blue);
+            letter-spacing: 1px;
+            animation: floatNeon 4s ease-in-out infinite;
+        }
+
+        @keyframes floatNeon {
+            0%, 100% { text-shadow: 0 0 8px var(--neon-blue), 0 0 15px var(--neon-blue); }
+            50% { text-shadow: 0 0 12px var(--neon-cyan), 0 0 20px var(--neon-cyan); }
+        }
+
+        .announcement {
+            background: rgba(10, 0, 20, 0.7);
+            border-radius: 16px;
+            padding: 2.8rem;
+            margin: 3.5rem 0;
+            text-align: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 30px rgba(255, 0, 204, 0.3);
+            border: 2px solid var(--neon-pink);
+            animation: borderPulse 2.5s infinite alternate;
+        }
+
+        @keyframes borderPulse {
+            0% { box-shadow: 0 0 20px rgba(255, 0, 204, 0.4); }
+            100% { box-shadow: 0 0 40px rgba(255, 0, 204, 0.8), inset 0 0 15px rgba(255, 0, 204, 0.3); }
+        }
+
+        .announcement::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: url('https://assets.codepen.io/2849238/neon-grid.png') repeat;
+            background-size: 50px 50px;
+            opacity: 0.15;
+            z-index: -1;
+            animation: gridGlow 4s linear infinite;
+        }
+
+        @keyframes gridGlow {
+            0% { opacity: 0.1; }
+            50% { opacity: 0.2; }
+            100% { opacity: 0.1; }
+        }
+
+        .announcement h2 {
+            font-size: 2.4rem;
+            margin-bottom: 1.3rem;
+            color: var(--neon-yellow);
+            text-shadow: 
+                0 0 10px var(--neon-yellow),
+                0 0 20px var(--neon-yellow),
+                0 0 30px var(--neon-yellow);
+            animation: flickerYellow 3s infinite alternate;
+            position: relative;
+            display: inline-block;
+        }
+
+        @keyframes flickerYellow {
+            0%, 19%, 21%, 23%, 25%, 53%, 55%, 100% {
+                text-shadow: 0 0 10px var(--neon-yellow), 0 0 20px var(--neon-yellow), 0 0 30px var(--neon-yellow);
+            }
+            20%, 22%, 24%, 54% {
+                text-shadow: none;
+            }
+        }
+
+        .announcement p {
+            font-size: 1.3rem;
+            font-weight: 500;
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255, 0, 204, 0.6);
+        }
+
+        .announcement strong {
+            color: var(--neon-pink);
+            font-weight: 700;
+            text-shadow: 
+                0 0 10px var(--neon-pink),
+                0 0 20px var(--neon-pink);
+            animation: pulsePink 1.5s infinite alternate;
+        }
+
+        @keyframes pulsePink {
+            0% { text-shadow: 0 0 10px var(--neon-pink), 0 0 20px var(--neon-pink); }
+            100% { text-shadow: 0 0 15px var(--neon-pink), 0 0 30px var(--neon-pink), 0 0 40px var(--neon-pink); }
+        }
+
+        .section {
+            margin: 4.5rem 0;
+            padding: 3rem;
+            border-radius: 18px;
+            background: rgba(10, 10, 20, 0.7);
+            backdrop-filter: blur(10px);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 25px rgba(0, 0, 0, 0.5);
+            border-left: 6px solid var(--neon-red);
+        }
+
+        .section::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: url('https://assets.codepen.io/2849238/circuit-board.png') repeat;
+            background-size: 60px 60px;
+            opacity: 0.07;
+            z-index: -1;
+            animation: circuitFlow 6s linear infinite;
+        }
+
+        @keyframes circuitFlow {
+            0% { background-position: 0 0; }
+            100% { background-position: 120px 120px; }
+        }
+
+        .section::after {
+            content: '';
+            position: absolute;
+            top: 2px; right: 2px; bottom: 2px; left: 2px;
+            border: 1px solid rgba(255, 0, 204, 0.3);
+            border-radius: 16px;
+            pointer-events: none;
+            box-shadow: 
+                0 0 15px rgba(255, 0, 204, 0.3),
+                inset 0 0 10px rgba(0, 0, 0, 0.5);
+            animation: borderGlow 2s infinite alternate;
+        }
+
+        @keyframes borderGlow {
+            0% { box-shadow: 0 0 15px rgba(255, 0, 204, 0.3), inset 0 0 10px rgba(0, 0, 0, 0.5); }
+            100% { box-shadow: 0 0 25px rgba(255, 0, 204, 0.6), inset 0 0 15px rgba(0, 0, 0, 0.7); }
+        }
+
+        .section h2 {
+            font-size: 2.5rem;
+            margin-bottom: 2rem;
+            color: var(--neon-cyan);
+            position: relative;
+            padding-bottom: 0.7rem;
+            text-shadow: 
+                0 0 10px var(--neon-cyan),
+                0 0 20px var(--neon-cyan),
+                0 0 30px var(--neon-cyan);
+            animation: neonFlickerBlue 3s infinite alternate;
+        }
+
+        @keyframes neonFlickerBlue {
+            0%, 20%, 24%, 28%, 52%, 56%, 100% {
+                text-shadow: 0 0 10px var(--neon-cyan), 0 0 20px var(--neon-cyan), 0 0 30px var(--neon-cyan);
+            }
+            22%, 26%, 54% {
+                text-shadow: 0 0 5px rgba(0, 204, 255, 0.5), 0 0 10px rgba(0, 204, 255, 0.3);
+            }
+        }
+
+        .section h2::after {
+            content: '';
+            position: absolute;
+            bottom: 0;
+            left: 0;
+            width: 100px;
+            height: 4px;
+            background: var(--neon-pink);
+            border-radius: 3px;
+            box-shadow: 0 0 15px var(--neon-pink), 0 0 30px var(--neon-pink);
+            animation: barPulse 2s ease-in-out infinite alternate;
+        }
+
+        @keyframes barPulse {
+            0% { opacity: 0.7; width: 80px; }
+            100% { opacity: 1; width: 120px; }
+        }
+
+        .features {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 2.5rem;
+            margin: 2.5rem 0;
+        }
+
+        .feature {
+            background: rgba(20, 10, 30, 0.5);
+            padding: 1.8rem;
+            border-radius: 14px;
+            border: 1px solid rgba(255, 0, 204, 0.2);
+            transition: all 0.4s cubic-bezier(0.25, 0.8, 0.25, 1);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 5px 15px rgba(0, 0, 0, 0.4);
+        }
+
+        .feature:hover {
+            transform: translateY(-8px);
+            box-shadow: 
+                0 10px 30px rgba(255, 0, 204, 0.4),
+                0 0 30px rgba(255, 0, 204, 0.3);
+        }
+
+        .feature::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: radial-gradient(circle at 20% 30%, rgba(255, 0, 204, 0.1), transparent 60%);
+            z-index: -1;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+
+        .feature:hover::before {
+            opacity: 1;
+        }
+
+        .feature h3 {
+            color: var(--neon-pink);
+            margin-bottom: 0.8rem;
+            font-size: 1.4rem;
+            text-shadow: 
+                0 0 8px var(--neon-pink),
+                0 0 15px var(--neon-pink);
+            animation: flickerOnce 3s infinite;
+        }
+
+        @keyframes flickerOnce {
+            0%, 98% { opacity: 1; }
+            99% { opacity: 0.6; text-shadow: none; }
+        }
+
+        ul {
+            padding-left: 1.8rem;
+            margin: 1.2rem 0;
+        }
+
+        li {
+            margin-bottom: 0.7rem;
+            color: #d0f0ff;
+            text-shadow: 0 0 5px rgba(0, 204, 255, 0.4);
+            position: relative;
+        }
+
+        li::before {
+            content: '⚡';
+            margin-right: 0.5rem;
+            color: var(--neon-yellow);
+            animation: spark 3s infinite;
+        }
+
+        @keyframes spark {
+            0%, 100% { opacity: 0.6; }
+            50% { opacity: 1; transform: scale(1.1); }
+        }
+
+        .taglines {
+            display: flex;
+            flex-direction: column;
+            gap: 1.8rem;
+            margin: 4rem 0;
+            text-align: center;
+        }
+
+        .tagline {
+            font-size: 1.6rem;
+            font-weight: 600;
+            padding: 1.8rem;
+            background: rgba(30, 0, 40, 0.6);
+            border-radius: 14px;
+            border-left: 5px solid var(--neon-pink);
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 20px rgba(255, 0, 204, 0.4);
+            color: #fff;
+            text-shadow: 0 0 10px rgba(255, 0, 204, 0.8);
+            transition: all 0.3s;
+        }
+
+        .tagline:hover {
+            transform: scale(1.02);
+            box-shadow: 0 0 30px rgba(255, 0, 204, 0.7);
+        }
+
+        .tagline::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 100%;
+            background: linear-gradient(90deg, transparent, rgba(255, 0, 204, 0.15), transparent);
+            animation: shine 3s infinite ease-in-out;
+            z-index: -1;
+        }
+
+        @keyframes shine {
+            0% { transform: translateX(-100%); }
+            100% { transform: translateX(100%); }
+        }
+
+        .why-matters {
+            background: linear-gradient(135deg, rgba(0, 0, 20, 0.8), rgba(10, 5, 30, 0.9));
+            border-left-color: var(--neon-blue);
+        }
+
+        .why-matters h2 {
+            color: var(--neon-blue);
+            text-shadow: 
+                0 0 10px var(--neon-blue),
+                0 0 20px var(--neon-blue),
+                0 0 30px var(--neon-blue);
+            animation: neonFlickerCyan 3s infinite alternate;
+        }
+
+        @keyframes neonFlickerCyan {
+            0%, 21%, 25%, 54%, 100% {
+                text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-blue), 0 0 30px var(--neon-blue);
+            }
+            23%, 56% {
+                text-shadow: 0 0 5px rgba(0, 204, 255, 0.5);
+            }
+        }
+
+        .call-sign {
+            font-family: 'Courier New', monospace;
+            font-size: 1.6rem;
+            font-weight: bold;
+            text-align: center;
+            color: var(--neon-pink);
+            text-shadow: 
+                0 0 8px var(--neon-pink),
+                0 0 15px var(--neon-blue),
+                0 0 25px var(--neon-yellow);
+            animation: glitchWave 2.5s infinite;
+            margin: 2rem 0 3rem;
+            letter-spacing: 1px;
+        }
+
+        @keyframes glitchWave {
+            0%, 100% { text-shadow: 0 0 8px var(--neon-pink), 0 0 15px var(--neon-blue), 0 0 25px var(--neon-yellow); }
+            10% { text-shadow: 0 0 12px var(--neon-yellow), 0 0 20px var(--neon-pink); }
+            20% { text-shadow: 0 0 15px var(--neon-blue), 0 0 25px var(--neon-pink); }
+            30% { text-shadow: 0 0 10px var(--neon-pink), 0 0 20px var(--neon-yellow); }
+            40% { text-shadow: none; }
+            50% { text-shadow: 0 0 10px var(--neon-blue), 0 0 20px var(--neon-cyan); }
+        }
+
+        footer {
+            text-align: center;
+            padding: 3.5rem 0 2rem;
+            margin-top: 4rem;
+            border-top: 1px solid rgba(255, 0, 204, 0.2);
+            font-size: 0.95rem;
+            opacity: 0.7;
+            color: #aaa;
+            text-shadow: 0 0 5px rgba(0, 0, 0, 0.8);
+            position: relative;
+        }
+
+        footer::after {
+            content: '◣ ◢ ◤ ◥';
+            display: block;
+            margin-top: 0.5rem;
+            font-size: 0.8rem;
+            color: var(--neon-blue);
+            opacity: 0.4;
+        }
+
+        @media (max-width: 768px) {
+            h1 {
+                font-size: 3rem;
+            }
+            .subtitle {
+                font-size: 1.1rem;
+            }
+            .section {
+                padding: 1.8rem;
+            }
+            .tagline {
+                font-size: 1.1rem;
+                padding: 1.2rem;
+            }
+            .call-sign {
+                font-size: 1.3rem;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Optional Call Sign -->
+    <div class="call-sign">CALL SIGN: GN4RL-01 [ACTIVE]</div>
+
+    <div class="container">
+        <header>
+            <h1>AUDIOGNARLS</h1>
+            <p class="subtitle">The first on-chain synthesizer collection, inscribed forever on Bitcoin.</p>
+        </header>
+
+        <div class="announcement">
+            <h2>What Just Happened</h2>
+            <p>As announced by <strong>Ord.io</strong>, the world’s first <strong>interactive audio synthesizer</strong> has been fully inscribed on-chain. This milestone unlocks a new frontier: <strong>electronic music creation, natively on Bitcoin.</strong></p>
+        </div>
+
+        <div class="section">
+            <h2>About the Collection</h2>
+            <p><strong>AudioGNARLS</strong> is a series of <strong>256 seed-driven synth entities</strong>. Each Gnarl generates:</p>
+            <div class="features">
+                <div class="feature">
+                    <h3>Unique Oscilloscope Artwork</h3>
+                    <p>Visual representations of each Gnarl's sonic signature, permanently etched on-chain.</p>
+                </div>
+                <div class="feature">
+                    <h3>18 Deterministic Presets</h3>
+                    <p>A complete bank of reproducible sounds that define each Gnarl's character.</p>
+                </div>
+                <div class="feature">
+                    <h3>Reproducible Audio Signature</h3>
+                    <p>Each Gnarl's unique "call sign" — a sonic fingerprint that can be verified and reproduced.</p>
+                </div>
+            </div>
+            <p>These are not 8-bit throwbacks. They are <strong>modern, procedural synth presets</strong>, designed with a custom Tone.js engine featuring oscillators, filters, envelopes, and modulation. Each Gnarl's sound and art are permanently etched on-chain, inseparable and eternal.</p>
+        </div>
+
+        <div class="section">
+            <h2>From Collectible to Instrument</h2>
+            <p>AudioGNARLS is both <strong>art</strong> and <strong>instrument</strong>:</p>
+            <ul>
+                <li>Import any Gnarl's sound bank into the upcoming <strong>AudioGNARLS Sequencer (BVST synth)</strong>.</li>
+                <li>Use the <strong>Ordinal ID</strong> of your Gnarl to load its unique presets.</li>
+                <li>Tracks created with those sounds will <strong>credit the Gnarl's owner</strong> — linking provenance and authorship at the protocol level.</li>
+            </ul>
+        </div>
+
+        <div class="section why-matters">
+            <h2>Why It Matters</h2>
+            <p>This is more than a drop. It's the <strong>foundation of the AudioGNARLS protocol</strong> — a blockchain-native <strong>digital audio workstation (DAW)</strong> where:</p>
+            <ul>
+                <li>Presets are <strong>provably unique</strong> and <strong>ownable</strong>.</li>
+                <li><strong>Rights and recognition</strong> are built directly into sound design.</li>
+                <li>Art, code, and music converge into a living ecosystem.</li>
+            </ul>
+        </div>
+
+        <div class="taglines">
+            <div class="tagline">"Audio Gnarls: 256 deterministic synth souls, etched forever on-chain."</div>
+            <div class="tagline">"Oscilloscopes as art, presets as provenance."</div>
+            <div class="tagline">"From seed to sound — a new era of blockchain-native instruments."</div>
+        </div>
+    </div>
+
+    <footer>
+        AudioGNARLS — The First On-Chain Synthesizer Collection • Inscribed on Bitcoin Ordinals
+    </footer>
+
+</body>
+</html>
