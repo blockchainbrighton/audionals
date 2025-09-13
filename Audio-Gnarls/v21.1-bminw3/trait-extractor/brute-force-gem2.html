@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oscilloscope Rarity Generator (Curated Ranking)</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --primary-text: #e0e0e0;
+            --secondary-text: #b3b3b3;
+            --header-bg: #1e1e1e;
+            --border-color: #333;
+            --accent-color: #03dac6;
+            --button-bg: #bb86fc;
+            --button-text: #000;
+            --input-bg: #2c2c2c;
+            --rank-gold: #ffd700;
+            --highlight-bg: rgba(3, 218, 198, 0.1);
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--primary-text);
+            margin: 0;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 95%;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        h1 {
+            color: var(--accent-color);
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .explanation {
+            text-align: center;
+            color: var(--secondary-text);
+            max-width: 800px;
+            margin: 0 auto 1.5rem auto;
+            font-size: 0.95rem;
+            border: 1px solid var(--border-color);
+            padding: 1rem;
+            border-radius: 8px;
+        }
+        
+        .explanation h3 {
+            margin-top: 0;
+            color: var(--primary-text);
+        }
+
+        .explanation ol {
+            text-align: left;
+            display: inline-block;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--primary-text);
+            padding: 1rem;
+            font-size: 1rem;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        button {
+            padding: 0.8rem 1.5rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            align-self: center;
+        }
+
+        button:hover:not(:disabled) {
+            background-color: #a764fa;
+        }
+        
+        button:disabled {
+            background-color: #444;
+            color: #888;
+            cursor: not-allowed;
+        }
+
+        #status {
+            text-align: center;
+            min-height: 24px;
+            font-style: italic;
+            color: var(--accent-color);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        th, td {
+            padding: 0.6rem 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            border-left: 1px solid var(--border-color);
+        }
+        
+        th:first-child, td:first-child { border-left: none; }
+
+        th {
+            background-color: var(--header-bg);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+        
+        .scored-col {
+            background-color: var(--highlight-bg);
+            font-weight: bold;
+        }
+        
+        tbody tr:nth-child(even) .scored-col {
+             background-color: color-mix(in srgb, var(--highlight-bg) 70%, #1a1a1a);
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #1a1a1a;
+        }
+        
+        .rank-col { font-weight: bold; }
+        .rank-1 { color: var(--rank-gold); }
+        .rank-2 { color: #c0c0c0; }
+        .rank-3 { color: #cd7f32; }
+
+        .long-text {
+            min-width: 300px;
+            white-space: normal;
+        }
+        
+        /* --- Brute Force Styles --- */
+        .brute-force-container {
+            margin-top: 2rem;
+            padding: 1.5rem;
+        }
+
+        .brute-force-container .controls {
+            display: flex;
+            justify-content: center;
+            gap: 1rem;
+            margin-bottom: 1.5rem;
+            flex-wrap: wrap;
+            align-items: flex-end;
+        }
+
+        .brute-force-container .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+        }
+
+        .brute-force-container label {
+            margin-bottom: 0.5rem;
+            font-size: 0.9rem;
+            color: var(--secondary-text);
+        }
+
+        .brute-force-container select,
+        .brute-force-container input {
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 5px;
+            color: var(--primary-text);
+            padding: 0.5rem;
+            font-size: 1rem;
+            width: 220px;
+        }
+
+        #brute-force-status {
+            margin-top: 1rem;
+            min-height: 24px;
+            font-style: italic;
+            color: var(--accent-color);
+        }
+
+        #brute-force-results {
+            margin-top: 1rem;
+            height: 150px;
+        }
+        
+        .hidden {
+            display: none;
+        }
+
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Oscilloscope Rarity Generator (Curated Ranking)</h1>
+        <div class="explanation">
+            <h3>Curated Hierarchical Ranking System</h3>
+            <p>Ranking is based on a strict sorting order, not statistics. All other traits are informational.</p>
+            <ol>
+                <li><strong># of Colors</strong> (Lowest is best)</li>
+                <li><strong>Signature Shape Count</strong> (Lowest is best)</li>
+                <li><strong>Has Strobe</strong> ('Yes' is best)</li>
+            </ol>
+        </div>
+        
+        <textarea id="seed-input" placeholder="Paste seeds here (one seed per line)..."></textarea>
+        
+        <button id="generate-button">Generate Curated Ranking</button>
+
+        <div id="status"></div>
+        
+        <!-- --- Brute Force Section --- -->
+        <div class="brute-force-container explanation">
+            <h3>Brute Force Trait Finder</h3>
+            <p>Find new seeds that have a specific rare trait. This process can be slow.</p>
+            <div class="controls">
+                <div class="control-group">
+                    <label for="trait-select">Target Trait:</label>
+                    <select id="trait-select">
+                        <option value="mono"># of Colors = 1 (Mono)</option>
+                        <option value="dark">Dark Palette</option>
+                        <option value="neutral">Neutral Palette</option>
+                        <option value="half">Half-Dominant Palette</option>
+                        <option value="specific-color">Specific Color</option>
+                    </select>
+                </div>
+                <div class="control-group hidden" id="specific-color-control">
+                    <label for="color-select">Color:</label>
+                    <select id="color-select"></select>
+                </div>
+                <div class="control-group">
+                    <label for="seeds-to-find">Seeds to Find:</label>
+                    <input type="number" id="seeds-to-find" value="5" min="1" max="100">
+                </div>
+                <div class="control-group">
+                    <label for="max-attempts">Max Attempts:</label>
+                    <input type="number" id="max-attempts" value="1000000" min="1000">
+                </div>
+            </div>
+            <button id="brute-force-button">Start Search</button>
+            <div id="brute-force-status">Ready to search.</div>
+            <textarea id="brute-force-results" placeholder="Found seeds will appear here..." readonly></textarea>
+        </div>
+
+        <div class="table-container" id="output-container">
+            <!-- Generated table will be inserted here -->
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS AND DEFAULTS ---
+        const CONSTANTS = { SHAPES: ["circle","square","butterfly","Bowditch","spiro","harmonograph","rose","hypocycloid","epicycloid","spiral","star","flower","wave","mandala","infinity","dna","tornado"], SOUNDS: ["hum","circle","square","butterfly","Bowditch","spiro","harmonograph","rose","hypocycloid","epicycloid","spiral","star","flower","wave","mandala","infinity","dna","tornado"], PROB: {"mono-prob":0.02,"half-dominant-prob":0.05,"group-strobe-prob":0.01,"dark-palette-prob":0.01,"neutral-palette-prob":0.05}, EFFECT_WEIGHTS: {none:60,glow:25,strobe:10,neon:5}, COLOR_WEIGHTS: {bitcoin_orange:3,stacks_purple:2,deep_purple:2,light_magenta:3,shocking_pink:4,royal_blue:10,dark_green:3,bright_pink:6,bright_red:12,dark_red:6,bright_yellow:1,gold:1,white:3,dark_gray:2,cycler:3}, DARK_COLOR_WEIGHTS: {extra_dark_purple:2,very_dark_blue:2,very_dark_green:3,dark_red:5,extra_dark_gray:3,charcoal:2,near_black:1,gold:1}, NEUTRAL_COLOR_WEIGHTS: {near_black:4,extra_dark_gray:5,charcoal:5,dark_gray:5,slate_gray:4,dim_gray:4,silver:3,gainsboro:3,off_white:4,white:3}, HALF_DOMINANT_RATIO:0.5, };
+
+        // --- CORE GENERATIVE ALGORITHMS ---
+        const createRng=s=>{let a=4215235397^s.length;for(let i=0;i<s.length;i++){a=Math.imul(a^s.charCodeAt(i),2654435761)}return()=>{a=Math.imul(a^a>>>15,1|a);return((a>>>16)&65535)/65536}};
+        const createRngEnsurePlan=s=>{let t=0;for(let i=0;i<s.length;i++)t=(t<<5)-t+s.charCodeAt(i);t=0|t;return()=>{t=t+1831565813|0;let e=Math.imul(t^t>>>15,1|t);e=e+Math.imul(e^e>>>7,61|e)^e;return((e^e>>>14)>>>0)/4294967296}};
+        const pickWeightedKey=(rng,weights)=>{const keys=Object.keys(weights);if(!keys.length)return null;const totalWeight=keys.reduce((sum,key)=>sum+(weights[key]||0),0);if(totalWeight<=0)return keys[0];let r=rng()*totalWeight;for(const key of keys){r-=(weights[key]||0);if(r<=0)return key}return keys[keys.length-1]};
+        const chooseSubset=(rng,arr,count)=>{const shuffled=[...arr];for(let i=shuffled.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]]}return shuffled.slice(0,count)};
+        
+        function generateVisualTraits(seed){const sounds=CONSTANTS.SOUNDS;const isMono=createRngEnsurePlan(`${seed}::mode::mono`)()<CONSTANTS.PROB["mono-prob"];const isNeutralPalette=!isMono&&createRngEnsurePlan(`${seed}::mode::neutral`)()<CONSTANTS.PROB["neutral-palette-prob"];const isDarkPalette=!isMono&&!isNeutralPalette&&createRngEnsurePlan(`${seed}::mode::dark`)()<CONSTANTS.PROB["dark-palette-prob"];const isHalf=!isMono&&createRngEnsurePlan(`${seed}::mode::half`)()<CONSTANTS.PROB["half-dominant-prob"];const isGroupStrobe=createRngEnsurePlan(`${seed}::mode::gStrobe`)()<CONSTANTS.PROB["group-strobe-prob"];const groupStrobeAll=isGroupStrobe&&(createRngEnsurePlan(`${seed}::mode::gStrobeType`)()<.5);let activeColorWeights=isNeutralPalette?CONSTANTS.NEUTRAL_COLOR_WEIGHTS:isDarkPalette?CONSTANTS.DARK_COLOR_WEIGHTS:{...CONSTANTS.COLOR_WEIGHTS};let halfDominantKey=isHalf?pickWeightedKey(createRngEnsurePlan(`${seed}::halfColorPick`),activeColorWeights):null;const colorUniformKey=isMono?pickWeightedKey(createRngEnsurePlan(`${seed}::monoColorPick`),activeColorWeights):null;const halfDominantSet=isHalf?new Set(chooseSubset(createRngEnsurePlan(`${seed}::halfSubset`),sounds,Math.max(1,Math.round(sounds.length*CONSTANTS.HALF_DOMINANT_RATIO)))):new Set;const perShapeColorKey={};const perShapeEffectKey={};for(const key of sounds){perShapeColorKey[key]=isMono?colorUniformKey:isHalf&&halfDominantSet.has(key)?halfDominantKey:pickWeightedKey(createRngEnsurePlan(`${seed}::color::${key}`),activeColorWeights);perShapeEffectKey[key]=pickWeightedKey(createRngEnsurePlan(`${seed}::effect::${key}`),CONSTANTS.EFFECT_WEIGHTS)??"none"}if(isGroupStrobe){let strobeSet=groupStrobeAll?new Set(sounds):new Set(chooseSubset(createRngEnsurePlan(`${seed}::gStrobe::subset`),sounds,Math.max(1,Math.round(sounds.length*(.5+.5*createRngEnsurePlan(`${seed}::gStrobe::size`)())))));for(const key of strobeSet)perShapeEffectKey[key]="strobe"}const colors=Object.values(perShapeColorKey),effects=Object.values(perShapeEffectKey),strobeShapesCount=effects.filter(e=>e==="strobe").length;return{allColors:colors,paletteType:isMono?"Mono":isNeutralPalette?"Neutral":isDarkPalette?"Dark":"Standard",paletteTrait:isHalf?"Half-Dominant":"None",groupEffect:isGroupStrobe?groupStrobeAll?"Strobe (All)":"Strobe (Subset)":"None",hasStrobe:strobeShapesCount>0?"Yes":"No",numColors:new Set(colors).size,neonShapes:effects.filter(e=>e==="neon").length,strobeShapes:strobeShapesCount,glowShapes:effects.filter(e=>e==="glow").length,cyclerShapes:colors.filter(c=>c==="cycler").length,dominantColor:halfDominantKey||"N/A"}}
+        function generateAudioTraits(seed){const presets=CONSTANTS.SHAPES.map(shape=>deterministicPreset(seed,shape));const modeCounts={0:0,1:0,2:0,3:0},waveformCounts={sine:0,triangle:0,square:0,sawtooth:0};let totalLfo=0;presets.forEach(p=>{modeCounts[p.mode]++;waveformCounts[p.osc1[0]]++;if(p.osc2)waveformCounts[p.osc2[0]]++;totalLfo+=p.lfoRate});const dominantSoundMode=`Mode ${Object.keys(modeCounts).reduce((a,b)=>modeCounts[a]>modeCounts[b]?a:b)}`;const numSoundModes=Object.values(modeCounts).filter(c=>c>0).length,dualOscillatorShapes=presets.filter(p=>p.osc2).length;const dominantWaveform=Object.keys(waveformCounts).reduce((a,b)=>waveformCounts[a]>modeCounts[b]?a:b);const avgLfo=totalLfo/presets.length,avgLfoCategory=avgLfo>20?"Fast":avgLfo>5?"Medium":avgLfo>1?"Slow":"Subtle";const signatureSequence=generateSignatureWithConstraints(seed);const uniqueShapesInSig=new Set(signatureSequence.filter(v=>v!==null&&v>0));return{dominantSoundMode,numSoundModes,dualOscillatorShapes,dominantWaveform,avgLfoCategory,signatureMapping:getUniqueAlgorithmMapping(seed).join(", "),signatureShapeCount:uniqueShapesInSig.size}}
+        const deterministicPreset=(seed,shape)=>{const r=createRng(`${seed}_${shape}`);const types=["sine","triangle","square","sawtooth"],notes=["C1","C2","E2","G2","A2","C3","E3","G3","B3","D4","F#4","A4","C5"];const m=r(),mode=m<.18?0:m<.56?1:m<.85?2:3,cnt=mode===3?2+(r()>.7?1:0):1+(r()>.6?1:0);const pick=arr=>arr[Math.floor(r()*arr.length)],oscs=Array.from({length:cnt},()=>[pick(types),pick(notes)]);let lfoRate;if(mode===0){lfoRate=.07+r()*.3}else if(mode===1){lfoRate=.25+r()*8}else if(mode===2){lfoRate=6+r()*20}else{lfoRate=24+r()*36}return{mode,osc1:oscs[0],osc2:oscs[1]||null,lfoRate}};
+        const getUniqueAlgorithmMapping=(seed)=>{const r=createRngEnsurePlan(`${seed}_unique_algo_mapping`),keys=CONSTANTS.SOUNDS,n=keys.length,base=[1,2,3,4,5,6,7,8,9,10],pool=[];while(pool.length<n)pool.push(...base);pool.length=n;for(let i=pool.length-1;i>0;i--){const j=(r()*(i+1))|0;[pool[i],pool[j]]=[pool[j],pool[i]]}return pool};
+        function generateSignatureWithConstraints(seed){const r=createRngEnsurePlan(`${seed}_audio_signature_constrained`);const N=CONSTANTS.SHAPES.length,pal=Math.min(6,N);const p={steps:32,pRepeat:.35,pHum:.15,pSilence:.2,avoidBackAndForth:true};const seq=[];let last=null,prev=null;const rInt=(rng,min,max)=>min+Math.floor(rng()*(max-min+1));for(let i=0;i<p.steps;i++){if(r()<p.pSilence){seq.push(null);continue}const roll=r();let next;if(roll<p.pHum){next=0}else if(roll<p.pHum+p.pRepeat&&prev!==null){next=prev}else{do{next=rInt(r,1,pal);if(p.avoidBackAndForth&&last!==null&&last>=1&&next>=1&&seq.length>=2&&seq.at(-2)===next){next=null}}while(next===null)}seq.push(next);if(next!==null){if(next>=1)prev=next;last=next}}return seq}
+        
+        // --- CURATED RANKING ---
+        function calculateCustomRanking(allTraits) {
+            allTraits.sort((a, b) => {
+                if (a.numColors !== b.numColors) return a.numColors - b.numColors;
+                if (a.signatureShapeCount !== b.signatureShapeCount) return a.signatureShapeCount - b.signatureShapeCount;
+                const strobeA = a.hasStrobe === 'Yes' ? -1 : 1;
+                const strobeB = b.hasStrobe === 'Yes' ? -1 : 1;
+                if (strobeA !== strobeB) return strobeA - strobeB;
+                return a.seed.localeCompare(b.seed);
+            });
+            allTraits.forEach((trait, index) => { trait.rank = index + 1; });
+            return allTraits;
+        }
+
+        // --- UI AND TABLE GENERATION ---
+        function generateTable() {
+            const seedInput = document.getElementById('seed-input');
+            const outputContainer = document.getElementById('output-container');
+            const statusDiv = document.getElementById('status');
+            const seeds = seedInput.value.split('\n').map(s => s.trim()).filter(s => s);
+            if(seeds.length === 0) { statusDiv.textContent = 'Please enter at least one seed.'; outputContainer.innerHTML = ''; return; }
+
+            statusDiv.textContent = `Generating traits for ${seeds.length} seed(s)...`;
+            outputContainer.innerHTML = '';
+
+            setTimeout(() => {
+                let allTraits = seeds.map(seed => ({ seed, ...generateVisualTraits(seed), ...generateAudioTraits(seed) }));
+                statusDiv.textContent = 'Applying curated ranking rules...';
+                
+                setTimeout(() => {
+                    allTraits = calculateCustomRanking(allTraits);
+                    const headers = ['Rank', '# Colors', 'Sig. Shape Count', 'Has Strobe', 'Seed', 'Palette Type', 'Palette Trait', 'Neon', 'Cyclers', 'Dom Color', 'Dom Sound Mode', '# Sound Modes', 'Dual-Osc', 'Dom Waveform', 'Avg LFO', 'Audio Sig Map', 'Glow', 'Strobe', 'Group Effect'];
+                    const keys    = ['rank', 'numColors', 'signatureShapeCount', 'hasStrobe', 'seed', 'paletteType', 'paletteTrait', 'neonShapes', 'cyclerShapes', 'dominantColor', 'dominantSoundMode', 'numSoundModes', 'dualOscillatorShapes', 'dominantWaveform', 'avgLfoCategory', 'signatureMapping', 'glowShapes', 'strobeShapes', 'groupEffect'];
+                    
+                    let tableHTML = '<table><thead><tr>';
+                    headers.forEach(h => tableHTML += `<th>${h}</th>`);
+                    tableHTML += '</tr></thead><tbody>';
+
+                    allTraits.forEach(trait => {
+                        tableHTML += `<tr>`;
+                        keys.forEach(key => {
+                            const value = trait[key];
+                            let className = '';
+                            if (key === 'rank') className = `rank-col rank-${value}`;
+                            if (['numColors', 'signatureShapeCount', 'hasStrobe'].includes(key)) className += ' scored-col';
+                            if (key === 'signatureMapping') className = 'long-text';
+                            tableHTML += `<td class="${className}">${value}</td>`;
+                        });
+                        tableHTML += `</tr>`;
+                    });
+
+                    tableHTML += '</tbody></table>';
+                    outputContainer.innerHTML = tableHTML;
+                    statusDiv.textContent = `Generated and ranked ${seeds.length} seeds with your curated rules.`;
+                }, 10);
+            }, 10);
+        }
+        document.getElementById('generate-button').addEventListener('click', generateTable);
+
+        // --- BRUTE FORCE LOGIC ---
+        let isBruteForcing = false;
+
+        function checkTrait(seed, targetTrait) {
+            const traits = generateVisualTraits(seed);
+            switch (targetTrait) {
+                case 'mono':    return traits.numColors === 1;
+                case 'dark':    return traits.paletteType === 'Dark';
+                case 'neutral': return traits.paletteType === 'Neutral';
+                case 'half':    return traits.paletteTrait === 'Half-Dominant';
+                case 'specific-color': {
+                    const targetColor = document.getElementById('color-select').value;
+                    return traits.allColors.includes(targetColor);
+                }
+                default: return false;
+            }
+        }
+        
+        function startBruteForce() {
+            if (isBruteForcing) return;
+            isBruteForcing = true;
+
+            const traitSelect = document.getElementById('trait-select');
+            const seedsToFindInput = document.getElementById('seeds-to-find');
+            const maxAttemptsInput = document.getElementById('max-attempts');
+            const statusDiv = document.getElementById('brute-force-status');
+            const resultsTextarea = document.getElementById('brute-force-results');
+            const searchButton = document.getElementById('brute-force-button');
+
+            const targetTrait = traitSelect.value;
+            const numToFind = parseInt(seedsToFindInput.value, 10);
+            const maxAttempts = parseInt(maxAttemptsInput.value, 10);
+
+            let foundSeeds = [];
+            let attempts = 0;
+            resultsTextarea.value = '';
+            searchButton.disabled = true;
+            searchButton.textContent = 'Searching...';
+
+            function searchBatch() {
+                const BATCH_SIZE = 1000;
+                for (let i = 0; i < BATCH_SIZE; i++) {
+                    if (foundSeeds.length >= numToFind || attempts >= maxAttempts) break;
+                    attempts++;
+                    const currentSeed = attempts.toString();
+                    if (checkTrait(currentSeed, targetTrait)) {
+                        foundSeeds.push(currentSeed);
+                        resultsTextarea.value = foundSeeds.join('\n');
+                    }
+                }
+
+                statusDiv.textContent = `Found ${foundSeeds.length} / ${numToFind} seeds after ${attempts.toLocaleString()} attempts...`;
+
+                if (foundSeeds.length < numToFind && attempts < maxAttempts) {
+                    setTimeout(searchBatch, 0);
+                } else {
+                    finishSearch();
+                }
+            }
+
+            function finishSearch() {
+                if (foundSeeds.length < numToFind) {
+                    statusDiv.textContent = `Search finished. Found ${foundSeeds.length} seed(s) after reaching the max of ${maxAttempts.toLocaleString()} attempts.`;
+                } else {
+                    statusDiv.textContent = `Successfully found ${foundSeeds.length} seed(s) after ${attempts.toLocaleString()} attempts!`;
+                }
+                isBruteForcing = false;
+                searchButton.disabled = false;
+                searchButton.textContent = 'Start Search';
+            }
+            
+            searchBatch();
+        }
+
+        function initializeBruteForceControls() {
+            // Populate the color selector dropdown
+            const colorSelect = document.getElementById('color-select');
+            const allColorNames = new Set([
+                ...Object.keys(CONSTANTS.COLOR_WEIGHTS),
+                ...Object.keys(CONSTANTS.DARK_COLOR_WEIGHTS),
+                ...Object.keys(CONSTANTS.NEUTRAL_COLOR_WEIGHTS)
+            ]);
+            
+            Array.from(allColorNames).sort().forEach(colorName => {
+                const option = document.createElement('option');
+                option.value = colorName;
+                option.textContent = colorName.replace(/_/g, ' '); // Make it more readable
+                colorSelect.appendChild(option);
+            });
+
+            // Add event listener to show/hide the color selector
+            const traitSelect = document.getElementById('trait-select');
+            const specificColorControl = document.getElementById('specific-color-control');
+            traitSelect.addEventListener('change', function() {
+                if (this.value === 'specific-color') {
+                    specificColorControl.classList.remove('hidden');
+                } else {
+                    specificColorControl.classList.add('hidden');
+                }
+            });
+        }
+        
+        document.getElementById('brute-force-button').addEventListener('click', startBruteForce);
+        
+        // --- INITIALIZE ---
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeBruteForceControls();
+        });
+
+    </script>
+</body>
+</html>

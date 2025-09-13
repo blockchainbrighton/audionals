@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Unified Oscilloscope Seed Generator</title>
+  <style>
+    :root{
+      --bg-color:#0f1115;--primary-text:#e6e6e6;--secondary-text:#a8b3c1;--header-bg:#12151b;
+      --border-color:#202635;--accent-color:#7df9ff;--button-bg:#a78bfa;--button-text:#0b0d12;
+      --input-bg:#131825;--rank-gold:#ffd700;--highlight-bg:rgba(125,249,255,.08);
+    }
+    *{box-sizing:border-box}
+    body{font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial,"Apple Color Emoji","Segoe UI Emoji";background:var(--bg-color);color:var(--primary-text);margin:0;padding:24px;line-height:1.6}
+    h1{color:var(--accent-color);text-align:center;margin:0 0 .5rem}
+    p.subtitle{text-align:center;color:var(--secondary-text);margin:0 0 1.5rem}
+    .container{max-width:1200px;margin:0 auto;display:flex;flex-direction:column;gap:1rem}
+
+    .panel{border:1px solid var(--border-color);border-radius:14px;padding:1.2rem;background:linear-gradient(180deg,var(--header-bg),#0f131c);box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .panel h2{margin:.2rem 0 1rem;font-size:1.15rem;color:#dbeafe}
+    .row{display:flex;flex-wrap:wrap;gap:.8rem;align-items:center;margin-bottom:1rem}
+    .label{font-weight:600;color:var(--secondary-text);margin-right:.5rem}
+    .chip, button, select{padding:.55rem .9rem;border:1px solid var(--border-color);border-radius:12px;background:#151a26;color:#eaeaea;cursor:pointer;font-size:.95rem}
+    select{-webkit-appearance:none;-moz-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");background-position:right .5rem center;background-repeat:no-repeat;background-size:1.5em 1.5em;padding-right:2.5rem}
+    button{background:var(--button-bg);border:none;color:var(--button-text);font-weight:700}
+    button:hover{filter:brightness(.95)}
+    .mini{font-size:.9rem;padding:.45rem .85rem}
+    input[type=number]{background:var(--input-bg);color:#e0e0e0;border:1px solid var(--border-color);border-radius:10px;padding:.45rem .6rem;width:110px}
+    .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:.45rem;padding:.45rem;border:1px dashed var(--border-color);border-radius:10px;max-height:220px;overflow:auto;background:#0f1420}
+    .status{min-height:24px;font-style:italic;color:var(--accent-color)}
+    .table-container{overflow:auto;border:1px solid var(--border-color);border-radius:12px;margin-top:1rem}
+    table{width:100%;border-collapse:collapse;font-size:.9rem;white-space:nowrap}
+    th,td{padding:.55rem .75rem;border-bottom:1px solid var(--border-color);border-left:1px solid var(--border-color)}
+    th:first-child,td:first-child{border-left:none}
+    th{background:#141923;position:sticky;top:0;z-index:10}
+    tbody tr:nth-child(even){background:#0e1420}
+
+    .filter-grid{display:grid;grid-template-columns:repeat(auto-fill, minmax(320px, 1fr));gap:1rem 1.5rem;border-top:1px solid var(--border-color);padding-top:1rem;margin-top:1rem}
+    .filter-group h3{font-size:1rem;color:var(--accent-color);margin:0 0 .75rem;padding-bottom:.5rem;border-bottom:1px solid var(--border-color);}
+    .input-group{display:flex;gap:.5rem;align-items:center}
+    .input-group .label{flex-shrink:0}
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Unified Oscilloscope Seed Generator</h1>
+    <p class="subtitle">A streamlined tool to find seeds matching precise visual and audio traits.</p>
+
+    <div class="panel">
+      <h2>Unified Seed Search</h2>
+
+      <div class="filter-grid">
+        <!-- Visual Filters -->
+        <div class="filter-group">
+          <h3>Visual Filters</h3>
+          <div class="row">
+            <div class="input-group">
+              <span class="label">Palette Type:</span>
+              <select id="f-palette-type">
+                <option value="any">Any</option>
+                <option value="Mono">Mono</option>
+                <option value="Standard">Standard</option>
+                <option value="Dark">Dark</option>
+                <option value="Neutral">Neutral</option>
+              </select>
+            </div>
+          </div>
+          <div class="row">
+            <div class="input-group">
+                <span class="label">Num Colors:</span>
+                <select id="f-colors-op" style="width:auto;"><option value=">=">&ge;</option><option value="=">=</option><option value="<=">&le;</option></select>
+                <input id="f-colors-val" type="number" min="1" max="18" placeholder="Any">
+            </div>
+          </div>
+           <div class="row">
+            <div class="input-group">
+                <span class="label">Target Color:</span>
+                <select id="f-target-color"><option value="">None</option></select>
+            </div>
+          </div>
+          <div class="row" id="sound-grid-container" style="display:none;">
+             <div id="sound-grid" class="grid" style="width:100%"></div>
+             <button class="mini" id="select-all">All</button><button class="mini" id="select-none">None</button>
+          </div>
+        </div>
+
+        <!-- Audio Filters -->
+        <div class="filter-group">
+            <h3>Audio Filters</h3>
+            <div class="row">
+                <div class="input-group">
+                    <span class="label">Dual-Osc Shapes:</span>
+                    <select id="f-dual-op" style="width:auto;"><option value=">=">&ge;</option><option value="=">=</option><option value="<=">&le;</option></select>
+                    <input id="f-dual-val" type="number" min="0" max="17" placeholder="Any">
+                </div>
+            </div>
+            <div class="row">
+                <div class="input-group">
+                    <span class="label">Pause Rate (%):</span>
+                    <select id="f-pause-op" style="width:auto;"><option value=">=">&ge;</option><option value="=">=</option><option value="<=">&le;</option></select>
+                    <input id="f-pause-val" type="number" min="0" max="100" placeholder="Any">
+                </div>
+            </div>
+            <div class="row">
+                <div class="input-group">
+                    <span class="label">Unique Notes:</span>
+                    <select id="f-notes-op" style="width:auto;"><option value=">=">&ge;</option><option value="=">=</option><option value="<=">&le;</option></select>
+                    <input id="f-notes-val" type="number" min="0" max="12" placeholder="Any">
+                </div>
+            </div>
+        </div>
+
+        <!-- Search & Results -->
+        <div class="filter-group">
+          <h3>Search & Results</h3>
+           <div class="row">
+                <div class="input-group">
+                    <span class="label">Find:</span>
+                    <input id="cfg-howmany" type="number" value="25" min="1">
+                </div>
+                 <div class="input-group">
+                    <span class="label">Max Tries:</span>
+                    <input id="cfg-max" type="number" value="100000" min="1">
+                </div>
+            </div>
+            <div class="row">
+                <button id="run-search">Run Unified Search</button>
+                <button id="dl-csv" class="mini" disabled>Download CSV</button>
+            </div>
+        </div>
+      </div>
+      
+      <div id="status" class="status"></div>
+      <div id="results-table" class="table-container"></div>
+    </div>
+  </div>
+
+  <script>
+    // =======================
+    // SHARED CONSTANTS
+    // =======================
+    const CONSTANTS = {
+      SHAPES:["circle","square","butterfly","Bowditch","spiro","harmonograph","rose","hypocycloid","epicycloid","spiral","star","flower","wave","mandala","infinity","dna","tornado"],
+      SOUNDS:["hum","circle","square","butterfly","Bowditch","spiro","harmonograph","rose","hypocycloid","epicycloid","spiral","star","flower","wave","mandala","infinity","dna","tornado"],
+      PROB:{"mono-prob":0.02,"half-dominant-prob":0.05,"group-strobe-prob":0.01,"dark-palette-prob":0.01,"neutral-palette-prob":0.05},
+      EFFECT_WEIGHTS:{none:60,glow:25,strobe:10,neon:5},
+      COLOR_WEIGHTS:{bitcoin_orange:3,stacks_purple:2,deep_purple:2,light_magenta:3,shocking_pink:4,royal_blue:10,dark_green:3,bright_pink:6,bright_red:12,dark_red:6,bright_yellow:1,gold:1,white:3,dark_gray:2,cycler:3},
+      DARK_COLOR_WEIGHTS:{extra_dark_purple:2,very_dark_blue:2,very_dark_green:3,dark_red:5,extra_dark_gray:3,charcoal:2,near_black:1,gold:1},
+      NEUTRAL_COLOR_WEIGHTS:{near_black:4,extra_dark_gray:5,charcoal:5,dark_gray:5,slate_gray:4,dim_gray:4,silver:3,gainsboro:3,off_white:4,white:3},
+      RNG_CHARS:"0123456789abcdefghijklmnopqrstuvwxyz"
+    };
+
+    const COLOR_SETS = { standard:Object.keys(CONSTANTS.COLOR_WEIGHTS), dark:Object.keys(CONSTANTS.DARK_COLOR_WEIGHTS), neutral:Object.keys(CONSTANTS.NEUTRAL_COLOR_WEIGHTS) };
+    const ALL_COLORS = Array.from(new Set([...COLOR_SETS.standard, ...COLOR_SETS.dark, ...COLOR_SETS.neutral])).sort();
+
+    // =======================
+    // RNG + HELPERS
+    // =======================
+    const createRng=s=>{let a=4215235397^s.length;for(let i=0;i<s.length;i++){a=Math.imul(a^s.charCodeAt(i),2654435761)}return()=>{a=Math.imul(a^a>>>15,1|a);return((a>>>16)&65535)/65536}};
+    const createRngEnsurePlan=s=>{let t=0;for(let i=0;i<s.length;i++)t=(t<<5)-t+s.charCodeAt(i);t=0|t;return()=>{t=t+1831565813|0;let e=Math.imul(t^t>>>15,1|t);e=e+Math.imul(e^e>>>7,61|e)^e;return((e^e>>>14)>>>0)/4294967296}};
+    const pickWeightedKey=(rng,weights)=>{const keys=Object.keys(weights);if(!keys.length)return null;const totalWeight=keys.reduce((sum,key)=>sum+(weights[key]||0),0);if(totalWeight<=0)return keys[0];let r=rng()*totalWeight;for(const key of keys){r-=(weights[key]||0);if(r<=0)return key}return keys[keys.length-1]};
+    const chooseSubset=(rng,arr,count)=>{const shuffled=[...arr];for(let i=shuffled.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]]}return shuffled.slice(0,count)};
+    const randomSeed8 = ()=>{let out=''; for(let i=0;i<8;i++) out+=CONSTANTS.RNG_CHARS[(Math.random()*36|0)]; return out;};
+    const NOTE_BASE = { C:0, D:2, E:4, F:5, G:7, A:9, B:11 };
+    const toMidi = (note) => { if (!note || typeof note !== 'string') return null; const m = note.match(/^([A-G])([#b]?)(-?\d+)$/i); if (!m) return null; const [, L, acc, octStr] = m; let s = NOTE_BASE[L.toUpperCase()]; if (acc === '#') s += 1; else if (acc === 'b') s -= 1; const octave = parseInt(octStr, 10); return 12 * (octave + 1) + s; };
+
+
+    // =======================
+    // DETERMINISTIC TRAIT GENERATION
+    // =======================
+    const deterministicPreset=(seed,shape)=>{const r=createRng(`${seed}_${shape}`);const types=["sine","triangle","square","sawtooth"],notes=["C1","C2","E2","G2","A2","C3","E3","G3","B3","D4","F#4","A4","C5"];const m=r(),mode=m<.18?0:m<.56?1:m<.85?2:3,cnt=mode===3?2+(r()>.7?1:0):1+(r()>.6?1:0);const pick=arr=>arr[Math.floor(r()*arr.length)],oscs=Array.from({length:cnt},()=>[pick(types),pick(notes)]);let lfoRate;if(mode===0){lfoRate=.07+r()*.3}else if(mode===1){lfoRate=.25+r()*8}else if(mode===2){lfoRate=6+r()*20}else{lfoRate=24+r()*36}return{mode,osc1:oscs[0],osc2:oscs[1]||null,lfoRate}};
+    
+    const getUniqueAlgorithmMappingMap=(seed)=>{
+        const r=createRngEnsurePlan(`${seed}_unique_algo_mapping`), keys=CONSTANTS.SOUNDS, n=keys.length;
+        const base=[1,2,3,4,5,6,7,8,9,10,11]; const pool=[]; 
+        while(pool.length<n) pool.push(...base); pool.length=n;
+        for(let i=pool.length-1;i>0;i--){const j=(r()*(i+1))|0;[pool[i],pool[j]]=[pool[j],pool[i]]}
+        const map={}; keys.forEach((k,i)=>map[k]=pool[i]); return map;
+    };
+
+    function generateAllTraits(seed) {
+        // --- Visual ---
+        const v_isMono=createRngEnsurePlan(`${seed}::mode::mono`)()<CONSTANTS.PROB["mono-prob"];
+        const v_isNeutral=!v_isMono&&createRngEnsurePlan(`${seed}::mode::neutral`)()<CONSTANTS.PROB["neutral-palette-prob"];
+        const v_isDark=!v_isMono&&!v_isNeutral&&createRngEnsurePlan(`${seed}::mode::dark`)()<CONSTANTS.PROB["dark-palette-prob"];
+        const v_paletteType = v_isMono ? "Mono" : v_isNeutral ? "Neutral" : v_isDark ? "Dark" : "Standard";
+        
+        let activeColorWeights=v_isNeutral?CONSTANTS.NEUTRAL_COLOR_WEIGHTS:v_isDark?CONSTANTS.DARK_COLOR_WEIGHTS:{...CONSTANTS.COLOR_WEIGHTS};
+        const v_colorUniformKey=v_isMono?pickWeightedKey(createRngEnsurePlan(`${seed}::monoColorPick`),activeColorWeights):null;
+        
+        const perShapeColorKey={};
+        for(const key of CONSTANTS.SOUNDS){
+            perShapeColorKey[key]=v_isMono?v_colorUniformKey:pickWeightedKey(createRngEnsurePlan(`${seed}::color::${key}`),activeColorWeights);
+        }
+        const v_numColors = new Set(Object.values(perShapeColorKey)).size;
+
+        // --- Audio ---
+        const presets=CONSTANTS.SHAPES.map(shape=>deterministicPreset(seed,shape));
+        const a_dualOscillatorShapes=presets.filter(p=>p.osc2).length;
+        
+        const algMap = getUniqueAlgorithmMappingMap(seed);
+        let alg11Hits = 0; for (const key of CONSTANTS.SOUNDS) if (algMap[key] === 11) alg11Hits++;
+        const a_pauseRate = (CONSTANTS.SOUNDS.length - alg11Hits) / CONSTANTS.SOUNDS.length;
+
+        const allPcs = new Set();
+        for(const p of presets){
+            const m1 = toMidi(p.osc1?.[1]); if(m1!=null) allPcs.add(m1%12);
+            const m2 = toMidi(p.osc2?.[1]); if(m2!=null) allPcs.add(m2%12);
+        }
+        const a_uniqueNotes = allPcs.size;
+
+        return {
+            seed,
+            paletteType: v_paletteType,
+            numColors: v_numColors,
+            perShapeColorKey, // For group checks
+            dualOscillatorShapes: a_dualOscillatorShapes,
+            pauseRate: a_pauseRate,
+            uniqueNotes: a_uniqueNotes,
+        };
+    }
+
+    // =======================
+    // UNIFIED SEARCH LOGIC
+    // =======================
+    function getFilterConfig() {
+        const getVal = id => { const el = document.getElementById(id); return el.value === '' ? null : el.value; };
+        const getInt = id => { const v = getVal(id); return v === null ? null : parseInt(v, 10); };
+        
+        return {
+            paletteType: getVal('f-palette-type'),
+            colorsOp: getVal('f-colors-op'),
+            colorsVal: getInt('f-colors-val'),
+            targetColor: getVal('f-target-color'),
+            dualOp: getVal('f-dual-op'),
+            dualVal: getInt('f-dual-val'),
+            pauseOp: getVal('f-pause-op'),
+            pauseVal: getInt('f-pause-val'), // This will be a %
+            notesOp: getVal('f-notes-op'),
+            notesVal: getInt('f-notes-val'),
+            selectedSounds: [...document.querySelectorAll('#sound-grid input:checked')].map(cb => cb.dataset.sound),
+        };
+    }
+
+    function seedMatchesFilters(traits, config) {
+        const check = (val, op, target) => {
+            if (target === null) return true;
+            if (op === '=') return val === target;
+            if (op === '>=') return val >= target;
+            if (op === '<=') return val <= target;
+            return true;
+        };
+
+        if (config.paletteType !== 'any' && traits.paletteType !== config.paletteType) return false;
+        if (!check(traits.numColors, config.colorsOp, config.colorsVal)) return false;
+        if (!check(traits.dualOscillatorShapes, config.dualOp, config.dualVal)) return false;
+        if (!check(Math.round(traits.pauseRate * 100), config.pauseOp, config.pauseVal)) return false;
+        if (!check(traits.uniqueNotes, config.notesOp, config.notesVal)) return false;
+
+        // Target color check - this is more complex
+        if (config.targetColor) {
+            if (config.paletteType === 'Mono') {
+                // If filtering by mono, the single color must be the target color
+                if(traits.perShapeColorKey.hum !== config.targetColor) return false;
+            } else {
+                // Check if the target color exists for the selected group of sounds
+                if (config.selectedSounds.length === 0) return false; // Must select sounds for this to work
+                const groupColors = new Set(config.selectedSounds.map(s => traits.perShapeColorKey[s]));
+                if (groupColors.size !== 1 || !groupColors.has(config.targetColor)) return false;
+            }
+        }
+        
+        return true;
+    }
+
+    function renderTable(rows) {
+      const el = document.getElementById('results-table');
+      if(!rows.length){ el.innerHTML = '<div class="label" style="padding:1rem;">No results found matching criteria.</div>'; return; }
+      
+      const headers=['Seed', 'Palette', '# Colors', 'Dual-Osc', 'Pause %', 'Unique Notes'];
+      let html='<table><thead><tr>'+headers.map(h=>`<th>${h}</th>`).join('')+'</tr></thead><tbody>';
+      rows.forEach(r=>{
+        html+='<tr>'+
+          `<td>${r.seed}</td>`+
+          `<td>${r.paletteType}</td>`+
+          `<td>${r.numColors}</td>`+
+          `<td>${r.dualOscillatorShapes}</td>`+
+          `<td>${Math.round(r.pauseRate * 100)}%</td>`+
+          `<td>${r.uniqueNotes}</td>`+
+        '</tr>';
+      });
+      html+='</tbody></table>';
+      el.innerHTML = html;
+    }
+
+    async function runUnifiedSearch() {
+        const howMany = parseInt(document.getElementById('cfg-howmany').value, 10);
+        const maxTries = parseInt(document.getElementById('cfg-max').value, 10);
+        const statusEl = document.getElementById('status');
+        const dlBtn = document.getElementById('dl-csv');
+        
+        const config = getFilterConfig();
+        if (config.targetColor && config.paletteType !== 'Mono' && config.selectedSounds.length === 0) {
+            statusEl.textContent = 'Error: You must select sounds from the grid when specifying a Target Color for non-Mono palettes.';
+            return;
+        }
+
+        dlBtn.disabled = true;
+        statusEl.textContent = 'Searching...';
+        
+        const hits = [];
+        const seen = new Set();
+        let tried = 0;
+        const chunk = 2000;
+
+        while (tried < maxTries && hits.length < howMany) {
+            const until = Math.min(tried + chunk, maxTries);
+            for (; tried < until && hits.length < howMany; tried++) {
+                const s = randomSeed8();
+                if (seen.has(s)) continue;
+                seen.add(s);
+
+                const traits = generateAllTraits(s);
+                if (seedMatchesFilters(traits, config)) {
+                    hits.push(traits);
+                }
+            }
+            statusEl.textContent = `Searching… found ${hits.length} / ${howMany}. Tries: ${tried} / ${maxTries}.`;
+            await new Promise(r => setTimeout(r, 0)); // Unblock UI
+        }
+
+        statusEl.textContent = `Search complete. Found ${hits.length} seeds after ${tried} attempts.`;
+        renderTable(hits);
+
+        if (hits.length > 0) {
+            dlBtn.disabled = false;
+            dlBtn.onclick = () => downloadCSV(hits, 'unified_seed_search.csv');
+        }
+    }
+    
+    // =======================
+    // UI SETUP
+    // =======================
+    function setupUI(){
+        // Populate color dropdown
+        const colorSelect = document.getElementById('f-target-color');
+        ALL_COLORS.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c; opt.textContent = c;
+            colorSelect.appendChild(opt);
+        });
+
+        // Populate sound grid
+        const soundGrid = document.getElementById('sound-grid');
+        CONSTANTS.SOUNDS.forEach(s => {
+            const id=`sound-${s}`; 
+            const wrap=document.createElement('label'); 
+            wrap.style.cssText='display:flex;align-items:center;gap:.4rem;'; 
+            wrap.innerHTML=`<input type="checkbox" id="${id}" data-sound="${s}" checked> ${s}`; 
+            soundGrid.appendChild(wrap);
+        });
+
+        // Event Listeners
+        document.getElementById('run-search').addEventListener('click', runUnifiedSearch);
+        document.getElementById('select-all').onclick = () => [...soundGrid.querySelectorAll('input')].forEach(cb => cb.checked = true);
+        document.getElementById('select-none').onclick = () => [...soundGrid.querySelectorAll('input')].forEach(cb => cb.checked = false);
+
+        // Show/hide sound grid based on filter choices
+        const soundGridContainer = document.getElementById('sound-grid-container');
+        const paletteSelect = document.getElementById('f-palette-type');
+        const targetColorSelect = document.getElementById('f-target-color');
+        
+        const toggleSoundGrid = () => {
+            const show = targetColorSelect.value !== '' && paletteSelect.value !== 'Mono';
+            soundGridContainer.style.display = show ? 'block' : 'none';
+        };
+        paletteSelect.addEventListener('change', toggleSoundGrid);
+        targetColorSelect.addEventListener('change', toggleSoundGrid);
+    }
+    
+    function downloadCSV(data, filename){ 
+        if (!data || data.length === 0) return; 
+        const replacer=(k,v)=>v===null?'':v; 
+        const header=Object.keys(data[0]); 
+        let csv=data.map(row=>header.map(fieldName=>JSON.stringify(row[fieldName], replacer)).join(',')); 
+        csv.unshift(header.join(',')); csv=csv.join('\r\n'); 
+        const blob = new Blob([csv], { type: 'text/csv;charset=utf-8,' }); 
+        const url = URL.createObjectURL(blob); const link = document.createElement('a'); 
+        link.setAttribute('href', url); link.setAttribute('download', filename); 
+        link.style.visibility = 'hidden'; document.body.appendChild(link); 
+        link.click(); document.body.removeChild(link); 
+    }
+
+    // Initialize
+    document.addEventListener('DOMContentLoaded', setupUI);
+  </script>
+</body>
+</html>

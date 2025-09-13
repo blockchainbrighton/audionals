@@ -1,0 +1,409 @@
+<!-- Reduced weight of strobe to on or off, not how many shapes -->
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oscilloscope Trait & Rarity Generator (V3)</title>
+    <style>
+        :root {
+            --bg-color: #121212;
+            --primary-text: #e0e0e0;
+            --secondary-text: #b3b3b3;
+            --header-bg: #1e1e1e;
+            --border-color: #333;
+            --accent-color: #03dac6;
+            --button-bg: #bb86fc;
+            --button-text: #000;
+            --input-bg: #2c2c2c;
+            --rank-gold: #ffd700;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--primary-text);
+            margin: 0;
+            padding: 2rem;
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 95%;
+            margin: 0 auto;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        h1 {
+            color: var(--accent-color);
+            text-align: center;
+            margin-bottom: 0.5rem;
+        }
+
+        .explanation {
+            text-align: center;
+            color: var(--secondary-text);
+            max-width: 800px;
+            margin: 0 auto 1.5rem auto;
+            font-size: 0.95rem;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            background-color: var(--input-bg);
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            color: var(--primary-text);
+            padding: 1rem;
+            font-size: 1rem;
+            box-sizing: border-box;
+            resize: vertical;
+        }
+
+        button {
+            padding: 0.8rem 1.5rem;
+            font-size: 1.1rem;
+            font-weight: bold;
+            background-color: var(--button-bg);
+            color: var(--button-text);
+            border: none;
+            border-radius: 8px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+            align-self: center;
+        }
+
+        button:hover {
+            background-color: #a764fa;
+        }
+
+        #status {
+            text-align: center;
+            min-height: 24px;
+            font-style: italic;
+            color: var(--accent-color);
+        }
+
+        .table-container {
+            overflow-x: auto;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+        }
+        
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 0.85rem;
+            white-space: nowrap;
+        }
+
+        th, td {
+            padding: 0.6rem 0.8rem;
+            text-align: left;
+            border-bottom: 1px solid var(--border-color);
+            border-left: 1px solid var(--border-color);
+        }
+        
+        th:first-child, td:first-child { border-left: none; }
+
+        th {
+            background-color: var(--header-bg);
+            position: sticky;
+            top: 0;
+            z-index: 10;
+        }
+
+        tbody tr:nth-child(even) {
+            background-color: #1a1a1a;
+        }
+        
+        .rank-col, .score-col { font-weight: bold; }
+        .rank-1 { color: var(--rank-gold); }
+        .rank-2 { color: #c0c0c0; }
+        .rank-3 { color: #cd7f32; }
+        
+        .rarity-score {
+            font-size: 0.8em;
+            color: #888;
+            margin-left: 4px;
+        }
+
+        .long-text {
+            min-width: 300px;
+            white-space: normal;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Oscilloscope Trait & Rarity Generator (V3)</h1>
+        <div class="explanation">
+            <p><strong>Rarity Logic Update:</strong> 'Glow' count is no longer scored. A new scored trait, <strong>'Signature Shape Count'</strong> (sonic variety), has been added.</p>
+        </div>
+        
+        <textarea id="seed-input" placeholder="Paste seeds here (one seed per line)..."></textarea>
+        
+        <button id="generate-button">Generate Traits & Rarity</button>
+
+        <div id="status"></div>
+        
+        <div class="table-container" id="output-container">
+            <!-- Generated table will be inserted here -->
+        </div>
+    </div>
+
+    <script>
+        // --- CONSTANTS AND DEFAULTS ---
+        const CONSTANTS = {
+            SHAPES: ["circle", "square", "butterfly", "Bowditch", "spiro", "harmonograph", "rose", "hypocycloid", "epicycloid", "spiral", "star", "flower", "wave", "mandala", "infinity", "dna", "tornado"],
+            SOUNDS: ["hum", "circle", "square", "butterfly", "Bowditch", "spiro", "harmonograph", "rose", "hypocycloid", "epicycloid", "spiral", "star", "flower", "wave", "mandala", "infinity", "dna", "tornado"],
+            PROB: { "mono-prob": 0.02, "half-dominant-prob": 0.05, "group-strobe-prob": 0.01, "dark-palette-prob": 0.01, "neutral-palette-prob": 0.05 },
+            EFFECT_WEIGHTS: { none: 60, glow: 25, strobe: 10, neon: 5 },
+            COLOR_WEIGHTS: { bitcoin_orange: 3, stacks_purple: 2, deep_purple: 2, light_magenta: 3, shocking_pink: 4, royal_blue: 10, dark_green: 3, bright_pink: 6, bright_red: 12, dark_red: 6, bright_yellow: 1, gold: 1, white: 3, dark_gray: 2, cycler: 3 },
+            DARK_COLOR_WEIGHTS: { extra_dark_purple: 2, very_dark_blue: 2, very_dark_green: 3, dark_red: 5, extra_dark_gray: 3, charcoal: 2, near_black: 1, gold: 1 },
+            NEUTRAL_COLOR_WEIGHTS: { near_black: 4, extra_dark_gray: 5, charcoal: 5, dark_gray: 5, slate_gray: 4, dim_gray: 4, silver: 3, gainsboro: 3, off_white: 4, white: 3 },
+            HALF_DOMINANT_RATIO: 0.5,
+        };
+        const NEUTRAL_COLOR_KEYS = Object.keys(CONSTANTS.NEUTRAL_COLOR_WEIGHTS);
+
+        // --- CORE GENERATIVE ALGORITHMS ---
+        const createRng = s => {
+            let a = 0x6d2b79f5 ^ s.length;
+            for (let i = 0; i < s.length; i++) { a = Math.imul(a ^ s.charCodeAt(i), 2654435761); }
+            return () => { a = Math.imul(a ^ (a >>> 15), 1 | a); return ((a >>> 16) & 0xffff) / 0x10000; };
+        };
+        const createRngEnsurePlan = s => {
+            let t = 0;
+            for (let i = 0; i < s.length; i++) t = (t << 5) - t + s.charCodeAt(i);
+            t = 0 | t;
+            return () => { t = t + 1831565813 | 0; let e = Math.imul(t ^ t >>> 15, 1 | t); e = e + Math.imul(e ^ e >>> 7, 61 | e) ^ e; return ((e ^ e >>> 14) >>> 0) / 4294967296 };
+        };
+        const pickWeightedKey = (rng, weights) => {
+            const keys = Object.keys(weights);
+            if (!keys.length) return null;
+            const totalWeight = keys.reduce((sum, key) => sum + (weights[key] || 0), 0);
+            if (totalWeight <= 0) return keys[0];
+            let r = rng() * totalWeight;
+            for (const key of keys) { r -= (weights[key] || 0); if (r <= 0) return key; }
+            return keys[keys.length - 1];
+        };
+        const chooseSubset = (rng, arr, count) => {
+            const shuffled = [...arr];
+            for (let i = shuffled.length - 1; i > 0; i--) { const j = Math.floor(rng() * (i + 1));
+                [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]]; }
+            return shuffled.slice(0, count);
+        };
+        
+        // --- VISUAL TRAIT GENERATION ---
+        function generateVisualTraits(seed) {
+            const sounds = CONSTANTS.SOUNDS;
+            const isMono = createRngEnsurePlan(`${seed}::mode::mono`)() < CONSTANTS.PROB["mono-prob"];
+            const isNeutralPalette = !isMono && createRngEnsurePlan(`${seed}::mode::neutral`)() < CONSTANTS.PROB["neutral-palette-prob"];
+            const isDarkPalette = !isMono && !isNeutralPalette && createRngEnsurePlan(`${seed}::mode::dark`)() < CONSTANTS.PROB["dark-palette-prob"];
+            const isHalf = !isMono && createRngEnsurePlan(`${seed}::mode::half`)() < CONSTANTS.PROB["half-dominant-prob"];
+            const isGroupStrobe = createRngEnsurePlan(`${seed}::mode::gStrobe`)() < CONSTANTS.PROB["group-strobe-prob"];
+            const groupStrobeAll = isGroupStrobe && (createRngEnsurePlan(`${seed}::mode::gStrobeType`)() < 0.5);
+
+            let activeColorWeights = isNeutralPalette ? CONSTANTS.NEUTRAL_COLOR_WEIGHTS : isDarkPalette ? CONSTANTS.DARK_COLOR_WEIGHTS : { ...CONSTANTS.COLOR_WEIGHTS };
+            
+            let halfDominantKey = isHalf ? pickWeightedKey(createRngEnsurePlan(`${seed}::halfColorPick`), activeColorWeights) : null;
+            const colorUniformKey = isMono ? pickWeightedKey(createRngEnsurePlan(`${seed}::monoColorPick`), activeColorWeights) : null;
+            const halfDominantSet = isHalf ? new Set(chooseSubset(createRngEnsurePlan(`${seed}::halfSubset`), sounds, Math.max(1, Math.round(sounds.length * CONSTANTS.HALF_DOMINANT_RATIO)))) : new Set();
+            
+            const perShapeColorKey = {};
+            const perShapeEffectKey = {};
+            
+             for (const key of sounds) {
+                perShapeColorKey[key] = isMono ? colorUniformKey
+                    : (isHalf && halfDominantSet.has(key)) ? halfDominantKey
+                    : pickWeightedKey(createRngEnsurePlan(`${seed}::color::${key}`), activeColorWeights);
+                perShapeEffectKey[key] = pickWeightedKey(createRngEnsurePlan(`${seed}::effect::${key}`), CONSTANTS.EFFECT_WEIGHTS) ?? 'none';
+            }
+
+            if (isGroupStrobe) {
+                let strobeSet = groupStrobeAll ? new Set(sounds) : new Set(chooseSubset(createRngEnsurePlan(`${seed}::gStrobe::subset`), sounds, Math.max(1, Math.round(sounds.length * (0.5 + 0.5 * createRngEnsurePlan(`${seed}::gStrobe::size`)())))));
+                for (const key of strobeSet) perShapeEffectKey[key] = 'strobe';
+            }
+
+            const colors = Object.values(perShapeColorKey);
+            const effects = Object.values(perShapeEffectKey);
+            const strobeShapesCount = effects.filter(e => e === 'strobe').length;
+            
+            return {
+                paletteType: isMono ? 'Mono' : isNeutralPalette ? 'Neutral' : isDarkPalette ? 'Dark' : 'Standard',
+                paletteTrait: isHalf ? 'Half-Dominant' : 'None',
+                groupEffect: isGroupStrobe ? (groupStrobeAll ? 'Strobe (All)' : 'Strobe (Subset)') : 'None',
+                hasStrobe: strobeShapesCount > 0 ? 'Yes' : 'No', 
+                numColors: new Set(colors).size,
+                neonShapes: effects.filter(e => e === 'neon').length,
+                strobeShapes: strobeShapesCount,
+                glowShapes: effects.filter(e => e === 'glow').length,
+                cyclerShapes: colors.filter(c => c === 'cycler').length,
+                dominantColor: halfDominantKey || 'N/A'
+            };
+        }
+        
+        // --- AUDIO TRAIT GENERATION ---
+        function generateAudioTraits(seed) {
+            const presets = CONSTANTS.SHAPES.map(shape => deterministicPreset(seed, shape));
+            const modeCounts = { 0: 0, 1: 0, 2: 0, 3: 0 };
+            const waveformCounts = { sine: 0, triangle: 0, square: 0, sawtooth: 0 };
+            let totalLfo = 0;
+            
+            presets.forEach(p => { modeCounts[p.mode]++; waveformCounts[p.osc1[0]]++; if (p.osc2) waveformCounts[p.osc2[0]]++; totalLfo += p.lfoRate; });
+            const dominantSoundMode = `Mode ${Object.keys(modeCounts).reduce((a, b) => modeCounts[a] > modeCounts[b] ? a : b)}`;
+            const numSoundModes = Object.values(modeCounts).filter(c => c > 0).length;
+            const dualOscillatorShapes = presets.filter(p => p.osc2).length;
+            const dominantWaveform = Object.keys(waveformCounts).reduce((a, b) => waveformCounts[a] > waveformCounts[b] ? a : b);
+            const avgLfo = totalLfo / presets.length;
+            const avgLfoCategory = avgLfo > 20 ? 'Fast' : avgLfo > 5 ? 'Medium' : avgLfo > 1 ? 'Slow' : 'Subtle';
+
+            const signatureSequence = generateSignatureWithConstraints(seed);
+            const uniqueShapesInSig = new Set(signatureSequence.filter(v => v !== null && v > 0));
+
+            return {
+                dominantSoundMode, numSoundModes, dualOscillatorShapes, dominantWaveform, avgLfoCategory,
+                signatureMapping: getUniqueAlgorithmMapping(seed).join(', '),
+                signatureShapeCount: uniqueShapesInSig.size // NEW AUDIO TRAIT
+            };
+        }
+        
+        const deterministicPreset = (seed, shape) => {
+            const r = createRng(`${seed}_${shape}`);
+            const types=['sine','triangle','square','sawtooth'], notes=['C1','C2','E2','G2','A2','C3','E3','G3','B3','D4','F#4','A4','C5'];
+            const m=r(), mode=m<.18?0:m<.56?1:m<.85?2:3, cnt=mode===3?2+(r()>.7?1:0):1+(r()>.6?1:0);
+            const pick=arr=>arr[Math.floor(r()*arr.length)], oscs=Array.from({length:cnt},()=>[pick(types),pick(notes)]);
+            let lfoRate;
+            if(mode===0){lfoRate=.07+r()*.3} else if(mode===1){lfoRate=.25+r()*8} else if(mode===2){lfoRate=6+r()*20} else {lfoRate=24+r()*36}
+            return { mode, osc1: oscs[0], osc2: oscs[1] || null, lfoRate };
+        };
+
+        const getUniqueAlgorithmMapping = (seed) => {
+            const r = createRngEnsurePlan(`${seed}_unique_algo_mapping`), keys=CONSTANTS.SOUNDS, n=keys.length, base=[1,2,3,4,5,6,7,8,9,10], pool=[];
+            while (pool.length < n) pool.push(...base);
+            pool.length = n;
+            for(let i=pool.length-1;i>0;i--){ const j=(r()*(i+1))|0; [pool[i],pool[j]]=[pool[j],pool[i]]; }
+            return pool;
+        };
+
+        function generateSignatureWithConstraints(seed) {
+            const r = createRngEnsurePlan(`${seed}_audio_signature_constrained`);
+            const N = CONSTANTS.SHAPES.length, pal = Math.min(6, N);
+            const p = { steps: 32, pRepeat: 0.35, pHum: 0.15, pSilence: 0.2, avoidBackAndForth: true };
+            const seq = []; let last = null, prev = null;
+            const rInt = (rng, min, max) => min + Math.floor(rng() * (max - min + 1));
+            
+            for (let i = 0; i < p.steps; i++) {
+                if (r() < p.pSilence) { seq.push(null); continue; }
+                const roll = r(); let next;
+                if (roll < p.pHum) { next = 0; }
+                else if (roll < p.pHum + p.pRepeat && prev !== null) { next = prev; }
+                else {
+                    do {
+                        next = rInt(r, 1, pal);
+                        if (p.avoidBackAndForth && last !== null && last >= 1 && next >= 1 && seq.length >= 2 && seq.at(-2) === next) {
+                            next = null;
+                        }
+                    } while (next === null);
+                }
+                seq.push(next);
+                if (next !== null) { if (next >= 1) prev = next; last = next; }
+            }
+            return seq;
+        };
+        
+        // --- RARITY CALCULATION (MODIFIED) ---
+        function calculateRarity(allTraits) {
+            const totalCount = allTraits.length;
+            if (totalCount === 0) return [];
+            
+            const scoredTraitKeys = Object.keys(allTraits[0]).filter(k => 
+                !['seed', 'strobeShapes', 'groupEffect', 'glowShapes'].includes(k)
+            );
+            
+            const occurrences = {};
+            scoredTraitKeys.forEach(key => occurrences[key] = {});
+
+            for (const trait of allTraits) {
+                for (const key of scoredTraitKeys) {
+                    const value = trait[key];
+                    occurrences[key][value] = (occurrences[key][value] || 0) + 1;
+                }
+            }
+            
+            allTraits.forEach(trait => {
+                trait.scores = {};
+                trait.overallRarityScore = 0;
+                for (const key of scoredTraitKeys) {
+                    const value = trait[key];
+                    const count = occurrences[key][value];
+                    const score = totalCount / count;
+                    trait.scores[key] = score;
+                    trait.overallRarityScore += score;
+                }
+            });
+            
+            allTraits.sort((a, b) => b.overallRarityScore - a.overallRarityScore);
+            allTraits.forEach((trait, index) => { trait.rank = index + 1; });
+            return allTraits;
+        }
+
+        // --- UI AND TABLE GENERATION (MODIFIED) ---
+        function generateTable() {
+            const seedInput = document.getElementById('seed-input');
+            const outputContainer = document.getElementById('output-container');
+            const statusDiv = document.getElementById('status');
+            const seeds = seedInput.value.split('\n').map(s => s.trim()).filter(s => s);
+            if(seeds.length === 0) { statusDiv.textContent = 'Please enter at least one seed.'; outputContainer.innerHTML = ''; return; }
+
+            statusDiv.textContent = `Generating traits for ${seeds.length} seed(s)...`;
+            outputContainer.innerHTML = '';
+
+            setTimeout(() => {
+                let allTraits = seeds.map(seed => {
+                    const visual = generateVisualTraits(seed);
+                    const audio = generateAudioTraits(seed);
+                    return { seed, ...visual, ...audio };
+                });
+                
+                statusDiv.textContent = 'Calculating rarity scores...';
+                
+                setTimeout(() => {
+                    allTraits = calculateRarity(allTraits);
+                    
+                    const headers = ['Rank', 'Seed', 'Overall Rarity', 'Palette Type', 'Palette Trait', 'Has Strobe', 'Sig. Shape Count', '# Colors', 'Neon', 'Cyclers', 'Dom Color', 'Dom Sound Mode', '# Sound Modes', 'Dual-Osc', 'Dom Waveform', 'Avg LFO', 'Audio Sig Map', 'Glow Count', 'Strobe Count', 'Group Effect'];
+                    const keys = ['rank', 'seed', 'overallRarityScore', 'paletteType', 'paletteTrait', 'hasStrobe', 'signatureShapeCount', 'numColors', 'neonShapes', 'cyclerShapes', 'dominantColor', 'dominantSoundMode', 'numSoundModes', 'dualOscillatorShapes', 'dominantWaveform', 'avgLfoCategory', 'signatureMapping', 'glowShapes', 'strobeShapes', 'groupEffect'];
+                    
+                    let tableHTML = '<table><thead><tr>';
+                    headers.forEach(h => tableHTML += `<th>${h}</th>`);
+                    tableHTML += '</tr></thead><tbody>';
+
+                    allTraits.forEach(trait => {
+                        tableHTML += `<tr>`;
+                        keys.forEach(key => {
+                            const value = trait[key];
+                            const isScoredCol = trait.scores && trait.scores[key] !== undefined;
+                            let className = (key === 'rank') ? `rank-col rank-${value}` : (key === 'overallRarityScore') ? 'score-col' : '';
+                            if (key === 'signatureMapping') className = 'long-text';
+                            
+                            let scoreHTML = isScoredCol ? `<span class="rarity-score">(${(trait.scores[key] || 0).toFixed(2)})</span>` : '';
+                            
+                            tableHTML += `<td class="${className}">${key === 'overallRarityScore' ? value.toFixed(2) : value}${scoreHTML}</td>`;
+                        });
+                        tableHTML += `</tr>`;
+                    });
+
+                    tableHTML += '</tbody></table>';
+                    outputContainer.innerHTML = tableHTML;
+                    statusDiv.textContent = `Generated and ranked traits for ${seeds.length} seed(s).`;
+                }, 10);
+            }, 10);
+        }
+        document.getElementById('generate-button').addEventListener('click', generateTable);
+    </script>
+</body>
+</html>
