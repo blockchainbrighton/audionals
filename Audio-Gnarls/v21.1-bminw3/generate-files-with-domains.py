@@ -37,10 +37,10 @@ seeds = [
 ]
 
 # The base HTML template
-html_template = "<!doctypehtml><html data-seed=\"{}\"><osc-app></osc-app><script src=/content/c71a959e95f49ec24181864f82c140b94713dbeba4190e5afd323704856e0658i0 type=module></script>"
+html_template = "<!doctypehtml><html data-seed=\"{}\"><osc-app></osc-app><script src=https://ordinals.com/content/c71a959e95f49ec24181864f82c140b94713dbeba4190e5afd323704856e0658i0 type=module></script>"
 
 # The name of the folder to create
-output_folder = "generated_html"
+output_folder = "generated_html_with_domains"
 
 # Create the folder if it doesn't already exist
 if not os.path.exists(output_folder):

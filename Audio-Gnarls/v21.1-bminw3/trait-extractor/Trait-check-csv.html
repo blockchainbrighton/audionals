@@ -1,0 +1,288 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Seed Traits → CSV (Colors, Dual-Osc, Strobe, Cycler, Signature, Rarity)</title>
+  <style>
+    :root{--bg:#0f1115;--fg:#e6e6e6;--muted:#9fb0c2;--panel:#12151b;--border:#243042;--accent:#7df9ff;--btn:#a78bfa;--btnText:#0b0d12;--input:#131825}
+    *{box-sizing:border-box}
+    body{margin:0; padding:24px; font-family:ui-sans-serif,system-ui,-apple-system,"Segoe UI",Roboto,Helvetica,Arial; background:var(--bg); color:var(--fg)}
+    h1{margin:0 0 .25rem; text-align:center; color:var(--accent)}
+    p{margin:.25rem 0 1rem; text-align:center; color:var(--muted)}
+    .card{max-width:1100px; margin:0 auto; background:linear-gradient(180deg,var(--panel),#0f141c); border:1px solid var(--border); border-radius:14px; padding:16px; box-shadow:0 10px 30px rgba(0,0,0,.25)}
+    .row{display:flex; flex-wrap:wrap; gap:.6rem; align-items:center}
+    textarea,input,button{font-size:1rem}
+    textarea{width:100%; min-height:180px; background:var(--input); border:1px solid var(--border); border-radius:10px; color:#e0e0e0; padding:.8rem; resize:vertical}
+    .out{min-height:160px}
+    button{background:var(--btn); color:var(--btnText); border:none; border-radius:10px; padding:.6rem .9rem; font-weight:800; cursor:pointer}
+    button:disabled{opacity:.6; cursor:not-allowed}
+    .status{min-height:24px; color:var(--accent); font-style:italic; margin-top:.25rem}
+    .btns{display:flex; gap:.5rem; flex-wrap:wrap; margin:.5rem 0}
+    .small{font-size:.9rem; padding:.45rem .7rem}
+    .tableWrap{overflow:auto; border:1px solid var(--border); border-radius:10px}
+    table{width:100%; border-collapse:collapse; white-space:nowrap}
+    th,td{padding:.5rem .7rem; border-bottom:1px solid var(--border)}
+    th{background:#141923; position:sticky; top:0}
+    td.num, th.num{text-align:right}
+  </style>
+</head>
+<body>
+  <h1>Seed Traits → CSV</h1>
+  <p>Paste seeds (one per line). Outputs <strong># Colors</strong>, <strong>Mono Color</strong>, <strong>Dual‑Osc Shapes</strong>, <strong>Strobe?</strong>, <strong>Cycler?</strong>, <strong># Cycler Shapes</strong>, <strong>Signature Shapes</strong>, and computed <strong>Rarity</strong>.</p>
+
+  <div class="card">
+    <h3>Input</h3>
+    <textarea id="in" placeholder="e.g.
+4k0a9d1c
+zz12abcd
+..."></textarea>
+    <div class="row" style="margin-top:.5rem">
+      <label class="label">Rarity mode
+        <select id="rarityMode" style="margin-left:.5rem; background:var(--input); color:#e0e0e0; border:1px solid var(--border); border-radius:8px; padding:.35rem .5rem;">
+          <option value="balanced">Balanced (inverse-frequency)</option>
+          <option value="colorfirst" selected>Color-first (Mono Cycler → Mono → Fewer Colors)</option>
+        </select>
+      </label>
+    </div>
+    <div class="btns">
+      <button id="analyze">Analyze</button>
+      <button id="clear" class="small">Clear</button>
+      <button id="dl" class="small" disabled>Download CSV</button>
+      <button id="copy" class="small" disabled>Copy CSV</button>
+    </div>
+    <div id="status" class="status"></div>
+
+    <h3>Preview (sorted by rarity)</h3>
+    <div class="tableWrap" id="tableWrap"></div>
+
+    <h3>CSV</h3>
+    <textarea id="csv" class="out" readonly placeholder="CSV will appear here..." onclick="this.select()"></textarea>
+  </div>
+
+<script>
+// ===== Constants & RNG (minimal set) =====
+const CONSTANTS={
+  SHAPES:["circle","square","butterfly","Bowditch","spiro","harmonograph","rose","hypocycloid","epicycloid","spiral","star","flower","wave","mandala","infinity","dna","tornado"],
+  SOUNDS:["hum","circle","square","butterfly","Bowditch","spiro","harmonograph","rose","hypocycloid","epicycloid","spiral","star","flower","wave","mandala","infinity","dna","tornado"],
+  PROB:{"mono-prob":0.02,"half-dominant-prob":0.05,"group-strobe-prob":0.01,"dark-palette-prob":0.01,"neutral-palette-prob":0.05},
+  EFFECT_WEIGHTS:{none:60,glow:25,strobe:10,neon:5},
+  COLOR_WEIGHTS:{bitcoin_orange:3,stacks_purple:2,deep_purple:2,light_magenta:3,shocking_pink:4,royal_blue:10,dark_green:3,bright_pink:6,bright_red:12,dark_red:6,bright_yellow:1,gold:1,white:3,dark_gray:2,cycler:3},
+  DARK_COLOR_WEIGHTS:{extra_dark_purple:2,very_dark_blue:2,very_dark_green:3,dark_red:5,extra_dark_gray:3,charcoal:2,near_black:1,gold:1},
+  NEUTRAL_COLOR_WEIGHTS:{near_black:4,extra_dark_gray:5,charcoal:5,dark_gray:5,slate_gray:4,dim_gray:4,silver:3,gainsboro:3,off_white:4,white:3},
+  HALF_DOMINANT_RATIO:.5,
+};
+const createRng=s=>{let a=4215235397^s.length;for(let i=0;i<s.length;i++){a=Math.imul(a^s.charCodeAt(i),2654435761)}return()=>{a=Math.imul(a^a>>>15,1|a);return((a>>>16)&65535)/65536}};
+const createRngEnsurePlan=s=>{let t=0;for(let i=0;i<s.length;i++)t=(t<<5)-t+s.charCodeAt(i);t|=0;return()=>{t=t+1831565813|0;let e=Math.imul(t^t>>>15,1|t);e=e+Math.imul(e^e>>>7,61|e)^e;return((e^e>>>14)>>>0)/4294967296}};
+const pickWeightedKey=(rng,weights)=>{const keys=Object.keys(weights);if(!keys.length)return null;const tot=keys.reduce((s,k)=>s+(weights[k]||0),0);if(tot<=0)return keys[0];let r=rng()*tot;for(const k of keys){r-=(weights[k]||0);if(r<=0)return k}return keys.at(-1)};
+const chooseSubset=(rng,arr,n)=>{const a=[...arr];for(let i=a.length-1;i>0;i--){const j=(rng()*(i+1))|0;[a[i],a[j]]=[a[j],a[i]]}return a.slice(0,n)};
+
+// ===== Minimal sound + visual trait generators =====
+const deterministicPreset=(seed,shape)=>{const r=createRng(`${seed}_${shape}`),types=["sine","triangle","square","sawtooth"],notes=["C1","C2","E2","G2","A2","C3","E3","G3","B3","D4","F#4","A4","C5"];const m=r(),mode=m<.18?0:m<.56?1:m<.85?2:3,cnt=mode===3?2+(r()>.7?1:0):1+(r()>.6?1:0);const pick=a=>a[(r()*a.length)|0],oscs=Array.from({length:cnt},()=>[pick(types),pick(notes)]);return{mode,osc1:oscs[0],osc2:oscs[1]||null}};
+
+function generateVisualTraits(seed){
+  const sounds=CONSTANTS.SOUNDS;
+  const r=createRngEnsurePlan;
+  const isMono=r(`${seed}::mode::mono`)()<CONSTANTS.PROB["mono-prob"];
+  const isNeutral=!isMono&&r(`${seed}::mode::neutral`)()<CONSTANTS.PROB["neutral-palette-prob"];
+  const isDark=!isMono&&!isNeutral&&r(`${seed}::mode::dark`)()<CONSTANTS.PROB["dark-palette-prob"];
+  const isHalf=!isMono&&r(`${seed}::mode::half`)()<CONSTANTS.PROB["half-dominant-prob"];
+  const weights=isNeutral?CONSTANTS.NEUTRAL_COLOR_WEIGHTS:isDark?CONSTANTS.DARK_COLOR_WEIGHTS:{...CONSTANTS.COLOR_WEIGHTS};
+  const halfKey=isHalf?pickWeightedKey(r(`${seed}::halfColorPick`),weights):null;
+  const monoKey=isMono?pickWeightedKey(r(`${seed}::monoColorPick`),weights):null;
+  const halfSet=isHalf?new Set(chooseSubset(r(`${seed}::halfSubset`),sounds,Math.max(1,Math.round(sounds.length*CONSTANTS.HALF_DOMINANT_RATIO)))):new Set;
+  const perShapeColorKey={}, perShapeEffectKey={};
+  for(const key of sounds){
+    perShapeColorKey[key]=isMono?monoKey:isHalf&&halfSet.has(key)?halfKey:pickWeightedKey(r(`${seed}::color::${key}`),weights);
+    perShapeEffectKey[key]=pickWeightedKey(r(`${seed}::effect::${key}`),CONSTANTS.EFFECT_WEIGHTS)||"none";
+  }
+  const colors=Object.values(perShapeColorKey);
+  const effects=Object.values(perShapeEffectKey);
+  const cyclerShapes=colors.filter(c=>c==='cycler').length;
+  const numColors = new Set(colors).size;
+  return {
+    numColors,
+    monoColor: numColors === 1 ? colors[0] : null,
+    hasStrobe:effects.includes("strobe"),
+    hasCycler:cyclerShapes>0,
+    cyclerShapes
+  };
+}
+
+function generateAudioTraits(seed){
+  const presets=CONSTANTS.SHAPES.map(s=>deterministicPreset(seed,s));
+  const dual=presets.filter(p=>p.osc2).length;
+  // approximate signature variety by counting distinct shapes touched in a deterministic 32-step signature
+  const r=createRngEnsurePlan(`${seed}_sigcount`);
+  const steps=32; const used=new Set();
+  for(let i=0;i<steps;i++){ used.add(CONSTANTS.SHAPES[(r()*CONSTANTS.SHAPES.length)|0]); }
+  return { dualOscillatorShapes:dual, signatureShapeCount:used.size };
+}
+
+// ===== Rarity computation =====
+function addRarityBalanced(rows){
+  const total=rows.length || 1;
+  const countBy=(key)=>{ const m=new Map(); for(const r of rows){ const v=r[key]; m.set(v,(m.get(v)||0)+1); } return m; };
+  const cColors=countBy('numColors');
+  const cDual=countBy('dualOscillatorShapes');
+  const cStrobe=countBy('hasStrobe');
+  const cSig=countBy('signatureShapeCount');
+  const cCycler=countBy('hasCycler');
+  const cCyclerN=countBy('cyclerShapes');
+  const cMonoColor=new Map();
+  rows.forEach(r => { if(r.monoColor) cMonoColor.set(r.monoColor, (cMonoColor.get(r.monoColor) || 0) + 1); });
+
+  let min=Infinity, max=-Infinity;
+  const strobeWeight = 3.0; // Increased weight for strobe trait
+
+  for(const r of rows){
+    const fC=(cColors.get(r.numColors)||0)/total;
+    const fD=(cDual.get(r.dualOscillatorShapes)||0)/total;
+    const fS=(cStrobe.get(r.hasStrobe)||0)/total;
+    const fG=(cSig.get(r.signatureShapeCount)||0)/total;
+    const fCy=(cCycler.get(r.hasCycler)||0)/total;
+    const fCyN=(cCyclerN.get(r.cyclerShapes)||0)/total;
+    const fMC = r.monoColor ? (cMonoColor.get(r.monoColor) || 0) / total : 1.0;
+
+    const rc = (1/Math.max(fC,1e-9)) +
+               (1/Math.max(fD,1e-9)) +
+               (strobeWeight * (1/Math.max(fS,1e-9))) + // Apply weight here
+               (1/Math.max(fG,1e-9)) +
+               (1/Math.max(fCy,1e-9)) +
+               (1/Math.max(fCyN,1e-9)) +
+               (r.monoColor ? 1/Math.max(fMC, 1e-9) : 0);
+
+    r.rarityScore=rc; r._rmode='balanced'; r.freqColors=fC; r.freqDual=fD; r.freqStrobe=fS; r.freqSig=fG; r.freqCycler=fCy; r.freqCyclerN=fCyN; r.freqMonoColor=fMC;
+    if(rc<min) min=rc; if(rc>max) max=rc;
+  }
+  for(const r of rows){ r.rarityIndex = max===min ? 50 : ((r.rarityScore-min)/(max-min))*100; }
+  rows.sort((a,b)=>b.rarityScore-a.rarityScore);
+  rows.forEach((r,i)=>r.rarityRank=i+1);
+  return rows;
+}
+
+function addRarityColorFirst(rows){
+  const monoSeeds = rows.filter(r => r.numColors === 1);
+  const totalMonos = monoSeeds.length || 1;
+  const monoColorCounts = new Map();
+  for (const r of monoSeeds) {
+    monoColorCounts.set(r.monoColor, (monoColorCounts.get(r.monoColor) || 0) + 1);
+  }
+
+  for(const r of rows){
+    const isMono = r.numColors===1;
+    const isMonoCycler = isMono && r.hasCycler===true;
+    let base;
+    if(isMonoCycler) base = 1000;
+    else if(isMono) base = 800;
+    else base = Math.max(100, 600 - (r.numColors-2)*50);
+
+    let colorBoost = 0;
+    if (isMono) {
+        const colorFreq = (monoColorCounts.get(r.monoColor) || 0) / totalMonos;
+        colorBoost = (1 / Math.max(colorFreq, 1e-9)) * 0.1;
+    }
+
+    const strobeBoost = r.hasStrobe ? 50 : 0; // Add significant score for strobe
+    const tieBoost = (r.hasCycler?5:0) + Math.min(r.cyclerShapes, 17)*0.1;
+    r.rarityScore = base + tieBoost + colorBoost + strobeBoost;
+    r.rarityIndex = r.rarityScore/11; // Adjusted divisor for a better 0-100 scale
+    r._rmode='colorfirst';
+  }
+  rows.sort((a,b)=>b.rarityScore-a.rarityScore || a.numColors-b.numColors);
+  rows.forEach((r,i)=>r.rarityRank=i+1);
+  return rows;
+}
+
+// ===== UI logic =====
+const $=id=>document.getElementById(id);
+const inEl=$("in"), csvEl=$("csv"), statusEl=$("status"), tableWrap=$("tableWrap");
+const btnAnalyze=$("analyze"), btnClear=$("clear"), btnDl=$("dl"), btnCopy=$("copy");
+
+function toCSV(rows){
+  if(!rows.length) return '';
+  const header=['rank','seed','num_colors','mono_color','dual_osc_shapes','has_strobe','has_cycler','cycler_shapes','signature_shape_count','rarity_mode','rarity_score','rarity_index'];
+  const body=rows.map(r=>[
+    r.rarityRank,
+    r.seed,
+    r.numColors,
+    r.monoColor || '',
+    r.dualOscillatorShapes,
+    r.hasStrobe?"Yes":"No",
+    r.hasCycler?"Yes":"No",
+    r.cyclerShapes,
+    r.signatureShapeCount,
+    r._rmode||'balanced',
+    (r.rarityScore??0).toFixed(4),
+    (r.rarityIndex??0).toFixed(1),
+  ].join(','));
+  return [header.join(','), ...body].join('\n');
+}
+
+function renderTable(rows){
+  if(!rows.length){ tableWrap.innerHTML='<div class="row" style="padding:.5rem; color:#9fb0c2">No results.</div>'; return; }
+  let html='<table><thead><tr>'+
+    '<th>#</th><th>Seed</th><th class="num"># Colors</th><th>Mono Color</th><th class="num">Dual‑Osc</th><th>Strobe?</th><th>Cycler?</th><th class="num"># Cycler</th><th class="num">Signature</th>'+
+    '<th class="num">Rarity Score</th><th class="num">Rarity Index</th><th>Mode</th>'+
+    '</tr></thead><tbody>';
+  for(const r of rows){
+    html+=`<tr>
+      <td class="num">${r.rarityRank}</td>
+      <td>${r.seed}</td>
+      <td class="num">${r.numColors}</td>
+      <td>${r.monoColor || '-'}</td>
+      <td class="num">${r.dualOscillatorShapes}</td>
+      <td>${r.hasStrobe?"Yes":"No"}</td>
+      <td>${r.hasCycler?"Yes":"No"}</td>
+      <td class="num">${r.cyclerShapes}</td>
+      <td class="num">${r.signatureShapeCount}</td>
+      <td class="num">${(r.rarityScore??0).toFixed(4)}</td>
+      <td class="num">${(r.rarityIndex??0).toFixed(1)}</td>
+      <td>${r._rmode||'balanced'}</td>
+    </tr>`;
+  }
+  html+='</tbody></table>'; tableWrap.innerHTML=html;
+}
+
+
+btnAnalyze.onclick = ()=>{
+  const seeds=inEl.value.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+  if(!seeds.length){ statusEl.textContent='Please paste at least one seed.'; renderTable([]); csvEl.value=''; btnDl.disabled=true; btnCopy.disabled=true; return; }
+  statusEl.textContent=`Analyzing ${seeds.length} seed(s)…`;
+  const base=seeds.map(seed=>{
+      const v=generateVisualTraits(seed);
+      const a=generateAudioTraits(seed);
+      return {
+          seed,
+          numColors:v.numColors,
+          monoColor:v.monoColor,
+          dualOscillatorShapes:a.dualOscillatorShapes,
+          hasStrobe:v.hasStrobe,
+          hasCycler:v.hasCycler,
+          cyclerShapes:v.cyclerShapes,
+          signatureShapeCount:a.signatureShapeCount
+      };
+  });
+  const mode=document.getElementById('rarityMode').value;
+  const rows = mode==='colorfirst' ? addRarityColorFirst(base) : addRarityBalanced(base);
+  const csv=toCSV(rows);
+  csvEl.value=csv; renderTable(rows);
+  btnDl.disabled=false; btnCopy.disabled=false;
+  statusEl.textContent='Done.';
+};
+
+btnClear.onclick = ()=>{ inEl.value=''; csvEl.value=''; renderTable([]); statusEl.textContent=''; btnDl.disabled=true; btnCopy.disabled=true; };
+
+btnCopy.onclick = async()=>{
+  try{ await navigator.clipboard.writeText(csvEl.value); statusEl.textContent='CSV copied to clipboard.'; }
+  catch{ statusEl.textContent='Clipboard blocked — select CSV and copy manually.'; }
+};
+
+btnDl.onclick = ()=>{
+  const blob=new Blob([csvEl.value],{type:'text/csv;charset=utf-8,'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download = (document.getElementById('rarityMode')?.value==='colorfirst') ? 'seed_traits_colorfirst.csv' : 'seed_traits_balanced.csv'; a.click(); URL.revokeObjectURL(url);
+};
+</script>
+</body>
+</html>
