@@ -73,6 +73,18 @@
     .phase2-text { color: var(--neon-cyan); }
     .phase3-text { color: var(--neon-yellow); }
 
+    /*
+        Use Flexbox to position items on each line.
+        This creates two invisible "columns" within each line:
+        - The description on the left.
+        - The countdown on the right.
+      */
+      #mint-schedule .schedule-grid p {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+      }
+
     .tagline{margin:1rem 0;padding:1rem;background:rgba(0,0,0,.6);border-left:4px solid var(--neon-cyan);box-shadow:0 0 15px var(--neon-cyan);color:var(--text);text-align:center;text-shadow:0 0 6px var(--neon-cyan);animation:neonPulse 3s infinite alternate}
 
     footer{padding:2rem;text-align:center;color:var(--muted);border-top:2px solid var(--neon-pink);box-shadow:0 0 10px var(--neon-pink);animation:flicker 6s infinite alternate}
@@ -114,9 +126,15 @@
               <!-- UTC column -->
               <div>
                   <div class="col-title">UTC</div>
-                  <p class="phase1-text"><strong id="utc-gw">15:00</strong> — Guaranteed Whitelist (approved wallets)</p>
-                  <p class="phase2-text"><strong id="utc-hw">16:00</strong> — Holders Whitelist (<a href="https://www.trio.xyz/mint/audiognarls" target="_blank">Trio</a>, <a href="https://magiceden.io/ordinals/marketplace/truth" target="_blank">TRUTH</a>/<a href="https://magiceden.io/ordinals/marketplace/freedom-to-transact" target="_blank">FREEDOM</a>/<a href="https://magiceden.io/ordinals/marketplace/ilovecheese" target="_blank">Cheese</a>, <a href="https://magiceden.io/ordinals/marketplace/ordinalbased1s" target="_blank">OB1</a>)</p>
-                  <p class="phase3-text"><strong id="utc-pub">17:00</strong> — Public Sale (until sold out)</p>
+                  <p class="phase1-text">
+                    <span><strong id="utc-gw">15:00</strong> — Guaranteed Whitelist (approved wallets)</span>
+                  </p>
+                  <p class="phase2-text">
+                    <span><strong id="utc-hw">16:00</strong> — Holders Whitelist (<a href="https://www.trio.xyz/mint/audiognarls" target="_blank">Trio</a>, <a href="https://magiceden.io/ordinals/marketplace/truth" target="_blank">TRUTH</a>/<a href="https://magiceden.io/ordinals/marketplace/freedom-to-transact" target="_blank">FREEDOM</a>/<a href="https://magiceden.io/ordinals/marketplace/ilovecheese" target="_blank">Cheese</a>, <a href="https://magiceden.io/ordinals/marketplace/ordinalbased1s" target="_blank">OB1</a>)</span>
+                  </p>
+                  <p class="phase3-text">
+                    <span><strong id="utc-pub">17:00</strong> — Public Sale (until sold out)</span>
+                  </p>
               </div>
 
               <!-- Your timezone column (with subtle divider) -->
@@ -124,9 +142,18 @@
                 <div class="col-title">
                   Your time zone <span id="ytz-name" class="tz-name"></span>
                 </div>
-                <p class="phase1-text"><strong id="loc-gw">—</strong> — Guaranteed Whitelist</p>
-                <p class="phase2-text"><strong id="loc-hw">—</strong> — Holders Whitelist</p>
-                <p class="phase3-text"><strong id="loc-pub">—</strong> — Public Sale</p>
+                <p class="phase1-text">
+                  <strong><span id="loc-gw">—</span></strong>
+                  <span id="countdown-gw-right"></span>
+                </p>
+                <p class="phase2-text">
+                  <strong><span id="loc-hw">—</span></strong>
+                  <span id="countdown-hw-right"></span>
+                </p>
+                <p class="phase3-text">
+                  <strong><span id="loc-pub">—</span></strong>
+                  <span id="countdown-pub-right"></span>
+                </p>
               </div>
             </div>
 
@@ -136,6 +163,96 @@
                 data-hw="2025-09-17T16:00:00Z"
                 data-pub="2025-09-17T17:00:00Z"></div>
           </div>
+
+          <script>
+          document.addEventListener('DOMContentLoaded', function() {
+            const msData = document.getElementById('ms-data');
+
+            // Right column countdowns
+            const countdownGWRight = document.getElementById('countdown-gw-right');
+            const countdownHWRight = document.getElementById('countdown-hw-right');
+            const countdownPubRight = document.getElementById('countdown-pub-right');
+
+            // Convert mint times from the HTML data attributes into a format JavaScript can use
+            const gwTime = new Date(msData.getAttribute('data-gw')).getTime();
+            const hwTime = new Date(msData.getAttribute('data-hw')).getTime();
+            const pubTime = new Date(msData.getAttribute('data-pub')).getTime();
+
+            function updateCountdowns() {
+              const now = new Date().getTime();
+              let textContent;
+
+              // --- Phase 1: Guaranteed Whitelist ---
+              const distGW = gwTime - now;
+              if (distGW > 0) {
+                const days = Math.floor(distGW / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((distGW % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distGW % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distGW % (1000 * 60)) / 1000);
+                textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+              } else if (now >= gwTime && now < hwTime) {
+                textContent = 'Minting Live';
+              } else {
+                textContent = 'Ended';
+              }
+              countdownGWRight.textContent = textContent;
+
+              // --- Phase 2: Holders Whitelist ---
+              const distHW = hwTime - now;
+              if (distHW > 0) {
+                const days = Math.floor(distHW / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((distHW % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distHW % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distHW % (1000 * 60)) / 1000);
+                textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+              } else if (now >= hwTime && now < pubTime) {
+                textContent = 'Minting Live';
+              } else if (now >= pubTime) {
+                textContent = 'Ended';
+              } else {
+                textContent = ''; // Don't show a countdown if the previous phase is still running
+              }
+              countdownHWRight.textContent = textContent;
+
+              // --- Phase 3: Public Sale ---
+              const distPub = pubTime - now;
+              if (distPub > 0) {
+                const days = Math.floor(distPub / (1000 * 60 * 60 * 24));
+                const hours = Math.floor((distPub % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
+                const minutes = Math.floor((distPub % (1000 * 60 * 60)) / (1000 * 60));
+                const seconds = Math.floor((distPub % (1000 * 60)) / 1000);
+                textContent = `${days}d ${hours}h ${minutes}m ${seconds}s`;
+              } else {
+                textContent = 'Minting Live';
+              }
+              countdownPubRight.textContent = textContent;
+            }
+
+            // Run the function every second to keep the countdowns live
+            setInterval(updateCountdowns, 1000);
+
+            // Run the function once immediately on page load
+            updateCountdowns();
+
+            // Your existing timezone display logic
+            try {
+              const ytzName = document.getElementById('ytz-name');
+              const locGw = document.getElementById('loc-gw');
+              const locHw = document.getElementById('loc-hw');
+              const locPub = document.getElementById('loc-pub');
+
+              const formatter = new Intl.DateTimeFormat([], { timeStyle: 'short' });
+              locGw.textContent = formatter.format(gwTime);
+              locHw.textContent = formatter.format(hwTime);
+              locPub.textContent = formatter.format(pubTime);
+
+              ytzName.textContent = `(${new Intl.DateTimeFormat().resolvedOptions().timeZone.split('/').pop().replace('_', ' ')})`;
+            } catch(e) {
+              console.error("Could not display local times.", e);
+            }
+          });
+          </script>
+
 
           <!-- Price / Supply -->
           <div class="item">
