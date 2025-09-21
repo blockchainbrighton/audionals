@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" data-seed="audionals    ">
+<head>
+  <meta charset="UTF-8" />
+  <title>Oscilloscope App v15.6 (AudioWorklet)</title>
+
+  <!-- Mobile viewport: use dynamic viewport units + allow safe-area usage -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+
+  <!-- Helpful mobile meta -->
+  <meta name="theme-color" content="#000000" />
+  <!-- Chrome/Android PWA capability (modern, non-deprecated) -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <!-- NOTE: Apple-specific metas are injected by setup.js on iOS Safari only to avoid Chrome deprecation warnings -->
+  <meta name="format-detection" content="telephone=no" />
+
+  <!-- All scripts, including setup.js and the modules, are now in bundle.js -->
+</head>
+<body>
+  <osc-app></osc-app>
+
+  <!-- PRE-BUNDLE PATCH: install safe JSON.stringify + global error logging -->
+<script>
+(()=>{const e=new Set(["Tone","chains","audioSignatureTimer","sequenceIntervalId","audioContext","analyser","transport","node","input","output","_node","_input","_output","context","_context","_destination"]),n=JSON.stringify;function t(t,r,o){const i=new WeakSet;let a=0,c=0;const s=function(n,t){try{r&&(t=r.call(this,n,t))}catch(e){console.warn("[patch.stringify] user replacer threw",e)}if(t&&"object"==typeof t){if(i.has(t))return void(a++<10&&console.warn("[patch.stringify] skipping circular at key",n,t));if(i.add(t),e.has(n)||(e=>{try{return e&&"object"==typeof e&&("_context"in e||"_destination"in e||window.AudioNode&&e instanceof AudioNode||e.context&&e.context.audioWorklet)}catch{return!1}})(t))return void(c++<10&&console.warn("[patch.stringify] dropping audio-ish at key",n,t))}return t};try{const e=n(t,s,o);return(a||c)&&console.info(`[patch.stringify] OK (cycles:${a}, dropped:${c}, len:${e?.length??0})`),e}catch(e){console.error("[patch.stringify] hard failure",e);try{const e={};for(const n in t||{})e[n]=s(n,t[n]);return n(e,null,o)}catch(n){throw console.error("[patch.stringify] shallow fallback failed",n),e}}}Object.defineProperty(JSON,"stringify",{configurable:!0,writable:!0,value:t}),window.__safeStringify=t,console.log("[AudioGnarls prepatch] JSON.stringify patched"),window.addEventListener("error",(e=>console.error("[window.error]",e.message,e.error||e))),window.addEventListener("unhandledrejection",(e=>console.error("[unhandledrejection]",e.reason)))})();
+</script>
+
+<!-- Load the single, bundled JavaScript file for the entire application -->
+<script type="module" src="./bundle.js"></script>
+
+ <!-- POST-BUNDLE LOAD PATCH: sanitize loaded JSON, then call the original loader -->
+<script type="module">
+(()=>{const e=(...e)=>console.log("[AudioGnarls parsepatch v2]",...e),t=(...e)=>console.warn("[AudioGnarls parsepatch v2]",...e),r=e=>"number"==typeof e&&Number.isFinite(e),o=e=>e&&r(e.t)&&r(e.x)&&r(e.y);function n(e){if(!e||"object"!=typeof e)return{points:[],duration:0};let t=Array.isArray(e.points)?e.points.filter(o):[];const n=e.points?.length??0;t.length&&(t.sort(((e,t)=>e.t-t.t)),t=((e,t)=>{const r=new Set,o=[];for(const n of e){const e=t(n);r.has(e)||(r.add(e),o.push(n))}return o})(t,(e=>e.t)));return{points:t,duration:r(e.duration)?e.duration:t.length?t[t.length-1].t:0,__stats:{before:n,after:t.length}}}const a=JSON.parse;Object.defineProperty(JSON,"parse",{configurable:!0,writable:!0,value:function(r,o){let i=a(r,o);try{if(!((s=i)&&"object"==typeof s&&Object.keys(s).includes("presets")&&"uiState"in s&&("freestyleRecording"in s||"pathRecorderState"in s||"sequence"in s&&"sequenceSteps"in s)))return i;const r=n(i.freestyleRecording);let o=null;i.pathRecorderState?.recording&&(o=n(i.pathRecorderState.recording));let a=r.points.length?r:o&&o.points.length?o:r;i.freestyleRecording={points:a.points,duration:a.duration},i.pathRecorderState&&"object"==typeof i.pathRecorderState?(i.pathRecorderState.recording=i.freestyleRecording,i.pathRecorderState.isArmed=!!i.pathRecorderState.isArmed,i.pathRecorderState.loop=!!i.pathRecorderState.loop):i.pathRecorderState={recording:i.freestyleRecording,isArmed:!1,loop:!1},e("intercepted state: freestyle points",{mainBefore:r.__stats.before,mainAfter:r.__stats.after,pathBefore:o?.__stats.before??0,pathAfter:o?.__stats.after??0,chosen:a===r?"main":o?"path":"main"}),queueMicrotask((()=>function(r){const o=document.querySelector("osc-app");if(o){o.state=o.state||{},o.state.freestyleRecording=r.freestyleRecording,o.pathRecorderState=o.pathRecorderState||{},o.pathRecorderState.recording=r.freestyleRecording;try{o._pathRec?.loadRecording&&r.freestyleRecording&&(o._pathRec.loadRecording(r.freestyleRecording),e("rehydrated path recorder with",r.freestyleRecording.points.length,"points"))}catch(e){t("optional _pathRec.loadRecording failed:",e)}try{"_seqFirstCycleStarted"in o&&(o._seqFirstCycleStarted=!1),"sequenceStepIndex"in o&&(o.sequenceStepIndex=0)}catch{}window.playRehydrated=()=>{try{o._onFreestylePlay?.()}catch(e){t("playRehydrated failed:",e)}}}else t("osc-app not found during rehydrate")}({freestyleRecording:i.freestyleRecording})))}catch(e){t("parse sanitizer error (continuing with original data)",e)}var s;return i}}),e("JSON.parse patched (v2)")})();
+</script>
+  
+
+</body>
+</html>

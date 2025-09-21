@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="en" data-seed="audionals    ">
+<head>
+  <meta charset="UTF-8" />
+  <title>Oscilloscope App v15.6 (AudioWorklet)</title>
+
+  <!-- Mobile viewport: use dynamic viewport units + allow safe-area usage -->
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no" />
+
+  <!-- Helpful mobile meta -->
+  <meta name="theme-color" content="#000000" />
+  <!-- Chrome/Android PWA capability (modern, non-deprecated) -->
+  <meta name="mobile-web-app-capable" content="yes" />
+  <!-- NOTE: Apple-specific metas are injected by setup.js on iOS Safari only to avoid Chrome deprecation warnings -->
+  <meta name="format-detection" content="telephone=no" />
+
+  <!-- All scripts, including setup.js and the modules, are now in bundle.js -->
+</head>
+<body>
+  <osc-app></osc-app>
+
+  <!-- PRE-BUNDLE PATCH: install safe JSON.stringify + global error logging -->
+<script>
+(() => {
+  const dropKeys = new Set([
+    'Tone','chains','audioSignatureTimer','sequenceIntervalId',
+    'audioContext','analyser','transport','node','input','output',
+    '_node','_input','_output','context','_context','_destination'
+  ]);
+
+  const isAudioish = v => {
+    try {
+      return v && typeof v === 'object' && (
+        '_context' in v || '_destination' in v ||
+        (window.AudioNode && v instanceof AudioNode) ||
+        (v.context && v.context.audioWorklet)
+      );
+    } catch { return false; }
+  };
+
+  const origStringify = JSON.stringify;
+
+  function safeStringify(value, replacer, space) {
+    const seen = new WeakSet();
+    let cycles = 0, dropped = 0;
+
+    const composed = function(key, val) {
+      try {
+        if (replacer) val = replacer.call(this, key, val);
+      } catch (e) {
+        console.warn('[patch.stringify] user replacer threw', e);
+      }
+      if (val && typeof val === 'object') {
+        if (seen.has(val)) {
+          if (cycles++ < 10) console.warn('[patch.stringify] skipping circular at key', key, val);
+          return undefined;
+        }
+        seen.add(val);
+        if (dropKeys.has(key) || isAudioish(val)) {
+          if (dropped++ < 10) console.warn('[patch.stringify] dropping audio-ish at key', key, val);
+          return undefined;
+        }
+      }
+      return val;
+    };
+
+    try {
+      const text = origStringify(value, composed, space);
+      if (cycles || dropped) {
+        console.info(`[patch.stringify] OK (cycles:${cycles}, dropped:${dropped}, len:${text?.length ?? 0})`);
+      }
+      return text;
+    } catch (e) {
+      console.error('[patch.stringify] hard failure', e);
+      // Last-resort shallow fallback
+      try {
+        const shallow = {};
+        for (const k in (value || {})) shallow[k] = composed(k, value[k]);
+        return origStringify(shallow, null, space);
+      } catch (e2) {
+        console.error('[patch.stringify] shallow fallback failed', e2);
+        throw e;
+      }
+    }
+  }
+
+  Object.defineProperty(JSON, 'stringify', { configurable: true, writable: true, value: safeStringify });
+  window.__safeStringify = safeStringify;
+  console.log('[AudioGnarls prepatch] JSON.stringify patched');
+
+  window.addEventListener('error',  e => console.error('[window.error]', e.message, e.error || e));
+  window.addEventListener('unhandledrejection', e => console.error('[unhandledrejection]', e.reason));
+})();
+</script>
+
+  <!-- Load the single, bundled JavaScript file for the entire application -->
+  <script type="module" src="./bundle.js"></script>
+
+ <!-- POST-BUNDLE LOAD PATCH: sanitize loaded JSON, then call the original loader -->
+<script type="module">
+(() => {
+  const log  = (...a) => console.log('[AudioGnarls parsepatch v2]', ...a);
+  const warn = (...a) => console.warn('[AudioGnarls parsepatch v2]', ...a);
+
+  // --- helpers ---
+  const isNum = v => typeof v === 'number' && Number.isFinite(v);
+  const isPoint = p => p && isNum(p.t) && isNum(p.x) && isNum(p.y);
+  const uniqBy = (arr, kf) => {
+    const seen = new Set(), out = [];
+    for (const it of arr) { const k = kf(it); if (!seen.has(k)) { seen.add(k); out.push(it); } }
+    return out;
+  };
+
+  function sanitizeFreestyle(rec) {
+    if (!rec || typeof rec !== 'object') return { points: [], duration: 0 };
+    let pts = Array.isArray(rec.points) ? rec.points.filter(isPoint) : [];
+    const before = rec.points?.length ?? 0;
+    if (pts.length) {
+      pts.sort((a,b)=>a.t-b.t);
+      pts = uniqBy(pts, p => p.t);
+    }
+    const duration = isNum(rec.duration) ? rec.duration : (pts.length ? pts[pts.length-1].t : 0);
+    return { points: pts, duration, __stats: { before, after: pts.length } };
+  }
+
+  function looksLikeAudioGnarlsState(o) {
+    if (!o || typeof o !== 'object') return false;
+    const keys = Object.keys(o);
+    // core shape
+    if (!keys.includes('presets')) return false;
+    if (!('uiState' in o)) return false;
+    // strong hints
+    if ('freestyleRecording' in o || 'pathRecorderState' in o) return true;
+    return ('sequence' in o && 'sequenceSteps' in o);
+  }
+
+  // --- rehydration on the real element so RAF loop can see it ---
+  function rehydrateIntoElement(cleanState) {
+    const el = document.querySelector('osc-app');
+    if (!el) { warn('osc-app not found during rehydrate'); return; }
+
+    // Put the cleaned freestyle into state (both places)
+    el.state = el.state || {};
+    el.state.freestyleRecording = cleanState.freestyleRecording;
+    el.pathRecorderState = el.pathRecorderState || {};
+    el.pathRecorderState.recording = cleanState.freestyleRecording;
+
+    // Rebuild the internal recorder cache if available
+    try {
+      if (el._pathRec?.loadRecording && cleanState.freestyleRecording) {
+        el._pathRec.loadRecording(cleanState.freestyleRecording);
+        log('rehydrated path recorder with', cleanState.freestyleRecording.points.length, 'points');
+      }
+    } catch (e) {
+      warn('optional _pathRec.loadRecording failed:', e);
+    }
+
+    // Reset cursors so play starts at the beginning
+    try {
+      if ('_seqFirstCycleStarted' in el) el._seqFirstCycleStarted = false;
+      if ('sequenceStepIndex' in el) el.sequenceStepIndex = 0;
+    } catch {}
+
+    // Don’t force play; expose a helper to trigger the app’s own handler
+    window.playRehydrated = () => {
+      try {
+        el._onFreestylePlay?.();
+      } catch (e) {
+        warn('playRehydrated failed:', e);
+      }
+    };
+  }
+
+  // --- JSON.parse interception (shape-checked) ---
+  const origParse = JSON.parse;
+  Object.defineProperty(JSON, 'parse', {
+    configurable: true,
+    writable: true,
+    value: function patchedParse(text, reviver) {
+      let data = origParse(text, reviver);
+      try {
+        if (!looksLikeAudioGnarlsState(data)) return data;
+
+        // Sanitize both copies
+        const frMain = sanitizeFreestyle(data.freestyleRecording);
+        let frPath = null;
+        if (data.pathRecorderState?.recording) {
+          frPath = sanitizeFreestyle(data.pathRecorderState.recording);
+        }
+
+        // Pick the best source of truth (prefer the one with points)
+        let chosen = frMain.points.length ? frMain : (frPath && frPath.points.length ? frPath : frMain);
+
+        // Keep both in sync
+        data.freestyleRecording = { points: chosen.points, duration: chosen.duration };
+        if (!data.pathRecorderState || typeof data.pathRecorderState !== 'object') {
+          data.pathRecorderState = { recording: data.freestyleRecording, isArmed:false, loop:false };
+        } else {
+          data.pathRecorderState.recording = data.freestyleRecording;
+          data.pathRecorderState.isArmed = !!data.pathRecorderState.isArmed;
+          data.pathRecorderState.loop    = !!data.pathRecorderState.loop;
+        }
+
+        log('intercepted state: freestyle points', {
+          mainBefore: frMain.__stats.before,
+          mainAfter:  frMain.__stats.after,
+          pathBefore: frPath?.__stats.before ?? 0,
+          pathAfter:  frPath?.__stats.after ?? 0,
+          chosen:     (chosen === frMain) ? 'main' : (frPath ? 'path' : 'main')
+        });
+
+        // Defer rehydrate until element is ready
+        queueMicrotask(() => rehydrateIntoElement({
+          freestyleRecording: data.freestyleRecording
+        }));
+      } catch (e) {
+        warn('parse sanitizer error (continuing with original data)', e);
+      }
+      return data;
+    }
+  });
+  log('JSON.parse patched (v2)');
+})();
+</script>
+
+
+
+
+
+  
+
+</body>
+</html>
