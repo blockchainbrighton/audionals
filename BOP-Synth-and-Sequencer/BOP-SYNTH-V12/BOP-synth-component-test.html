@@ -1,0 +1,127 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>BOP Synth Component Debug Harness (Ordinals Tone.js)</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body { background: #111; margin: 0; min-height: 100vh; display: flex; align-items: center; justify-content: center; }
+    #logger { position: fixed; top: 0; left: 0; width: 100vw; max-height: 40vh; overflow: auto; background: rgba(12,12,20,0.95); color: #1fa; font-size: 1rem; z-index: 10; padding: 10px; font-family: monospace; }
+    #copyLog { position: absolute; right: 18px; top: 6px; }
+    bop-synth-ui { box-shadow: 0 8px 24px #0008; }
+  </style>
+</head>
+<body>
+  <div id="logger">
+    <button id="copyLog">Copy Logs</button>
+    <div id="logLines"></div>
+  </div>
+  <bop-synth-ui></bop-synth-ui>
+
+  <!-- 1. Dynamically load Tone.js from the blockchain -->
+  <script>
+    const TONE_ORDINALS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+    const logLines = document.getElementById('logLines');
+    function logger(...args) {
+      const msg = args.map(a => (typeof a === 'object' ? JSON.stringify(a) : a)).join(' ');
+      logLines.innerHTML += `<div>${msg}</div>`;
+      logLines.scrollTop = logLines.scrollHeight;
+      console.log('[SYNTH TEST]', ...args);
+    }
+    logger('Loading Tone.js from Ordinals:', TONE_ORDINALS_URL);
+    window.Tone = undefined;
+    const script = document.createElement('script');
+    script.src = TONE_ORDINALS_URL;
+    script.onload = () => {
+      logger('Tone.js loaded from blockchain:', window.Tone?.version || '[version unknown]');
+      // Now that Tone is loaded, load the synth component as a module
+      import('./BopSynthUIComponent.js')
+        .then(() => logger('BopSynthUIComponent loaded as module.'))
+        .catch(e => logger('Error loading BopSynthUIComponent:', e));
+    };
+    script.onerror = e => {
+      logger('Error loading Tone.js from Ordinals:', e);
+    };
+    document.head.appendChild(script);
+  </script>
+
+  <!-- 2. The rest of the diagnostics script remains the same -->
+  <script>
+    document.getElementById('copyLog').onclick = () => {
+      const text = logLines.innerText;
+      navigator.clipboard.writeText(text).then(() => {
+        logger('Log copied to clipboard.');
+      });
+    };
+
+    function componentDiagnostics() {
+      const el = document.querySelector('bop-synth-ui');
+      if (!el) { logger('ERROR: <bop-synth-ui> not found in DOM.'); return; }
+      logger('<bop-synth-ui> found in DOM.');
+      if (el.shadowRoot) {
+        logger('Shadow DOM attached.');
+        const kb = el.shadowRoot.querySelector('.keyboard,#keyboard');
+        logger('Keyboard element:', !!kb);
+        if (kb) {
+          kb.addEventListener('mousedown', e => logger('mousedown on keyboard:', e.target.className));
+          kb.addEventListener('touchstart', e => logger('touchstart on keyboard:', e.target.className));
+          logger('Added mouse/touch event listeners to keyboard.');
+        }
+        const pr = el.shadowRoot.querySelector('.piano-roll,#rollGrid');
+        logger('Piano roll element:', !!pr);
+        const tr = el.shadowRoot.querySelector('.transport-controls,#transport-controls');
+        logger('Transport element:', !!tr);
+      } else {
+        logger('WARNING: No shadowRoot found on <bop-synth-ui> (maybe not using Shadow DOM or not initialized yet).');
+      }
+      setTimeout(() => {
+        let foundTone = false;
+        if (window.Tone) {
+          logger('Tone.js detected on window:', window.Tone.version || '[version unknown]');
+          foundTone = true;
+        }
+        if (el.Tone) {
+          logger('Tone.js found as el.Tone:', el.Tone.version || '[version unknown]');
+          foundTone = true;
+        }
+        if (el.synthEngine) {
+          logger('SynthEngine instance found on component:', typeof el.synthEngine);
+        }
+        if (el.logic) {
+          logger('Logic controller found on component.');
+          if (el.logic.synthEngine) logger('SynthEngine on logic:', typeof el.logic.synthEngine);
+          if (el.logic.state) logger('Synth state:', JSON.stringify(el.logic.state));
+        }
+        if (!foundTone) logger('Tone.js NOT found on window or component.');
+      }, 800);
+
+      el.addEventListener('error', e => {
+        logger('<bop-synth-ui> ERROR:', e.detail || '');
+      });
+      el.addEventListener('keydown', e => logger('keydown on <bop-synth-ui>:', e.key));
+      el.addEventListener('noteon', e => logger('noteon event:', e.detail || ''));
+      el.addEventListener('noteoff', e => logger('noteoff event:', e.detail || ''));
+
+      setTimeout(() => {
+        if (typeof el.focus === 'function') {
+          logger('Calling el.focus()');
+          el.focus();
+        }
+        if (typeof el.init === 'function') {
+          logger('Calling el.init()');
+          el.init();
+        }
+      }, 1000);
+    }
+
+    logger('=== BOP Synth Debug Harness Loaded ===');
+    window.addEventListener('DOMContentLoaded', () => {
+      logger('DOM fully loaded, running diagnostics in 400ms...');
+      setTimeout(componentDiagnostics, 400);
+    });
+    window.addEventListener('error', e => {
+      logger('GLOBAL JS ERROR:', e.message, e.filename, e.lineno);
+    });
+  </script>
+</body>
+</html>
