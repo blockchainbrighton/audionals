@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<title>Audio GNARLS - Cyberpunk Glitch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Exo+2:wght@900&display=swap" rel="stylesheet">
+<style>
+  :root{
+    /* Timing in musical units */
+    --bpm: 125;
+    --beat: calc(60s / var(--bpm));     /* 1 beat  = 0.48s at 125 BPM */
+    --bar:  calc(var(--beat) * 4);      /* 1 bar   = 1.92s */
+    --pulse: 0;                         /* JS drives this 0..1 every beat */
+  }
+
+  * { box-sizing: border-box; }
+
+  body {
+    margin: 0;
+    height: 100vh;
+    background-color: #04020a;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+    font-family: 'Exo 2', sans-serif;
+    /* Beat-driven global shimmer */
+    filter: brightness(calc(1 + var(--pulse) * 0.18)) contrast(calc(1 + var(--pulse) * 0.12));
+  }
+
+  .overlay {
+    position: absolute;
+    inset: 0;
+    z-index: 1;
+    pointer-events: none;
+  }
+
+  /* Scanlines — locked to beat (move 1 "line" per 1/2 beat) */
+  .scanlines {
+    background: linear-gradient(
+      to bottom,
+      rgba(255, 255, 255, 0),
+      rgba(255, 255, 255, 0) 50%,
+      rgba(255, 255, 255, 0.05) 50%,
+      rgba(255, 255, 255, 0.05)
+    );
+    background-size: 100% 4px;
+    animation-name: scan;
+    animation-duration: calc(var(--beat) / 2); /* 8th notes */
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    opacity: calc(0.25 + var(--pulse) * 0.25); /* thump in time */
+  }
+
+  @keyframes scan {
+    from { background-position: 0 0; }
+    to   { background-position: 0 4px; }
+  }
+
+  /* CRT vignette gets heavier on the beat */
+  .vignette {
+     box-shadow: inset 0 0 200px rgba(0,0,0,0.9);
+     outline: 1px solid rgba(255,255,255, calc(0.02 + var(--pulse) * 0.08));
+  }
+
+  #title {
+    position: relative;
+    font-size: clamp(3rem, 12vw, 7rem);
+    color: #fff;
+    text-transform: uppercase;
+    text-align: center;
+    z-index: 2;
+
+    /* Beat: micro-zoom + glow tied to --pulse */
+    transform: scale(calc(1 + var(--pulse) * 0.02));
+    text-shadow:
+      0 0 calc(8px + var(--pulse) * 16px) rgba(0,255,249,0.5),
+      0 0 calc(4px + var(--pulse) * 10px) rgba(255,0,193,0.35);
+
+    /* Glitch motion synced in musical multiples */
+    animation-name: main-glitch;
+    animation-duration: calc(var(--bar) * 2); /* 2 bars */
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+
+  /* Glitch layers for chromatic aberration */
+  #title::before,
+  #title::after {
+    content: attr(data-text);
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    background: #04020a;
+    overflow: hidden;
+    mix-blend-mode: screen;
+  }
+
+  #title::before {
+    left: 2px;
+    text-shadow: -2px 0 #ff00c1;
+    clip: rect(24px, 550px, 90px, 0);
+    animation-name: glitch-anim-1;
+    animation-duration: calc(var(--bar));      /* 1 bar */
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-direction: alternate-reverse;
+  }
+
+  #title::after {
+    left: -2px;
+    text-shadow: -2px 0 #00fff9, 2px 2px #ff00c1;
+    clip: rect(85px, 550px, 140px, 0);
+    animation-name: glitch-anim-2;
+    animation-duration: calc(var(--bar) * 1.5); /* dotted-quarter feel */
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+    animation-direction: alternate-reverse;
+  }
+
+  /* Keyframes (unchanged shapes, just duration now musical) */
+  @keyframes main-glitch {
+    2%, 64% { transform: translate(2px, 0) skew(0deg) scale(calc(1 + var(--pulse) * 0.02)); }
+    4%, 60% { transform: translate(-2px, 0) skew(0deg) scale(calc(1 + var(--pulse) * 0.02)); }
+    62%     { transform: translate(0, 0) skew(5deg) scale(calc(1 + var(--pulse) * 0.02)); }
+  }
+
+  @keyframes glitch-anim-1 {
+    0%, 100% { clip: rect(42px, 9999px, 99px, 0); transform: skew(0.3deg); }
+    25% { clip: rect(18px, 9999px, 112px, 0); }
+    50% { clip: rect(50px, 9999px, 120px, 0); }
+    75% { clip: rect(30px, 9999px, 90px, 0); }
+  }
+
+  @keyframes glitch-anim-2 {
+    0%, 100% { clip: rect(10px, 9999px, 130px, 0); transform: skew(0.5deg); }
+    20% { clip: rect(100px, 9999px, 80px, 0); }
+    40% { clip: rect(40px, 9999px, 50px, 0); }
+    60% { clip: rect(120px, 9999px, 20px, 0); }
+    80% { clip: rect(80px, 9999px, 95px, 0); }
+  }
+
+  /* Respect reduced motion preferences */
+  @media (prefers-reduced-motion: reduce) {
+    .scanlines, #title, #title::before, #title::after {
+      animation: none !important;
+    }
+    body { filter: none; }
+    #title { transform: none; text-shadow: none; }
+  }
+</style>
+</head>
+<body>
+  <div class="overlay scanlines"></div>
+  <div class="overlay vignette"></div>
+  <div id="title" data-text="AudioGNARLS">AudioGNARLS</div>
+
+  <script>
+    // --- Beat-locked pulse driver (JS updates CSS --pulse in real time) ---
+    (() => {
+      const root = document.documentElement;
+      const bpm = parseFloat(getComputedStyle(root).getPropertyValue('--bpm')) || 125;
+      const beatDur = 60 / bpm; // seconds
+
+      // A per-beat "thump": quick spike then decay (musical envelope)
+      function envelope(phase) {
+        // phase: 0..1 across the beat
+        const attack = 0.06; // 6% of beat for the spike
+        if (phase < attack) return 1 - (phase / attack); // linear quick peak
+        const t = (phase - attack) / (1 - attack);
+        return Math.exp(-7 * t); // smooth decay
+      }
+
+      let start = performance.now();
+      function frame(now) {
+        const elapsed = (now - start) / 1000;    // seconds
+        const phase = (elapsed % beatDur) / beatDur;
+        const pulse = envelope(phase);
+
+        root.style.setProperty('--pulse', pulse.toFixed(4));
+        requestAnimationFrame(frame);
+      }
+      requestAnimationFrame(frame);
+
+      // Optional: expose a setter if you want to change tempo on the fly later.
+      window.setTempo = (newBpm) => {
+        root.style.setProperty('--bpm', String(newBpm));
+      };
+    })();
+  </script>
+</body>
+</html>

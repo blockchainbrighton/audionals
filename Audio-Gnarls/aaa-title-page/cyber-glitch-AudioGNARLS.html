@@ -1,0 +1,203 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <title>AudioGNARLS</title>
+    <style>
+        body {
+            margin: 0;
+            height: 100vh;
+            background: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: "Arial Black", Impact, sans-serif;
+            cursor: pointer; /* Indicate the page is interactive */
+        }
+
+        .overlay {
+            position: absolute;
+            inset: 0;
+            z-index: 1;
+        }
+
+        .scanlines {
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0), rgba(255, 255, 255, 0) 50%, rgba(255, 255, 255, .02) 0, rgba(255, 255, 255, .02));
+            background-size: 100% 3px;
+            animation: scan 0.3s linear infinite;
+        }
+
+        @keyframes scan {
+            from { background-position: 0 0; }
+            to { background-position: 0 3px; }
+        }
+
+        .vignette {
+            box-shadow: inset 0 0 120px rgba(0, 0, 0, .8);
+        }
+
+        #title {
+            position: relative;
+            font-size: 7em;
+            color: #fff; /* Letters are white */
+            text-align: center;
+            animation: main-glitch 4.8s ease-in-out infinite;
+            z-index: 2;
+            letter-spacing: -2px;
+            text-shadow: 0 0 4px rgba(255, 255, 255, .4);
+            /* Set a fast transition for the blink effect */
+            transition: opacity 0.05s ease-in-out;
+            /* Default state is visible */
+            opacity: 1;
+        }
+
+        #title:before,
+        #title:after {
+            content: attr(data-text);
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            background: #000;
+            overflow: hidden;
+            opacity: .85;
+        }
+
+        #title:before {
+            left: 1px;
+            clip: rect(24px, 550px, 90px, 0);
+            animation: glitch-anim-1 2.4s cubic-bezier(.35, .65, .5, .9) infinite;
+        }
+
+        #title:after {
+            left: -1px;
+            clip: rect(85px, 550px, 140px, 0);
+            animation: glitch-anim-2 4.8s cubic-bezier(.6, -.2, .4, 1.2) infinite;
+        }
+
+        @keyframes main-glitch {
+            0%, 95.8%, 100% { transform: translate(0, 0) skew(0); }
+            2.1% { transform: translate(2px, 0) skew(0); }
+            4.2% { transform: translate(-2px, 0) skew(0); }
+            8.3% { transform: translate(0, 0) skew(3deg); }
+            20.8% { transform: translate(2px, 1px) skew(-1deg); }
+            22.9% { transform: translate(-2px, -1px) skew(0); }
+            33.3% { transform: translate(1px, 0) skew(0); }
+            36.1% { transform: translate(-1px, 1px) skew(0); }
+            38.9% { transform: translate(0, 0) skew(2deg); }
+            54.2% { transform: translate(2px, -1px) skew(1deg); }
+            56.3% { transform: translate(-1px, 1px) skew(-1deg); }
+            58.3% { transform: translate(0, 0) skew(0); }
+        }
+
+        @keyframes glitch-anim-1 {
+            0%, 100% { clip: rect(42px, 9999px, 99px, 0); transform: skew(.2deg) translateX(0); }
+            16% { clip: rect(18px, 9999px, 112px, 0); transform: skew(-.3deg); }
+            33% { clip: rect(65px, 9999px, 80px, 0); transform: skew(.4deg); }
+            50% { clip: rect(30px, 9999px, 130px, 0); transform: skew(-.1deg); }
+            66% { clip: rect(90px, 9999px, 45px, 0); transform: skew(.3deg); }
+            83% { clip: rect(20px, 9999px, 100px, 0); transform: skew(-.2deg); }
+        }
+
+        @keyframes glitch-anim-2 {
+            0%, 100% { clip: rect(10px, 9999px, 130px, 0); transform: skew(.3deg) translateX(0); }
+            15% { clip: rect(110px, 9999px, 60px, 0); transform: skew(-.4deg); }
+            30% { clip: rect(35px, 9999px, 40px, 0); transform: skew(.6deg); }
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay scanlines"></div>
+    <div class="overlay vignette"></div>
+    <div id="title" data-text="AudioGNARLS">AudioGNARLS</div>
+
+<script>
+    document.addEventListener('DOMContentLoaded', () => {
+        const titleElement = document.getElementById('title');
+        const bpm = 125;
+        const quarterNoteTime = 60 / bpm; // 1 beat
+        const halfNoteTime = quarterNoteTime * 2; // 2 beats
+        const wholeNoteTime = quarterNoteTime * 4; // 4 beats
+        const blinkDuration = 0.05; // The text will disappear for 50ms
+
+        // A pattern of intervals between blinks to create variety
+        const blinkIntervals = [
+            halfNoteTime, // Wait 2 beats
+            quarterNoteTime, // Wait 1 beat
+            quarterNoteTime, // Wait 1 beat
+            wholeNoteTime, // Wait 4 beats
+            quarterNoteTime, // Wait 1 beat
+            halfNoteTime, // Wait 2 beats
+        ];
+
+        // Simulated AudioContext for high-precision timing without actual audio
+        const simulatedAudioContext = {
+            get currentTime() {
+                return performance.now() / 1000;
+            }
+        };
+
+        let startTime;
+        let nextBlinkTime;
+        let patternIndex = 0;
+        let blinkTimeoutId;
+
+        // Schedules the sequence of blinks
+        function scheduleBlinks() {
+            const now = simulatedAudioContext.currentTime;
+            const currentInterval = blinkIntervals[patternIndex % blinkIntervals.length];
+
+            // Schedule the blink OFF
+            // Only schedule if the event is in the future
+            if (nextBlinkTime >= now) {
+                setTimeout(() => {
+                    titleElement.style.opacity = '0'; // Blink off
+                }, (nextBlinkTime - now) * 1000);
+            }
+
+            // Schedule the blink ON again, shortly after it turns off
+            const blinkOnTime = nextBlinkTime + blinkDuration;
+            if (blinkOnTime >= now) {
+                 setTimeout(() => {
+                    titleElement.style.opacity = '1'; // Back to visible
+                }, (blinkOnTime - now) * 1000);
+            }
+
+            // Set up the time for the next blink in the sequence
+            nextBlinkTime += currentInterval;
+            patternIndex++;
+            
+            // Calculate when to call this scheduling function again to add the next blink to the queue
+            const timeUntilNextSchedule = (nextBlinkTime - now) * 1000;
+            blinkTimeoutId = setTimeout(scheduleBlinks, timeUntilNextSchedule);
+        }
+
+        // Main function to start or restart the entire effect
+        function startOrResetEffect() {
+            // Clear any previously scheduled blinks to prevent overlap
+            if (blinkTimeoutId) {
+                clearTimeout(blinkTimeoutId);
+            }
+
+            // Anchor the timing to the current moment
+            startTime = simulatedAudioContext.currentTime;
+            nextBlinkTime = startTime; // The first blink will happen based on the first interval
+            patternIndex = 0;
+            
+            // Ensure the title is visible when the effect (re)starts
+            titleElement.style.opacity = '1';
+
+            // Begin the scheduling loop
+            scheduleBlinks();
+        }
+
+        // Start the effect when the page loads
+        startOrResetEffect();
+
+        // Silently reset the timing anchor whenever the page is clicked
+        document.addEventListener('click', startOrResetEffect);
+    });
+</script>
+</body>
+</html>
