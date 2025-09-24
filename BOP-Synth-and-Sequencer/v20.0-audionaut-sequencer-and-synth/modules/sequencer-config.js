@@ -20,8 +20,8 @@ export const MAX_SEQUENCES = 32;
 export const MAX_CHANNELS = 32;
 
 export const ROWS_LAYOUTS = [
-  { maxWidth: 9999, rows: 1, stepsPerRow: 64 },
-  { maxWidth: 1250, rows: 2, stepsPerRow: 32 },
+  { maxWidth: 540,  rows: 8, stepsPerRow: 8 },
   { maxWidth: 820,  rows: 4, stepsPerRow: 16 },
-  { maxWidth: 540,  rows: 8, stepsPerRow: 8 }
+  { maxWidth: 1250, rows: 2, stepsPerRow: 32 },
+  { maxWidth: 9999, rows: 1, stepsPerRow: 64 }
 ];

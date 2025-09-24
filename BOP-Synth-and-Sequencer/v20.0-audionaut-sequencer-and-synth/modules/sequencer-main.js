@@ -54,6 +54,6 @@ import(TONE_ORDINALS_URL)
         boot();
     })
     .catch(err => {
-        setLoader-status('Failed to load Tone.js. App cannot start.', true);
+        setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
         console.error('[BOP Matrix] Critical Tone.js load error:', err);
     });

@@ -7,7 +7,7 @@
  */
 
 import { projectState, runtimeState, getCurrentSequence } from './sequencer-state.js';
-import { playSamplerChannel } from './sequencer-sampler-playback.js';
+import { playSamplerChannel, disposeSamplerVoices } from './sequencer-sampler-playback.js';
 
 let toneSequence;
 
@@ -97,6 +97,7 @@ export async function startPlayback(mode) {
     if (mode === 'all') runtimeState.currentPlaybackSequenceIndex = projectState.currentSequenceIndex;
 
     setBPM(projectState.bpm);
+    runtimeState.currentStepIndex = 0;
     createToneSequence();
     runtimeState.Tone.Transport.start();
 }
@@ -126,8 +127,13 @@ export function stopPlayback() {
     projectState.isPlaying = false;
     projectState.playMode  = null;
     runtimeState.currentStepIndex = 0;
+
+    if (typeof window !== 'undefined' && window?.dispatchEvent) {
+        window.dispatchEvent(new CustomEvent('transport-stop'));
+    }
 }
 
 export function resetAudioEnvironment() {
     disposeAllInstrumentNodes();
+    disposeSamplerVoices();
 }

@@ -7,8 +7,7 @@ import { loadProject, saveProject } from './sequencer-save-load.js';
 import { createInstrumentForChannel, openSynthUI } from './sequencer-instrument.js';
 
 
-let previousStepIndex = null;
-let allChannels = [];
+let resizeRafId = null;
 
 // --- Element Cache Factory ---
 function getElements() {
@@ -36,6 +35,9 @@ const elements = getElements();
 const PROJECT_STORAGE_KEY = 'myBopMachineProject';
 
 let STEP_ROWS = 1, STEPS_PER_ROW = 64;
+
+let pendingPlayheadFrame = null;
+let targetPlayheadStep = 0;
 
 function renderBPM(val) {
     elements.bpmInput.value = val.toFixed(2).replace(/\.00$/, '');
@@ -128,10 +130,6 @@ function renderStepGrid(channelEl, channelData, chIndex) {
         stepEl.dataset.step = stepIndex;
         if (channelData.steps[stepIndex]) stepEl.classList.add('active');
 
-        if (stepIndex === runtimeState.currentStepIndex && projectState.isPlaying) {
-            stepEl.classList.add('playing');
-        }
-
         stepEl.onclick = () => {
             const currentSeq = getCurrentSequence();
             currentSeq.channels[chIndex].steps[stepIndex] = !currentSeq.channels[chIndex].steps[stepIndex];
@@ -152,9 +150,6 @@ export function render() {
     elements.sequencer.innerHTML = '';
     const currentSeq = getCurrentSequence();
     if (!currentSeq) return;
-
-        // --- REBUILD CHANNEL CACHE ---
-        allChannels = currentSeq.channels.map(() => ({ stepElements: [] }));
 
         currentSeq.channels.forEach((channelData, chIndex) => {        // 1. Create the top-level channel element
         const channelEl = document.createElement('div');
@@ -185,8 +180,7 @@ export function render() {
         channelEl.appendChild(infoContainer);
 
         // 6. Append the step grid, which will now align perfectly
-        const stepElements = [];
-        // Instead of calling renderStepGrid, do this inline to populate stepElements:
+        // Instead of calling renderStepGrid, do this inline:
         const stepsContainer = document.createElement('div');
         stepsContainer.className = 'steps';
         const rowDiv = document.createElement('div');
@@ -205,35 +199,19 @@ export function render() {
             };
 
             rowDiv.appendChild(stepEl);
-            stepElements.push(stepEl);
         }
 
         stepsContainer.appendChild(rowDiv);
         channelEl.appendChild(stepsContainer);
 
-        // --- Cache stepElements for highlightPlayhead ---
-        allChannels[chIndex].stepElements = stepElements;
-
         // 7. Finally, add the completed channel to the DOM
         elements.sequencer.appendChild(channelEl);
     });
 
+    if (projectState.isPlaying) schedulePlayheadHighlight(runtimeState.currentStepIndex ?? 0);
+
     updateSequenceListUI();
     updatePlaybackControls();
-}
-
-
-
-function highlightPlayhead(currentStep, previousStep) {
-    // Iterate over your cached channel objects
-    allChannels.forEach(channel => {
-        if (previousStep !== null && channel.stepElements[previousStep]) {
-            channel.stepElements[previousStep].classList.remove('playhead');
-        }
-        if (currentStep !== null && channel.stepElements[currentStep]) {
-            channel.stepElements[currentStep].classList.add('playhead');
-        }
-    });
 }
 
 
@@ -329,6 +307,13 @@ export function bindEventListeners() {
             .catch(err => { console.error(err); setLoaderStatus('Load failed.', true); });
     };
 
+    window.addEventListener('step', evt => {
+        if (typeof evt.detail?.stepIndex !== 'number') return;
+        schedulePlayheadHighlight(evt.detail.stepIndex);
+    });
+
+    window.addEventListener('transport-stop', clearTransportHighlight);
+
     // Clear Storage button logic
     const clearBtn = document.createElement('button');
     clearBtn.id          = 'clearBtn';
@@ -345,21 +330,28 @@ export function bindEventListeners() {
         }
     };
 
-    document.addEventListener('DOMContentLoaded', () => {
-        console.log('[UI] DOMContentLoaded: Checking for saved project in localStorage...');
+    const tryAutoLoadProject = () => {
+        console.log('[UI] Checking for saved project in localStorage...');
         const saved = localStorage.getItem(PROJECT_STORAGE_KEY);
         if (!saved) return;
         loadProject(saved)
-            .then(() => { console.log('[UI] Auto‑load ok'); render(); })
+            .then(() => { console.log('[UI] Auto-load ok'); render(); })
             .catch(err => { console.error(err); initializeProject(); render(); });
-    });
+    };
 
-    window.onresize = () => { updateStepRows(); render(); };
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', tryAutoLoadProject, { once: true });
+    } else {
+        tryAutoLoadProject();
+    }
 
-    window.addEventListener('step', e => {
-        const stepIndex = e.detail.stepIndex;
-        highlightPlayhead(stepIndex, previousStepIndex);
-        previousStepIndex = stepIndex;
+    window.addEventListener('resize', () => {
+        if (resizeRafId) cancelAnimationFrame(resizeRafId);
+        resizeRafId = requestAnimationFrame(() => {
+            resizeRafId = null;
+            updateStepRows();
+            render();
+        });
     });
 
     document.addEventListener('bop:request-record-toggle', () => {
@@ -374,6 +366,34 @@ export function bindEventListeners() {
         const chan = seq.channels.find(c => c.instrumentId === instrumentId);
         if (chan) { chan.steps.fill(false); render(); }
     });
+}
+
+function schedulePlayheadHighlight(stepIndex) {
+    targetPlayheadStep = stepIndex;
+    if (pendingPlayheadFrame !== null) return;
+    pendingPlayheadFrame = requestAnimationFrame(() => {
+        pendingPlayheadFrame = null;
+        applyPlayheadHighlight(targetPlayheadStep);
+    });
+}
+
+function applyPlayheadHighlight(stepIndex) {
+    const totalSteps = config.TOTAL_STEPS;
+    if (!totalSteps) return;
+
+    const normalizedIndex = ((stepIndex % totalSteps) + totalSteps) % totalSteps;
+
+    document.querySelectorAll('.step.playhead').forEach(stepEl => stepEl.classList.remove('playhead'));
+    document.querySelectorAll(`.step[data-step="${normalizedIndex}"]`).forEach(stepEl => stepEl.classList.add('playhead'));
+}
+
+function clearTransportHighlight() {
+    if (pendingPlayheadFrame !== null) {
+        cancelAnimationFrame(pendingPlayheadFrame);
+        pendingPlayheadFrame = null;
+    }
+
+    document.querySelectorAll('.step.playhead').forEach(stepEl => stepEl.classList.remove('playhead'));
 }
 
 // No-op destroy for future modularity (not used now, but pattern-compliant)

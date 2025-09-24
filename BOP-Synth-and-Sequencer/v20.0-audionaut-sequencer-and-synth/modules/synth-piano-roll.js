@@ -9,8 +9,9 @@ export class PianoRoll {
     scrollContainer = null; innerContent = null;
     MIDI_LOW = 21; MIDI_HIGH = 108; CELL_H = 18;
     zoomX = 1; zoomY = 1; minZoomX = 0.25; maxZoomX = 4; minZoomY = 0.5; maxZoomY = 2.5;
-    transportInterval = null; dragData = null; dragNoteIndex = null; lastPreviewMidi = null; _keyListener = null;
+    playheadRaf = null; dragData = null; dragNoteIndex = null; lastPreviewMidi = null; _keyListener = null;
     quantizeEnabled = false; quantizeGrid = 0.25; Tone = null;
+    cellWidth = 40;
 
     constructor(containerElement, eventBus, state) {
         this.rollGrid = containerElement;
@@ -86,7 +87,10 @@ export class PianoRoll {
             this.draw();
         });
         // Playback animation
-        this.eventBus.addEventListener('recording-state-changed', e => e.detail.isPlaying ? this.startPlayheadAnimation() : this.stopPlayheadAnimation());
+        this.eventBus.addEventListener('recording-state-changed', e => {
+            this.state.isPlaying = e.detail.isPlaying;
+            e.detail.isPlaying ? this.startPlayheadAnimation() : this.stopPlayheadAnimation();
+        });
         // Tone.js ready
         this.eventBus.addEventListener('tone-ready', e => { this.Tone = e.detail.Tone; this.draw(); });
         // Keyboard shortcut (note delete)
@@ -109,6 +113,7 @@ export class PianoRoll {
         const timeMax = Math.max(16, ...seq.map(o => o.start + o.dur));
         const gridTimeCount = quantGrid ? Math.ceil(timeMax / quantGrid) * quantGrid : Math.ceil(timeMax / 0.25) * 0.25;
         const cellW = 40 * this.zoomX, cellH = this.CELL_H * this.zoomY;
+        this.cellWidth = cellW;
         this.innerContent.innerHTML = '';
         const gridWidth = cellW * gridTimeCount;
         for (let midi = this.MIDI_HIGH; midi >= this.MIDI_LOW; midi--) {
@@ -129,7 +134,7 @@ export class PianoRoll {
         }
         this.innerContent.style.width = `calc(48px + ${gridWidth}px)`;
         this.#setupDragListeners(cellW, Tone);
-        this.updatePlayhead(cellW);
+        this.updatePlayhead();
         // Deselect on empty click
         this.innerContent.onclick = e => {
             if (e.target.classList.contains('roll-note') || e.target.closest('.roll-note')) return;
@@ -225,14 +230,21 @@ export class PianoRoll {
     }
 
     startPlayheadAnimation() {
-        if (!this.transportInterval)
-            this.transportInterval = setInterval(() => this.updatePlayhead(40 * this.zoomX), 33);
+        if (this.playheadRaf) return;
+        const tick = () => {
+            this.updatePlayhead();
+            this.playheadRaf = requestAnimationFrame(tick);
+        };
+        this.playheadRaf = requestAnimationFrame(tick);
     }
     stopPlayheadAnimation() {
-        if (this.transportInterval) clearInterval(this.transportInterval), this.transportInterval = null;
+        if (this.playheadRaf) {
+            cancelAnimationFrame(this.playheadRaf);
+            this.playheadRaf = null;
+        }
         const oldPh = this.scrollContainer?.querySelector('.playhead'); if (oldPh) oldPh.remove();
     }
-    updatePlayhead(cellW) {
+    updatePlayhead() {
         if (!this.innerContent || !this.scrollContainer) return;
         const Tone = this.Tone || window.Tone; if (!Tone) return;
         const playTime = Tone.Transport.seconds;
@@ -246,7 +258,7 @@ export class PianoRoll {
             ph.className = 'playhead';
             this.scrollContainer.appendChild(ph);
         }
-        ph.style.left = `${playTime * cellW + 48}px`;
+        ph.style.left = `${playTime * this.cellWidth + 48}px`;
         ph.style.height = `${this.innerContent.scrollHeight}px`;
     }
 

@@ -18,6 +18,7 @@ export const runtimeState = {
     currentPlaybackSequenceIndex: 0,
     instrumentRack: {},
     allSampleBuffers: {},
+    samplerVoices: new Map(),
     sampleMetadata: {
         names: [],
         bpms: [],
@@ -113,6 +114,16 @@ export function setupDefaultRhythm(sequence) {
 
 export function initializeProject() {
     console.log('[STATE] Initializing new project...');
+
+    runtimeState.samplerVoices.forEach(voice => {
+        try {
+            voice.player?.dispose();
+            voice.ampEnv?.dispose();
+        } catch (err) {
+            console.warn('[STATE] Failed to dispose sampler voice during project init:', err);
+        }
+    });
+    runtimeState.samplerVoices.clear();
     projectState.sequences = [];
     for (let i = 0; i < INITIAL_SEQUENCES; i++) {
         const seq = createNewSequence();
