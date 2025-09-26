@@ -1,0 +1,102 @@
+import os
+import csv
+
+# The list of seeds you provided
+seeds = [
+    "xxg8rhww", "qmwe1s75", "q029ds41", "v5ux9waz", "dzezu29b", "a8mcifbp", "s8pzzo3w", "lt978luy",
+    "k7cqq142", "lmxiok75", "qtndyi84", "ipaxatz7", "998dkb4b", "q4javypc", "yw3i3k36", "1h7xe2jo",
+    "46kya1hb", "nzicnl5r", "1nsis5l2", "zjfwqt32", "8z0a02rg", "3hritoqz", "intj0qd2", "xhujnanr",
+    "ud0qxdi6", "no4l9avb", "qoalbdq3", "5kf3hsl7", "15h8y164", "qnyrq1q6", "zwaex941", "1yj10yoa",
+    "0d53spgn", "bxn3ovpm", "dhqvmsxy", "i78iozsm", "11stbur9", "ripx4y5d", "xads3wgb", "61j76xub",
+    "xnjy6exo", "7xpn101m", "hqutptbr", "1s7lo6lj", "s1nsd4oi", "1xmhq2je", "88kvmm45", "or4033kf",
+    "y91qocj1", "tvuptn0p", "84ppfw2m", "jz5jhgzt", "jb69lhm2", "1b30svj1", "sscjba2b", "ra17c49k",
+    "gx3v5616", "3n4v3lta", "pm685lnp", "6mty6v6d", "jqwx6i35", "fgiqfybd", "6ghrbh0u", "7svghks4",
+    "ckls8lj8", "gctuq8tf", "j8la784e", "kdua0i8v", "p08sc26a", "vk5ua7r4", "cvi78sgj", "lo6zmoor",
+    "6plbbkyz", "8gw9662g", "x1e10p9j", "evjcxnpi", "d9omvlur", "0181pa78", "payms5md", "nveffipi",
+    "w76ng4mt", "f1xge2gv", "yielphyp", "r8yd9bf3", "f0ejdnib", "a29jfzbo", "yrgbp0er", "scy4b424",
+    "twber7vx", "trzz4pug", "vm3sz0sf", "x2xyn90z", "fgarg5dz", "zfddilrl", "1lm1f48j", "pd868avf",
+    "yldgf9ea", "w4wpzm90", "cn3ba0pl", "e2407y5u", "40nb9k7x", "hmsd37f1", "os3dk9ac", "ghukro4c",
+    "4jlksomw", "vhe6dcth", "8jaw99rt", "26ovq6q7", "8k7cq1eh", "cklcun85", "sfsjxfwr", "43xewl46",
+    "kv2i4n1x", "xf7yi5pr", "poptobs4", "6qnrrehp", "yknygwc0", "x9i2gr0g", "oiccbavp", "hnsnhys6",
+    "2w30xkys", "u21rlxl0", "dx1mx4rk", "h54jyr6y", "yvcnnjnh", "7mlq8000", "xxfiyzhz", "9n43uoht",
+    "3zfgt8la", "jzliibsy", "949pnymq", "ap7z2awn", "j5xopsx9", "b4f6d7y2", "6943c0cp", "7ehstuli",
+    "538ca66c", "cj9axu3d", "vptywtrq", "fzpq5gnl", "2m0f5ix5", "9c9bemuq", "7uf3kl44", "icwpc2xu",
+    "d10hnaq9", "y6dzk4r3", "umdclu3w", "fo8tkqt4", "pu270g8t", "1ktvpqiv", "dywkb8vu", "cs9hoc2m",
+    "2rzhkzwh", "5h8kfooe", "x8wocjj0", "302hphv5", "szcvz4bc", "h1qigpd2", "zjp990je", "wn1ufh70",
+    "nz59p5sn", "5xk9teid", "q6v07l60", "j80lzzwq", "9iu1mav4", "shas9io8", "zthk87oi", "rjbre3yq",
+    "s38mycbg", "d2vk5vqv", "wiy2i4qt", "g44vik85", "9pzonjrg", "qlnlxvha", "5hrdxfqr", "q2iqhw59",
+    "ki9wgiyg", "t8o2glds", "o493qph2", "10ksyxe8", "e9xs74po", "p1teuavy", "0rduzjr3", "7r77lz4n",
+    "q5jrx9fu", "6fd8xal6", "vaoo5zjr", "bw7xmkp7", "qkuh3p2f", "jjv69l3z", "vycz18v6", "ff0l359a",
+    "hy1z3tn3", "3volnbej", "x65vzjll", "msu6j5nm", "a98dzxp4", "4yty11om", "xfq17mbp", "a2p33tss",
+    "j0r2p222", "yh2a66qr", "1c9ttn1p", "fvdimabl", "um3h5ban", "y45qx3hg", "1j3d3dva", "ykvxpjec",
+    "w5z63ysk", "qn1n602r", "z2f6xy21", "wb57oxjw", "y7qvhmc1", "notfwt98", "1gaih0b4", "inxpdbqm",
+    "0rwpeq7h", "r1zjh6i5", "0hdq52f2", "h50q5dx8", "nk3o4k8f", "k2s6hzcr", "ztx8clu1", "4z9jatms",
+    "7qppc65j", "udb7uc6d", "277h7mu5", "lhw892cq", "ofigbnxm", "4mmug9re", "sjn0l5y3", "nq2lsa1x",
+    "9cceanug", "c6tx27k8", "jrv8zmrp", "x22xtx7p", "pppsbmqk", "mxyac6gf", "gwmaegt1", "akop8lek",
+    "wixwvmlf", "tlsihij4", "hqs11nms", "mw8xfmyv", "68bmmo0w", "ld6de2aa", "zzomvgyc", "u3r7zx6o",
+    "suu6c1b0", "pjhcrcus", "acp200h9", "0je0vj7m", "1zmjaxpp", "ydvbl2hg", "e3pv5iak", "uanb1cfw"
+]
+
+# The base HTML template
+html_template = "<!doctypehtml><html data-seed=\"{}\"><osc-app></osc-app><script src=/content/43504f02f485036d736698adb6e7f26c74372eb7280cfc6f7f2991e851939f1ei0 type=module></script>"
+
+# The name of the folder to create
+output_folder = "AudioGNARLS-v2-generated_html_files_addressed"
+
+# --- New code to read the CSV and create a seed-to-address map ---
+seed_to_address = {}
+csv_file_path = 'new-owners-csv.csv'
+
+try:
+    with open(csv_file_path, mode='r', newline='') as infile:
+        reader = csv.reader(infile, delimiter=';')
+        header = next(reader)  # Skip header row
+        
+        # Find the index for 'seeds' and 'address' columns
+        try:
+            seed_index = header.index('seeds')
+            address_index = header.index('address')
+        except ValueError as e:
+            print(f"CSV header error: {e}. Please ensure 'seeds' and 'address' columns exist.")
+            exit()
+
+        for row in reader:
+            if len(row) > max(seed_index, address_index):
+                seed = row[seed_index]
+                address = row[address_index]
+                seed_to_address[seed] = address
+except FileNotFoundError:
+    print(f"Error: The file '{csv_file_path}' was not found.")
+    exit()
+# --- End of new code ---
+
+# Create the folder if it doesn't already exist
+if not os.path.exists(output_folder):
+    os.makedirs(output_folder)
+
+# Loop through each seed and create an HTML file
+for seed in seeds:
+    # Format the HTML content with the current seed
+    html_content = html_template.format(seed)
+    
+    # Check if the seed exists in our map from the CSV
+    address = seed_to_address.get(seed) # Use .get() to avoid errors for seeds not in the CSV. [1, 2, 3]
+    
+    # Determine the filename
+    if address:
+        # If an address is found, append it to the filename
+        file_name = f"{seed}-{address}.html"
+    else:
+        # Otherwise, use the original filename format
+        file_name = f"{seed}.html"
+        
+    # Define the path for the new file
+    file_path = os.path.join(output_folder, file_name)
+    
+    # Write the content to the new HTML file
+    with open(file_path, "w") as file:
+        file.write(html_content)
+
+    print(f"Created file: {file_path}")
+
+print("\nProcess complete. All 256 HTML files have been generated.")
