@@ -1928,27 +1928,32 @@ class UIController {
     this.ensureGlobalKey();
     this.ensureRhythmState();
     this.keyButtons = new Map();
+    this.collapsiblePanels = [];
+    this.accordionInitialised = false;
+    this.visualisersAttached = false;
+    this.audioInitPromise = null;
+    this.autoInitBound = null;
+    this.transportControlsBound = false;
     this.scope = document.getElementById('oscilloscope');
     this.spectrum = document.getElementById('spectrum');
     this.meterBar = document.getElementById('master-meter');
+    this.startButton = document.getElementById('start-audio');
+    this.playButton = document.getElementById('transport-play');
+    this.rhythmButton = document.getElementById('transport-rhythm');
+    this.stopButton = document.getElementById('transport-stop');
 
     this.populatePanels();
     this.bindMasterControls();
+    this.bindTransportControls();
     this.setupKeyControls();
     this.attachKeyboard();
     this.applyStateToUI();
     this.loadState();
-    document.getElementById('start-audio').addEventListener('click', async () => {
-      try {
-        await this.synth.init();
-        this.synth.renderVisualisers(this.scope, this.spectrum, this.meterBar);
-        this.applyStateToEngine();
-        document.getElementById('start-audio').disabled = true;
-        document.getElementById('start-audio').textContent = 'Audio Ready';
-      } catch (err) {
-        alert(err.message);
-      }
+    this.setupPanelAccordion();
+    this.startButton?.addEventListener('click', () => {
+      this.initAudio();
     });
+    this.setupAutoInitHandlers();
   }
   ensureGlobalKey() {
     if (!this.state.global) this.state.global = {};
@@ -2041,6 +2046,71 @@ class UIController {
       this.persistState();
     });
   }
+  bindTransportControls() {
+    if (!this.transportControlsBound) {
+      const playBtn = this.playButton;
+      const rhythmBtn = this.rhythmButton;
+      const stopBtn = this.stopButton;
+      if (playBtn) {
+        playBtn.addEventListener('click', async () => {
+          await this.initAudio();
+          if (!this.synth.initialised) return;
+          this.state.sequencer.playing = true;
+          this.persistState();
+          if (this.state.rhythm?.enabled) {
+            this.synth.setRhythmEnabled(true);
+          }
+          this.synth.sequencer.start();
+        });
+      }
+      if (stopBtn) {
+        stopBtn.addEventListener('click', async () => {
+          await this.initAudio();
+          if (this.synth.initialised) {
+            this.synth.stopAll();
+          }
+          this.ensureRhythmState();
+          let stateDirty = false;
+          if (this.state.rhythm.enabled) {
+            this.state.rhythm.enabled = false;
+            if (this.synth.initialised) {
+              this.synth.setRhythmEnabled(false);
+            }
+            stateDirty = true;
+          }
+          if (this.state.sequencer.playing) {
+            this.state.sequencer.playing = false;
+            stateDirty = true;
+          }
+          if (stateDirty) this.persistState();
+          this.updateRhythmToggleUI?.();
+        });
+      }
+      if (rhythmBtn) {
+        const updateRhythmLabel = () => {
+          this.ensureRhythmState();
+          const enabled = !!this.state.rhythm?.enabled;
+          rhythmBtn.textContent = enabled ? 'Rhythm: On' : 'Rhythm: Off';
+          rhythmBtn.classList.toggle('is-active', enabled);
+          rhythmBtn.setAttribute('aria-pressed', String(enabled));
+        };
+        this.updateRhythmToggleUI = updateRhythmLabel;
+        rhythmBtn.addEventListener('click', () => {
+          this.ensureRhythmState();
+          this.state.rhythm.enabled = !this.state.rhythm.enabled;
+          if (this.synth.initialised) {
+            this.synth.setRhythmEnabled(this.state.rhythm.enabled);
+          }
+          this.persistState();
+          updateRhythmLabel();
+        });
+        updateRhythmLabel();
+      }
+      this.transportControlsBound = true;
+    } else {
+      this.updateRhythmToggleUI?.();
+    }
+  }
   populatePanels() {
     this.ensureGlobalKey();
     this.ensureRhythmState();
@@ -2056,6 +2126,125 @@ class UIController {
     this.buildModMatrixPanel();
     this.buildPresetPanel();
     this.buildSequencerPanel();
+    this.syncAccordionState();
+  }
+  setupPanelAccordion() {
+    const panels = Array.from(document.querySelectorAll('main > .panel'));
+    this.collapsiblePanels = panels.filter((panel) => !panel.classList.contains('meters'));
+    this.collapsiblePanels.forEach((panel) => {
+      panel.classList.add('collapsible');
+      if (panel.dataset.accordionBound === 'true') return;
+      const header = panel.querySelector('h2');
+      if (!header) return;
+      header.setAttribute('role', 'button');
+      header.setAttribute('tabindex', '0');
+      header.setAttribute('aria-expanded', 'false');
+      header.addEventListener('click', () => this.handlePanelToggle(panel));
+      header.addEventListener('keydown', (event) => {
+        if (event.key === 'Enter' || event.key === ' ' || event.key === 'Space') {
+          event.preventDefault();
+          this.handlePanelToggle(panel);
+        }
+        if (event.key === 'Spacebar') {
+          event.preventDefault();
+          this.handlePanelToggle(panel);
+        }
+      });
+      panel.dataset.accordionBound = 'true';
+    });
+    if (!this.accordionInitialised) {
+      this.collapsiblePanels.forEach((panel) => this.collapsePanel(panel));
+      this.accordionInitialised = true;
+    } else {
+      this.syncAccordionState();
+    }
+  }
+  handlePanelToggle(panel) {
+    if (panel.classList.contains('is-collapsed')) {
+      this.openAccordionPanel(panel);
+    } else {
+      this.collapsePanel(panel);
+    }
+  }
+  openAccordionPanel(panel) {
+    this.collapsiblePanels.forEach((item) => {
+      if (item !== panel) this.collapsePanel(item);
+    });
+    this.expandPanel(panel);
+  }
+  collapsePanel(panel) {
+    if (!panel) return;
+    panel.classList.add('is-collapsed');
+    const header = panel.querySelector('h2');
+    if (header) header.setAttribute('aria-expanded', 'false');
+    const body = panel.querySelector('.panel-body');
+    if (body) body.setAttribute('aria-hidden', 'true');
+  }
+  expandPanel(panel) {
+    if (!panel) return;
+    panel.classList.remove('is-collapsed');
+    const header = panel.querySelector('h2');
+    if (header) header.setAttribute('aria-expanded', 'true');
+    const body = panel.querySelector('.panel-body');
+    if (body) body.setAttribute('aria-hidden', 'false');
+  }
+  syncAccordionState() {
+    if (!Array.isArray(this.collapsiblePanels) || !this.collapsiblePanels.length) return;
+    this.collapsiblePanels.forEach((panel) => {
+      if (panel.classList.contains('is-collapsed')) {
+        this.collapsePanel(panel);
+      } else {
+        this.expandPanel(panel);
+      }
+    });
+  }
+  setupAutoInitHandlers() {
+    this.removeAutoInitListeners();
+    const handler = () => {
+      this.removeAutoInitListeners();
+      this.initAudio();
+    };
+    this.autoInitBound = handler;
+    document.addEventListener('pointerdown', handler, { passive: true });
+    document.addEventListener('keydown', handler);
+  }
+  removeAutoInitListeners() {
+    if (!this.autoInitBound) return;
+    document.removeEventListener('pointerdown', this.autoInitBound, { passive: true });
+    document.removeEventListener('keydown', this.autoInitBound);
+    this.autoInitBound = null;
+  }
+  markAudioReady() {
+    if (!this.startButton) return;
+    this.startButton.disabled = true;
+    this.startButton.textContent = 'Audio Ready';
+  }
+  async initAudio() {
+    if (this.synth.initialised) {
+      this.markAudioReady();
+      return;
+    }
+    if (this.audioInitPromise) {
+      return this.audioInitPromise;
+    }
+    this.removeAutoInitListeners();
+    this.audioInitPromise = (async () => {
+      try {
+        await this.synth.init();
+        if (!this.visualisersAttached) {
+          this.synth.renderVisualisers(this.scope, this.spectrum, this.meterBar);
+          this.visualisersAttached = true;
+        }
+        this.applyStateToEngine();
+        this.markAudioReady();
+      } catch (err) {
+        alert(err.message);
+        this.setupAutoInitHandlers();
+      } finally {
+        this.audioInitPromise = null;
+      }
+    })();
+    return this.audioInitPromise;
   }
   createControls(panel, configs) {
     configs.filter(Boolean).forEach((config) => this.bindControl(panel, config));
@@ -2378,65 +2567,7 @@ class UIController {
     const panel = document.getElementById('seq-panel');
     panel.innerHTML = '';
     this.ensureRhythmState();
-    const controls = document.createElement('div');
-    controls.className = 'seq-controls';
-
-    const playBtn = document.createElement('button');
-    playBtn.textContent = 'Play';
-    playBtn.addEventListener('click', () => {
-      if (!this.synth.initialised) return;
-      this.state.sequencer.playing = true;
-      this.persistState();
-      if (this.state.rhythm?.enabled) {
-        this.synth.setRhythmEnabled(true);
-      }
-      this.synth.sequencer.start();
-    });
-    controls.appendChild(playBtn);
-
-    const rhythmBtn = document.createElement('button');
-    rhythmBtn.className = 'rhythm-toggle';
-    const updateRhythmLabel = () => {
-      const enabled = !!this.state.rhythm?.enabled;
-      rhythmBtn.textContent = enabled ? 'Rhythm: On' : 'Rhythm: Off';
-      rhythmBtn.classList.toggle('is-active', enabled);
-    };
-    updateRhythmLabel();
-    this.updateRhythmToggleUI = updateRhythmLabel;
-    rhythmBtn.addEventListener('click', () => {
-      this.ensureRhythmState();
-      this.state.rhythm.enabled = !this.state.rhythm.enabled;
-      if (this.synth.initialised) {
-        this.synth.setRhythmEnabled(this.state.rhythm.enabled);
-      }
-      this.persistState();
-      updateRhythmLabel();
-    });
-    controls.appendChild(rhythmBtn);
-
-    const stopBtn = document.createElement('button');
-    stopBtn.textContent = 'Stop';
-    stopBtn.addEventListener('click', () => {
-      this.synth.stopAll();
-      this.ensureRhythmState();
-      let stateDirty = false;
-      if (this.state.rhythm.enabled) {
-        this.state.rhythm.enabled = false;
-        if (this.synth.initialised) {
-          this.synth.setRhythmEnabled(false);
-        }
-        stateDirty = true;
-      }
-      if (this.state.sequencer.playing) {
-        this.state.sequencer.playing = false;
-        stateDirty = true;
-      }
-      if (stateDirty) this.persistState();
-      updateRhythmLabel();
-    });
-    controls.appendChild(stopBtn);
-
-    panel.appendChild(controls);
+    this.updateRhythmToggleUI?.();
 
     const template = document.getElementById('lane-step-template');
     this.state.sequencer.lanes.forEach((lane, laneIndex) => {
