@@ -37,10 +37,10 @@ seeds = [
 ]
 
 # The base HTML template
-html_template = "<!doctypehtml><html data-seed=\"{}\"><osc-app></osc-app><script src=/content/43504f02f485036d736698adb6e7f26c74372eb7280cfc6f7f2991e851939f1ei0 type=module></script>"
+html_template = "<!DOCTYPE html><html data-seed=\"{}\"><osc-app></osc-app><script src=/content/43504f02f485036d736698adb6e7f26c74372eb7280cfc6f7f2991e851939f1ei0 type=module></script>"
 
 # The name of the folder to create
-output_folder = "AudioGNARLS-v2-generated_html_files"
+output_folder = "AudioGNARLS-v2.2-generated_html_files"
 
 # Create the folder if it doesn't already exist
 if not os.path.exists(output_folder):
