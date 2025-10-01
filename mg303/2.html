@@ -1,0 +1,250 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>303 Style Synth</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+<style>
+  body { font-family: sans-serif; background-color: #2c2c2c; color: #f0f0f0; display: flex; justify-content: center; align-items: center; min-height: 100vh; margin: 0; }
+  #container { background-color: #3c3c3c; padding: 20px; border-radius: 10px; box-shadow: 0 0 20px rgba(0,0,0,0.5); }
+  h1 { text-align: center; color: #ff9800; }
+  .controls { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
+  .control-group { background-color: #4c4c4c; padding: 15px; border-radius: 8px; }
+  label { display: block; margin-bottom: 5px; font-size: 0.9em; }
+  input[type="range"] { width: 100%; }
+  select, button { width: 100%; padding: 8px; border: none; border-radius: 5px; background-color: #5c5c5c; color: #f0f0f0; cursor: pointer; }
+  button { background-color: #ff9800; }
+  #sequencer { display: grid; grid-template-columns: repeat(16, 1fr); gap: 5px; margin-top: 20px; }
+  .step { width: 40px; height: 100px; border: 1px solid #5c5c5c; background-color: #4c4c4c; border-radius: 5px; display: flex; flex-direction: column; align-items: center; justify-content: space-around; cursor: pointer; }
+  .step.active { background-color: #ff9800; }
+  .step.playing { border-color: #fff; }
+  .step input[type="text"] { width: 80%; text-align: center; background-color: #5c5c5c; border: 1px solid #777; color: #f0f0f0; border-radius: 3px; }
+  .step-controls { display: flex; justify-content: space-around; width: 100%; }
+  .step-controls span { font-size: 0.8em; padding: 2px 4px; border-radius: 3px; cursor: pointer; }
+  .step-controls .accent.active { background-color: #f44336; }
+  .step-controls .slide.active { background-color: #2196f3; }
+</style>
+</head>
+<body>
+
+<div id="container">
+  <h1>303 Style Synth</h1>
+
+  <div class="controls">
+    <div class="control-group">
+      <label for="waveform">Waveform</label>
+      <select id="waveform">
+        <option value="sawtooth">Sawtooth</option>
+        <option value="square">Square</option>
+      </select>
+    </div>
+    <div class="control-group">
+      <label for="cutoff">Cutoff: <span id="cutoff-value">1000</span> Hz</label>
+      <input type="range" id="cutoff" min="100" max="5000" value="1000">
+    </div>
+    <div class="control-group">
+      <label for="resonance">Resonance: <span id="resonance-value">10</span></label>
+      <input type="range" id="resonance" min="0" max="20" value="10" step="0.1">
+    </div>
+    <div class="control-group">
+      <label for="env-mod">Env Mod: <span id="env-mod-value">2500</span></label>
+      <input type="range" id="env-mod" min="0" max="5000" value="2500">
+    </div>
+    <div class="control-group">
+      <label for="decay">Decay: <span id="decay-value">0.5</span>s</label>
+      <input type="range" id="decay" min="0.1" max="2" value="0.5" step="0.01">
+    </div>
+    <div class="control-group">
+        <label for="tempo">Tempo: <span id="tempo-value">140</span> BPM</label>
+        <input type="range" id="tempo" min="60" max="200" value="140">
+    </div>
+  </div>
+
+  <button id="start-stop">Start / Stop</button>
+
+  <div id="sequencer"></div>
+</div>
+
+<script>
+  document.addEventListener('DOMContentLoaded', () => {
+    const synth = new Tone.MonoSynth({
+      oscillator: {
+        type: 'sawtooth'
+      },
+      envelope: {
+        attack: 0.01,
+        decay: 0.1,
+        sustain: 0.9,
+        release: 0.1
+      },
+      filterEnvelope: {
+        attack: 0.05,
+        decay: 0.2,
+        sustain: 0.5,
+        release: 2,
+        baseFrequency: 200,
+        octaves: 7,
+        exponent: 2
+      }
+    }).toDestination();
+
+    const filter = new Tone.Filter({
+      type: 'lowpass',
+      frequency: 1000,
+      rolloff: -24,
+      Q: 10
+    }).toDestination();
+
+    synth.connect(filter);
+
+    let sequenceData = Array(16).fill(null).map(() => ({
+      note: 'C3',
+      isActive: false,
+      accent: false,
+      slide: false
+    }));
+
+    const sequencerContainer = document.getElementById('sequencer');
+    const steps = [];
+
+    for (let i = 0; i < 16; i++) {
+      const step = document.createElement('div');
+      step.classList.add('step');
+      step.dataset.index = i;
+
+      const noteInput = document.createElement('input');
+      noteInput.type = 'text';
+      noteInput.value = sequenceData[i].note;
+      noteInput.addEventListener('change', (e) => {
+        sequenceData[i].note = e.target.value;
+      });
+
+      const stepControls = document.createElement('div');
+      stepControls.classList.add('step-controls');
+
+      const accentBtn = document.createElement('span');
+      accentBtn.textContent = 'A';
+      accentBtn.classList.add('accent');
+      accentBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sequenceData[i].accent = !sequenceData[i].accent;
+        accentBtn.classList.toggle('active');
+      });
+
+      const slideBtn = document.createElement('span');
+      slideBtn.textContent = 'S';
+      slideBtn.classList.add('slide');
+      slideBtn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        sequenceData[i].slide = !sequenceData[i].slide;
+        slideBtn.classList.toggle('active');
+      });
+
+      stepControls.appendChild(accentBtn);
+      stepControls.appendChild(slideBtn);
+
+      step.appendChild(noteInput);
+      step.appendChild(stepControls);
+
+      step.addEventListener('click', () => {
+        sequenceData[i].isActive = !sequenceData[i].isActive;
+        step.classList.toggle('active');
+      });
+
+      sequencerContainer.appendChild(step);
+      steps.push(step);
+    }
+
+    let currentStep = 0;
+    const seq = new Tone.Sequence((time, index) => {
+      steps.forEach((s, i) => s.classList.toggle('playing', i === index));
+      const stepData = sequenceData[index];
+
+      if (stepData.isActive) {
+        const velocity = stepData.accent ? 1 : 0.7;
+        const envModValue = parseFloat(document.getElementById('env-mod').value);
+        const filterEnvMod = stepData.accent ? envModValue * 1.5 : envModValue;
+
+        synth.filterEnvelope.baseFrequency = filter.frequency.value;
+        synth.filterEnvelope.octaves = Math.log2( (filter.frequency.value + filterEnvMod) / filter.frequency.value);
+
+
+        if (stepData.slide && index > 0) {
+            let prevNoteIndex = (index - 1 + 16) % 16;
+            while(!sequenceData[prevNoteIndex].isActive && prevNoteIndex !== index) {
+                prevNoteIndex = (prevNoteIndex - 1 + 16) % 16;
+            }
+            if (sequenceData[prevNoteIndex].isActive) {
+                 synth.setNote(stepData.note, time);
+            } else {
+                synth.triggerAttackRelease(stepData.note, '16n', time, velocity);
+            }
+        } else {
+            synth.triggerAttackRelease(stepData.note, '16n', time, velocity);
+        }
+      }
+    }, Array.from(Array(16).keys()), '16n').start(0);
+
+
+    const startStopButton = document.getElementById('start-stop');
+    startStopButton.addEventListener('click', async () => {
+      await Tone.start();
+      if (Tone.Transport.state === 'started') {
+        Tone.Transport.stop();
+      } else {
+        Tone.Transport.start();
+      }
+    });
+
+    // --- Control Listeners ---
+    const waveformSelect = document.getElementById('waveform');
+    waveformSelect.addEventListener('change', (e) => {
+      synth.oscillator.type = e.target.value;
+    });
+
+    const cutoffSlider = document.getElementById('cutoff');
+    const cutoffValue = document.getElementById('cutoff-value');
+    cutoffSlider.addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      filter.frequency.value = value;
+      cutoffValue.textContent = value;
+    });
+
+    const resonanceSlider = document.getElementById('resonance');
+    const resonanceValue = document.getElementById('resonance-value');
+    resonanceSlider.addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      filter.Q.value = value;
+      resonanceValue.textContent = value.toFixed(1);
+    });
+
+    const envModSlider = document.getElementById('env-mod');
+    const envModValue = document.getElementById('env-mod-value');
+    envModSlider.addEventListener('input', (e) => {
+      const value = parseInt(e.target.value);
+      envModValue.textContent = value;
+    });
+
+    const decaySlider = document.getElementById('decay');
+    const decayValue = document.getElementById('decay-value');
+    decaySlider.addEventListener('input', (e) => {
+      const value = parseFloat(e.target.value);
+      synth.envelope.decay = value;
+      synth.filterEnvelope.decay = value;
+      decayValue.textContent = value.toFixed(2);
+    });
+
+    const tempoSlider = document.getElementById('tempo');
+    const tempoValue = document.getElementById('tempo-value');
+    tempoSlider.addEventListener('input', (e) => {
+        const value = parseInt(e.target.value);
+        Tone.Transport.bpm.value = value;
+        tempoValue.textContent = value;
+    });
+
+  });
+</script>
+
+</body>
+</html>

@@ -1,0 +1,407 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Standalone 303 (Tone.js + WebAudio)</title>
+<link rel="preconnect" href="https://unpkg.com">
+<style>
+  :root{
+    --bg:#0b0d10; --card:#12161b; --muted:#1a2027; --text:#e8eef6; --sub:#9fb0c3; --acc:#7ee787; --accent:#86efac;
+    --gridOn:#39c2ff; --gridOff:#2a3441; --accentOn:#ffb84d; --accentOff:#3b2f19; --slideOn:#d98cff; --slideOff:#372a41;
+  }
+  *{box-sizing:border-box}
+  body{margin:0;background:linear-gradient(180deg,#0b0d10,#0a1016);color:var(--text);font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial,sans-serif}
+  h1{font-size:20px;margin:0 0 8px}
+  .wrap{max-width:1100px;margin:24px auto;padding:16px}
+  .topbar{display:flex;gap:12px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+  button,.chip,select,input[type="range"]{appearance:none;border:none;outline:0}
+  button{background:var(--muted);color:var(--text);padding:10px 14px;border-radius:12px;cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.25)}
+  button:hover{filter:brightness(1.1)}
+  button.primary{background:linear-gradient(135deg,#2563eb,#06b6d4)}
+  button.play{background:linear-gradient(135deg,#22c55e,#16a34a)}
+  button.stop{background:linear-gradient(135deg,#ef4444,#b91c1c)}
+  .cards{display:grid;grid-template-columns:1.1fr 1fr;gap:16px}
+  .card{background:var(--card);border:1px solid #1e2630;border-radius:16px;padding:14px;box-shadow:0 6px 28px rgba(0,0,0,.25)}
+  .row{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+  .col{display:flex;flex-direction:column;gap:8px}
+  label{font-size:12px;color:var(--sub)}
+  .slider{display:grid;grid-template-columns:1fr 60px;gap:8px;align-items:center}
+  input[type="range"]{width:100%;height:6px;border-radius:6px;background:linear-gradient(90deg,#334155,#475569);accent-color:#60a5fa}
+  .value{font-variant-numeric:tabular-nums;color:#cfe4ff;text-align:right}
+  .grid{display:grid;grid-template-columns:repeat(16,1fr);gap:6px;margin-top:8px}
+  .step{display:grid;grid-template-rows:auto auto auto;gap:4px;background:#0f141a;padding:6px;border-radius:10px;border:1px solid #1f2834}
+  .gate{height:22px;border-radius:8px;background:var(--gridOff);cursor:pointer}
+  .gate.on{background:var(--gridOn);box-shadow:0 0 10px #2ad3ff80 inset}
+  .accent,.slide{height:14px;border-radius:6px;cursor:pointer}
+  .accent{background:var(--accentOff)}
+  .accent.on{background:var(--accentOn)}
+  .slide{background:var(--slideOff)}
+  .slide.on{background:var(--slideOn)}
+  .noteSel{width:100%;border-radius:8px;background:#0c1117;color:var(--text);border:1px solid #1f2834;padding:6px 8px}
+  .foot{display:flex;gap:8px;align-items:center;justify-content:space-between;margin-top:10px}
+  .blink{animation:blink 0.12s ease}
+  @keyframes blink{from{filter:brightness(1.5)}to{filter:brightness(1)}}
+  .mini{font-size:12px;color:var(--sub)}
+  @media (max-width:980px){.cards{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="topbar">
+    <h1>Mothy G - 303</h1>
+    <button id="startBtn" class="primary">Start Audio</button>
+    <button id="playBtn" class="play">Play</button>
+    <button id="stopBtn" class="stop">Stop</button>
+    <button id="rndBtn">Randomize</button>
+    <button id="clrBtn">Clear</button>
+    <span class="mini">Click steps to toggle; middle row = Accent, bottom = Slide</span>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <h2 style="margin:0 0 8px;font-size:16px;color:#dbeafe">Sequencer</h2>
+      <div class="row" style="gap:16px;margin:8px 0 6px">
+        <div class="col">
+          <label>BPM</label>
+          <div class="slider">
+            <input type="range" id="bpm" min="60" max="180" value="140" step="1">
+            <div class="value" id="bpmVal">140</div>
+          </div>
+        </div>
+        <div class="col">
+          <label>Swing</label>
+          <div class="slider">
+            <input type="range" id="swing" min="0" max="100" value="12" step="1">
+            <div class="value" id="swingVal">12%</div>
+          </div>
+        </div>
+        <div class="col">
+          <label>Wave</label>
+          <select id="wave" class="noteSel">
+            <option value="sawtooth">Saw</option>
+            <option value="square">Square</option>
+          </select>
+        </div>
+        <div class="col">
+          <label>Scale root</label>
+          <select id="root" class="noteSel">
+            <option>C</option><option>C#</option><option>D</option><option>D#</option>
+            <option>E</option><option>F</option><option>F#</option><option>G</option>
+            <option>G#</option><option>A</option><option>A#</option><option>B</option>
+          </select>
+        </div>
+        <div class="col">
+          <label>Pattern length</label>
+          <select id="length" class="noteSel">
+            <option>16</option><option>12</option><option>8</option><option>4</option>
+          </select>
+        </div>
+      </div>
+      <div id="grid" class="grid"></div>
+      <div class="foot">
+        <div class="mini" id="now">Step: –</div>
+        <div class="mini">Tip: Hold Alt/Option while clicking top row to set a rest (turn gate off).</div>
+      </div>
+    </div>
+
+    <div class="card">
+      <h2 style="margin:0 0 8px;font-size:16px;color:#dbeafe">Synth</h2>
+      <div class="row">
+        <div class="col" style="min-width:220px;flex:1">
+          <label>Cutoff</label>
+          <div class="slider">
+            <input type="range" id="cutoff" min="80" max="5000" value="650" step="1">
+            <div class="value" id="cutoffVal">650 Hz</div>
+          </div>
+          <label>Resonance (Q)</label>
+          <div class="slider">
+            <input type="range" id="res" min="0.5" max="20" value="14" step="0.1">
+            <div class="value" id="resVal">14.0</div>
+          </div>
+          <label>Env Amount (octaves)</label>
+          <div class="slider">
+            <input type="range" id="envAmt" min="0" max="6" value="3.5" step="0.1">
+            <div class="value" id="envAmtVal">3.5</div>
+          </div>
+          <label>Env Decay</label>
+          <div class="slider">
+            <input type="range" id="envDecay" min="0.05" max="1.2" value="0.45" step="0.01">
+            <div class="value" id="envDecayVal">0.45 s</div>
+          </div>
+          <label>Glide (Slide)</label>
+          <div class="slider">
+            <input type="range" id="glide" min="0" max="0.2" value="0.06" step="0.005">
+            <div class="value" id="glideVal">0.060 s</div>
+          </div>
+          <label>Accent Gain</label>
+          <div class="slider">
+            <input type="range" id="accentGain" min="0" max="12" value="6" step="0.5">
+            <div class="value" id="accentGainVal">+6 dB</div>
+          </div>
+          <label>Volume</label>
+          <div class="slider">
+            <input type="range" id="vol" min="-24" max="0" value="-6" step="1">
+            <div class="value" id="volVal">-6 dB</div>
+          </div>
+        </div>
+      </div>
+      <div class="foot"><span class="mini">Classic 303 vibe: high Q, moderate env, tweak cutoff live.</span></div>
+    </div>
+  </div>
+</div>
+
+<!-- Tone.js -->
+<script src="https://unpkg.com/tone@latest/build/Tone.js"></script>
+<script>
+  // --- Utilities ---
+  const $ = (id)=>document.getElementById(id);
+  const fmt = {
+    hz:v=>`${Math.round(v)} Hz`,
+    q:v=>(+v).toFixed(1),
+    s:v=>(+v).toFixed(2)+" s",
+    db:v=> (v>0?"+":"")+v+" dB",
+    pct:v=> v+"%"
+  };
+
+  // --- State ---
+  const state = {
+    steps: 16,
+    seq: Array.from({length:16}, (_,i)=>({
+      note: "C4", gate: i%2===0, accent: false, slide: false
+    })),
+    scaleRoots: ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"],
+    currentStep: -1
+  };
+
+  // Build available note list (TB-303 ~ 2.5 octaves typical)
+  function buildNoteSet(root="C"){
+    const order = ["C","C#","D","D#","E","F","F#","G","G#","A","A#","B"];
+    const idx = order.indexOf(root);
+    const rot = order.slice(idx).concat(order.slice(0,idx));
+    const degrees = [0,2,3,5,7,8,10]; // Phrygian-ish/minor pent tweaks are fun; but we'll offer chromatic via select dropdowns anyway
+    // We'll provide chromatic list for each step's selector (C3..B5)
+    const chroma = [];
+    for(let o=3;o<=5;o++){
+      for(const n of order) chroma.push(`${n}${o}`);
+    }
+    return chroma;
+  }
+  let NOTESET = buildNoteSet($("root").value);
+
+  // --- Audio graph ---
+  // Master with soft limiting to tame resonance peaks
+  const limiter = new Tone.Limiter(-1).toDestination();
+  const master = new Tone.Volume(-6).connect(limiter);
+
+  // Accent path: extra gain that we toggle per step
+  const accentGain = new Tone.Gain(Tone.dbToGain(0)).connect(master);
+
+  // The voice: MonoSynth configured to approximate 303 behavior
+  const synth = new Tone.MonoSynth({
+    oscillator: { type: "sawtooth" },
+    filter: { type: "lowpass", rolloff: -24, Q: 14 },
+    envelope: { attack: 0.001, decay: 0.15, sustain: 0.0, release: 0.06 },
+    filterEnvelope: {
+      attack: 0.001, decay: 0.45, sustain: 0.0, release: 0.07,
+      baseFrequency: 90, octaves: 3.5, exponent: 2
+    },
+    portamento: 0.06
+  }).connect(accentGain);
+
+  // --- Transport & sequence ---
+  Tone.Transport.bpm.value = 140;
+  Tone.Transport.swing = 0.12; // 12%
+  Tone.Transport.swingSubdivision = "8n";
+
+  // Step callback
+  const loop = new Tone.Loop(time=>{
+    const i = (state.currentStep + 1) % state.steps;
+    state.currentStep = i;
+    const step = state.seq[i];
+
+    highlightStep(i);
+
+    if(step.gate){
+      // Accent: raise accentGain and velocity; also a smidge more filter env
+      const isAccent = step.accent;
+      const accDb = parseFloat($("accentGain").value);
+      accentGain.gain.setValueAtTime(Tone.dbToGain(isAccent ? accDb : 0), time);
+
+      const envOct = parseFloat($("envAmt").value);
+      // Briefly push filter env amount on accented notes
+      const envBoost = isAccent ? 0.3 : 0;
+      synth.set({ filterEnvelope: { octaves: envOct + envBoost } });
+
+      // Slide handling: if slide, we call triggerAttack without releasing previous
+      const dur = "16n";
+      if(step.slide){
+        synth.triggerAttack(step.note, time, isAccent ? 0.95 : 0.8);
+      }else{
+        synth.triggerAttackRelease(step.note, dur, time, isAccent ? 0.95 : 0.8);
+      }
+    }else{
+      // Rest: ensure we release to avoid hanging slides
+      synth.triggerRelease(time);
+    }
+  }, "16n");
+
+  // --- UI: grid ---
+  const gridEl = $("grid");
+  function renderGrid(){
+    gridEl.innerHTML = "";
+    for(let i=0;i<16;i++){
+      const cell = document.createElement("div");
+      cell.className = "step";
+      // Gate (top bar)
+      const gate = document.createElement("div");
+      gate.className = "gate" + (state.seq[i].gate ? " on":"");
+      gate.title = "Gate (click to toggle)";
+      gate.onclick = (e)=>{
+        if(e.altKey){ state.seq[i].gate = false; } else { state.seq[i].gate = !state.seq[i].gate; }
+        gate.classList.toggle("on", state.seq[i].gate);
+        cell.classList.add("blink");
+        setTimeout(()=>cell.classList.remove("blink"),90);
+      };
+      // Accent (middle)
+      const acc = document.createElement("div");
+      acc.className = "accent" + (state.seq[i].accent ? " on":"");
+      acc.title = "Accent";
+      acc.onclick = ()=>{
+        state.seq[i].accent = !state.seq[i].accent;
+        acc.classList.toggle("on", state.seq[i].accent);
+      };
+      // Slide (bottom)
+      const sl = document.createElement("div");
+      sl.className = "slide" + (state.seq[i].slide ? " on":"");
+      sl.title = "Slide (glide to next)";
+      sl.onclick = ()=>{
+        state.seq[i].slide = !state.seq[i].slide;
+        sl.classList.toggle("on", state.seq[i].slide);
+      };
+
+      // Note selector
+      const sel = document.createElement("select");
+      sel.className = "noteSel";
+      NOTESET.forEach(n=>{
+        const opt = document.createElement("option");
+        opt.value = n; opt.textContent = n;
+        sel.appendChild(opt);
+      });
+      sel.value = state.seq[i].note;
+      sel.onchange = ()=> state.seq[i].note = sel.value;
+
+      // Assemble: [gate bar], [note select], [accent], [slide]
+      cell.appendChild(gate);
+      cell.appendChild(sel);
+      cell.appendChild(acc);
+      cell.appendChild(sl);
+      gridEl.appendChild(cell);
+    }
+  }
+  renderGrid();
+
+  function highlightStep(i){
+    $("now").textContent = "Step: " + (i+1);
+    const kids = [...gridEl.children];
+    kids.forEach((c,idx)=>{
+      c.style.outline = idx===i ? "2px solid #60a5fa" : "1px solid #1f2834";
+    });
+  }
+
+  // --- Controls wiring ---
+  const bind = (id, fmtFn, apply)=>{
+    const el = $(id), out = $(id+"Val");
+    const set = ()=>{
+      out.textContent = fmtFn ? fmtFn(el.value) : el.value;
+      apply(parseFloat(el.value));
+    };
+    el.oninput = set; set();
+  };
+
+  bind("bpm", v=>v, v=> Tone.Transport.bpm.rampTo(v, 0.05));
+  bind("swing", v=>fmt.pct(v), v=> Tone.Transport.swing = v/100);
+  bind("cutoff", v=>fmt.hz(v), v=>{
+    synth.set({ filterEnvelope: { baseFrequency: v } });
+  });
+  bind("res", v=>fmt.q(v), v=>{
+    synth.filter.Q.rampTo(v, 0.02);
+  });
+  bind("envAmt", v=>v, v=>{
+    synth.set({ filterEnvelope: { octaves: v } });
+  });
+  bind("envDecay", v=>fmt.s(v), v=>{
+    synth.set({ filterEnvelope: { decay: v } });
+  });
+  bind("glide", v=>fmt.s(v), v=>{
+    synth.portamento = v;
+  });
+  bind("accentGain", v=>fmt.db(v), v=>{
+    // value applied per-step in loop; keep label in sync
+  });
+  bind("vol", v=>fmt.db(v), v=>{
+    master.volume.rampTo(v, 0.03);
+  });
+
+  $("wave").onchange = e=>{
+    synth.oscillator.type = e.target.value;
+  };
+  $("root").onchange = e=>{
+    NOTESET = buildNoteSet(e.target.value);
+    renderGrid();
+  };
+  $("length").onchange = e=>{
+    state.steps = parseInt(e.target.value,10);
+  };
+
+  // Transport buttons
+  $("startBtn").onclick = async ()=>{
+    await Tone.start();
+    $("startBtn").textContent = "Audio Ready ✓";
+    $("startBtn").disabled = true;
+  };
+  $("playBtn").onclick = async ()=>{
+    if(Tone.context.state !== "running") await Tone.start();
+    if(!loop.state || loop.state === "stopped") loop.start(0);
+    Tone.Transport.start("+0.05");
+  };
+  $("stopBtn").onclick = ()=>{
+    Tone.Transport.stop();
+    loop.stop(0);
+    state.currentStep = -1;
+    highlightStep(-1);
+  };
+
+  // Randomize & Clear
+  $("rndBtn").onclick = ()=>{
+    const notes = NOTESET;
+    for(let i=0;i<16;i++){
+      const st = state.seq[i];
+      st.note = notes[(Math.random()*notes.length)|0];
+      st.gate = Math.random() < 0.75;
+      st.accent = Math.random() < 0.3;
+      st.slide = Math.random() < 0.25;
+    }
+    renderGrid();
+  };
+  $("clrBtn").onclick = ()=>{
+    for(let i=0;i<16;i++){
+      const st = state.seq[i];
+      st.gate = false; st.accent = false; st.slide = false;
+    }
+    renderGrid();
+  };
+
+  // Startup defaults to a classic 303-ish riff
+  (function seedPattern(){
+    const base = ["C4","C5","G4","C5","C4","D#4","G4","A#4","C5","A#4","G4","F4","G4","C5","G4","C4"];
+    state.seq.forEach((s,i)=>{
+      s.note = base[i]; s.gate = true;
+      s.accent = (i%4===3) || (i===10);
+      s.slide = (i===1 || i===13);
+    });
+    renderGrid();
+  })();
+</script>
+</body>
+</html>

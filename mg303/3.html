@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>303 Style Synth</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.7.77/Tone.js"></script>
+    <style>
+        body { font-family: sans-serif; text-align: center; background-color: #f0f0f0; }
+        #container { max-width: 600px; margin: auto; background: #fff; padding: 20px; border-radius: 8px; box-shadow: 0 0 10px rgba(0,0,0,0.1); }
+        .control { margin: 10px 0; }
+        label { display: inline-block; width: 150px; text-align: right; margin-right: 10px; }
+        input[type="range"] { width: 300px; }
+        #sequencer { display: grid; grid-template-columns: repeat(16, 1fr); gap: 5px; margin-top: 20px; }
+        .step { width: 100%; aspect-ratio: 1; border: 1px solid #ccc; background-color: #eee; cursor: pointer; }
+        .step.active { background-color: #3498db; }
+        .step.playing { border-color: #e74c3c; }
+        #accent-row { display: grid; grid-template-columns: repeat(16, 1fr); gap: 5px; margin-top: 5px; }
+        .accent { width: 100%; height: 15px; border: 1px solid #ccc; background-color: #eee; cursor: pointer; }
+        .accent.active { background-color: #f1c40f; }
+    </style>
+</head>
+<body>
+    <div id="container">
+        <h1>303 Style Synthesizer</h1>
+        <button id="start-stop">Start / Stop</button>
+        <div class="control">
+            <label for="waveform">Waveform:</label>
+            <button id="waveform-saw">Sawtooth</button>
+            <button id="waveform-square">Square</button>
+        </div>
+        <div class="control">
+            <label for="cutoff">Cutoff:</label>
+            <input type="range" id="cutoff" min="100" max="8000" value="4000" step="1">
+        </div>
+        <div class="control">
+            <label for="resonance">Resonance:</label>
+            <input type="range" id="resonance" min="0" max="20" value="5" step="0.1">
+        </div>
+        <div class="control">
+            <label for="env-mod">Env Mod:</label>
+            <input type="range" id="env-mod" min="0" max="5000" value="2500" step="1">
+        </div>
+        <div class="control">
+            <label for="decay">Decay:</label>
+            <input type="range" id="decay" min="0.1" max="2" value="0.5" step="0.01">
+        </div>
+         <div class="control">
+            <label for="accent-amount">Accent:</label>
+            <input type="range" id="accent-amount" min="1" max="5" value="2" step="0.1">
+        </div>
+        <div class="control">
+            <label for="tempo">Tempo:</label>
+            <input type="range" id="tempo" min="60" max="180" value="120" step="1">
+        </div>
+
+        <div id="sequencer"></div>
+        <div id="accent-row"></div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            const startStopButton = document.getElementById('start-stop');
+            const waveformSawButton = document.getElementById('waveform-saw');
+            const waveformSquareButton = document.getElementById('waveform-square');
+            const cutoffSlider = document.getElementById('cutoff');
+            const resonanceSlider = document.getElementById('resonance');
+            const envModSlider = document.getElementById('env-mod');
+            const decaySlider = document.getElementById('decay');
+            const accentAmountSlider = document.getElementById('accent-amount');
+            const tempoSlider = document.getElementById('tempo');
+            const sequencerGrid = document.getElementById('sequencer');
+            const accentRow = document.getElementById('accent-row');
+
+            const filter = new Tone.Filter({
+                type: 'lowpass',
+                frequency: cutoffSlider.value,
+                Q: resonanceSlider.value
+            }).toDestination();
+
+            const synth = new Tone.MonoSynth({
+                oscillator: {
+                    type: 'sawtooth'
+                },
+                envelope: {
+                    attack: 0.01,
+                    decay: 0.1,
+                    sustain: 0.9,
+                    release: 0.1
+                },
+                filterEnvelope: {
+                    attack: 0.02,
+                    decay: decaySlider.value,
+                    sustain: 0,
+                    release: 0.2,
+                    baseFrequency: 100,
+                    octaves: 5,
+                }
+            }).connect(filter);
+
+            let sequence = new Array(16).fill(false);
+            let accents = new Array(16).fill(false);
+            let currentStep = 0;
+
+            for (let i = 0; i < 16; i++) {
+                const step = document.createElement('div');
+                step.classList.add('step');
+                step.dataset.index = i;
+                step.addEventListener('click', () => {
+                    sequence[i] = !sequence[i];
+                    step.classList.toggle('active', sequence[i]);
+                });
+                sequencerGrid.appendChild(step);
+
+                const accent = document.createElement('div');
+                accent.classList.add('accent');
+                accent.dataset.index = i;
+                accent.addEventListener('click', () => {
+                    accents[i] = !accents[i];
+                    accent.classList.toggle('active', accents[i]);
+                });
+                accentRow.appendChild(accent);
+            }
+
+            const loop = new Tone.Loop(time => {
+                const stepElements = sequencerGrid.children;
+                stepElements[currentStep]?.classList.remove('playing');
+                currentStep = (currentStep + 1) % 16;
+                stepElements[currentStep]?.classList.add('playing');
+
+                if (sequence[currentStep]) {
+                    const velocity = accents[currentStep] ? 1 : 0.7;
+                    synth.filterEnvelope.baseFrequency = accents[currentStep] ? envModSlider.value * 0.5 : envModSlider.value;
+                     synth.filterEnvelope.octaves = accents[currentStep] ? accentAmountSlider.value : 3;
+
+                    synth.triggerAttackRelease('C2', '16n', time, velocity);
+                }
+            }, '16n').start(0);
+
+
+            startStopButton.addEventListener('click', async () => {
+                await Tone.start();
+                if (Tone.Transport.state === 'started') {
+                    Tone.Transport.stop();
+                    currentStep = -1;
+                     sequencerGrid.childNodes.forEach(node => node.classList.remove('playing'));
+                } else {
+                    Tone.Transport.start();
+                }
+            });
+
+            waveformSawButton.addEventListener('click', () => synth.oscillator.type = 'sawtooth');
+            waveformSquareButton.addEventListener('click', () => synth.oscillator.type = 'square');
+
+            cutoffSlider.addEventListener('input', () => filter.frequency.value = cutoffSlider.value);
+            resonanceSlider.addEventListener('input', () => filter.Q.value = resonanceSlider.value);
+            envModSlider.addEventListener('input', () => synth.filterEnvelope.baseFrequency = envModSlider.value);
+            decaySlider.addEventListener('input', () => synth.filterEnvelope.decay = decaySlider.value);
+
+            tempoSlider.addEventListener('input', (e) => Tone.Transport.bpm.value = e.target.value);
+        });
+    </script>
+</body>
+</html>
