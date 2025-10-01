@@ -1,0 +1,313 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Mothy G - 303</title>
+  <!--
+    This standalone HTML document implements a simplified TB‑303 style
+    bass synthesizer and step sequencer using only Tone.js and the Web
+    Audio API.  The original Roland TB‑303 is a monophonic bass synth
+    with a single oscillator (sawtooth or square) fed into a 24 dB/oct
+    low‑pass filter controlled by an envelope【113336110715358†L150-L187】.  Users
+    program patterns with notes, slides and accents using a built‑in
+    sequencer【113336110715358†L184-L188】.  Tone.js provides a MonoSynth
+    instrument composed of one oscillator, one filter and separate
+    amplitude and filter envelopes【642649388740431†L8-L12】, which makes it
+    well suited for this style of synthesis.  In this example the
+    sequence editor below lets you set a note (or rest), toggle accent
+    and slide per step, and tweak parameters like cutoff, resonance,
+    envelope amount, decay, accent level and slide time.  When you hit
+    play the sequence loops with the tempo you choose.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/tone@14.8.39/build/Tone.js"></script>
+  <style>
+    body {
+      font-family: sans-serif;
+      background: #111;
+      color: #ddd;
+      margin: 20px;
+    }
+    #container {
+      max-width: 960px;
+      margin: 0 auto;
+    }
+    h1 {
+      text-align: center;
+      margin-bottom: 10px;
+    }
+    /* Control panel styling */
+    .control-group {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 15px;
+      justify-content: center;
+      margin-bottom: 20px;
+    }
+    .control-group label {
+      display: flex;
+      flex-direction: column;
+      font-size: 0.8rem;
+      align-items: center;
+      color: #bbb;
+    }
+    .control-group input[type=range],
+    .control-group select {
+      width: 140px;
+      margin-top: 4px;
+    }
+    button {
+      padding: 8px 20px;
+      font-size: 1rem;
+      border: none;
+      border-radius: 4px;
+      background-color: #2980b9;
+      color: #fff;
+      cursor: pointer;
+    }
+    button:hover {
+      background-color: #3498db;
+    }
+    /* Step sequencer grid */
+    .sequencer {
+      display: grid;
+      grid-template-rows: repeat(3, auto);
+      grid-template-columns: repeat(16, 1fr);
+      gap: 2px;
+      border: 1px solid #333;
+      padding: 4px;
+    }
+    .sequencer div {
+      border: 1px solid #444;
+      padding: 4px 2px;
+      text-align: center;
+      cursor: pointer;
+      user-select: none;
+      font-size: 0.75rem;
+      background: #222;
+      color: #ccc;
+    }
+    .sequencer div:hover {
+      background: #333;
+    }
+    /* Distinguish accent and slide rows */
+    .sequencer .accent { color: #f39c12; }
+    .sequencer .slide  { color: #16a085; }
+    /* Highlight currently playing step */
+    .sequencer .active {
+      background: #2c3e50 !important;
+      color: #fff !important;
+    }
+  </style>
+</head>
+<body>
+  <div id="container">
+    <h1>Mothy G 303</h1>
+    <div class="control-group">
+      <button id="playBtn">Play</button>
+      <label>Tempo (BPM)
+        <input type="range" id="tempo" min="60" max="200" value="120">
+      </label>
+      <label>Waveform
+        <select id="waveform">
+          <option value="sawtooth">Sawtooth</option>
+          <option value="square">Square</option>
+        </select>
+      </label>
+      <label>Cutoff
+        <input type="range" id="cutoff" min="100" max="8000" value="1000">
+      </label>
+      <label>Resonance (Q)
+        <input type="range" id="resonance" min="0.1" max="10" step="0.1" value="2">
+      </label>
+      <label>Envelope (Octaves)
+        <input type="range" id="envelope" min="0" max="4" step="0.1" value="1">
+      </label>
+      <label>Decay (s)
+        <input type="range" id="decay" min="0.05" max="1" step="0.01" value="0.3">
+      </label>
+      <label>Accent Level
+        <input type="range" id="accentLevel" min="0.5" max="1" step="0.01" value="0.9">
+      </label>
+      <label>Slide Time (s)
+        <input type="range" id="slideTime" min="0" max="0.5" step="0.01" value="0.1">
+      </label>
+    </div>
+    <!-- Sequencer grid: first row notes, second accents, third slides -->
+    <div class="sequencer" id="sequencer"></div>
+  </div>
+
+  <script>
+    // List of possible notes.  '-' represents a rest.
+    const noteOptions = ['-','C3','C#3','D3','D#3','E3','F3','F#3','G3','G#3','A3','A#3','B3','C4','C#4','D4','D#4','E4'];
+    const sequenceLength = 16;
+    // Each step has an index into noteOptions plus accent/slide flags
+    const pattern = [];
+    for (let i = 0; i < sequenceLength; i++) {
+      pattern.push({ noteIndex: 0, accent: false, slide: false });
+    }
+    // Build the sequencer grid dynamically
+    const sequencerEl = document.getElementById('sequencer');
+    for (let row = 0; row < 3; row++) {
+      for (let col = 0; col < sequenceLength; col++) {
+        const cell = document.createElement('div');
+        cell.dataset.col = col;
+        if (row === 0) {
+          cell.classList.add('note');
+          cell.textContent = noteOptions[pattern[col].noteIndex];
+          // Cycle through available notes on click
+          cell.addEventListener('click', () => {
+            pattern[col].noteIndex = (pattern[col].noteIndex + 1) % noteOptions.length;
+            cell.textContent = noteOptions[pattern[col].noteIndex];
+          });
+        } else if (row === 1) {
+          cell.classList.add('accent');
+          cell.textContent = 'A';
+          cell.addEventListener('click', () => {
+            pattern[col].accent = !pattern[col].accent;
+            cell.style.backgroundColor = pattern[col].accent ? '#8e44ad' : '';
+          });
+        } else {
+          cell.classList.add('slide');
+          cell.textContent = 'S';
+          cell.addEventListener('click', () => {
+            pattern[col].slide = !pattern[col].slide;
+            cell.style.backgroundColor = pattern[col].slide ? '#16a085' : '';
+          });
+        }
+        sequencerEl.appendChild(cell);
+      }
+    }
+
+    // Create a MonoSynth which roughly approximates a 303.  MonoSynth
+    // features one oscillator, a filter and both amplitude and filter
+    // envelopes【642649388740431†L8-L12】.  We set the filter to 24 dB per
+    // octave to emulate the TB‑303's low‑pass filter【113336110715358†L150-L187】.
+    const synth = new Tone.MonoSynth({
+      oscillator: { type: document.getElementById('waveform').value },
+      filter: {
+        Q: parseFloat(document.getElementById('resonance').value),
+        type: 'lowpass',
+        rolloff: -24
+      },
+      envelope: {
+        attack: 0.01,
+        decay: parseFloat(document.getElementById('decay').value),
+        sustain: 0,
+        release: 0.1
+      },
+      filterEnvelope: {
+        attack: 0.01,
+        decay: parseFloat(document.getElementById('decay').value),
+        sustain: 0.5,
+        release: 0.2,
+        baseFrequency: parseFloat(document.getElementById('cutoff').value),
+        octaves: parseFloat(document.getElementById('envelope').value)
+      },
+      portamento: parseFloat(document.getElementById('slideTime').value)
+    }).toDestination();
+
+    // Update synthesizer parameters when the user tweaks the controls
+    document.getElementById('waveform').addEventListener('change', (e) => {
+      synth.oscillator.type = e.target.value;
+    });
+    document.getElementById('cutoff').addEventListener('input', (e) => {
+      synth.filterEnvelope.baseFrequency = parseFloat(e.target.value);
+    });
+    document.getElementById('resonance').addEventListener('input', (e) => {
+      synth.filter.Q.value = parseFloat(e.target.value);
+    });
+    document.getElementById('envelope').addEventListener('input', (e) => {
+      synth.filterEnvelope.octaves = parseFloat(e.target.value);
+    });
+    document.getElementById('decay').addEventListener('input', (e) => {
+      const val = parseFloat(e.target.value);
+      synth.envelope.decay = val;
+      synth.filterEnvelope.decay = val;
+    });
+    document.getElementById('slideTime').addEventListener('input', (e) => {
+      synth.portamento = parseFloat(e.target.value);
+    });
+
+    // Accent control
+    const accentSlider = document.getElementById('accentLevel');
+    let accentLevel = parseFloat(accentSlider.value);
+    accentSlider.addEventListener('input', (e) => {
+      accentLevel = parseFloat(e.target.value);
+    });
+
+    // Tempo control
+    const tempoSlider = document.getElementById('tempo');
+    tempoSlider.addEventListener('input', (e) => {
+      Tone.Transport.bpm.value = parseInt(e.target.value, 10);
+    });
+
+    // Sequence scheduling state variables
+    let slideActive = false;
+    // Tone.Sequence callback: index goes from 0 to 15 each sixteenth note
+    const seqCallback = (time, step) => {
+      const stepData = pattern[step];
+      const noteName = noteOptions[stepData.noteIndex];
+      // Highlight the current step using Tone.Draw to ensure smooth UI updates
+      Tone.Draw.schedule(() => {
+        document.querySelectorAll('#sequencer div').forEach((cell) => {
+          const col = parseInt(cell.dataset.col, 10);
+          if (col === step) {
+            cell.classList.add('active');
+          } else {
+            cell.classList.remove('active');
+          }
+        });
+      }, time);
+      // Handle rests
+      if (noteName === '-') {
+        if (slideActive) {
+          // release any held note when encountering a rest
+          synth.triggerRelease(time);
+        }
+        slideActive = false;
+        return;
+      }
+      // Determine velocity based on accent
+      const velocity = stepData.accent ? accentLevel : 0.6;
+      // If currently sliding, just change pitch; otherwise trigger a new attack
+      if (slideActive) {
+        // Adjust portamento for smooth glides
+        synth.portamento = parseFloat(document.getElementById('slideTime').value);
+        synth.setNote(noteName, time);
+      } else {
+        synth.portamento = parseFloat(document.getElementById('slideTime').value);
+        synth.triggerAttack(noteName, time, velocity);
+      }
+      // If the current step has a slide flag, keep gate open so next note glides
+      if (stepData.slide) {
+        slideActive = true;
+      } else {
+        // Otherwise schedule release at the end of the step
+        slideActive = false;
+        // Convert "16n" (a sixteenth note) to seconds for release scheduling
+        const noteDur = Tone.Time('16n').toSeconds();
+        synth.triggerRelease(time + noteDur);
+      }
+    };
+    const sequence = new Tone.Sequence(seqCallback, Array.from({ length: sequenceLength }, (_, i) => i), '16n');
+
+    // Play/stop button
+    const playBtn = document.getElementById('playBtn');
+    playBtn.addEventListener('click', async () => {
+      if (Tone.Transport.state !== 'started') {
+        // Start audio context on user interaction
+        await Tone.start();
+        Tone.Transport.bpm.value = parseInt(tempoSlider.value, 10);
+        // Start the sequence at the beginning of the measure
+        sequence.start(0);
+        Tone.Transport.start();
+        playBtn.textContent = 'Stop';
+      } else {
+        Tone.Transport.stop();
+        sequence.stop();
+        playBtn.textContent = 'Play';
+      }
+    });
+  </script>
+</body>
+</html>

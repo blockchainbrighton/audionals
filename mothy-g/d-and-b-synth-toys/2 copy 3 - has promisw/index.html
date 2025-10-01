@@ -1,0 +1,915 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Drum & Bass Synth Toys</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
+    <style>
+        :root {
+            --primary: #8a2be2;
+            --secondary: #00bfff;
+            --dark: #121212;
+            --light: #f0f0f0;
+            --accent: #ff6b6b;
+        }
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, var(--dark), #1a1a2e);
+            color: var(--light);
+            min-height: 100vh;
+            padding: 20px;
+            overflow-x: hidden;
+        }
+        
+        header {
+            text-align: center;
+            margin-bottom: 30px;
+            padding: 20px;
+        }
+        
+        h1 {
+            font-size: 2.8rem;
+            margin-bottom: 10px;
+            background: linear-gradient(to right, var(--secondary), var(--primary));
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            text-shadow: 0 2px 10px rgba(0,0,0,0.2);
+        }
+        
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.8;
+            max-width: 700px;
+            margin: 0 auto;
+        }
+        
+        .controls {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 30px;
+            flex-wrap: wrap;
+        }
+        
+        .global-control {
+            background: rgba(30, 30, 46, 0.7);
+            border-radius: 12px;
+            padding: 15px;
+            min-width: 180px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.3);
+        }
+        
+        .control-title {
+            text-align: center;
+            margin-bottom: 12px;
+            font-weight: 600;
+            color: var(--secondary);
+        }
+        
+        .knob-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 10px 0;
+        }
+        
+        .knob-label {
+            margin-bottom: 8px;
+            font-size: 0.9rem;
+            opacity: 0.9;
+        }
+        
+        .knob {
+            width: 60px;
+            height: 60px;
+            border-radius: 50%;
+            background: linear-gradient(145deg, #2d2d44, #1e1e2e);
+            border: 2px solid var(--primary);
+            position: relative;
+            cursor: pointer;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.4);
+            transition: transform 0.2s;
+        }
+        
+        .knob:hover {
+            transform: scale(1.05);
+        }
+        
+        .knob::before {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 4px;
+            height: 25px;
+            background: var(--light);
+            transform: translate(-50%, -50%) rotate(0deg);
+            border-radius: 2px;
+        }
+        
+        .transport-controls {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            margin-top: 20px;
+        }
+        
+        .btn {
+            padding: 12px 25px;
+            border: none;
+            border-radius: 8px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 1rem;
+            min-width: 120px;
+        }
+        
+        .btn-primary {
+            background: var(--primary);
+            color: white;
+        }
+        
+        .btn-secondary {
+            background: var(--secondary);
+            color: var(--dark);
+        }
+        
+        .btn-accent {
+            background: var(--accent);
+            color: white;
+        }
+        
+        .btn:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+        }
+        
+        .btn:active {
+            transform: translateY(0);
+        }
+        
+        .toys-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 25px;
+            margin-top: 20px;
+        }
+        
+        .toy {
+            background: rgba(30, 30, 46, 0.8);
+            border-radius: 16px;
+            padding: 25px;
+            box-shadow: 0 8px 30px rgba(0,0,0,0.4);
+            transition: transform 0.3s;
+            border: 1px solid rgba(138, 43, 226, 0.3);
+        }
+        
+        .toy:hover {
+            transform: translateY(-5px);
+            border-color: var(--primary);
+        }
+        
+        .toy-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding-bottom: 15px;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+        }
+        
+        .toy-title {
+            font-size: 1.5rem;
+            color: var(--secondary);
+        }
+        
+        .toy-icon {
+            font-size: 1.8rem;
+        }
+        
+        .toy-controls {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 15px;
+        }
+        
+        .pad-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 12px;
+            margin-top: 20px;
+        }
+        
+        .pad {
+            aspect-ratio: 1;
+            border-radius: 8px;
+            background: linear-gradient(145deg, #2d2d44, #1e1e2e);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            cursor: pointer;
+            transition: all 0.2s;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.3);
+            border: 2px solid transparent;
+        }
+        
+        .pad:hover {
+            transform: scale(1.05);
+        }
+        
+        .pad.active {
+            background: var(--primary);
+            box-shadow: 0 0 20px rgba(138, 43, 226, 0.7);
+            border-color: white;
+        }
+        
+        .status-bar {
+            margin-top: 30px;
+            text-align: center;
+            padding: 15px;
+            background: rgba(0,0,0,0.3);
+            border-radius: 10px;
+            font-size: 1.1rem;
+        }
+        
+        .recording-indicator {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            background: var(--accent);
+            border-radius: 50%;
+            margin-right: 10px;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.3; }
+            100% { opacity: 1; }
+        }
+        
+        footer {
+            text-align: center;
+            margin-top: 40px;
+            padding: 20px;
+            opacity: 0.7;
+            font-size: 0.9rem;
+        }
+        
+        @media (max-width: 768px) {
+            .toys-container {
+                grid-template-columns: 1fr;
+            }
+            
+            .controls {
+                flex-direction: column;
+                align-items: center;
+            }
+            
+            .global-control {
+                width: 100%;
+                max-width: 300px;
+            }
+        }
+    </style>
+</head>
+<body>
+    <header>
+        <h1>Drum & Bass Synth Toys</h1>
+        <p class="subtitle">5 unique instruments for live performance with recording capabilities. All sounds generated with Tone.js and Web Audio API.</p>
+    </header>
+    
+    <div class="controls">
+        <div class="global-control">
+            <div class="control-title">Tempo</div>
+            <div class="knob-container">
+                <div class="knob-label">BPM</div>
+                <div class="knob" id="tempoKnob" data-value="174" data-min="60" data-max="220"></div>
+                <div id="tempoValue">174</div>
+            </div>
+        </div>
+        
+        <div class="global-control">
+            <div class="control-title">Master FX</div>
+            <div class="knob-container">
+                <div class="knob-label">Reverb</div>
+                <div class="knob" id="reverbKnob" data-value="0.3" data-min="0" data-max="1"></div>
+                <div id="reverbValue">30%</div>
+            </div>
+            <div class="knob-container">
+                <div class="knob-label">Delay</div>
+                <div class="knob" id="delayKnob" data-value="0.2" data-min="0" data-max="1"></div>
+                <div id="delayValue">20%</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="transport-controls">
+        <button class="btn btn-primary" id="playBtn">Play</button>
+        <button class="btn btn-accent" id="recordBtn">Record</button>
+        <button class="btn btn-secondary" id="stopBtn">Stop</button>
+        <button class="btn btn-secondary" id="clearBtn">Clear Recording</button>
+    </div>
+    
+    <div class="toys-container">
+        <!-- Toy 1: Bass Machine -->
+        <div class="toy" id="bassMachine">
+            <div class="toy-header">
+                <div class="toy-title">Bass Machine</div>
+                <div class="toy-icon">🔊</div>
+            </div>
+            <div class="toy-controls">
+                <div class="knob-container">
+                    <div class="knob-label">Cutoff</div>
+                    <div class="knob" data-value="800" data-min="20" data-max="20000"></div>
+                    <div class="knob-value">800Hz</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Resonance</div>
+                    <div class="knob" data-value="3" data-min="0.1" data-max="20"></div>
+                    <div class="knob-value">3.0</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Distortion</div>
+                    <div class="knob" data-value="0.3" data-min="0" data-max="1"></div>
+                    <div class="knob-value">30%</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">LFO Rate</div>
+                    <div class="knob" data-value="4" data-min="0.1" data-max="20"></div>
+                    <div class="knob-value">4Hz</div>
+                </div>
+            </div>
+            <div class="pad-grid">
+                <div class="pad" data-note="C2">C2</div>
+                <div class="pad" data-note="D2">D2</div>
+                <div class="pad" data-note="E2">E2</div>
+                <div class="pad" data-note="F2">F2</div>
+                <div class="pad" data-note="G2">G2</div>
+                <div class="pad" data-note="A2">A2</div>
+                <div class="pad" data-note="B2">B2</div>
+                <div class="pad" data-note="C3">C3</div>
+            </div>
+        </div>
+        
+        <!-- Toy 2: Stutter FX -->
+        <div class="toy" id="stutterFx">
+            <div class="toy-header">
+                <div class="toy-title">Stutter FX</div>
+                <div class="toy-icon">🌀</div>
+            </div>
+            <div class="toy-controls">
+                <div class="knob-container">
+                    <div class="knob-label">Rate</div>
+                    <div class="knob" data-value="8" data-min="1" data-max="32"></div>
+                    <div class="knob-value">1/8</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Depth</div>
+                    <div class="knob" data-value="0.7" data-min="0" data-max="1"></div>
+                    <div class="knob-value">70%</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Feedback</div>
+                    <div class="knob" data-value="0.4" data-min="0" data-max="1"></div>
+                    <div class="knob-value">40%</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Dry/Wet</div>
+                    <div class="knob" data-value="0.6" data-min="0" data-max="1"></div>
+                    <div class="knob-value">60%</div>
+                </div>
+            </div>
+            <div class="pad-grid">
+                <div class="pad" data-effect="stutter">Stutter</div>
+                <div class="pad" data-effect="reverse">Reverse</div>
+                <div class="pad" data-effect="freeze">Freeze</div>
+                <div class="pad" data-effect="glitch">Glitch</div>
+                <div class="pad" data-effect="pitch-up">Pitch+</div>
+                <div class="pad" data-effect="pitch-down">Pitch-</div>
+                <div class="pad" data-effect="filter-sweep">Sweep</div>
+                <div class="pad" data-effect="noise">Noise</div>
+            </div>
+        </div>
+        
+        <!-- Toy 3: Percussion Synth -->
+        <div class="toy" id="percussionSynth">
+            <div class="toy-header">
+                <div class="toy-title">Percussion Synth</div>
+                <div class="toy-icon">🥁</div>
+            </div>
+            <div class="toy-controls">
+                <div class="knob-container">
+                    <div class="knob-label">Tone</div>
+                    <div class="knob" data-value="0.5" data-min="0" data-max="1"></div>
+                    <div class="knob-value">50%</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Decay</div>
+                    <div class="knob" data-value="0.3" data-min="0.01" data-max="2"></div>
+                    <div class="knob-value">0.3s</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Pitch</div>
+                    <div class="knob" data-value="0" data-min="-12" data-max="12"></div>
+                    <div class="knob-value">0</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Noise</div>
+                    <div class="knob" data-value="0.4" data-min="0" data-max="1"></div>
+                    <div class="knob-value">40%</div>
+                </div>
+            </div>
+            <div class="pad-grid">
+                <div class="pad" data-perc="kick">Kick</div>
+                <div class="pad" data-perc="snare">Snare</div>
+                <div class="pad" data-perc="hihat">Hi-Hat</div>
+                <div class="pad" data-perc="clap">Clap</div>
+                <div class="pad" data-perc="tom">Tom</div>
+                <div class="pad" data-perc="rim">Rim</div>
+                <div class="pad" data-perc="cowbell">Cowbell</div>
+                <div class="pad" data-perc="shaker">Shaker</div>
+            </div>
+        </div>
+        
+        <!-- Toy 4: Lead Synth -->
+        <div class="toy" id="leadSynth">
+            <div class="toy-header">
+                <div class="toy-title">Lead Synth</div>
+                <div class="toy-icon">🎹</div>
+            </div>
+            <div class="toy-controls">
+                <div class="knob-container">
+                    <div class="knob-label">Waveform</div>
+                    <div class="knob" data-value="0" data-min="0" data-max="3"></div>
+                    <div class="knob-value">Saw</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Portamento</div>
+                    <div class="knob" data-value="0.02" data-min="0" data-max="0.5"></div>
+                    <div class="knob-value">20ms</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Vibrato</div>
+                    <div class="knob" data-value="0.3" data-min="0" data-max="1"></div>
+                    <div class="knob-value">30%</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Octave</div>
+                    <div class="knob" data-value="0" data-min="-2" data-max="2"></div>
+                    <div class="knob-value">0</div>
+                </div>
+            </div>
+            <div class="pad-grid">
+                <div class="pad" data-note="C4">C4</div>
+                <div class="pad" data-note="D4">D4</div>
+                <div class="pad" data-note="E4">E4</div>
+                <div class="pad" data-note="F4">F4</div>
+                <div class="pad" data-note="G4">G4</div>
+                <div class="pad" data-note="A4">A4</div>
+                <div class="pad" data-note="B4">B4</div>
+                <div class="pad" data-note="C5">C5</div>
+            </div>
+        </div>
+        
+        <!-- Toy 5: Texture Generator -->
+        <div class="toy" id="textureGen">
+            <div class="toy-header">
+                <div class="toy-title">Texture Generator</div>
+                <div class="toy-icon">🌌</div>
+            </div>
+            <div class="toy-controls">
+                <div class="knob-container">
+                    <div class="knob-label">Density</div>
+                    <div class="knob" data-value="0.5" data-min="0" data-max="1"></div>
+                    <div class="knob-value">50%</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Grain Size</div>
+                    <div class="knob" data-value="0.1" data-min="0.01" data-max="0.5"></div>
+                    <div class="knob-value">100ms</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Spread</div>
+                    <div class="knob" data-value="0.3" data-min="0" data-max="1"></div>
+                    <div class="knob-value">30%</div>
+                </div>
+                <div class="knob-container">
+                    <div class="knob-label">Motion</div>
+                    <div class="knob" data-value="0.4" data-min="0" data-max="1"></div>
+                    <div class="knob-value">40%</div>
+                </div>
+            </div>
+            <div class="pad-grid">
+                <div class="pad" data-texture="atmos">Atmos</div>
+                <div class="pad" data-texture="pads">Pads</div>
+                <div class="pad" data-texture="riser">Riser</div>
+                <div class="pad" data-texture="impact">Impact</div>
+                <div class="pad" data-texture="swell">Swell</div>
+                <div class="pad" data-texture="drones">Drones</div>
+                <div class="pad" data-texture="noise">Noise</div>
+                <div class="pad" data-texture="silence">Silence</div>
+            </div>
+        </div>
+    </div>
+    
+    <div class="status-bar">
+        <span id="statusText">Ready to jam! Press Play to start.</span>
+    </div>
+    
+    <footer>
+        <p>Drum & Bass Synth Toys • Built with Tone.js and Web Audio API • All sounds generated in real-time</p>
+    </footer>
+
+    <script>
+        // Initialize Tone.js
+        Tone.context.latencyHint = 'interactive';
+        
+        // Global variables
+        let isRecording = false;
+        let recordedEvents = [];
+        let recordingStartTime = 0;
+        let currentTempo = 174;
+        let masterReverb, masterDelay;
+        
+        // Initialize master effects
+        function initMasterEffects() {
+            masterReverb = new Tone.Reverb(1.5).toDestination();
+            masterDelay = new Tone.FeedbackDelay("8n", 0.5).toDestination();
+            
+            // Connect to master output
+            const masterOutput = new Tone.Gain().toDestination();
+            masterReverb.connect(masterOutput);
+            masterDelay.connect(masterOutput);
+        }
+        
+        // Initialize instruments
+        const instruments = {
+            bass: null,
+            percussion: null,
+            lead: null,
+            texture: null,
+            stutter: null
+        };
+        
+        function initInstruments() {
+            // Bass Machine
+            instruments.bass = new Tone.Synth({
+                oscillator: { type: 'sawtooth' },
+                envelope: { attack: 0.01, decay: 0.2, sustain: 0.8, release: 0.3 }
+            }).connect(masterReverb);
+            
+            // Percussion Synth
+            instruments.percussion = {
+                kick: new Tone.MembraneSynth().connect(masterDelay),
+                snare: new Tone.NoiseSynth().connect(masterDelay),
+                hihat: new Tone.MetalSynth().connect(masterDelay),
+                clap: new Tone.Sampler({
+                    urls: {
+                        C1: "clap.mp3"
+                    },
+                    baseUrl: "https://tonejs.github.io/audio/drum-samples/"
+                }).connect(masterDelay),
+                tom: new Tone.Synth().connect(masterDelay),
+                rim: new Tone.Synth().connect(masterDelay),
+                cowbell: new Tone.Synth().connect(masterDelay),
+                shaker: new Tone.NoiseSynth().connect(masterDelay)
+            };
+            
+            // Lead Synth
+            instruments.lead = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: 'sawtooth' },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.7, release: 0.2 },
+                portamento: 0.02
+            }).connect(masterReverb);
+            
+            // Texture Generator (simplified)
+            instruments.texture = {
+                atmos: new Tone.NoiseSynth({ noise: { type: 'pink' } }).connect(masterReverb),
+                pads: new Tone.Synth({ oscillator: { type: 'sine' } }).connect(masterReverb),
+                riser: new Tone.FMSynth().connect(masterReverb),
+                impact: new Tone.MembraneSynth().connect(masterReverb),
+                swell: new Tone.Synth().connect(masterReverb),
+                drones: new Tone.Synth({ oscillator: { type: 'sine' } }).connect(masterReverb),
+                noise: new Tone.NoiseSynth().connect(masterReverb)
+            };
+            
+            // Stutter FX (using Tone.js effects)
+            instruments.stutter = {
+                stutter: new Tone.AutoFilter({ frequency: 8, type: 'square' }).connect(masterDelay),
+                reverse: new Tone.PingPongDelay("16n").connect(masterDelay),
+                freeze: new Tone.Reverb(3).connect(masterDelay),
+                glitch: new Tone.BitCrusher(4).connect(masterDelay),
+                'pitch-up': new Tone.PitchShift(2).connect(masterDelay),
+                'pitch-down': new Tone.PitchShift(-2).connect(masterDelay),
+                'filter-sweep': new Tone.AutoFilter({ frequency: 1, type: 'sine' }).connect(masterDelay),
+                noise: new Tone.NoiseSynth().connect(masterDelay)
+            };
+        }
+        
+        // Knob interaction
+        function setupKnobs() {
+            const knobs = document.querySelectorAll('.knob');
+            knobs.forEach(knob => {
+                let isDragging = false;
+                let startY = 0;
+                let startValue = parseFloat(knob.dataset.value);
+                const min = parseFloat(knob.dataset.min);
+                const max = parseFloat(knob.dataset.max);
+                
+                knob.addEventListener('mousedown', (e) => {
+                    isDragging = true;
+                    startY = e.clientY;
+                    knob.style.transform = 'scale(1.1)';
+                });
+                
+                knob.addEventListener('mousemove', (e) => {
+                    if (!isDragging) return;
+                    
+                    const deltaY = startY - e.clientY;
+                    const range = max - min;
+                    const newValue = Math.min(max, Math.max(min, startValue + (deltaY * range / 200)));
+                    
+                    knob.dataset.value = newValue;
+                    updateKnobDisplay(knob, newValue);
+                    
+                    // Handle specific knobs
+                    if (knob.id === 'tempoKnob') {
+                        currentTempo = newValue;
+                        Tone.Transport.bpm.value = newValue;
+                        document.getElementById('tempoValue').textContent = Math.round(newValue);
+                    } else if (knob.id === 'reverbKnob') {
+                        masterReverb.wet.value = newValue;
+                        document.getElementById('reverbValue').textContent = Math.round(newValue * 100) + '%';
+                    } else if (knob.id === 'delayKnob') {
+                        masterDelay.wet.value = newValue;
+                        document.getElementById('delayValue').textContent = Math.round(newValue * 100) + '%';
+                    }
+                });
+                
+                const stopDrag = () => {
+                    if (isDragging) {
+                        isDragging = false;
+                        knob.style.transform = '';
+                        recordEvent('knob', {
+                            id: knob.id || knob.closest('.toy').id,
+                            value: parseFloat(knob.dataset.value)
+                        });
+                    }
+                };
+                
+                window.addEventListener('mouseup', stopDrag);
+                window.addEventListener('mouseleave', stopDrag);
+            });
+        }
+        
+        function updateKnobDisplay(knob, value) {
+            const min = parseFloat(knob.dataset.min);
+            const max = parseFloat(knob.dataset.max);
+            const angle = ((value - min) / (max - min)) * 240 - 120;
+            knob.style.setProperty('--angle', angle + 'deg');
+            knob.style.transform = `rotate(${angle}deg)`;
+            
+            // Update display value
+            const valueDisplay = knob.nextElementSibling;
+            if (valueDisplay) {
+                if (knob.closest('#bassMachine')) {
+                    if (knob.querySelector('.knob-label').textContent.includes('Cutoff')) {
+                        valueDisplay.textContent = Math.round(value) + 'Hz';
+                    } else if (knob.querySelector('.knob-label').textContent.includes('LFO')) {
+                        valueDisplay.textContent = value.toFixed(1) + 'Hz';
+                    } else {
+                        valueDisplay.textContent = value.toFixed(1);
+                    }
+                } else if (knob.closest('#percussionSynth')) {
+                    if (knob.querySelector('.knob-label').textContent.includes('Decay')) {
+                        valueDisplay.textContent = value.toFixed(2) + 's';
+                    } else {
+                        valueDisplay.textContent = Math.round(value) + (knob.querySelector('.knob-label').textContent.includes('Pitch') ? '' : '%');
+                    }
+                } else if (knob.closest('#leadSynth')) {
+                    if (knob.querySelector('.knob-label').textContent.includes('Waveform')) {
+                        const waveforms = ['Saw', 'Square', 'Triangle', 'Sine'];
+                        valueDisplay.textContent = waveforms[Math.round(value)];
+                    } else if (knob.querySelector('.knob-label').textContent.includes('Portamento')) {
+                        valueDisplay.textContent = Math.round(value * 1000) + 'ms';
+                    } else {
+                        valueDisplay.textContent = Math.round(value);
+                    }
+                } else if (knob.closest('#textureGen')) {
+                    if (knob.querySelector('.knob-label').textContent.includes('Grain')) {
+                        valueDisplay.textContent = Math.round(value * 1000) + 'ms';
+                    } else {
+                        valueDisplay.textContent = Math.round(value * 100) + '%';
+                    }
+                } else if (knob.closest('#stutterFx')) {
+                    if (knob.querySelector('.knob-label').textContent.includes('Rate')) {
+                        valueDisplay.textContent = '1/' + Math.round(value);
+                    } else {
+                        valueDisplay.textContent = Math.round(value * 100) + '%';
+                    }
+                }
+            }
+        }
+        
+        // Pad interaction
+        function setupPads() {
+            const pads = document.querySelectorAll('.pad');
+            pads.forEach(pad => {
+                pad.addEventListener('mousedown', () => {
+                    pad.classList.add('active');
+                    triggerPad(pad);
+                });
+                
+                pad.addEventListener('mouseup', () => {
+                    pad.classList.remove('active');
+                });
+                
+                pad.addEventListener('mouseleave', () => {
+                    pad.classList.remove('active');
+                });
+            });
+        }
+        
+        function triggerPad(pad) {
+            const toyId = pad.closest('.toy').id;
+            const time = Tone.now();
+            
+            if (toyId === 'bassMachine') {
+                const note = pad.dataset.note;
+                instruments.bass.triggerAttackRelease(note, "8n", time);
+                recordEvent('note', { instrument: 'bass', note, time: Tone.now() });
+            } 
+            else if (toyId === 'percussionSynth') {
+                const perc = pad.dataset.perc;
+                if (perc === 'kick') {
+                    instruments.percussion.kick.triggerAttackRelease("C2", "8n", time);
+                } else if (perc === 'snare') {
+                    instruments.percussion.snare.triggerAttackRelease("8n", time);
+                } else if (perc === 'hihat') {
+                    instruments.percussion.hihat.triggerAttackRelease("C5", "16n", time);
+                } else if (perc === 'clap') {
+                    instruments.percussion.clap.triggerAttack("C1", time);
+                } else if (perc === 'tom') {
+                    instruments.percussion.tom.triggerAttackRelease("F2", "8n", time);
+                } else if (perc === 'rim') {
+                    instruments.percussion.rim.triggerAttackRelease("G3", "16n", time);
+                } else if (perc === 'cowbell') {
+                    instruments.percussion.cowbell.triggerAttackRelease("E4", "16n", time);
+                } else if (perc === 'shaker') {
+                    instruments.percussion.shaker.triggerAttackRelease("16n", time);
+                }
+                recordEvent('percussion', { type: perc, time: Tone.now() });
+            }
+            else if (toyId === 'leadSynth') {
+                const note = pad.dataset.note;
+                instruments.lead.triggerAttackRelease(note, "8n", time);
+                recordEvent('note', { instrument: 'lead', note, time: Tone.now() });
+            }
+            else if (toyId === 'textureGen') {
+                const texture = pad.dataset.texture;
+                if (texture !== 'silence') {
+                    instruments.texture[texture].triggerAttackRelease("4n", time);
+                }
+                recordEvent('texture', { type: texture, time: Tone.now() });
+            }
+            else if (toyId === 'stutterFx') {
+                const effect = pad.dataset.effect;
+                // In a real implementation, this would apply the effect to the master output
+                // For demo purposes, we'll just trigger a sound
+                instruments.stutter[effect].wet.value = 0.7;
+                setTimeout(() => {
+                    instruments.stutter[effect].wet.value = 0;
+                }, 300);
+                recordEvent('effect', { type: effect, time: Tone.now() });
+            }
+        }
+        
+        // Recording functionality
+        function recordEvent(type, data) {
+            if (isRecording) {
+                const elapsedTime = Tone.now() - recordingStartTime;
+                recordedEvents.push({
+                    type,
+                    data,
+                    time: elapsedTime
+                });
+            }
+        }
+        
+        function startRecording() {
+            if (isRecording) return;
+            isRecording = true;
+            recordingStartTime = Tone.now();
+            recordedEvents = [];
+            document.getElementById('statusText').innerHTML = '<span class="recording-indicator"></span> Recording...';
+            document.getElementById('recordBtn').textContent = 'Stop Recording';
+        }
+        
+        function stopRecording() {
+            if (!isRecording) return;
+            isRecording = false;
+            document.getElementById('statusText').textContent = `Recording saved (${recordedEvents.length} events)`;
+            document.getElementById('recordBtn').textContent = 'Record';
+        }
+        
+        function clearRecording() {
+            recordedEvents = [];
+            document.getElementById('statusText').textContent = 'Recording cleared';
+        }
+        
+        function playRecording() {
+            if (recordedEvents.length === 0) {
+                document.getElementById('statusText').textContent = 'No recording to play';
+                return;
+            }
+            
+            // Schedule all events
+            recordedEvents.forEach(event => {
+                const scheduledTime = Tone.now() + event.time;
+                
+                if (event.type === 'note') {
+                    if (event.data.instrument === 'bass') {
+                        instruments.bass.triggerAttackRelease(event.data.note, "8n", scheduledTime);
+                    } else if (event.data.instrument === 'lead') {
+                        instruments.lead.triggerAttackRelease(event.data.note, "8n", scheduledTime);
+                    }
+                } else if (event.type === 'percussion') {
+                    // Trigger percussion sounds as in triggerPad
+                } else if (event.type === 'texture') {
+                    if (event.data.type !== 'silence') {
+                        instruments.texture[event.data.type].triggerAttackRelease("4n", scheduledTime);
+                    }
+                } else if (event.type === 'effect') {
+                    // Apply effect
+                } else if (event.type === 'knob') {
+                    // Update knob values
+                }
+            });
+            
+            document.getElementById('statusText').textContent = 'Playing recording...';
+        }
+        
+        // Transport controls
+        function setupTransport() {
+            document.getElementById('playBtn').addEventListener('click', () => {
+                if (Tone.Transport.state !== 'started') {
+                    Tone.Transport.start();
+                    document.getElementById('statusText').textContent = 'Playing...';
+                } else {
+                    playRecording();
+                }
+            });
+            
+            document.getElementById('recordBtn').addEventListener('click', () => {
+                if (isRecording) {
+                    stopRecording();
+                } else {
+                    startRecording();
+                }
+            });
+            
+            document.getElementById('stopBtn').addEventListener('click', () => {
+                Tone.Transport.stop();
+                document.getElementById('statusText').textContent = 'Stopped';
+            });
+            
+            document.getElementById('clearBtn').addEventListener('click', () => {
+                clearRecording();
+            });
+        }
+        
+        // Initialize everything
+        window.addEventListener('load', async () => {
+            // Wait for audio context to be ready
+            await Tone.start();
+            
+            initMasterEffects();
+            initInstruments();
+            setupKnobs();
+            setupPads();
+            setupTransport();
+            
+            // Set initial tempo
+            Tone.Transport.bpm.value = currentTempo;
+            
+            // Initialize knob displays
+            document.querySelectorAll('.knob').forEach(knob => {
+                updateKnobDisplay(knob, parseFloat(knob.dataset.value));
+            });
+            
+            document.getElementById('statusText').textContent = 'Ready to jam! Press Play to start.';
+        });
+    </script>
+</body>
+</html>
