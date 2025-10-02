@@ -1,0 +1,1052 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TB-303 Style Synthesizer</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.min.js"></script>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            color: #fff;
+            padding: 20px;
+        }
+        
+        .synth-container {
+            background: linear-gradient(145deg, #3a3a3a, #2a2a2a);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+            max-width: 700px;
+            width: 100%;
+        }
+        
+        h1 {
+            text-align: center;
+            margin-bottom: 20px;
+            font-size: 28px;
+            color: #ff6b35;
+            text-shadow: 0 0 10px rgba(255, 107, 53, 0.5);
+        }
+        
+        .info-toggle {
+            text-align: center;
+            margin-bottom: 20px;
+        }
+        
+        .info-btn {
+            background: linear-gradient(145deg, #4a4a4a, #3a3a3a);
+            border: 2px solid #555;
+            border-radius: 6px;
+            padding: 8px 16px;
+            color: #aaa;
+            font-size: 12px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .info-btn:hover {
+            background: linear-gradient(145deg, #5a5a5a, #4a4a4a);
+            border-color: #6bb6ff;
+            color: #6bb6ff;
+        }
+        
+        .info-btn.active {
+            background: #6bb6ff;
+            color: #000;
+            border-color: #6bb6ff;
+            box-shadow: 0 0 10px rgba(107, 182, 255, 0.4);
+        }
+        
+        .info-panel {
+            background: rgba(0, 0, 0, 0.4);
+            border: 2px solid rgba(107, 182, 255, 0.3);
+            border-radius: 10px;
+            padding: 25px;
+            margin-bottom: 25px;
+            display: none;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        
+        .info-panel.show {
+            display: block;
+            animation: slideDown 0.3s ease;
+        }
+        
+        @keyframes slideDown {
+            from {
+                opacity: 0;
+                transform: translateY(-10px);
+            }
+            to {
+                opacity: 1;
+                transform: translateY(0);
+            }
+        }
+        
+        .info-panel h2 {
+            color: #6bb6ff;
+            font-size: 18px;
+            margin-bottom: 15px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .info-panel h3 {
+            color: #ff6b35;
+            font-size: 16px;
+            margin-top: 20px;
+            margin-bottom: 10px;
+        }
+        
+        .info-panel p {
+            color: #ccc;
+            line-height: 1.6;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        
+        .info-panel ol, .info-panel ul {
+            color: #ccc;
+            line-height: 1.8;
+            margin-left: 20px;
+            margin-bottom: 15px;
+        }
+        
+        .info-panel li {
+            margin-bottom: 8px;
+        }
+        
+        .info-panel strong {
+            color: #ff6b35;
+        }
+        
+        .info-panel code {
+            background: rgba(0, 0, 0, 0.4);
+            padding: 2px 6px;
+            border-radius: 3px;
+            color: #6bb6ff;
+            font-family: 'Courier New', monospace;
+        }
+        
+        .platform-section {
+            background: rgba(0, 0, 0, 0.2);
+            padding: 15px;
+            border-radius: 6px;
+            margin-bottom: 15px;
+            border-left: 3px solid #6bb6ff;
+        }
+        
+        .troubleshooting {
+            background: rgba(255, 107, 53, 0.1);
+            padding: 15px;
+            border-radius: 6px;
+            border-left: 3px solid #ff6b35;
+            margin-top: 20px;
+        }
+        
+        .tempo-section {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(255, 107, 53, 0.3);
+        }
+        
+        .clock-mode {
+            display: flex;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .clock-btn {
+            background: linear-gradient(145deg, #4a4a4a, #3a3a3a);
+            border: 2px solid #555;
+            border-radius: 6px;
+            padding: 10px 20px;
+            color: #aaa;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        .clock-btn:hover {
+            background: linear-gradient(145deg, #5a5a5a, #4a4a4a);
+            border-color: #ff6b35;
+        }
+        
+        .clock-btn.active {
+            background: #ff6b35;
+            color: #000;
+            border-color: #ff6b35;
+            box-shadow: 0 0 20px rgba(255, 107, 53, 0.6);
+            font-weight: bold;
+        }
+        
+        .link-status {
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 6px;
+        }
+        
+        .link-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background: #555;
+            transition: all 0.3s;
+        }
+        
+        .link-indicator.connected {
+            background: #4ade80;
+            box-shadow: 0 0 10px rgba(74, 222, 128, 0.6);
+            animation: pulse 2s infinite;
+        }
+        
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.5; }
+        }
+        
+        .link-info {
+            font-size: 12px;
+            color: #aaa;
+        }
+        
+        .link-info.connected {
+            color: #4ade80;
+        }
+        
+        .bpm-display {
+            text-align: center;
+            font-size: 48px;
+            color: #ff6b35;
+            font-weight: bold;
+            margin-bottom: 15px;
+            text-shadow: 0 0 20px rgba(255, 107, 53, 0.6);
+        }
+        
+        .bpm-display.link-mode {
+            color: #4ade80;
+            text-shadow: 0 0 20px rgba(74, 222, 128, 0.6);
+        }
+        
+        .control-group {
+            margin-bottom: 25px;
+        }
+        
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-size: 14px;
+            color: #aaa;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+        }
+        
+        input[type="range"] {
+            width: 100%;
+            height: 6px;
+            border-radius: 3px;
+            background: #1a1a1a;
+            outline: none;
+            -webkit-appearance: none;
+        }
+        
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ff6b35;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255, 107, 53, 0.5);
+        }
+        
+        input[type="range"]::-moz-range-thumb {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            background: #ff6b35;
+            cursor: pointer;
+            border: none;
+            box-shadow: 0 0 10px rgba(255, 107, 53, 0.5);
+        }
+        
+        input[type="range"]:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+        }
+        
+        .value-display {
+            display: inline-block;
+            float: right;
+            color: #ff6b35;
+            font-weight: bold;
+        }
+        
+        .lfo-section {
+            background: rgba(0, 0, 0, 0.3);
+            padding: 20px;
+            border-radius: 10px;
+            margin-bottom: 25px;
+            border: 1px solid rgba(107, 182, 255, 0.3);
+        }
+        
+        .lfo-title {
+            color: #6bb6ff;
+            margin-bottom: 15px;
+            font-size: 16px;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+        }
+        
+        .lfo-buttons {
+            display: grid;
+            grid-template-columns: repeat(6, 1fr);
+            gap: 8px;
+            margin-top: 15px;
+        }
+        
+        .lfo-btn {
+            background: linear-gradient(145deg, #4a4a4a, #3a3a3a);
+            border: 2px solid #555;
+            border-radius: 6px;
+            padding: 12px 8px;
+            color: #aaa;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        
+        .lfo-btn:hover {
+            background: linear-gradient(145deg, #5a5a5a, #4a4a4a);
+            border-color: #6bb6ff;
+        }
+        
+        .lfo-btn.active {
+            background: #6bb6ff;
+            color: #000;
+            border-color: #6bb6ff;
+            box-shadow: 0 0 20px rgba(107, 182, 255, 0.6);
+            font-weight: bold;
+        }
+        
+        .keyboard {
+            display: grid;
+            grid-template-columns: repeat(8, 1fr);
+            gap: 8px;
+            margin-top: 30px;
+        }
+        
+        .key {
+            background: linear-gradient(145deg, #4a4a4a, #3a3a3a);
+            border: none;
+            border-radius: 8px;
+            padding: 20px 10px;
+            color: #fff;
+            font-size: 14px;
+            cursor: pointer;
+            transition: all 0.1s;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+        }
+        
+        .key:hover {
+            background: linear-gradient(145deg, #5a5a5a, #4a4a4a);
+            transform: translateY(-2px);
+        }
+        
+        .key:active, .key.active {
+            background: #ff6b35;
+            box-shadow: 0 0 20px rgba(255, 107, 53, 0.8);
+            transform: translateY(0);
+        }
+        
+        .controls-row {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .toggle-container {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        .toggle {
+            position: relative;
+            display: inline-block;
+            width: 50px;
+            height: 26px;
+        }
+
+        .toggle input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+
+        .slider {
+            position: absolute;
+            cursor: pointer;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: #555;
+            transition: .3s;
+            border-radius: 26px;
+        }
+
+        .slider:before {
+            position: absolute;
+            content: "";
+            height: 18px;
+            width: 18px;
+            left: 4px;
+            bottom: 4px;
+            background-color: white;
+            transition: .3s;
+            border-radius: 50%;
+        }
+
+        input:checked + .slider {
+            background-color: #6bb6ff;
+            box-shadow: 0 0 10px rgba(107, 182, 255, 0.5);
+        }
+
+        input:checked + .slider:before {
+            transform: translateX(24px);
+        }
+    </style>
+</head>
+<body>
+    <div class="synth-container">
+        <h1>TB-303 ACID SYNTH</h1>
+        
+        <div class="info-toggle">
+            <button class="info-btn" id="info-toggle-btn">ℹ️ MIDI Sync Setup Guide</button>
+        </div>
+        
+        <div class="info-panel" id="info-panel">
+            <h2>🎛️ How to Sync with Your DAW</h2>
+            
+            <p>This synth can sync to your DAW's tempo using <strong>MIDI Clock</strong>. Follow the steps below for your operating system:</p>
+            
+            <div class="platform-section">
+                <h3>🍎 macOS Setup</h3>
+                <ol>
+                    <li><strong>Enable IAC Driver (Built-in Virtual MIDI)</strong>
+                        <ul>
+                            <li>Open <code>Audio MIDI Setup</code> (in Applications/Utilities)</li>
+                            <li>Go to <code>Window → Show MIDI Studio</code></li>
+                            <li>Double-click <code>IAC Driver</code></li>
+                            <li>Check <code>Device is online</code></li>
+                            <li>Click <code>Apply</code></li>
+                        </ul>
+                    </li>
+                    <li><strong>Configure Ableton Live</strong>
+                        <ul>
+                            <li>Go to <code>Preferences → Link, Tempo & MIDI</code></li>
+                            <li>Under MIDI Ports, find <code>IAC Driver Bus 1</code></li>
+                            <li>Enable <code>Sync</code> in the Output column</li>
+                            <li>Make sure <code>Sync</code> is enabled in the Track column</li>
+                        </ul>
+                    </li>
+                    <li><strong>In This Synth</strong>
+                        <ul>
+                            <li>Click the <code>MIDI Clock</code> button above</li>
+                            <li>Grant MIDI access when prompted by your browser</li>
+                            <li>Start playback in Ableton</li>
+                            <li>You should see "Synced: IAC Driver Bus 1"</li>
+                        </ul>
+                    </li>
+                </ol>
+            </div>
+            
+            <div class="platform-section">
+                <h3>🪟 Windows Setup</h3>
+                <ol>
+                    <li><strong>Install loopMIDI (Virtual MIDI Driver)</strong>
+                        <ul>
+                            <li>Download from <a href="https://www.tobias-erichsen.de/software/loopmidi.html" target="_blank" style="color: #6bb6ff;">tobias-erichsen.de</a></li>
+                            <li>Install and run loopMIDI</li>
+                            <li>Click the <code>+</code> button to create a virtual port</li>
+                            <li>Name it something like "Browser Sync"</li>
+                        </ul>
+                    </li>
+                    <li><strong>Configure Ableton Live</strong>
+                        <ul>
+                            <li>Go to <code>Options → Preferences → Link, Tempo & MIDI</code></li>
+                            <li>Under MIDI Ports, find your loopMIDI port</li>
+                            <li>Enable <code>Sync</code> in the Output column</li>
+                            <li>Enable <code>Sync</code> in the Track column</li>
+                        </ul>
+                    </li>
+                    <li><strong>In This Synth</strong>
+                        <ul>
+                            <li>Click the <code>MIDI Clock</code> button above</li>
+                            <li>Grant MIDI access when prompted by your browser</li>
+                            <li>Start playback in Ableton</li>
+                            <li>You should see "Synced: [Your Port Name]"</li>
+                        </ul>
+                    </li>
+                </ol>
+            </div>
+            
+            <h3>🎹 Other DAWs</h3>
+            <p>This works with <strong>any DAW</strong> that can send MIDI Clock:</p>
+            <ul>
+                <li><strong>Logic Pro:</strong> File → Project Settings → Synchronization → Enable "MIDI Clock" output</li>
+                <li><strong>FL Studio:</strong> Options → MIDI Settings → Enable clock output on your virtual MIDI port</li>
+                <li><strong>Bitwig:</strong> Settings → Synchronization → Enable MIDI Clock Out</li>
+                <li><strong>Reaper:</strong> Preferences → MIDI Devices → Enable "Send clock" for your virtual port</li>
+            </ul>
+
+                        <h3>🔗 Why Not Ableton Link?</h3>
+            <p>You may notice that this synth does <strong>not</strong> support <strong>Ableton Link</strong>. That’s because Link requires
+            <em>direct access to your local network clock</em>, which browsers intentionally restrict for security reasons.
+            While native desktop apps can freely use Link to share tempo across devices on Wi-Fi or LAN, browsers run inside
+            a sandbox and cannot access the same networking layer in real-time. </p>
+
+            <p>Instead, browser-based instruments rely on <strong>Web MIDI + virtual MIDI drivers</strong> to receive timing
+            information. This allows synchronization, but it’s limited to <em>MIDI Clock</em> rather than Link’s
+            peer-to-peer protocol. </p>
+
+            <p>In short: <strong>Link won’t work in a browser</strong>—use MIDI Clock for reliable sync.</p>
+
+            
+            <div class="troubleshooting">
+                <h3>⚠️ Troubleshooting</h3>
+                <p><strong>No MIDI devices found:</strong></p>
+                <ul>
+                    <li>Make sure your virtual MIDI driver is installed and running</li>
+                    <li>Refresh the browser page after setting up the virtual MIDI port</li>
+                    <li>Check that your browser has MIDI permissions</li>
+                </ul>
+                <p><strong>Connected but not syncing:</strong></p>
+                <ul>
+                    <li>Make sure your DAW is playing (not just armed)</li>
+                    <li>Verify MIDI Clock output is enabled in your DAW's MIDI settings</li>
+                    <li>Check that "Sync" is enabled, not just "Track" or "Remote"</li>
+                </ul>
+                <p><strong>Browser compatibility:</strong></p>
+                <ul>
+                    <li>Chrome, Edge, and Opera support Web MIDI</li>
+                    <li>Firefox and Safari require additional setup or don't support Web MIDI</li>
+                    <li>Use Chrome-based browsers for best results</li>
+                </ul>
+            </div>
+        </div>
+        
+        <div class="tempo-section">
+            <div class="clock-mode">
+                <button class="clock-btn active" data-mode="internal">Internal Clock</button>
+                <button class="clock-btn" data-mode="midi">MIDI Clock</button>
+            </div>
+            
+            <div class="link-status" id="midi-status" style="display: none;">
+                <div class="link-indicator" id="midi-indicator"></div>
+                <div class="link-info" id="midi-info">MIDI: No device connected</div>
+            </div>
+            
+            <div class="bpm-display" id="bpm-display">120</div>
+            <div class="control-group" style="margin-bottom: 0;">
+                <label>Master Tempo (BPM)</label>
+                <input type="range" id="bpm" min="60" max="180" value="120" step="1">
+            </div>
+        </div>
+
+        <div class="lfo-section">
+            <div class="lfo-title">LFO - Tempo Sync</div>
+            
+            <div class="toggle-container">
+                <label style="margin: 0;">LFO Enable</label>
+                <label class="toggle">
+                    <input type="checkbox" id="lfo-enable">
+                    <span class="slider"></span>
+                </label>
+            </div>
+
+            <div class="control-group">
+                <label>
+                    LFO Depth
+                    <span class="value-display" id="lfo-depth-val">500 Hz</span>
+                </label>
+                <input type="range" id="lfo-depth" min="0" max="2000" value="500" step="10">
+            </div>
+
+            <div class="lfo-buttons">
+                <button class="lfo-btn" data-rate="4">1/16</button>
+                <button class="lfo-btn" data-rate="2">1/8</button>
+                <button class="lfo-btn active" data-rate="1">1/4</button>
+                <button class="lfo-btn" data-rate="0.5">1/2</button>
+                <button class="lfo-btn" data-rate="0.25">1 bar</button>
+                <button class="lfo-btn" data-rate="0.125">2 bar</button>
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>
+                Cutoff Frequency
+                <span class="value-display" id="cutoff-val">1000 Hz</span>
+            </label>
+            <input type="range" id="cutoff" min="100" max="5000" value="1000" step="10">
+        </div>
+        
+        <div class="control-group">
+            <label>
+                Resonance
+                <span class="value-display" id="resonance-val">10</span>
+            </label>
+            <input type="range" id="resonance" min="0" max="30" value="10" step="0.5">
+        </div>
+        
+        <div class="control-group">
+            <label>
+                Envelope Modulation
+                <span class="value-display" id="envmod-val">2000</span>
+            </label>
+            <input type="range" id="envmod" min="0" max="5000" value="2000" step="10">
+        </div>
+        
+        <div class="controls-row">
+            <div class="control-group">
+                <label>
+                    Decay
+                    <span class="value-display" id="decay-val">0.2s</span>
+                </label>
+                <input type="range" id="decay" min="0.05" max="2" value="0.2" step="0.01">
+            </div>
+            
+            <div class="control-group">
+                <label>
+                    Accent
+                    <span class="value-display" id="accent-val">0.5</span>
+                </label>
+                <input type="range" id="accent" min="0" max="1" value="0.5" step="0.01">
+            </div>
+        </div>
+        
+        <div class="control-group">
+            <label>
+                Distortion
+                <span class="value-display" id="distortion-val">0.2</span>
+            </label>
+            <input type="range" id="distortion" min="0" max="1" value="0.2" step="0.01">
+        </div>
+        
+        <div class="keyboard">
+            <button class="key" data-note="C3">C</button>
+            <button class="key" data-note="D3">D</button>
+            <button class="key" data-note="E3">E</button>
+            <button class="key" data-note="F3">F</button>
+            <button class="key" data-note="G3">G</button>
+            <button class="key" data-note="A3">A</button>
+            <button class="key" data-note="B3">B</button>
+            <button class="key" data-note="C4">C4</button>
+        </div>
+    </div>
+
+    <script>
+        let synth, filter, envelope, distortion, lfo;
+        let currentBPM = 120;
+        let lfoRate = 1;
+        let lfoEnabled = false;
+        let baseCutoff = 1000;
+        let lfoDepth = 500;
+        let clockMode = 'internal';
+        let midiAccess = null;
+        let midiInput = null;
+        let lastMidiClockTime = 0;
+        let midiClockInterval = 0;
+        let midiClockCount = 0;
+        
+        // Info panel toggle
+        document.getElementById('info-toggle-btn').addEventListener('click', () => {
+            const panel = document.getElementById('info-panel');
+            const btn = document.getElementById('info-toggle-btn');
+            panel.classList.toggle('show');
+            btn.classList.toggle('active');
+        });
+        
+        // Initialize synth on user interaction
+        function initSynth() {
+            if (synth) return;
+            
+            synth = new Tone.Oscillator({
+                type: 'sawtooth',
+                volume: -12
+            });
+            
+            filter = new Tone.Filter({
+                type: 'lowpass',
+                frequency: baseCutoff,
+                Q: 10,
+                rolloff: -24
+            });
+            
+            envelope = new Tone.FrequencyEnvelope({
+                attack: 0.001,
+                decay: 0.2,
+                sustain: 0,
+                release: 0.1,
+                baseFrequency: baseCutoff,
+                octaves: 3
+            });
+            
+            lfo = new Tone.LFO({
+                type: 'sine',
+                min: 0,
+                max: lfoDepth,
+                frequency: calculateLFOFreq()
+            });
+            
+            distortion = new Tone.Distortion(0.2);
+            
+            envelope.connect(filter.frequency);
+            synth.connect(filter);
+            filter.connect(distortion);
+            distortion.toDestination();
+            
+            synth.start();
+            lfo.start();
+            
+            updateLFO();
+        }
+        
+        function calculateLFOFreq() {
+            const beatsPerSecond = currentBPM / 60;
+            return beatsPerSecond * lfoRate;
+        }
+        
+        function updateLFO() {
+            if (!lfo) return;
+            
+            lfo.frequency.value = calculateLFOFreq();
+            lfo.max = lfoDepth;
+            
+            lfo.disconnect();
+            if (lfoEnabled) {
+                lfo.connect(filter.frequency);
+            }
+        }
+        
+        function updateBPM(bpm) {
+            currentBPM = bpm;
+            document.getElementById('bpm-display').textContent = Math.round(bpm);
+            updateLFO();
+        }
+        
+        // Clock Mode Switching
+        const clockButtons = document.querySelectorAll('.clock-btn');
+        clockButtons.forEach(btn => {
+            btn.addEventListener('click', async () => {
+                const mode = btn.dataset.mode;
+                if (mode === clockMode) return;
+                
+                clockButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                clockMode = mode;
+                
+                if (mode === 'midi') {
+                    await initMIDI();
+                    document.getElementById('midi-status').style.display = 'flex';
+                    document.getElementById('bpm').disabled = true;
+                    document.getElementById('bpm-display').classList.add('link-mode');
+                } else {
+                    stopMIDI();
+                    document.getElementById('midi-status').style.display = 'none';
+                    document.getElementById('bpm').disabled = false;
+                    document.getElementById('bpm-display').classList.remove('link-mode');
+                }
+            });
+        });
+        
+        // Web MIDI Clock Integration
+        async function initMIDI() {
+            try {
+                if (!navigator.requestMIDIAccess) {
+                    updateMIDIStatus('Web MIDI not supported - Use Chrome, Edge, or Opera', false);
+                    return;
+                }
+                
+                updateMIDIStatus('Requesting MIDI access...', false);
+                midiAccess = await navigator.requestMIDIAccess({ sysex: false });
+                
+                // Listen for MIDI inputs
+                const inputs = Array.from(midiAccess.inputs.values());
+                
+                if (inputs.length === 0) {
+                    updateMIDIStatus('No MIDI devices found - Check setup guide above', false);
+                    return;
+                }
+                
+                // Connect to all inputs to receive clock from any source
+                inputs.forEach(input => {
+                    input.onmidimessage = handleMIDIMessage;
+                });
+                
+                midiInput = inputs[0]; // Store first input for display
+                updateMIDIStatus(`Ready: ${inputs.length} device(s) detected`, false);
+                
+                // Listen for device connect/disconnect
+                midiAccess.onstatechange = (e) => {
+                    if (e.port.type === 'input' && e.port.state === 'connected') {
+                        e.port.onmidimessage = handleMIDIMessage;
+                        updateMIDIStatus(`Connected: ${e.port.name}`, false);
+                    }
+                };
+                
+            } catch (error) {
+                console.error('MIDI initialization error:', error);
+                if (error.name === 'SecurityError') {
+                    updateMIDIStatus('MIDI access denied - Check browser permissions', false);
+                } else {
+                    updateMIDIStatus('MIDI initialization failed', false);
+                }
+            }
+        }
+        
+        function handleMIDIMessage(event) {
+            const [status, data1, data2] = event.data;
+            const deviceName = event.target.name || 'MIDI Device';
+            
+            // MIDI Clock message (0xF8)
+            if (status === 0xF8) {
+                const now = performance.now();
+                
+                if (lastMidiClockTime > 0) {
+                    midiClockInterval = now - lastMidiClockTime;
+                }
+                lastMidiClockTime = now;
+                
+                midiClockCount++;
+                
+                // MIDI sends 24 clock pulses per quarter note
+                // Calculate BPM every 24 pulses for accuracy
+                if (midiClockCount >= 24) {
+                    if (midiClockInterval > 0) {
+                        // Calculate BPM from clock interval
+                        const quarterNoteTime = midiClockInterval * 24;
+                        const bpm = 60000 / quarterNoteTime;
+                        
+                        // Only update if BPM is reasonable (prevents erratic values)
+                        if (bpm >= 40 && bpm <= 300) {
+                            updateBPM(bpm);
+                            updateMIDIStatus(`🎵 Synced: ${deviceName} (${Math.round(bpm)} BPM)`, true);
+                        }
+                    }
+                    midiClockCount = 0;
+                }
+            }
+            // Start message (0xFA)
+            else if (status === 0xFA) {
+                midiClockCount = 0;
+                lastMidiClockTime = 0;
+                updateMIDIStatus(`▶️ Started: ${deviceName}`, true);
+            }
+            // Continue message (0xFB)
+            else if (status === 0xFB) {
+                updateMIDIStatus(`▶️ Continued: ${deviceName}`, true);
+            }
+            // Stop message (0xFC)
+            else if (status === 0xFC) {
+                updateMIDIStatus(`⏸️ Stopped: ${deviceName}`, false);
+            }
+        }
+        
+        function stopMIDI() {
+            if (midiInput) {
+                midiInput.onmidimessage = null;
+                midiInput = null;
+            }
+            midiClockCount = 0;
+            lastMidiClockTime = 0;
+        }
+        
+        function updateMIDIStatus(message, synced) {
+            const indicator = document.getElementById('midi-indicator');
+            const info = document.getElementById('midi-info');
+            
+            info.textContent = message;
+            
+            if (synced) {
+                indicator.classList.add('connected');
+                info.classList.add('connected');
+            } else {
+                indicator.classList.remove('connected');
+                info.classList.remove('connected');
+            }
+        }
+        
+        // BPM Control (Internal Clock)
+        document.getElementById('bpm').addEventListener('input', (e) => {
+            if (clockMode === 'internal') {
+                updateBPM(parseInt(e.target.value));
+            }
+        });
+        
+        // LFO Enable Toggle
+        document.getElementById('lfo-enable').addEventListener('change', (e) => {
+            lfoEnabled = e.target.checked;
+            updateLFO();
+        });
+        
+        // LFO Depth Control
+        document.getElementById('lfo-depth').addEventListener('input', (e) => {
+            lfoDepth = parseFloat(e.target.value);
+            document.getElementById('lfo-depth-val').textContent = lfoDepth + ' Hz';
+            updateLFO();
+        });
+        
+        // LFO Rate Buttons
+        const lfoButtons = document.querySelectorAll('.lfo-btn');
+        lfoButtons.forEach(btn => {
+            btn.addEventListener('click', () => {
+                lfoButtons.forEach(b => b.classList.remove('active'));
+                btn.classList.add('active');
+                lfoRate = parseFloat(btn.dataset.rate);
+                updateLFO();
+            });
+        });
+        
+        // Synth Controls
+        document.getElementById('cutoff').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            baseCutoff = val;
+            if (filter) {
+                filter.frequency.value = val;
+                envelope.baseFrequency = val;
+            }
+            document.getElementById('cutoff-val').textContent = val + ' Hz';
+        });
+        
+        document.getElementById('resonance').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (filter) filter.Q.value = val;
+            document.getElementById('resonance-val').textContent = val;
+        });
+        
+        document.getElementById('envmod').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (envelope) {
+                const octaves = val / 1000;
+                envelope.octaves = octaves;
+            }
+            document.getElementById('envmod-val').textContent = val;
+        });
+        
+        document.getElementById('decay').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (envelope) envelope.decay = val;
+            document.getElementById('decay-val').textContent = val + 's';
+        });
+        
+        document.getElementById('accent').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            document.getElementById('accent-val').textContent = val;
+        });
+        
+        document.getElementById('distortion').addEventListener('input', (e) => {
+            const val = parseFloat(e.target.value);
+            if (distortion) distortion.distortion = val;
+            document.getElementById('distortion-val').textContent = val;
+        });
+        
+        // Keyboard functionality
+        const keys = document.querySelectorAll('.key');
+        
+        keys.forEach(key => {
+            key.addEventListener('mousedown', async () => {
+                await Tone.start();
+                initSynth();
+                playNote(key.dataset.note);
+                key.classList.add('active');
+            });
+            
+            key.addEventListener('mouseup', () => {
+                key.classList.remove('active');
+            });
+            
+            key.addEventListener('mouseleave', () => {
+                key.classList.remove('active');
+            });
+        });
+        
+        function playNote(note) {
+            if (!synth) return;
+            
+            const accentVal = parseFloat(document.getElementById('accent').value);
+            
+            synth.frequency.setValueAtTime(Tone.Frequency(note).toFrequency(), Tone.now());
+            
+            const now = Tone.now();
+            envelope.triggerAttack(now);
+            
+            if (accentVal > 0.5) {
+                const boost = (accentVal - 0.5) * 2;
+                filter.frequency.setValueAtTime(
+                    filter.frequency.value * (1 + boost), 
+                    now
+                );
+            }
+        }
+        
+        // Computer keyboard support
+        const keyMap = {
+            'a': 'C3',
+            's': 'D3',
+            'd': 'E3',
+            'f': 'F3',
+            'g': 'G3',
+            'h': 'A3',
+            'j': 'B3',
+            'k': 'C4'
+        };
+        
+        document.addEventListener('keydown', async (e) => {
+            if (keyMap[e.key] && !e.repeat) {
+                await Tone.start();
+                initSynth();
+                playNote(keyMap[e.key]);
+                const keyElement = document.querySelector(`[data-note="${keyMap[e.key]}"]`);
+                if (keyElement) keyElement.classList.add('active');
+            }
+        });
+        
+        document.addEventListener('keyup', (e) => {
+            if (keyMap[e.key]) {
+                const keyElement = document.querySelector(`[data-note="${keyMap[e.key]}"]`);
+                if (keyElement) keyElement.classList.remove('active');
+            }
+        });
+    </script>
+</body>
+</html>
