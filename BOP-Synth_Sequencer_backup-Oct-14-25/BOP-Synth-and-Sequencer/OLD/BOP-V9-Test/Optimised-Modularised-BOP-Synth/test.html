@@ -1,0 +1,358 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BOP Synthesizer Component Test</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: linear-gradient(135deg, #0f0f23 0%, #1a1a2e 50%, #16213e 100%);
+            min-height: 100vh;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        .test-container {
+            max-width: 1400px;
+            margin: 0 auto;
+        }
+
+        .test-header {
+            text-align: center;
+            color: white;
+            margin-bottom: 30px;
+        }
+
+        .test-header h1 {
+            font-size: 3em;
+            margin: 0;
+            background: linear-gradient(45deg, #bb86fc, #03dac6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .test-header p {
+            font-size: 1.2em;
+            color: #aaa;
+            margin: 10px 0;
+        }
+
+        .synth-container {
+            margin: 20px 0;
+        }
+
+        .test-controls {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 8px;
+            padding: 20px;
+            margin-bottom: 20px;
+            text-align: center;
+        }
+
+        .test-button {
+            background: #bb86fc;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 6px;
+            cursor: pointer;
+            font-weight: bold;
+            margin: 0 10px;
+            transition: all 0.2s;
+        }
+
+        .test-button:hover {
+            background: #9c5dfc;
+            transform: translateY(-2px);
+        }
+
+        .test-button:disabled {
+            background: #666;
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        .status-display {
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 15px;
+            margin-top: 20px;
+            color: white;
+        }
+
+        .status-display h3 {
+            margin: 0 0 10px 0;
+            color: #03dac6;
+        }
+
+        .status-item {
+            margin: 5px 0;
+            font-family: monospace;
+        }
+
+        .error-display {
+            background: rgba(255, 0, 0, 0.2);
+            border: 2px solid #ff3333;
+            border-radius: 8px;
+            padding: 15px;
+            margin: 20px 0;
+            color: white;
+            display: none;
+        }
+
+        .loading {
+            text-align: center;
+            color: white;
+            font-size: 1.2em;
+            padding: 40px;
+        }
+
+        .loading::after {
+            content: '';
+            animation: dots 1.5s infinite;
+        }
+
+        @keyframes dots {
+            0%, 20% { content: ''; }
+            40% { content: '.'; }
+            60% { content: '..'; }
+            80%, 100% { content: '...'; }
+        }
+    </style>
+</head>
+<body>
+    <div class="test-container">
+        <div class="test-header">
+            <h1>BOP Synthesizer Component</h1>
+            <p>Refactored ES6 Component Test</p>
+            <p>A self-contained, portable synthesizer that can be mounted into any DOM element</p>
+        </div>
+
+        <div class="test-controls">
+            <button id="initBtn" class="test-button">Initialize Synthesizer</button>
+            <button id="destroyBtn" class="test-button" disabled>Destroy Component</button>
+            <button id="testAudioBtn" class="test-button" disabled>Test Audio Context</button>
+        </div>
+
+        <div id="errorDisplay" class="error-display">
+            <h3>Error:</h3>
+            <div id="errorMessage"></div>
+        </div>
+
+        <div id="loadingDisplay" class="loading" style="display: none;">
+            Loading Tone.js and initializing synthesizer
+        </div>
+
+        <div id="synthContainer" class="synth-container">
+            <!-- The BOP Synthesizer Component will be mounted here -->
+        </div>
+
+        <div class="status-display">
+            <h3>Component Status</h3>
+            <div id="statusContent">
+                <div class="status-item">Status: <span id="componentStatus">Not Initialized</span></div>
+                <div class="status-item">Tone.js: <span id="toneStatus">Not Loaded</span></div>
+                <div class="status-item">Audio Context: <span id="audioStatus">Unknown</span></div>
+                <div class="status-item">Modules Loaded: <span id="moduleCount">0</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Tone.js from CDN -->
+    <script src="https://unpkg.com/tone@14.7.77/build/Tone.js"></script>
+    
+    <script type="module">
+        import { BopSynthComponent } from './BopSynthComponent.js';
+
+        let synthComponent = null;
+        let isInitialized = false;
+
+        // DOM elements
+        const initBtn = document.getElementById('initBtn');
+        const destroyBtn = document.getElementById('destroyBtn');
+        const testAudioBtn = document.getElementById('testAudioBtn');
+        const synthContainer = document.getElementById('synthContainer');
+        const errorDisplay = document.getElementById('errorDisplay');
+        const errorMessage = document.getElementById('errorMessage');
+        const loadingDisplay = document.getElementById('loadingDisplay');
+
+        // Status elements
+        const componentStatus = document.getElementById('componentStatus');
+        const toneStatus = document.getElementById('toneStatus');
+        const audioStatus = document.getElementById('audioStatus');
+        const moduleCount = document.getElementById('moduleCount');
+
+        // Update status display
+        function updateStatus() {
+            // Check Tone.js status
+            if (typeof window.Tone !== 'undefined') {
+                toneStatus.textContent = 'Loaded';
+                toneStatus.style.color = '#4caf50';
+            } else {
+                toneStatus.textContent = 'Not Loaded';
+                toneStatus.style.color = '#f44336';
+            }
+
+            // Check audio context status
+            if (window.Tone && window.Tone.context) {
+                audioStatus.textContent = window.Tone.context.state;
+                audioStatus.style.color = window.Tone.context.state === 'running' ? '#4caf50' : '#ff9800';
+            }
+
+            // Check component status
+            if (synthComponent) {
+                componentStatus.textContent = 'Initialized';
+                componentStatus.style.color = '#4caf50';
+                
+                const modules = synthComponent.getAllModules();
+                moduleCount.textContent = Object.keys(modules).length;
+                moduleCount.style.color = '#4caf50';
+            } else {
+                componentStatus.textContent = isInitialized ? 'Destroyed' : 'Not Initialized';
+                componentStatus.style.color = isInitialized ? '#ff9800' : '#f44336';
+                moduleCount.textContent = '0';
+                moduleCount.style.color = '#f44336';
+            }
+        }
+
+        // Show error
+        function showError(error) {
+            console.error('Test Error:', error);
+            errorMessage.textContent = error.message || error;
+            errorDisplay.style.display = 'block';
+        }
+
+        // Hide error
+        function hideError() {
+            errorDisplay.style.display = 'none';
+        }
+
+        // Initialize synthesizer
+        async function initializeSynth() {
+            try {
+                hideError();
+                loadingDisplay.style.display = 'block';
+                initBtn.disabled = true;
+
+                // Wait for Tone.js to be ready
+                if (typeof window.Tone === 'undefined') {
+                    throw new Error('Tone.js is not loaded. Please check your internet connection.');
+                }
+
+                // Start audio context if needed
+                if (window.Tone.context.state !== 'running') {
+                    await window.Tone.start();
+                    console.log('Audio context started');
+                }
+
+                // Create the synthesizer component
+                synthComponent = new BopSynthComponent(synthContainer, {
+                    enableMIDI: true,
+                    enableAudioSafety: true,
+                    enableLooping: true,
+                    enableSaveLoad: true
+                });
+
+                // Set up event listeners
+                synthComponent.on('initialized', () => {
+                    console.log('Synthesizer component initialized successfully');
+                    isInitialized = true;
+                    destroyBtn.disabled = false;
+                    testAudioBtn.disabled = false;
+                    updateStatus();
+                });
+
+                synthComponent.on('noteOn', (data) => {
+                    console.log('Note On:', data);
+                });
+
+                synthComponent.on('noteOff', (data) => {
+                    console.log('Note Off:', data);
+                });
+
+                loadingDisplay.style.display = 'none';
+                updateStatus();
+
+            } catch (error) {
+                loadingDisplay.style.display = 'none';
+                initBtn.disabled = false;
+                showError(error);
+                updateStatus();
+            }
+        }
+
+        // Destroy synthesizer
+        function destroySynth() {
+            try {
+                hideError();
+                
+                if (synthComponent) {
+                    synthComponent.destroy();
+                    synthComponent = null;
+                }
+
+                destroyBtn.disabled = true;
+                testAudioBtn.disabled = true;
+                initBtn.disabled = false;
+                updateStatus();
+
+                console.log('Synthesizer component destroyed');
+
+            } catch (error) {
+                showError(error);
+            }
+        }
+
+        // Test audio
+        async function testAudio() {
+            try {
+                hideError();
+                
+                if (!synthComponent) {
+                    throw new Error('Synthesizer not initialized');
+                }
+
+                // Start audio context if needed
+                if (window.Tone.context.state !== 'running') {
+                    await window.Tone.start();
+                }
+
+                // Play a test note
+                synthComponent.emit('noteOn', { note: 'C4', velocity: 0.8 });
+                
+                setTimeout(() => {
+                    synthComponent.emit('noteOff', { note: 'C4' });
+                }, 500);
+
+                console.log('Test audio played');
+                updateStatus();
+
+            } catch (error) {
+                showError(error);
+            }
+        }
+
+        // Event listeners
+        initBtn.addEventListener('click', initializeSynth);
+        destroyBtn.addEventListener('click', destroySynth);
+        testAudioBtn.addEventListener('click', testAudio);
+
+        // Initial status update
+        updateStatus();
+
+        // Update status periodically
+        setInterval(updateStatus, 1000);
+
+        // Auto-initialize after a short delay if Tone.js is loaded
+        setTimeout(() => {
+            if (typeof window.Tone !== 'undefined' && !synthComponent) {
+                console.log('Auto-initializing synthesizer...');
+                initializeSynth();
+            }
+        }, 1000);
+    </script>
+</body>
+</html>
+
