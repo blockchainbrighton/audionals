@@ -518,16 +518,20 @@ auiTemplate.innerHTML = `
     <div class="container">
         <h1>Blockchain-Orchestrated Polyphonic Synthesiser (BOP)</h1>
         <p class="subtitle">Foundational Tooling for The Bitcoin Audional Matrix</p>
-        <div class="top-toolbar">
-            <div class="transport-controls" id="transport-controls"></div>
-            <div class="preset-controls" id="preset-controls"></div>
-        </div>
         <div class="tabs">
             <button class="tab-button active" data-tab="synth">Synthesizer</button>
             <button class="tab-button" data-tab="midi">MIDI Editor</button>
         </div>
         <div id="synth" class="tab-content active">
             <div id="control-panel"></div>
+            <div class="transport-controls" id="transport-controls">
+                <button class="transport-btn record-btn">Record</button>
+                <button class="transport-btn stop-btn">Stop</button>
+                <button class="transport-btn play-btn">Play</button>
+                <button class="transport-btn clear-btn">Clear</button>
+                <button class="transport-btn save-btn">Save State</button>
+                <button class="transport-btn load-btn">Load State</button>
+            </div>
             <div class="loop-controls" id="loop-controls"></div>
             <div class="keyboard-container">
                 <div class="octave-controls">
@@ -537,13 +541,10 @@ auiTemplate.innerHTML = `
                 </div>
                 <div class="keyboard" id="keyboard"></div>
             </div>
-            <div class="status-bar">
-                <div><span class="status-indicator" id="midiInd"></span> <span id="midiStat">MIDI: Not supported</span></div>
-                <div><span class="status-indicator" id="recInd"></span> <span id="recStat">Status: Inactive</span></div>
-            </div>
+            <div class="status-bar"></div>
         </div>
         <div id="midi" class="tab-content">
-            <h3>Piano Roll Editor</h3>
+             <h3>Piano Roll Editor</h3>
             <div class="piano-roll"><div class="roll-grid" id="rollGrid"></div></div>
         </div>
         <footer>Blockchain-Orchestrated Polyphonic Synth</footer>
@@ -578,7 +579,6 @@ export class BopSynthUIComponent extends HTMLElement {
             controls: this.shadowRoot.querySelector('#control-panel'),
             pianoRoll: this.shadowRoot.querySelector('#rollGrid'),
             loopControls: this.shadowRoot.querySelector('#loop-controls'),
-            presetControls: this.shadowRoot.querySelector('#preset-controls'),
         });
 
         this._eventBus = logicController.eventBus;

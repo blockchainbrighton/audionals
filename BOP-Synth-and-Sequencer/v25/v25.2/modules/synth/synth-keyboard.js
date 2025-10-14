@@ -40,12 +40,6 @@ export class Keyboard {
         this.eventBus.addEventListener('keyboard-redraw', () => this.draw());
         this.eventBus.addEventListener('keyboard-note-visual', (e) => this.updateKeyVisual(e.detail.note, e.detail.active));
         this.eventBus.addEventListener('release-all-keys', () => this.releaseAllKeys());
-        this.eventBus.addEventListener('octave-change', (e) => {
-            const requested = e?.detail?.octave;
-            if (typeof requested === 'number') {
-                this.setOctave(requested, { broadcast: false });
-            }
-        });
 
         this.draw();
         console.log('[Keyboard] UI Component Initialized.');
@@ -53,26 +47,11 @@ export class Keyboard {
 
     changeOctave(direction) {
         const newOctave = this.state.curOct + direction;
-        this.setOctave(newOctave);
-    }
-
-    setOctave(targetOctave, { broadcast = true } = {}) {
-        const clamped = Math.max(0, Math.min(7, Math.round(targetOctave)));
-        const previous = this.state.curOct;
-        this.state.curOct = clamped;
-
-        if (this.octaveLabel) {
-            this.octaveLabel.textContent = `Octave: ${clamped}`;
-        }
-
-        if (previous !== clamped) {
-            this.draw();
-        }
-
-        if (broadcast && previous !== clamped) {
+        if (newOctave >= 0 && newOctave <= 7) {
             this.eventBus.dispatchEvent(new CustomEvent('octave-change', {
-                detail: { octave: clamped }
+                detail: { octave: newOctave }
             }));
+            this.octaveLabel.textContent = `Octave: ${newOctave}`;
         }
     }
 

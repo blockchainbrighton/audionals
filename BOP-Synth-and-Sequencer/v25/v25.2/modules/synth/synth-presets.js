@@ -67,14 +67,13 @@ function buildPreset(overrides = {}) {
     return Object.assign({}, BASE_PRESET, overrides);
 }
 
-function preset(id, name, overrides, description = '', category = '', options = {}) {
+function preset(id, name, overrides, description = '', category = '') {
     return {
         id,
         name,
         description,
         category,
-        values: buildPreset(overrides),
-        octave: typeof options.octave === 'number' ? Math.max(0, Math.min(7, Math.round(options.octave))) : 4
+        values: buildPreset(overrides)
     };
 }
 
@@ -106,7 +105,7 @@ export const PRESET_CATALOG = [
         'filterLFO.min': 180,
         'filterLFO.max': 5200,
         'vibratoLFO.depth': 0.02,
-    }, 'Evolving pad with wide stereo movement.', 'Pad', { octave: 4 }),
+    }, 'Evolving pad with wide stereo movement.', 'Pad'),
     preset('midnight-keys', 'Midnight Keys', {
         'oscillator.type': 'triangle',
         'oscillator.detune': -2,
@@ -133,7 +132,7 @@ export const PRESET_CATALOG = [
         'filterLFO.frequency': 0.7,
         'phaser.wet': 0.18,
         'phaser.frequency': 0.7,
-    }, 'Velvety keys with gentle echoes.', 'Keys', { octave: 4 }),
+    }, 'Velvety keys with gentle echoes.', 'Keys'),
     preset('solar-flare-lead', 'Solar Flare Lead', {
         'oscillator.type': 'fatsquare',
         'oscillator.detune': 12,
@@ -165,7 +164,7 @@ export const PRESET_CATALOG = [
         'phaser.frequency': 0.95,
         'filterLFO.depth': 0.3,
         'filterLFO.frequency': 1.4,
-    }, 'Cutting lead with focused mid bite.', 'Lead', { octave: 4 }),
+    }, 'Cutting lead with focused mid bite.', 'Lead'),
     preset('submerged-bass', 'Submerged Bass', {
         'master.volume': 0.82,
         'oscillator.type': 'square',
@@ -194,7 +193,7 @@ export const PRESET_CATALOG = [
         'filterLFO.frequency': 0.22,
         'tremoloLFO.depth': 0.12,
         'tremoloLFO.frequency': 2.8,
-    }, 'Deep rolling bass with subtle motion.', 'Bass', { octave: 2 }),
+    }, 'Deep rolling bass with subtle motion.', 'Bass'),
     preset('crystal-cascade', 'Crystal Cascade Pluck', {
         'oscillator.type': 'triangle',
         'oscillator.detune': 3,
@@ -221,7 +220,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.34,
         'filterLFO.frequency': 1.2,
         'vibratoLFO.depth': 0.018,
-    }, 'Bright plucks awash in crystalline echoes.', 'Pluck', { octave: 4 }),
+    }, 'Bright plucks awash in crystalline echoes.', 'Pluck'),
     preset('velvet-choir', 'Velvet Choir', {
         'oscillator.type': 'sine',
         'oscillator.detune': 14,
@@ -251,7 +250,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.48,
         'filterLFO.frequency': 0.22,
         'vibratoLFO.depth': 0.024,
-    }, 'Expansive choir with lush modulation.', 'Pad', { octave: 3 }),
+    }, 'Expansive choir with lush modulation.', 'Pad'),
     preset('analog-drift', 'Analog Drift', {
         'oscillator.type': 'fattriangle',
         'oscillator.detune': 9,
@@ -277,7 +276,7 @@ export const PRESET_CATALOG = [
         'filterLFO.frequency': 0.6,
         'phaserLFO.depth': 0.25,
         'phaserLFO.frequency': 0.4,
-    }, 'Vintage poly pad with drifting pitch.', 'Pad', { octave: 3 }),
+    }, 'Vintage poly pad with drifting pitch.', 'Pad'),
     preset('neon-runner', 'Neon Runner', {
         'oscillator.type': 'square',
         'oscillator.detune': 5,
@@ -304,7 +303,7 @@ export const PRESET_CATALOG = [
         'filterLFO.frequency': 1.6,
         'vibrato.wet': 0.3,
         'vibrato.depth': 0.1,
-    }, 'Retro lead with rhythmic motion.', 'Lead', { octave: 4 }),
+    }, 'Retro lead with rhythmic motion.', 'Lead'),
     preset('lunar-echo', 'Lunar Echo Pad', {
         'oscillator.type': 'fatsquare',
         'oscillator.detune': 7,
@@ -328,7 +327,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.62,
         'filterLFO.frequency': 0.18,
         'vibratoLFO.depth': 0.028,
-    }, 'Suspended pad drenched in echoes.', 'Pad', { octave: 3 }),
+    }, 'Suspended pad drenched in echoes.', 'Pad'),
     preset('dusty-tape', 'Dusty Tape Keys', {
         'oscillator.type': 'triangle',
         'oscillator.detune': -5,
@@ -356,7 +355,7 @@ export const PRESET_CATALOG = [
         'bitCrusher.bits': 5,
         'filterLFO.depth': 0.28,
         'filterLFO.frequency': 0.52,
-    }, 'Lo-fi keys with wobble and grit.', 'Keys', { octave: 4 }),
+    }, 'Lo-fi keys with wobble and grit.', 'Keys'),
     preset('arctic-glass', 'Arctic Glass', {
         'oscillator.type': 'sine',
         'oscillator.detune': 2,
@@ -380,7 +379,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.32,
         'filterLFO.frequency': 0.95,
         'vibratoLFO.depth': 0.02,
-    }, 'Icy bell with shimmering highs.', 'Bell', { octave: 5 }),
+    }, 'Icy bell with shimmering highs.', 'Bell'),
     preset('cosmic-sweep', 'Cosmic Sweep', {
         'oscillator.type': 'fatsawtooth',
         'oscillator.detune': 18,
@@ -406,7 +405,7 @@ export const PRESET_CATALOG = [
         'filterLFO.max': 4400,
         'phaserLFO.depth': 0.42,
         'phaserLFO.frequency': 0.26,
-    }, 'Slow sweeping texture with evolving filter.', 'Texture', { octave: 3 }),
+    }, 'Slow sweeping texture with evolving filter.', 'Texture'),
     preset('gritty-sync-bass', 'Gritty Sync Bass', {
         'oscillator.type': 'sawtooth',
         'oscillator.detune': -12,
@@ -430,7 +429,7 @@ export const PRESET_CATALOG = [
         'bitCrusher.bits': 4,
         'filterLFO.depth': 0.44,
         'filterLFO.frequency': 0.32,
-    }, 'Aggressive bass with heavy saturation.', 'Bass', { octave: 2 }),
+    }, 'Aggressive bass with heavy saturation.', 'Bass'),
     preset('shimmer-strings', 'Shimmer Verb Strings', {
         'oscillator.type': 'fattriangle',
         'oscillator.detune': 10,
@@ -452,7 +451,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.56,
         'filterLFO.frequency': 0.24,
         'vibratoLFO.depth': 0.026,
-    }, 'Glassy string pad with long tail.', 'Pad', { octave: 4 }),
+    }, 'Glassy string pad with long tail.', 'Pad'),
     preset('phaser-dreamscape', 'Phaser Dreamscape', {
         'oscillator.type': 'fatsawtooth',
         'oscillator.detune': 13,
@@ -475,7 +474,7 @@ export const PRESET_CATALOG = [
         'filterLFO.frequency': 0.2,
         'phaserLFO.depth': 0.52,
         'phaserLFO.frequency': 0.18,
-    }, 'Wide stereo pad with deep phasing.', 'Texture', { octave: 3 }),
+    }, 'Wide stereo pad with deep phasing.', 'Texture'),
     preset('pulse-engine', 'Pulse Engine Arp', {
         'oscillator.type': 'square',
         'oscillator.detune': 4,
@@ -501,7 +500,7 @@ export const PRESET_CATALOG = [
         'filterLFO.frequency': 1.8,
         'tremoloLFO.depth': 0.4,
         'tremoloLFO.frequency': 3.2,
-    }, 'Rhythmic pulse ideal for arps.', 'Arp', { octave: 4 }),
+    }, 'Rhythmic pulse ideal for arps.', 'Arp'),
     preset('lofi-vhs', 'Lo-Fi VHS', {
         'oscillator.type': 'triangle',
         'oscillator.detune': -7,
@@ -525,7 +524,7 @@ export const PRESET_CATALOG = [
         'bitCrusher.bits': 5,
         'filterLFO.depth': 0.32,
         'filterLFO.frequency': 0.48,
-    }, 'Wobbly nostalgic keys with tape grit.', 'Keys', { octave: 4 }),
+    }, 'Wobbly nostalgic keys with tape grit.', 'Keys'),
     preset('deep-sea-organ', 'Deep Sea Organ', {
         'oscillator.type': 'sine',
         'oscillator.detune': 11,
@@ -547,7 +546,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.62,
         'filterLFO.frequency': 0.16,
         'vibratoLFO.depth': 0.03,
-    }, 'Slow evolving organ for ambient beds.', 'Pad', { octave: 2 }),
+    }, 'Slow evolving organ for ambient beds.', 'Pad'),
     preset('alloy-bells', 'Alloy Bells', {
         'oscillator.type': 'triangle',
         'oscillator.detune': 6,
@@ -570,7 +569,7 @@ export const PRESET_CATALOG = [
         'bitCrusher.bits': 11,
         'filterLFO.depth': 0.28,
         'filterLFO.frequency': 1.1,
-    }, 'Metallic bells with sparkling tails.', 'Bell', { octave: 5 }),
+    }, 'Metallic bells with sparkling tails.', 'Bell'),
     preset('resonant-drift', 'Resonant Drones', {
         'oscillator.type': 'fatsawtooth',
         'oscillator.detune': 20,
@@ -592,7 +591,7 @@ export const PRESET_CATALOG = [
         'phaserLFO.depth': 0.48,
         'phaserLFO.frequency': 0.12,
         'vibratoLFO.depth': 0.034,
-    }, 'Long drones full of movement.', 'Drone', { octave: 2 }),
+    }, 'Long drones full of movement.', 'Drone'),
     preset('sparkle-motion', 'Sparkle Motion', {
         'oscillator.type': 'sawtooth',
         'oscillator.detune': 5,
@@ -613,7 +612,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.44,
         'filterLFO.frequency': 1.4,
         'vibratoLFO.depth': 0.02,
-    }, 'Bright shimmer ideal for arpeggios.', 'Arp', { octave: 4 }),
+    }, 'Bright shimmer ideal for arpeggios.', 'Arp'),
     preset('digital-rain', 'Digital Rain', {
         'oscillator.type': 'triangle',
         'oscillator.detune': 3,
@@ -636,7 +635,7 @@ export const PRESET_CATALOG = [
         'filterLFO.frequency': 2.2,
         'tremoloLFO.depth': 0.36,
         'tremoloLFO.frequency': 4.4,
-    }, 'Short blips with cascading repeats.', 'Sequence', { octave: 4 }),
+    }, 'Short blips with cascading repeats.', 'Sequence'),
     preset('vapor-trails', 'Vapor Trails', {
         'oscillator.type': 'fattriangle',
         'oscillator.detune': 9,
@@ -657,7 +656,7 @@ export const PRESET_CATALOG = [
         'vibratoLFO.depth': 0.028,
         'phaserLFO.depth': 0.32,
         'phaserLFO.frequency': 0.24,
-    }, 'Lush pad with retro shimmer.', 'Pad', { octave: 3 }),
+    }, 'Lush pad with retro shimmer.', 'Pad'),
     preset('harmonic-bloom', 'Harmonic Bloom', {
         'oscillator.type': 'fatsawtooth',
         'oscillator.detune': 8,
@@ -677,7 +676,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.58,
         'filterLFO.frequency': 0.42,
         'vibratoLFO.depth': 0.024,
-    }, 'Blooming chords with harmonic shimmer.', 'Pad', { octave: 3 }),
+    }, 'Blooming chords with harmonic shimmer.', 'Pad'),
     preset('bubble-pop', 'Bubble Pop Synth', {
         'oscillator.type': 'square',
         'oscillator.detune': 2,
@@ -700,7 +699,7 @@ export const PRESET_CATALOG = [
         'bitCrusher.bits': 9,
         'filterLFO.depth': 0.44,
         'filterLFO.frequency': 1.6,
-    }, 'Perky pop-ready synth stabs.', 'Lead', { octave: 4 }),
+    }, 'Perky pop-ready synth stabs.', 'Lead'),
     preset('thunder-plucks', 'Thunder Plucks', {
         'oscillator.type': 'sawtooth',
         'oscillator.detune': -4,
@@ -724,7 +723,7 @@ export const PRESET_CATALOG = [
         'compressor.ratio': 9,
         'filterLFO.depth': 0.4,
         'filterLFO.frequency': 1.2,
-    }, 'Punchy plucks with growl.', 'Pluck', { octave: 4 }),
+    }, 'Punchy plucks with growl.', 'Pluck'),
     preset('vapor-brass', 'Vapor Brass', {
         'oscillator.type': 'fatsquare',
         'oscillator.detune': 6,
@@ -743,7 +742,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.38,
         'filterLFO.frequency': 0.5,
         'vibratoLFO.depth': 0.018,
-    }, 'Retro brass pad with vapor flair.', 'Pad', { octave: 3 }),
+    }, 'Retro brass pad with vapor flair.', 'Pad'),
     preset('mirage-fm', 'FM Mirage', {
         'oscillator.type': 'triangle',
         'oscillator.detune': 8,
@@ -766,7 +765,7 @@ export const PRESET_CATALOG = [
         'filterLFO.depth': 0.52,
         'filterLFO.frequency': 0.64,
         'vibratoLFO.depth': 0.03,
-    }, 'Glassine pad reminiscent of FM tones.', 'Pad', { octave: 3 }),
+    }, 'Glassine pad reminiscent of FM tones.', 'Pad'),
     preset('subway-sub', 'Subway Sub Bass', {
         'master.volume': 0.9,
         'oscillator.type': 'sine',
@@ -789,7 +788,7 @@ export const PRESET_CATALOG = [
         'compressor.ratio': 16,
         'filterLFO.depth': 0.3,
         'filterLFO.frequency': 0.18,
-    }, 'Focused low-end sub bass.', 'Bass', { octave: 1 }),
+    }, 'Focused low-end sub bass.', 'Bass'),
     preset('binary-choir', 'Binary Choir', {
         'oscillator.type': 'square',
         'oscillator.detune': 14,
@@ -811,7 +810,7 @@ export const PRESET_CATALOG = [
         'filterLFO.frequency': 0.26,
         'phaserLFO.depth': 0.38,
         'phaserLFO.frequency': 0.24,
-    }, 'Digital choir with choral shimmer.', 'Pad', { octave: 3 }),
+    }, 'Digital choir with choral shimmer.', 'Pad'),
 ];
 
 const RANDOM_LIMITS = {
@@ -906,13 +905,11 @@ export function generateRandomPreset() {
     }
 
     const presetName = `Random Patch ${Math.floor(Math.random() * 900 + 100)}`;
-    const octave = Math.floor(Math.random() * 5) + 1;
 
     return {
         id: `random-${Date.now()}`,
         name: presetName,
         values,
-        octave
     };
 }
 

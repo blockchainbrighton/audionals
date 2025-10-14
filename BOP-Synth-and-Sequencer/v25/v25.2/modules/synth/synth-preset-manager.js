@@ -82,12 +82,6 @@ export class PresetManager {
 
         this.syncEffectBypassedState(patch);
 
-        if (typeof preset.octave === 'number') {
-            this.eventBus.dispatchEvent(new CustomEvent('octave-change', {
-                detail: { octave: preset.octave }
-            }));
-        }
-
         this.eventBus.dispatchEvent(new CustomEvent('preset-loaded', {
             detail: {
                 preset: patch,
@@ -95,8 +89,7 @@ export class PresetManager {
                     id: preset.id,
                     name: preset.name,
                     isRandom: Boolean(isRandom),
-                    engineApplied: true,
-                    octave: preset.octave
+                    engineApplied: true
                 }
             }
         }));

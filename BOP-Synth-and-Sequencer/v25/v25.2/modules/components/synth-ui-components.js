@@ -132,53 +132,34 @@ auiTemplate.innerHTML = `
         
         /* --- Base Button Styles (Simplified with :is()) --- */
         :is(.transport-button, .save-button, .load-button) {
-            padding: 12px 28px;
-            border-radius: 999px;
-            background: linear-gradient(145deg, rgba(42, 40, 64, 0.92), rgba(26, 24, 40, 0.9));
-            border: 1px solid rgba(187, 134, 252, 0.55);
-            color: #f7f8ff;
-            font: inherit;
-            font-weight: 600;
-            letter-spacing: 0.06em;
-            text-transform: uppercase;
-            cursor: pointer;
-            outline: none;
-            display: flex;
-            align-items: center;
-            gap: 9px;
-            box-shadow: 0 10px 28px rgba(3, 218, 198, 0.1), 0 4px 14px rgba(0, 0, 0, 0.55);
-            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease, background 0.18s ease;
+            padding: 10px 24px; border: 2px solid var(--accent2); border-radius: var(--border);
+            background: var(--panel); color: var(--accent); font: inherit;
+            font-weight: 600; letter-spacing: 0.03em; box-shadow: 0 2px 8px #0008;
+            cursor: pointer; outline: none; display: flex; align-items: center; gap: 9px;
+            transition: background 0.13s, color 0.13s, border 0.13s, box-shadow 0.13s, transform 0.1s;
         }
         :is(.transport-button, .save-button, .load-button):is(:focus, :hover) {
-            transform: translateY(-2px) scale(1.02);
-            box-shadow: 0 18px 38px rgba(3, 218, 198, 0.18), 0 8px 18px rgba(0, 0, 0, 0.42);
-            border-color: rgba(3, 218, 198, 0.82);
+            background: var(--accent2); color: #fff; border-color: var(--accent);
+            box-shadow: 0 4px 18px #0ff2, 0 2px 8px #000b; transform: translateY(-2px) scale(1.03);
         }
         :is(.transport-button, .save-button, .load-button):active {
-            transform: translateY(0) scale(0.97);
-            box-shadow: 0 6px 16px rgba(3, 218, 198, 0.12), 0 3px 8px rgba(0, 0, 0, 0.55);
+            background: var(--accent); color: #fff; border-color: var(--accent2);
+            box-shadow: 0 1px 3px #0006; transform: translateY(0) scale(0.98);
         }
         :is(.transport-button, .save-button, .load-button):disabled {
-            opacity: 0.5; cursor: default; box-shadow: none; filter: grayscale(0.1);
+            opacity: 0.54; cursor: default; box-shadow: none; filter: grayscale(0.1);
         }
         
-        .transport-button.play-btn {
-            background: linear-gradient(135deg, rgba(3, 218, 198, 0.85), rgba(0, 140, 150, 0.95));
-            border-color: rgba(3, 218, 198, 0.8);
-            color: #001f24;
-        }
-        .transport-button.record-btn {
-            background: linear-gradient(135deg, rgba(244, 67, 54, 0.9), rgba(179, 27, 16, 0.95));
-            border-color: rgba(244, 67, 54, 0.85);
-        }
-        .transport-button.stop-btn {
-            background: linear-gradient(135deg, rgba(187, 134, 252, 0.88), rgba(120, 82, 200, 0.92));
-            border-color: rgba(187, 134, 252, 0.82);
-        }
-        .transport-button.clear-btn {
-            background: linear-gradient(135deg, rgba(255, 152, 0, 0.88), rgba(215, 102, 0, 0.92));
-            border-color: rgba(255, 152, 0, 0.82);
-        }
+        /* --- Button Variants --- */
+        .record-button { border-color: #f44336; color: #f44336; }
+        .record-button:is(:focus, :hover) { background: #f44336; color: #fff; border-color: #fff; box-shadow: 0 4px 18px #f4433640, 0 2px 8px #000a; }
+        .record-button.armed { animation: pulse 1.1s infinite; background: #ff3333; color: #fff; border-color: #fff; box-shadow: 0 0 12px 2px #f4433680, 0 4px 16px #ff333330; }
+        .clear-button { border-color: #ff9800; color: #ff9800; }
+        .clear-button:is(:focus, :hover) { background: #ff9800; color: #fff; border-color: #fff; box-shadow: 0 4px 16px #ff9800a0, 0 2px 8px #000a; }
+        .clear-button:active { background: #fff; color: #ff9800; border-color: #ff9800; }
+        .stop-button { border-color: var(--accent); color: var(--accent2); background: #181818; }
+        .stop-button:is(:focus, :hover) { background: var(--accent); color: #fff; border-color: #fff; box-shadow: 0 4px 16px #bb86fc90, 0 2px 8px #000a; }
+        .stop-button:active { background: #fff; color: var(--accent); border-color: var(--accent); }
         
         /* --- Save/Load Specifics --- */
         .save-button, .load-button { padding: 9px 20px; font-size: 1rem; gap: 7px; }
@@ -206,27 +187,28 @@ auiTemplate.innerHTML = `
         }
         .preset-select { min-width: 220px; }
         .preset-random-button {
-            padding: 12px 24px;
-            border-radius: 999px;
-            border: 1px solid rgba(3, 218, 198, 0.68);
-            background: linear-gradient(135deg, rgba(32, 32, 54, 0.95), rgba(12, 12, 24, 0.88));
-            color: #e8fffb;
+            padding: 10px 20px;
+            border-radius: var(--border);
+            border: 2px solid var(--accent);
+            background: transparent;
+            color: var(--accent2);
             font-weight: 600;
-            letter-spacing: 0.06em;
             cursor: pointer;
-            transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+            transition: background 0.13s, color 0.13s, border 0.13s, transform 0.1s, box-shadow 0.13s;
             display: flex;
             align-items: center;
-            gap: 10px;
+            gap: 8px;
         }
         .preset-random-button:is(:hover, :focus) {
-            transform: translateY(-2px) scale(1.02);
-            border-color: rgba(3, 218, 198, 0.95);
-            box-shadow: 0 18px 36px rgba(3, 218, 198, 0.18), 0 8px 18px rgba(0, 0, 0, 0.4);
+            background: var(--accent);
+            color: #fff;
+            border-color: #fff;
+            transform: translateY(-1px);
+            box-shadow: 0 4px 16px rgba(187, 134, 252, 0.35), 0 2px 8px rgba(0, 0, 0, 0.35);
         }
         .preset-random-button:active {
-            transform: translateY(0) scale(0.97);
-            box-shadow: 0 6px 14px rgba(3, 218, 198, 0.12), 0 3px 8px rgba(0, 0, 0, 0.45);
+            transform: translateY(0) scale(0.98);
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.3);
         }
         
         /* =================== KEYBOARD SECTION (Simplified) =================== */
@@ -518,16 +500,20 @@ auiTemplate.innerHTML = `
     <div class="container">
         <h1>Blockchain-Orchestrated Polyphonic Synthesiser (BOP)</h1>
         <p class="subtitle">Foundational Tooling for The Bitcoin Audional Matrix</p>
-        <div class="top-toolbar">
-            <div class="transport-controls" id="transport-controls"></div>
-            <div class="preset-controls" id="preset-controls"></div>
-        </div>
         <div class="tabs">
             <button class="tab-button active" data-tab="synth">Synthesizer</button>
             <button class="tab-button" data-tab="midi">MIDI Editor</button>
         </div>
         <div id="synth" class="tab-content active">
             <div id="control-panel"></div>
+            <div class="transport-controls" id="transport-controls">
+                <button class="transport-btn record-btn">Record</button>
+                <button class="transport-btn stop-btn">Stop</button>
+                <button class="transport-btn play-btn">Play</button>
+                <button class="transport-btn clear-btn">Clear</button>
+                <button class="transport-btn save-btn">Save State</button>
+                <button class="transport-btn load-btn">Load State</button>
+            </div>
             <div class="loop-controls" id="loop-controls"></div>
             <div class="keyboard-container">
                 <div class="octave-controls">
@@ -537,13 +523,10 @@ auiTemplate.innerHTML = `
                 </div>
                 <div class="keyboard" id="keyboard"></div>
             </div>
-            <div class="status-bar">
-                <div><span class="status-indicator" id="midiInd"></span> <span id="midiStat">MIDI: Not supported</span></div>
-                <div><span class="status-indicator" id="recInd"></span> <span id="recStat">Status: Inactive</span></div>
-            </div>
+            <div class="status-bar"></div>
         </div>
         <div id="midi" class="tab-content">
-            <h3>Piano Roll Editor</h3>
+             <h3>Piano Roll Editor</h3>
             <div class="piano-roll"><div class="roll-grid" id="rollGrid"></div></div>
         </div>
         <footer>Blockchain-Orchestrated Polyphonic Synth</footer>
@@ -578,7 +561,6 @@ export class BopSynthUIComponent extends HTMLElement {
             controls: this.shadowRoot.querySelector('#control-panel'),
             pianoRoll: this.shadowRoot.querySelector('#rollGrid'),
             loopControls: this.shadowRoot.querySelector('#loop-controls'),
-            presetControls: this.shadowRoot.querySelector('#preset-controls'),
         });
 
         this._eventBus = logicController.eventBus;
