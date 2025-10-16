@@ -1,0 +1,105 @@
+
+
+## What Actually Changes
+
+* **Sequencer step**: When a step is active on a synth channel, trigger the synth to “play its stored sequence” (not a note).
+* **Synth instance**: Needs a `playSequence(time)` method (or similar), which will play its own internal sequence at the sequencer’s scheduled time.
+
+---
+
+### 1. Channel Data Model
+
+```js
+// Add channel as before:
+{
+  type: 'synth',
+  synthState: {},     // Contains synth patch + sequence data
+  steps: [ ... ]      // Used only to trigger the synth sequence at the step
+}
+```
+
+---
+
+### 2. Core Integration Logic
+
+* When the sequencer reaches an active step on a synth channel:
+
+  * **Instead of**: `triggerNote`
+  * **You do**:
+
+    ```js
+    synthInstance.playSequence(time);
+    ```
+  * The synth then runs its own MIDI/note array (internally stored) and handles its own playback.
+
+---
+
+### 3. Save/Load
+
+* Save the entire synth state (patch + its sequence) via `getState()`.
+* Restore with `loadState()` when loading sequencer projects.
+
+---
+
+### 4. UI
+
+* When rendering a synth channel in the sequencer, just embed the synth UI as before.
+
+---
+
+### 5. Example
+
+#### Sequencer Playback
+
+```js
+channels.forEach((channel, chIdx) => {
+  if (channel.type === 'synth' && channel.steps[stepIndex]) {
+    synthInstances[chIdx].playSequence(time); // << ONLY THIS IS NEEDED
+  }
+});
+```
+
+#### Save
+
+```js
+channel.synthState = synthInstances[chIdx].getState();
+```
+
+#### Load
+
+```js
+synthInstances[chIdx].loadState(channel.synthState);
+```
+
+---
+
+## Minimal Synth API (for Sequencer Integration)
+
+The synth module should expose:
+
+* `mount(targetElement, initialState)` — mounts synth UI
+* `playSequence(time)` — plays the synth’s own stored sequence
+* `getState()` — gets patch + sequence for saving
+* `loadState(obj)` — loads patch + sequence
+
+---
+
+## **Summary Table**
+
+| Area       | Minimal Change                               |
+| ---------- | -------------------------------------------- |
+| Data Model | Add `type: 'synth'`, store `synthState`      |
+| UI         | Mount synth UI in channel UI                 |
+| Playback   | On step trigger: call `synth.playSequence()` |
+| Save/Load  | Use synth’s own get/loadState methods        |
+
+---
+
+**This is as simple and future-proof as it gets.**
+
+* *No changes to the synth’s note triggering logic are needed—just add a `playSequence()` public method if you don’t have one already.*
+* The sequencer never needs to know about the synth’s internal note structure.
+
+---
+
+**Want the code for a stub “synth instrument channel” wrapper for your sequencer? Or just the minimal API implementation?** Let me know if you want the next step as a working code scaffold.
