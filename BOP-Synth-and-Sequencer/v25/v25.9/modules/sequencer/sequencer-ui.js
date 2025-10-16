@@ -1,6 +1,6 @@
 // BOP-Sequencer-V10-Modular/ui.js
 
-import { projectState, runtimeState, getCurrentSequence, createNewChannel, initializeProject } from './sequencer-state.js';
+import { projectState, runtimeState, getCurrentSequence, createNewChannel, initializeProject, ensureSamplerChannelDefaults, samplerChannelDefaults } from './sequencer-state.js';
 import * as config from './sequencer-config.js';
 import { startPlayback, stopPlayback, setBPM as setAudioBPM } from './sequencer-audio-time-scheduling.js';
 import { loadProject, saveProject } from './sequencer-save-load.js';
@@ -8,6 +8,7 @@ import { createInstrumentForChannel, openSynthUI } from './sequencer-instrument.
 import { updateAllChannelGains, forceChannelSilence } from './sequencer-channel-mixer.js';
 import { SimpleSampleLoader } from './sequencer-sample-loader.js';
 import { drawWaveform } from './sequencer-waveform.js';
+import { playSamplerChannel } from './sequencer-sampler-playback.js';
 
 
 let resizeRafId = null;
@@ -94,7 +95,15 @@ function renderSamplerControls(targetContainer, channelData, chIndex) {
 
     select.onchange = () => {
         const idx = parseInt(select.value, 10);
-        getCurrentSequence().channels[chIndex].selectedSampleIndex = idx;
+        const channel = getCurrentSequence().channels[chIndex];
+        if (!channel) return;
+        channel.selectedSampleIndex = idx;
+        ensureSamplerChannelDefaults(channel);
+        channel.sampleRegion.start = samplerChannelDefaults.regionStart;
+        channel.sampleRegion.end = samplerChannelDefaults.regionEnd;
+        channel.samplePlaybackRate = samplerChannelDefaults.playbackRate;
+        channel.sampleFadeIn = samplerChannelDefaults.fadeIn;
+        channel.sampleFadeOut = samplerChannelDefaults.fadeOut;
         // Re-render to update the label text
         render();
         checkAllSelectedLoopsBPM();
@@ -271,10 +280,11 @@ function closeWaveformModal() {
     }
 }
 
-function openWaveformModal(audioBuffer, title) {
+function openWaveformModal({ audioBuffer, channelData, sampleName, onStateChange }) {
     const modal = elements.waveformModal;
-    if (!modal) return;
+    if (!modal || !audioBuffer || !channelData) return;
 
+    ensureSamplerChannelDefaults(channelData);
     closeWaveformModal();
 
     const content = document.createElement('div');
@@ -283,28 +293,238 @@ function openWaveformModal(audioBuffer, title) {
     const closeBtn = document.createElement('button');
     closeBtn.type = 'button';
     closeBtn.className = 'waveform-modal-close';
-    closeBtn.setAttribute('aria-label', 'Close waveform preview');
+    closeBtn.setAttribute('aria-label', 'Close waveform editor');
     closeBtn.textContent = '×';
     closeBtn.onclick = closeWaveformModal;
 
     const titleEl = document.createElement('h3');
     titleEl.className = 'waveform-modal-title';
-    titleEl.textContent = title;
+    titleEl.textContent = sampleName || 'Sample Controls';
+
+    const subtitle = document.createElement('p');
+    subtitle.className = 'waveform-modal-subtitle';
+    subtitle.textContent = 'Trim, shape, and preview this waveform for the channel.';
+
+    const body = document.createElement('div');
+    body.className = 'waveform-modal-body';
+
+    const canvasWrap = document.createElement('div');
+    canvasWrap.className = 'waveform-modal-visual';
 
     const canvas = document.createElement('canvas');
     canvas.className = 'waveform-modal-canvas';
 
+    const summary = document.createElement('div');
+    summary.className = 'waveform-selection-summary';
+
+    const startInfo = document.createElement('span');
+    startInfo.className = 'waveform-summary-item';
+    const endInfo = document.createElement('span');
+    endInfo.className = 'waveform-summary-item';
+    const lengthInfo = document.createElement('span');
+    lengthInfo.className = 'waveform-summary-item';
+    summary.append(startInfo, endInfo, lengthInfo);
+
+    canvasWrap.append(canvas, summary);
+
+    const controls = document.createElement('div');
+    controls.className = 'waveform-modal-controls';
+
+    const startSlider = document.createElement('input');
+    startSlider.type = 'range';
+    startSlider.min = '0';
+    startSlider.max = '99.9';
+    startSlider.step = '0.1';
+    startSlider.className = 'waveform-control-slider';
+
+    const startValue = document.createElement('span');
+    startValue.className = 'waveform-control-value';
+
+    const endSlider = document.createElement('input');
+    endSlider.type = 'range';
+    endSlider.min = '0.1';
+    endSlider.max = '100';
+    endSlider.step = '0.1';
+    endSlider.className = 'waveform-control-slider';
+
+    const endValue = document.createElement('span');
+    endValue.className = 'waveform-control-value';
+
+    const playbackRateSlider = document.createElement('input');
+    playbackRateSlider.type = 'range';
+    playbackRateSlider.min = '50';
+    playbackRateSlider.max = '200';
+    playbackRateSlider.step = '1';
+    playbackRateSlider.className = 'waveform-control-slider';
+
+    const playbackRateValue = document.createElement('span');
+    playbackRateValue.className = 'waveform-control-value';
+
+    const fadeInSlider = document.createElement('input');
+    fadeInSlider.type = 'range';
+    fadeInSlider.min = '0';
+    fadeInSlider.max = '500';
+    fadeInSlider.step = '5';
+    fadeInSlider.className = 'waveform-control-slider';
+
+    const fadeInValue = document.createElement('span');
+    fadeInValue.className = 'waveform-control-value';
+
+    const fadeOutSlider = document.createElement('input');
+    fadeOutSlider.type = 'range';
+    fadeOutSlider.min = '0';
+    fadeOutSlider.max = '500';
+    fadeOutSlider.step = '5';
+    fadeOutSlider.className = 'waveform-control-slider';
+
+    const fadeOutValue = document.createElement('span');
+    fadeOutValue.className = 'waveform-control-value';
+
+    function createControlRow(labelText, sliderEl, valueEl) {
+        const row = document.createElement('label');
+        row.className = 'waveform-control-row';
+        const labelSpan = document.createElement('span');
+        labelSpan.className = 'waveform-control-label';
+        labelSpan.textContent = labelText;
+        row.append(labelSpan, sliderEl, valueEl);
+        return row;
+    }
+
+    controls.append(
+        createControlRow('Start', startSlider, startValue),
+        createControlRow('End', endSlider, endValue),
+        createControlRow('Playback Rate', playbackRateSlider, playbackRateValue),
+        createControlRow('Fade In', fadeInSlider, fadeInValue),
+        createControlRow('Fade Out', fadeOutSlider, fadeOutValue)
+    );
+
+    const actions = document.createElement('div');
+    actions.className = 'waveform-modal-actions';
+
+    const previewBtn = document.createElement('button');
+    previewBtn.type = 'button';
+    previewBtn.className = 'waveform-modal-button primary';
+    previewBtn.textContent = 'Preview Selection';
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'waveform-modal-button';
+    resetBtn.textContent = 'Reset to Full Sample';
+
+    actions.append(previewBtn, resetBtn);
+
+    body.append(canvasWrap, controls, actions);
+
+    content.append(closeBtn, titleEl, subtitle, body);
+    modal.appendChild(content);
+
     const maxWidth = Math.min(DEFAULT_WAVE_MODAL_WIDTH, Math.max(320, window.innerWidth - 120));
-    drawWaveform(canvas, audioBuffer, {
-        width: maxWidth,
-        height: DEFAULT_WAVE_MODAL_HEIGHT,
-        waveColor: '#0f0',
-        backgroundColor: '#111',
-        axisColor: '#333'
+    const bufferDuration = audioBuffer.duration || (audioBuffer.length / audioBuffer.sampleRate) || 0;
+
+    const formatTime = seconds => {
+        if (!Number.isFinite(seconds)) return '0 ms';
+        if (seconds >= 1) return `${seconds.toFixed(2)} s`;
+        return `${Math.round(seconds * 1000)} ms`;
+    };
+
+    const formatPercent = value => `${value.toFixed(1)}%`;
+    const formatMs = seconds => `${Math.round(seconds * 1000)} ms`;
+
+    function renderWaveform() {
+        drawWaveform(canvas, audioBuffer, {
+            width: maxWidth,
+            height: DEFAULT_WAVE_MODAL_HEIGHT,
+            waveColor: '#18ffb6',
+            backgroundColor: '#0b0f12',
+            axisColor: '#182026',
+            selection: {
+                start: channelData.sampleRegion.start,
+                end: channelData.sampleRegion.end,
+                color: 'rgba(24, 255, 182, 0.18)',
+                borderColor: '#18ffb6'
+            }
+        });
+    }
+
+    function updateReadouts() {
+        const startPct = channelData.sampleRegion.start * 100;
+        const endPct = channelData.sampleRegion.end * 100;
+
+        startSlider.value = startPct.toFixed(1);
+        endSlider.value = endPct.toFixed(1);
+        startValue.textContent = formatPercent(startPct);
+        endValue.textContent = formatPercent(endPct);
+
+        playbackRateSlider.value = Math.round((channelData.samplePlaybackRate ?? 1) * 100);
+        playbackRateValue.textContent = `${(channelData.samplePlaybackRate ?? 1).toFixed(2)}×`;
+
+        fadeInSlider.value = Math.round((channelData.sampleFadeIn ?? 0) * 1000);
+        fadeOutSlider.value = Math.round((channelData.sampleFadeOut ?? 0) * 1000);
+        fadeInValue.textContent = formatMs(channelData.sampleFadeIn ?? 0);
+        fadeOutValue.textContent = formatMs(channelData.sampleFadeOut ?? 0);
+
+        const startSeconds = (channelData.sampleRegion.start ?? 0) * bufferDuration;
+        const endSeconds = (channelData.sampleRegion.end ?? 1) * bufferDuration;
+        const lengthSeconds = Math.max(0, endSeconds - startSeconds);
+        startInfo.textContent = `Start: ${formatTime(startSeconds)}`;
+        endInfo.textContent = `End: ${formatTime(endSeconds)}`;
+        lengthInfo.textContent = `Length: ${formatTime(lengthSeconds)}`;
+    }
+
+    function emitChange() {
+        ensureSamplerChannelDefaults(channelData);
+        renderWaveform();
+        updateReadouts();
+        if (typeof onStateChange === 'function') onStateChange();
+    }
+
+    startSlider.addEventListener('input', () => {
+        const raw = parseFloat(startSlider.value) / 100;
+        channelData.sampleRegion.start = Math.min(raw, channelData.sampleRegion.end - 0.01);
+        emitChange();
     });
 
-    content.append(closeBtn, titleEl, canvas);
-    modal.appendChild(content);
+    endSlider.addEventListener('input', () => {
+        const raw = parseFloat(endSlider.value) / 100;
+        channelData.sampleRegion.end = Math.max(raw, channelData.sampleRegion.start + 0.01);
+        emitChange();
+    });
+
+    playbackRateSlider.addEventListener('input', () => {
+        const value = Math.round(parseInt(playbackRateSlider.value, 10)) / 100;
+        channelData.samplePlaybackRate = Math.max(0.25, Math.min(4, Number.isFinite(value) ? value : 1));
+        emitChange();
+    });
+
+    fadeInSlider.addEventListener('input', () => {
+        const value = parseInt(fadeInSlider.value, 10) / 1000;
+        channelData.sampleFadeIn = Math.max(0, Number.isFinite(value) ? value : samplerChannelDefaults.fadeIn);
+        emitChange();
+    });
+
+    fadeOutSlider.addEventListener('input', () => {
+        const value = parseInt(fadeOutSlider.value, 10) / 1000;
+        channelData.sampleFadeOut = Math.max(0, Number.isFinite(value) ? value : samplerChannelDefaults.fadeOut);
+        emitChange();
+    });
+
+    previewBtn.onclick = () => {
+        const Tone = runtimeState.Tone;
+        if (!Tone) return;
+        const startAt = Tone.now() + 0.02;
+        playSamplerChannel(startAt, channelData);
+    };
+
+    resetBtn.onclick = () => {
+        channelData.sampleRegion.start = samplerChannelDefaults.regionStart;
+        channelData.sampleRegion.end = samplerChannelDefaults.regionEnd;
+        channelData.samplePlaybackRate = samplerChannelDefaults.playbackRate;
+        channelData.sampleFadeIn = samplerChannelDefaults.fadeIn;
+        channelData.sampleFadeOut = samplerChannelDefaults.fadeOut;
+        emitChange();
+    };
+
+    emitChange();
 
     const backdropHandler = event => {
         if (event.target === modal) closeWaveformModal();
@@ -361,18 +581,35 @@ function appendChannelWaveform(channelEl, channelData) {
 
     ensureSampleBuffer(sampleIndex)
         .then(buffer => {
-            drawWaveform(previewCanvas, buffer, {
-                width: WAVE_PREVIEW_WIDTH,
-                height: WAVE_PREVIEW_HEIGHT,
-                waveColor: '#0f0',
-                backgroundColor: '#111',
-                axisColor: '#333'
-            });
+            ensureSamplerChannelDefaults(channelData);
+
+            const drawPreview = () => {
+                drawWaveform(previewCanvas, buffer, {
+                    width: WAVE_PREVIEW_WIDTH,
+                    height: WAVE_PREVIEW_HEIGHT,
+                    waveColor: '#0f0',
+                    backgroundColor: '#111',
+                    axisColor: '#333',
+                    selection: {
+                        start: channelData.sampleRegion.start,
+                        end: channelData.sampleRegion.end,
+                        color: 'rgba(24, 255, 182, 0.22)',
+                        borderColor: '#0f0'
+                    }
+                });
+            };
+
+            drawPreview();
             previewButton.disabled = false;
             previewButton.classList.remove('loading');
-            overlay.textContent = 'Zoom';
+            overlay.textContent = 'Edit';
 
-            const open = () => openWaveformModal(buffer, sampleName);
+            const open = () => openWaveformModal({
+                audioBuffer: buffer,
+                channelData,
+                sampleName,
+                onStateChange: drawPreview
+            });
             previewButton.onclick = open;
         })
         .catch(error => {
@@ -393,6 +630,7 @@ export function render() {
     if (!currentSeq) return;
 
     currentSeq.channels.forEach((channelData, chIndex) => {
+        ensureSamplerChannelDefaults(channelData);
         // 1. Create the top-level channel element
         const channelEl = document.createElement('div');
         channelEl.className = 'channel';
