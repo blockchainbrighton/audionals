@@ -35,7 +35,13 @@ let clients = new Map(); // SSE clients for real-time updates
 function loadProjects() {
   if (fs.existsSync(DATA_FILE)) {
     try {
-      return JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      const loaded = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+      Object.values(loaded).forEach(project => {
+        if (project && project.mode === 'dual') {
+          project.dualVoiceSummary = computeDualVoiceSummary(project);
+        }
+      });
+      return loaded;
     } catch (e) {
       console.error('Error loading projects:', e);
     }
@@ -45,6 +51,11 @@ function loadProjects() {
 
 // Save projects to disk
 function saveProjects() {
+  Object.values(projects).forEach(project => {
+    if (project && project.mode === 'dual') {
+      project.dualVoiceSummary = computeDualVoiceSummary(project);
+    }
+  });
   fs.writeFileSync(DATA_FILE, JSON.stringify(projects, null, 2));
 }
 
@@ -52,6 +63,30 @@ function saveProjects() {
 function generateId() {
   return Date.now().toString(36) + Math.random().toString(36).substr(2);
 }
+
+// Preset configurations for quick demo showcase
+const DEMO_PRESET_CONFIGS = [
+  {
+    name: 'Balanced Narrator',
+    settings: { stability: 0.55, similarity_boost: 0.78, style: 0.2, speed: 1.0 }
+  },
+  {
+    name: 'Dramatic Storyteller',
+    settings: { stability: 0.4, similarity_boost: 0.7, style: 0.75, speed: 1.05 }
+  },
+  {
+    name: 'Calm Documentary',
+    settings: { stability: 0.75, similarity_boost: 0.85, style: 0.1, speed: 0.95 }
+  },
+  {
+    name: 'Energetic Presenter',
+    settings: { stability: 0.45, similarity_boost: 0.65, style: 0.6, speed: 1.18 }
+  },
+  {
+    name: 'Crisp Newsreader',
+    settings: { stability: 0.6, similarity_boost: 0.9, style: 0.15, speed: 1.12 }
+  }
+];
 
 // Send SSE update to clients
 function sendUpdate(projectId, data) {
@@ -68,30 +103,43 @@ function sendUpdate(projectId, data) {
   }
 }
 
+const ZERO_WIDTH_CHAR_REGEX = /[\u200B\u200C\u200D\u2060\uFEFF]/g;
+
+function removeZeroWidthChars(value) {
+  return typeof value === 'string' ? value.replace(ZERO_WIDTH_CHAR_REGEX, '') : value;
+}
+
+function normalizeVoiceSwitchToken(token, fallback = '***') {
+  const sanitized = removeZeroWidthChars(typeof token === 'string' ? token : '');
+  const trimmed = sanitized.trim();
+  return trimmed.length > 0 ? trimmed : fallback;
+}
+
 // Parse manuscript into chapters
 function parseManuscript(text, mode, options = {}) {
   const chapters = [];
-  const voiceSwitchToken = options.voiceSwitchToken || '***';
+  const normalizedText = removeZeroWidthChars(typeof text === 'string' ? text : '');
+  const voiceSwitchToken = normalizeVoiceSwitchToken(options.voiceSwitchToken || '***');
   
   if (mode === 'single') {
     // Split by chapter markers (# Chapter, ## Chapter, etc.)
     const chapterRegex = /^#{1,3}\s+(?:Chapter\s+\d+|[A-Z][^#\n]*?)$/gim;
-    const matches = [...text.matchAll(chapterRegex)];
-    
+    const matches = [...normalizedText.matchAll(chapterRegex)];
+
     if (matches.length === 0) {
       // No chapters found, treat entire text as one chapter
       chapters.push({
         title: 'Full Text',
-        content: text.trim(),
+        content: normalizedText.trim(),
         voice: null
       });
     } else {
       for (let i = 0; i < matches.length; i++) {
         const start = matches[i].index;
-        const end = i < matches.length - 1 ? matches[i + 1].index : text.length;
-        const chapterText = text.substring(start, end).trim();
+        const end = i < matches.length - 1 ? matches[i + 1].index : normalizedText.length;
+        const chapterText = normalizedText.substring(start, end).trim();
         const title = matches[i][0].replace(/^#+\s*/, '').trim();
-        
+
         chapters.push({
           title: title || `Chapter ${i + 1}`,
           content: chapterText,
@@ -102,22 +150,22 @@ function parseManuscript(text, mode, options = {}) {
   } else if (mode === 'dual') {
     // Dual voice mode: chapters start with voice name, *** switches voices
     const chapterRegex = /^#{1,3}\s+(?:Chapter\s+\d+|[A-Z][^#\n]*?)$/gim;
-    const matches = [...text.matchAll(chapterRegex)];
-    
+    const matches = [...normalizedText.matchAll(chapterRegex)];
+
     if (matches.length === 0) {
         chapters.push({
           title: 'Full Text',
-          content: text.trim(),
+          content: normalizedText.trim(),
           voice: null,
-          segments: parseDualVoiceSegments(text.trim(), voiceSwitchToken)
+          segments: parseDualVoiceSegments(normalizedText.trim(), voiceSwitchToken)
         });
     } else {
       for (let i = 0; i < matches.length; i++) {
         const start = matches[i].index;
-        const end = i < matches.length - 1 ? matches[i + 1].index : text.length;
-        const chapterText = text.substring(start, end).trim();
+        const end = i < matches.length - 1 ? matches[i + 1].index : normalizedText.length;
+        const chapterText = normalizedText.substring(start, end).trim();
         const title = matches[i][0].replace(/^#+\s*/, '').trim();
-        
+
         chapters.push({
           title: title || `Chapter ${i + 1}`,
           content: chapterText,
@@ -134,20 +182,152 @@ function parseManuscript(text, mode, options = {}) {
 // Parse dual voice segments
 function parseDualVoiceSegments(text, delimiter = '***') {
   const segments = [];
-  const token = delimiter && typeof delimiter === 'string' && delimiter.length > 0 ? delimiter : '***';
-  const parts = token ? text.split(token) : [text];
-  
+  const sanitizedToken = normalizeVoiceSwitchToken(delimiter);
+  const sanitizedText = removeZeroWidthChars(typeof text === 'string' ? text : '');
+  const parts = sanitizedToken ? sanitizedText.split(sanitizedToken) : [sanitizedText];
+
   for (let i = 0; i < parts.length; i++) {
-    const content = parts[i].trim();
-    if (content) {
+    const trimmedContent = removeZeroWidthChars(parts[i]).trim();
+    if (trimmedContent) {
       segments.push({
-        content,
-        voiceIndex: i % 2 // Alternate between voice 1 and voice 2
+        content: trimmedContent,
+        voiceIndex: i % 2,
+        label: `Segment ${segments.length + 1}`
       });
     }
   }
-  
+
   return segments;
+}
+
+function computeDualVoiceSummary(project) {
+  const defaultSummary = {
+    ready: true,
+    chapterSummaries: [],
+    pendingChapters: [],
+    totalSegments: 0
+  };
+
+  if (!project || project.mode !== 'dual') {
+    return defaultSummary;
+  }
+
+  const chapters = Array.isArray(project.chapters) ? project.chapters : [];
+
+  const chapterSummaries = chapters.map((chapter, index) => {
+    const segments = Array.isArray(chapter && chapter.segments) ? chapter.segments.filter(Boolean) : [];
+    const uniqueVoices = new Set();
+
+    segments.forEach(segment => {
+      if (!segment) {
+        return;
+      }
+      const voiceIndex = typeof segment.voiceIndex === 'number'
+        ? segment.voiceIndex
+        : (typeof segment.voice === 'number' ? segment.voice : 0);
+      uniqueVoices.add(voiceIndex);
+    });
+
+    const hasBothVoices = uniqueVoices.has(0) && uniqueVoices.has(1);
+    const issues = [];
+
+    if (segments.length < 2) {
+      issues.push('Less than two segments detected');
+    }
+
+    if (!hasBothVoices) {
+      issues.push('Both voices not detected');
+    }
+
+    return {
+      chapterIndex: index,
+      chapterTitle: (chapter && chapter.title) || `Chapter ${index + 1}`,
+      segmentCount: segments.length,
+      voicesDetected: uniqueVoices.size,
+      hasBothVoices,
+      issues
+    };
+  });
+
+  const pendingChapters = chapterSummaries.filter(summary => summary.issues.length > 0);
+  const ready = pendingChapters.length === 0 && chapterSummaries.length > 0;
+  const totalSegments = chapterSummaries.reduce((acc, summary) => acc + summary.segmentCount, 0);
+
+  return {
+    ready,
+    chapterSummaries,
+    pendingChapters,
+    totalSegments
+  };
+}
+
+// Build a short sample for demo showcase runs
+function extractDemoSampleText(text, sentenceCount = 2, maxChars = 600) {
+  if (!text) {
+    return '';
+  }
+  const sentences = text.match(/[^.!?]+[.!?]+/g);
+  if (!sentences || sentences.length === 0) {
+    return text.slice(0, maxChars).trim();
+  }
+
+  let collected = '';
+  for (let i = 0; i < sentences.length && i < sentenceCount; i++) {
+    const candidate = (collected + ' ' + sentences[i]).trim();
+    if (candidate.length > maxChars && collected) {
+      break;
+    }
+    collected = candidate;
+  }
+
+  if (!collected) {
+    collected = sentences.slice(0, sentenceCount).join(' ').trim();
+  }
+
+  if (collected.length > maxChars) {
+    collected = collected.slice(0, maxChars).trim();
+  }
+
+  return collected;
+}
+
+// Create a dedicated chapter definition for a preset showcase demo
+function buildPresetShowcaseChapter(manuscript, options = {}) {
+  const baseSettings = options.baseSettings || {};
+  const sampleText = (options.sampleText && options.sampleText.trim()) || extractDemoSampleText(manuscript);
+  const sequences = DEMO_PRESET_CONFIGS.map((preset, index) => ({
+    name: preset.name,
+    announcement: `Preset ${index + 1}: ${preset.name}. Sample lines follow.`,
+    sampleText,
+    settings: { ...baseSettings, ...preset.settings }
+  }));
+
+  return {
+    title: 'Preset Showcase Demo',
+    content: sampleText,
+    voice: null,
+    presetShowcase: true,
+    sequences
+  };
+}
+
+function getVoiceSettings(project, voiceIndex) {
+  const baseSettings = project.settings || {};
+  if (!project.voiceSettings || !Array.isArray(project.voiceSettings)) {
+    return { ...baseSettings };
+  }
+
+  const voiceSpecific = project.voiceSettings[voiceIndex];
+  if (!voiceSpecific || typeof voiceSpecific !== 'object') {
+    return { ...baseSettings };
+  }
+
+  return {
+    stability: voiceSpecific.stability !== undefined ? voiceSpecific.stability : baseSettings.stability,
+    similarity_boost: voiceSpecific.similarity_boost !== undefined ? voiceSpecific.similarity_boost : baseSettings.similarity_boost,
+    style: voiceSpecific.style !== undefined ? voiceSpecific.style : baseSettings.style,
+    speed: voiceSpecific.speed !== undefined ? voiceSpecific.speed : baseSettings.speed
+  };
 }
 
 // Split text into smaller chunks (max ~5000 chars for stability)
@@ -275,6 +455,7 @@ function mergeAudioFiles(inputFiles, outputFile) {
     fs.writeFileSync(listFile, listContent);
     
     const args = [
+      '-y',
       '-f', 'concat',
       '-safe', '0',
       '-i', listFile,
@@ -336,17 +517,105 @@ async function processChapter(project, chapterIndex) {
     title: chapter.title
   });
   
+  const existingSegments = Array.isArray(chapter.segments) ? chapter.segments : [];
   chapter.status = 'processing';
-  chapter.segments = chapter.segments || [];
+  if (project.mode === 'single') {
+    chapter.segments = [];
+  } else {
+    chapter.segments = existingSegments;
+  }
   saveProjects();
   
   try {
     const chunkFiles = [];
     
     if (project.mode === 'single') {
-      // Single voice mode
-      const chapterContent = isDemo ? chapter.content.slice(0, demoCharLimit) : chapter.content;
-      let chunks = splitIntoChunks(chapterContent);
+      const singleVoiceSettings = getVoiceSettings(project, 0);
+      const showcaseActive = Boolean(
+        project.demoPresetShowcase &&
+        chapter.presetShowcase &&
+        Array.isArray(chapter.sequences) &&
+        chapter.sequences.length > 0
+      );
+
+      if (showcaseActive) {
+        const totalSegments = chapter.sequences.length * 2; // announcement + sample per preset
+        let segmentCounter = 0;
+
+        for (let seqIndex = 0; seqIndex < chapter.sequences.length; seqIndex++) {
+          const sequence = chapter.sequences[seqIndex];
+          const mergedSettings = { ...singleVoiceSettings, ...(sequence.settings || {}) };
+          const voiceId = project.voices && project.voices.length > 0 ? project.voices[0] : null;
+
+          if (!voiceId) {
+            throw new Error('No voice configured for preset showcase demo');
+          }
+
+          const steps = [
+            { text: sequence.announcement, type: 'announcement' },
+            { text: sequence.sampleText, type: 'sample' }
+          ];
+
+          for (const step of steps) {
+            if (!step.text) {
+              continue;
+            }
+
+            if (project.status === 'paused') {
+              chapter.status = 'paused';
+              saveProjects();
+              return;
+            }
+
+            sendUpdate(project.id, {
+              type: 'segment_start',
+              chapterIndex,
+              segmentIndex: segmentCounter,
+              total: totalSegments,
+              preset: sequence.name,
+              stage: step.type
+            });
+
+            const chunkFile = path.join(CHUNKS_DIR, `${chapterId}_${segmentCounter}.mp3`);
+
+            if (!fs.existsSync(chunkFile)) {
+              const audioBuffer = await generateAudio(
+                step.text,
+                voiceId,
+                project.apiKey,
+                mergedSettings
+              );
+              fs.writeFileSync(chunkFile, audioBuffer);
+            }
+
+            chunkFiles.push(chunkFile);
+
+            chapter.segments[segmentCounter] = {
+              index: segmentCounter,
+              voice: 0,
+              status: 'completed',
+              file: chunkFile,
+              label: step.type === 'announcement' ? `${sequence.name} Intro` : sequence.name,
+              presetName: sequence.name,
+              presetStage: step.type
+            };
+
+            sendUpdate(project.id, {
+              type: 'segment_complete',
+              chapterIndex,
+              segmentIndex: segmentCounter,
+              preset: sequence.name,
+              stage: step.type
+            });
+
+            segmentCounter++;
+            saveProjects();
+          }
+        }
+      } else {
+        // Single voice mode
+        const chapterContent = isDemo ? chapter.content.slice(0, demoCharLimit) : chapter.content;
+        let chunks = splitIntoChunks(chapterContent);
       if (isDemo) {
         chunks = chunks.slice(0, demoChunksPerSegment);
       }
@@ -372,7 +641,7 @@ async function processChapter(project, chapterIndex) {
             chunks[i],
             project.voices[0],
             project.apiKey,
-            project.settings
+            singleVoiceSettings
           );
           fs.writeFileSync(chunkFile, audioBuffer);
         }
@@ -393,6 +662,7 @@ async function processChapter(project, chapterIndex) {
         });
         
         saveProjects();
+      }
       }
     } else {
       // Dual voice mode
@@ -423,14 +693,15 @@ async function processChapter(project, chapterIndex) {
           });
           
           const chunkFile = path.join(CHUNKS_DIR, `${chapterId}_${segmentIndex}.mp3`);
-          
+
           if (!fs.existsSync(chunkFile)) {
             const voiceId = project.voices[segment.voiceIndex];
+            const voiceSettings = getVoiceSettings(project, segment.voiceIndex);
             const audioBuffer = await generateAudio(
               chunks[i],
               voiceId,
               project.apiKey,
-              project.settings
+              voiceSettings
             );
             fs.writeFileSync(chunkFile, audioBuffer);
           }
@@ -503,84 +774,185 @@ async function processChapter(project, chapterIndex) {
   }
 }
 
+async function compileBook(projectId, options = {}) {
+  const { manual = false } = options;
+  const project = projects[projectId];
+
+  if (!project) {
+    throw new Error('Project not found');
+  }
+
+  if (project._bookPromise) {
+    return project._bookPromise;
+  }
+
+  const taskPromise = (async () => {
+    const completedChapters = project.chapters
+      .map((chapter, index) => ({ chapter, index }))
+      .filter(item => (
+        item.chapter &&
+        item.chapter.status === 'completed' &&
+        item.chapter.file &&
+        fs.existsSync(item.chapter.file)
+      ));
+
+    if (completedChapters.length === 0) {
+      if (manual) {
+        throw new Error('No completed chapters available to merge.');
+      }
+      return null;
+    }
+
+    sendUpdate(projectId, {
+      type: 'book_merging',
+      manual,
+      chapters: completedChapters.length
+    });
+
+    const chapterFiles = completedChapters
+      .sort((a, b) => a.index - b.index)
+      .map(item => item.chapter.file);
+
+    const bookFile = path.join(BOOK_DIR, `${projectId}_audiobook.mp3`);
+    await mergeAudioFiles(chapterFiles, bookFile);
+
+    project.bookFile = bookFile;
+    project.bookUrl = `/audio/book/${path.basename(bookFile)}`;
+    project.bookGeneratedAt = new Date().toISOString();
+    saveProjects();
+
+    sendUpdate(projectId, {
+      type: 'book_ready',
+      manual,
+      bookUrl: project.bookUrl,
+      chapters: chapterFiles.length
+    });
+
+    return project.bookUrl;
+  })();
+
+  const trackedPromise = taskPromise.finally(() => {
+    const freshProject = projects[projectId];
+    if (freshProject && freshProject._bookPromise === trackedPromise) {
+      delete freshProject._bookPromise;
+    }
+  });
+
+  Object.defineProperty(project, '_bookPromise', {
+    value: trackedPromise,
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+
+  return trackedPromise;
+}
+
 // Process entire project
 async function processProject(projectId) {
   const project = projects[projectId];
-  if (!project) return;
-  
-  project.status = 'processing';
-  saveProjects();
-  
-  try {
-    const totalChapters = project.chapters.length;
-    const requestedLimit = typeof project.chapterLimit === 'number' && project.chapterLimit > 0
-      ? Math.min(project.chapterLimit, totalChapters)
-      : totalChapters;
-    const chapterLimit = project.demoMode ? Math.min(requestedLimit, 1) : requestedLimit;
-    
-    // Process each chapter
-    for (let i = 0; i < project.chapters.length; i++) {
-      if (i >= chapterLimit) {
-        if (project.chapters[i].status !== 'skipped') {
-          project.chapters[i].status = 'skipped';
-          if (Array.isArray(project.chapters[i].segments)) {
-            project.chapters[i].segments.forEach(seg => {
-              seg.status = 'skipped';
+  if (!project) {
+    return;
+  }
+
+  if (project._processingPromise) {
+    return project._processingPromise;
+  }
+
+  const taskPromise = (async () => {
+    project.status = 'processing';
+    saveProjects();
+
+    try {
+      const totalChapters = project.chapters.length;
+      const requestedLimit = typeof project.chapterLimit === 'number' && project.chapterLimit > 0
+        ? Math.min(project.chapterLimit, totalChapters)
+        : totalChapters;
+      const chapterLimit = project.demoMode ? Math.min(requestedLimit, 1) : requestedLimit;
+
+      for (let i = 0; i < project.chapters.length; i++) {
+        if (i >= chapterLimit) {
+          const chapter = project.chapters[i];
+          if (chapter.status !== 'skipped') {
+            chapter.status = 'skipped';
+            if (Array.isArray(chapter.segments)) {
+              chapter.segments.forEach(seg => {
+                seg.status = 'skipped';
+              });
+            }
+            saveProjects();
+            sendUpdate(projectId, {
+              type: project.demoMode ? 'chapter_skipped_demo' : 'chapter_skipped',
+              chapterIndex: i
             });
           }
-          saveProjects();
-          sendUpdate(projectId, {
-            type: project.demoMode ? 'chapter_skipped_demo' : 'chapter_skipped',
-            chapterIndex: i
-          });
+          continue;
         }
-        continue;
+
+        if (project.status === 'paused') {
+          return;
+        }
+
+        const chapter = project.chapters[i];
+        const chapterHasAudio = chapter.status === 'completed' && chapter.file && fs.existsSync(chapter.file);
+        if (chapterHasAudio) {
+          continue;
+        }
+
+        await processChapter(project, i);
+
+        if (project.status === 'paused') {
+          return;
+        }
+
+        if (chapter.status !== 'completed') {
+          if (chapter.status === 'error') {
+            throw new Error(chapter.error || `Chapter ${i + 1} failed to complete.`);
+          }
+          return;
+        }
       }
-      if (project.status === 'paused') {
-        return;
-      }
-      
-      await processChapter(project, i);
+
+      await compileBook(projectId, { manual: false });
+
+      project.status = 'completed';
+      project.completedAt = new Date().toISOString();
+
+      sendUpdate(projectId, {
+        type: 'project_complete',
+        bookUrl: project.bookUrl
+      });
+
+      saveProjects();
+    } catch (error) {
+      project.status = 'error';
+      project.error = error.message;
+
+      sendUpdate(projectId, {
+        type: 'project_error',
+        error: error.message
+      });
+
+      saveProjects();
+      throw error;
     }
-    
-    // Merge all chapters into full audiobook
-    sendUpdate(projectId, {
-      type: 'book_merging'
-    });
-    
-    const chapterFiles = project.chapters
-      .filter(ch => ch.file && fs.existsSync(ch.file))
-      .map(ch => ch.file);
-    
-    if (chapterFiles.length > 0) {
-      const bookFile = path.join(BOOK_DIR, `${projectId}_audiobook.mp3`);
-      await mergeAudioFiles(chapterFiles, bookFile);
-      
-      project.bookFile = bookFile;
-      project.bookUrl = `/audio/book/${path.basename(bookFile)}`;
+  })();
+
+  const trackedPromise = taskPromise.finally(() => {
+    const currentProject = projects[projectId];
+    if (currentProject && currentProject._processingPromise === trackedPromise) {
+      delete currentProject._processingPromise;
     }
-    
-    project.status = 'completed';
-    project.completedAt = new Date().toISOString();
-    
-    sendUpdate(projectId, {
-      type: 'project_complete',
-      bookUrl: project.bookUrl
-    });
-    
-    saveProjects();
-    
-  } catch (error) {
-    project.status = 'error';
-    project.error = error.message;
-    
-    sendUpdate(projectId, {
-      type: 'project_error',
-      error: error.message
-    });
-    
-    saveProjects();
-  }
+  });
+
+  Object.defineProperty(project, '_processingPromise', {
+    value: trackedPromise,
+    enumerable: false,
+    configurable: true,
+    writable: true
+  });
+
+  return trackedPromise;
 }
 
 // HTTP Server
@@ -628,7 +1000,13 @@ const server = http.createServer(async (req, res) => {
   // API endpoints
   if (pathname === '/api/projects' && req.method === 'GET') {
     res.writeHead(200, { 'Content-Type': 'application/json' });
-    res.end(JSON.stringify(Object.values(projects)));
+    const response = Object.values(projects).map(project => {
+      if (project && project.mode === 'dual') {
+        project.dualVoiceSummary = computeDualVoiceSummary(project);
+      }
+      return project;
+    });
+    res.end(JSON.stringify(response));
     return;
   }
   
@@ -639,9 +1017,7 @@ const server = http.createServer(async (req, res) => {
       try {
         const data = JSON.parse(body);
         
-        const voiceSwitchToken = typeof data.voiceSwitchToken === 'string' && data.voiceSwitchToken.trim().length > 0
-          ? data.voiceSwitchToken.trim()
-          : '***';
+        const voiceSwitchToken = normalizeVoiceSwitchToken(data.voiceSwitchToken);
         let chapterLimit = null;
         if (data.chapterLimit !== undefined && data.chapterLimit !== null && data.chapterLimit !== '') {
           const parsedLimit = parseInt(data.chapterLimit, 10);
@@ -654,14 +1030,53 @@ const server = http.createServer(async (req, res) => {
         const demoCharLimit = typeof data.demoCharLimit === 'number' && data.demoCharLimit > 0 ? data.demoCharLimit : undefined;
         const demoChunksPerSegment = typeof data.demoChunksPerSegment === 'number' && data.demoChunksPerSegment > 0 ? data.demoChunksPerSegment : undefined;
         const demoSegmentsPerChapter = typeof data.demoSegmentsPerChapter === 'number' && data.demoSegmentsPerChapter > 0 ? data.demoSegmentsPerChapter : undefined;
-        
+        const demoPresetShowcase = demoMode && Boolean(data.demoPresetShowcase);
+        const demoPresetSampleText = typeof data.demoPresetSample === 'string' && data.demoPresetSample.trim().length > 0
+          ? data.demoPresetSample.trim()
+          : undefined;
+        let voiceSettings = undefined;
+        if (Array.isArray(data.voiceSettings)) {
+          voiceSettings = data.voiceSettings.slice(0, 2).map((settings) => {
+            if (settings && typeof settings === 'object') {
+              const parsed = {};
+              if (typeof settings.stability === 'number') parsed.stability = settings.stability;
+              if (typeof settings.similarity_boost === 'number') parsed.similarity_boost = settings.similarity_boost;
+              if (typeof settings.style === 'number') parsed.style = settings.style;
+              if (typeof settings.speed === 'number') parsed.speed = settings.speed;
+              return Object.keys(parsed).length > 0 ? parsed : null;
+            }
+            return null;
+          });
+        }
+        let voicePresetLabels = undefined;
+        if (Array.isArray(data.voicePresetLabels)) {
+          voicePresetLabels = data.voicePresetLabels.slice(0, 2).map(label => (
+            typeof label === 'string' && label.trim().length > 0 ? label.trim() : null
+          ));
+        }
+
         // Validate API key by fetching voices
         const voices = await getVoices(data.apiKey);
-        
+
         const projectId = generateId();
-        const chapters = parseManuscript(data.manuscript, data.mode, { voiceSwitchToken });
-        
-        projects[projectId] = {
+        let chapters = parseManuscript(data.manuscript, data.mode, { voiceSwitchToken });
+
+        const primaryVoiceBaseSettings = voiceSettings && voiceSettings[0] ? voiceSettings[0] : (data.settings || {});
+
+        if (demoPresetShowcase) {
+          chapters = [
+            buildPresetShowcaseChapter(data.manuscript, {
+              baseSettings: primaryVoiceBaseSettings,
+              sampleText: demoPresetSampleText
+            })
+          ];
+        }
+
+        const showcaseSampleText = demoPresetShowcase && chapters[0] && chapters[0].sequences && chapters[0].sequences.length > 0
+          ? chapters[0].sequences[0].sampleText
+          : undefined;
+
+        const projectRecord = {
           id: projectId,
           title: data.title,
           author: data.author,
@@ -676,6 +1091,10 @@ const server = http.createServer(async (req, res) => {
           demoCharLimit,
           demoChunksPerSegment,
           demoSegmentsPerChapter,
+          demoPresetShowcase,
+          demoPresetSampleText: showcaseSampleText,
+          voiceSettings,
+          voicePresetLabels,
           voiceSwitchToken,
           chapters: chapters.map(ch => ({
             ...ch,
@@ -685,6 +1104,10 @@ const server = http.createServer(async (req, res) => {
           status: 'pending',
           createdAt: new Date().toISOString()
         };
+
+        projectRecord.dualVoiceSummary = computeDualVoiceSummary(projectRecord);
+
+        projects[projectId] = projectRecord;
         
         saveProjects();
         
@@ -704,6 +1127,9 @@ const server = http.createServer(async (req, res) => {
     const project = projects[projectId];
     
     if (project) {
+      if (project.mode === 'dual') {
+        project.dualVoiceSummary = computeDualVoiceSummary(project);
+      }
       res.writeHead(200, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(project));
     } else {
@@ -718,6 +1144,18 @@ const server = http.createServer(async (req, res) => {
     const project = projects[projectId];
     
     if (project) {
+      if (project.mode === 'dual') {
+        const dualVoiceSummary = computeDualVoiceSummary(project);
+        project.dualVoiceSummary = dualVoiceSummary;
+        if (!dualVoiceSummary.ready) {
+          res.writeHead(400, { 'Content-Type': 'application/json' });
+          res.end(JSON.stringify({
+            error: `Dual voice markers were not detected in all chapters. Please ensure the manuscript uses '${project.voiceSwitchToken || '***'}' between speaker sections.`
+          }));
+          return;
+        }
+      }
+
       project.status = 'processing';
       saveProjects();
       
@@ -766,6 +1204,29 @@ const server = http.createServer(async (req, res) => {
     } else {
       res.writeHead(404, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify({ error: 'Project not found' }));
+    }
+    return;
+  }
+
+  if (pathname.startsWith('/api/projects/') && pathname.endsWith('/book') && req.method === 'POST') {
+    const projectId = pathname.split('/')[3];
+    const project = projects[projectId];
+
+    if (!project) {
+      res.writeHead(404, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: 'Project not found' }));
+      return;
+    }
+
+    try {
+      const bookUrl = await compileBook(projectId, { manual: true });
+      const completedCount = project.chapters.filter(ch => ch && ch.status === 'completed' && ch.file && fs.existsSync(ch.file)).length;
+
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ status: 'ok', bookUrl, chapters: completedCount }));
+    } catch (error) {
+      res.writeHead(400, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify({ error: error.message }));
     }
     return;
   }
@@ -1078,14 +1539,24 @@ function getHTML() {
       background: #28a745;
       color: white;
     }
-    
+
     .status-paused {
       background: #6c757d;
       color: white;
     }
-    
+
     .status-error {
       background: #dc3545;
+      color: white;
+    }
+
+    .status-warning {
+      background: #ffc107;
+      color: #000;
+    }
+
+    .status-success {
+      background: #28a745;
       color: white;
     }
 
@@ -1097,6 +1568,31 @@ function getHTML() {
     .status-demo {
       background: #17a2b8;
       color: white;
+    }
+
+    .dual-voice-warning,
+    .dual-voice-success {
+      padding: 12px 14px;
+      border-radius: 6px;
+      margin: 15px 0;
+      font-size: 0.9em;
+      line-height: 1.45;
+    }
+
+    .dual-voice-warning {
+      background: #fff3cd;
+      border: 1px solid #ffeeba;
+      color: #856404;
+    }
+
+    .dual-voice-warning ul {
+      margin: 8px 0 0 18px;
+    }
+
+    .dual-voice-success {
+      background: #e6ffed;
+      border: 1px solid #c3e6cb;
+      color: #155724;
     }
     
     .chapter-list {
@@ -1208,7 +1704,44 @@ function getHTML() {
     .hidden {
       display: none !important;
     }
-    
+
+    .flash-message {
+      margin: 16px 0 10px 0;
+      padding: 12px 16px;
+      border-radius: 6px;
+      border: 1px solid transparent;
+      font-size: 0.95em;
+      font-weight: 500;
+      color: #1f2933;
+      background: #e2e8f0;
+      box-shadow: 0 2px 4px rgba(15, 23, 42, 0.08);
+      transition: opacity 0.2s ease;
+    }
+
+    .flash-message.flash-info {
+      background: #e6ebff;
+      border-color: #c4cdff;
+      color: #25316a;
+    }
+
+    .flash-message.flash-success {
+      background: #dcf7e5;
+      border-color: #9be7be;
+      color: #1f6f45;
+    }
+
+    .flash-message.flash-warning {
+      background: #fff4db;
+      border-color: #fed998;
+      color: #7a4d0f;
+    }
+
+    .flash-message.flash-error {
+      background: #ffe1e1;
+      border-color: #ffb4b4;
+      color: #7b1f1f;
+    }
+
     .loading {
       text-align: center;
       padding: 40px;
@@ -1262,6 +1795,37 @@ function getHTML() {
     
     .voice-1 {
       background: #f093fb;
+    }
+
+    .voice-preset-box {
+      margin-top: 10px;
+    }
+
+    .voice-preset-buttons {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 8px 0 6px 0;
+    }
+
+    .preset-btn {
+      background: #636363ff;
+      border: 1px solid #ccd0ff;
+      border-radius: 4px;
+      padding: 6px 10px;
+      font-size: 0.85em;
+      cursor: pointer;
+      transition: background 0.2s, border-color 0.2s;
+    }
+
+    .preset-btn:hover {
+      background: #a088f9ff;
+    }
+
+    .preset-btn.active {
+      background: #8366eaff;
+      border-color: #ffffffff;
+      color: white;
     }
 
     .help-text {
@@ -1366,6 +1930,8 @@ function getHTML() {
         <button class="tab" data-tab="new-book" onclick="switchTab('new-book', event)">New Book</button>
       </div>
       
+      <div id="flash-message" class="flash-message hidden" role="status" aria-live="polite"></div>
+      
       <!-- Dashboard Tab -->
       <div id="dashboard" class="tab-content active">
         <h2>Your Projects</h2>
@@ -1436,7 +2002,21 @@ function getHTML() {
             </label>
           </div>
         </div>
-        
+
+        <div class="form-group hidden" id="demo-options">
+          <label>Demo Preview Options</label>
+          <label class="checkbox-label" style="margin-bottom: 10px;">
+            <input type="checkbox" id="demo-preset-showcase">
+            <span>Generate five preset styles in one audition clip</span>
+          </label>
+          <p class="help-text">Creates a single demo that announces each preset before reading the sample lines so you can compare styles quickly.</p>
+          <div id="demo-preset-sample-wrapper" class="hidden" style="margin-top: 10px;">
+            <label for="demo-preset-sample">Custom sample sentences</label>
+            <textarea id="demo-preset-sample" placeholder="Optional: paste the sentences you want to hear in the preset showcase" disabled></textarea>
+            <span class="help-text">Leave blank to use the opening sentences of your manuscript.</span>
+          </div>
+        </div>
+
         <div class="form-group">
           <label for="description">Description</label>
           <textarea id="description" placeholder="Brief description of the book"></textarea>
@@ -1457,6 +2037,17 @@ function getHTML() {
                 <select id="voice-1" required>
                   <option value="">Load voices first</option>
                 </select>
+                <div class="voice-preset-box">
+                  <span style="font-size: 0.9em; font-weight: 600;">Quick presets</span>
+                  <div class="voice-preset-buttons" data-voice-index="0">
+                    <button type="button" class="preset-btn" data-preset-key="balanced" onclick="applyVoicePreset(0, 'balanced')">Balanced Narrator</button>
+                    <button type="button" class="preset-btn" data-preset-key="dramatic" onclick="applyVoicePreset(0, 'dramatic')">Dramatic Storyteller</button>
+                    <button type="button" class="preset-btn" data-preset-key="calm" onclick="applyVoicePreset(0, 'calm')">Calm Documentary</button>
+                    <button type="button" class="preset-btn" data-preset-key="energetic" onclick="applyVoicePreset(0, 'energetic')">Energetic Presenter</button>
+                    <button type="button" class="preset-btn" data-preset-key="news" onclick="applyVoicePreset(0, 'news')">Crisp Newsreader</button>
+                  </div>
+                  <span class="help-text">Selected preset: <span id="voice-preset-display-0">Custom</span></span>
+                </div>
               </div>
               
               <div class="form-group hidden" id="voice-2-group">
@@ -1466,6 +2057,17 @@ function getHTML() {
                 <select id="voice-2">
                   <option value="">Load voices first</option>
                 </select>
+                <div class="voice-preset-box">
+                  <span style="font-size: 0.9em; font-weight: 600;">Quick presets</span>
+                  <div class="voice-preset-buttons" data-voice-index="1">
+                    <button type="button" class="preset-btn" data-preset-key="balanced" onclick="applyVoicePreset(1, 'balanced')">Balanced Narrator</button>
+                    <button type="button" class="preset-btn" data-preset-key="dramatic" onclick="applyVoicePreset(1, 'dramatic')">Dramatic Storyteller</button>
+                    <button type="button" class="preset-btn" data-preset-key="calm" onclick="applyVoicePreset(1, 'calm')">Calm Documentary</button>
+                    <button type="button" class="preset-btn" data-preset-key="energetic" onclick="applyVoicePreset(1, 'energetic')">Energetic Presenter</button>
+                    <button type="button" class="preset-btn" data-preset-key="news" onclick="applyVoicePreset(1, 'news')">Crisp Newsreader</button>
+                  </div>
+                  <span class="help-text">Selected preset: <span id="voice-preset-display-1">Custom</span></span>
+                </div>
               </div>
             </div>
             
@@ -1483,27 +2085,27 @@ function getHTML() {
               <label class="slider-label">
                 <span class="slider-label-text">Stability</span>
                 <span class="info-icon" tabindex="0" role="img" aria-label="Stability setting info" data-tooltip="Higher values keep delivery consistent; lower values add more expressive variation. Try 0.3-0.6 for natural narration.">i</span>
-                <span id="stability-value" class="slider-value">0.5</span>
+                <span id="stability-value" class="slider-value">0.55</span>
               </label>
-              <input type="range" id="stability" min="0" max="1" step="0.1" value="0.5" oninput="updateSliderValue('stability')">
+              <input type="range" id="stability" min="0" max="1" step="0.1" value="0.55" oninput="updateSliderValue('stability')">
             </div>
             
             <div class="slider-group">
               <label class="slider-label">
                 <span class="slider-label-text">Similarity Boost</span>
                 <span class="info-icon" tabindex="0" role="img" aria-label="Similarity boost info" data-tooltip="Raises how closely the output matches the original voice. Use higher values for brand consistency; lower for more creativity.">i</span>
-                <span id="similarity-value" class="slider-value">0.75</span>
+                <span id="similarity-value" class="slider-value">0.78</span>
               </label>
-              <input type="range" id="similarity" min="0" max="1" step="0.05" value="0.75" oninput="updateSliderValue('similarity')">
+              <input type="range" id="similarity" min="0" max="1" step="0.01" value="0.78" oninput="updateSliderValue('similarity')">
             </div>
             
             <div class="slider-group">
               <label class="slider-label">
                 <span class="slider-label-text">Style</span>
                 <span class="info-icon" tabindex="0" role="img" aria-label="Style setting info" data-tooltip="Adds dramatic flair to delivery. Increase slightly for storytelling energy; keep lower for neutral narration.">i</span>
-                <span id="style-value" class="slider-value">0</span>
+                <span id="style-value" class="slider-value">0.2</span>
               </label>
-              <input type="range" id="style" min="0" max="1" step="0.1" value="0" oninput="updateSliderValue('style')">
+              <input type="range" id="style" min="0" max="1" step="0.1" value="0.2" oninput="updateSliderValue('style')">
             </div>
             
             <div class="slider-group">
@@ -1540,7 +2142,78 @@ function getHTML() {
     let currentProject = null;
     let eventSource = null;
     let availableVoices = [];
-    
+    let flashMessageTimeout = null;
+    const voicePresetOptions = [
+      {
+        key: 'balanced',
+        label: 'Balanced Narrator',
+        settings: { stability: 0.55, similarity_boost: 0.78, style: 0.2, speed: 1.0 }
+      },
+      {
+        key: 'dramatic',
+        label: 'Dramatic Storyteller',
+        settings: { stability: 0.4, similarity_boost: 0.7, style: 0.75, speed: 1.05 }
+      },
+      {
+        key: 'calm',
+        label: 'Calm Documentary',
+        settings: { stability: 0.75, similarity_boost: 0.85, style: 0.1, speed: 0.95 }
+      },
+      {
+        key: 'energetic',
+        label: 'Energetic Presenter',
+        settings: { stability: 0.45, similarity_boost: 0.65, style: 0.6, speed: 1.18 }
+      },
+      {
+        key: 'news',
+        label: 'Crisp Newsreader',
+        settings: { stability: 0.6, similarity_boost: 0.9, style: 0.15, speed: 1.12 }
+      }
+    ];
+    const voicePresetSelections = [null, null];
+    const sliderToPresetKey = {
+      stability: 'stability',
+      similarity: 'similarity_boost',
+      style: 'style',
+      speed: 'speed'
+    };
+    let activePresetVoiceIndex = null;
+
+    function showFlashMessage(message, type = 'info', duration = 4000) {
+      const container = document.getElementById('flash-message');
+      if (!container) {
+        return;
+      }
+
+      container.textContent = message;
+      container.className = 'flash-message';
+      container.classList.add('flash-' + type);
+      container.classList.remove('hidden');
+
+      if (flashMessageTimeout) {
+        clearTimeout(flashMessageTimeout);
+      }
+
+      if (duration !== null) {
+        flashMessageTimeout = setTimeout(() => {
+          container.classList.add('hidden');
+          flashMessageTimeout = null;
+        }, duration);
+      }
+    }
+
+    function clearFlashMessage() {
+      const container = document.getElementById('flash-message');
+      if (!container) {
+        return;
+      }
+      container.classList.add('hidden');
+      if (flashMessageTimeout) {
+        clearTimeout(flashMessageTimeout);
+        flashMessageTimeout = null;
+      }
+    }
+
     // Tab switching
     function switchTab(tabName, evt) {
       document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
@@ -1561,7 +2234,21 @@ function getHTML() {
     function updateSliderValue(name) {
       const slider = document.getElementById(name);
       const display = document.getElementById(name + '-value');
+      if (!slider || !display) {
+        return;
+      }
+
       display.textContent = slider.value;
+
+      const presetKey = sliderToPresetKey[name];
+      if (!presetKey || activePresetVoiceIndex === null) {
+        return;
+      }
+
+      const activeSelection = voicePresetSelections[activePresetVoiceIndex];
+      if (activeSelection && activeSelection.settings) {
+        activeSelection.settings[presetKey] = parseFloat(slider.value);
+      }
     }
     
     // Update voice selectors based on mode
@@ -1589,14 +2276,118 @@ function getHTML() {
         if (tokenHelp) {
           tokenHelp.textContent = 'Enable dual voice mode to customise the marker.';
         }
+        clearVoicePresetSelection(1);
+        if (voicePresetSelections[0]) {
+          activePresetVoiceIndex = 0;
+          setSlidersFromPreset(voicePresetSelections[0].settings);
+        }
       }
     }
-    
+
+    function updateDemoOptionsVisibility() {
+      const demoCheckbox = document.getElementById('demo-mode');
+      const options = document.getElementById('demo-options');
+      if (!demoCheckbox || !options) {
+        return;
+      }
+
+      const enabled = demoCheckbox.checked;
+      options.classList.toggle('hidden', !enabled);
+
+      if (!enabled) {
+        const showcaseCheckbox = document.getElementById('demo-preset-showcase');
+        const sampleWrapper = document.getElementById('demo-preset-sample-wrapper');
+        const sampleInput = document.getElementById('demo-preset-sample');
+        if (showcaseCheckbox) {
+          showcaseCheckbox.checked = false;
+        }
+        if (sampleWrapper) {
+          sampleWrapper.classList.add('hidden');
+        }
+        if (sampleInput) {
+          sampleInput.value = '';
+          sampleInput.disabled = true;
+        }
+      } else {
+        updatePresetSampleVisibility();
+      }
+    }
+
+    function updatePresetSampleVisibility() {
+      const showcaseCheckbox = document.getElementById('demo-preset-showcase');
+      const sampleWrapper = document.getElementById('demo-preset-sample-wrapper');
+      const sampleInput = document.getElementById('demo-preset-sample');
+      if (!showcaseCheckbox || !sampleWrapper || !sampleInput) {
+        return;
+      }
+
+      const enabled = showcaseCheckbox.checked;
+      sampleWrapper.classList.toggle('hidden', !enabled);
+      sampleInput.disabled = !enabled;
+    }
+
+    function updateVoicePresetDisplay(voiceIndex) {
+      const display = document.getElementById('voice-preset-display-' + voiceIndex);
+      const selection = voicePresetSelections[voiceIndex];
+      if (display) {
+        display.textContent = selection ? selection.label : 'Custom';
+      }
+
+      const container = document.querySelector('.voice-preset-buttons[data-voice-index="' + voiceIndex + '"]');
+      if (container) {
+        const buttons = container.querySelectorAll('button');
+        buttons.forEach(btn => {
+          const key = btn.getAttribute('data-preset-key');
+          if (selection && key === selection.key) {
+            btn.classList.add('active');
+          } else {
+            btn.classList.remove('active');
+          }
+        });
+      }
+    }
+
+    function setSlidersFromPreset(settings) {
+      Object.entries(sliderToPresetKey).forEach(([sliderId, presetKey]) => {
+        const slider = document.getElementById(sliderId);
+        if (!slider || settings[presetKey] === undefined) {
+          return;
+        }
+        slider.value = settings[presetKey];
+        updateSliderValue(sliderId);
+      });
+    }
+
+    function applyVoicePreset(voiceIndex, presetKey) {
+      const preset = voicePresetOptions.find(p => p.key === presetKey);
+      if (!preset) {
+        return;
+      }
+      voicePresetSelections[voiceIndex] = {
+        key: preset.key,
+        label: preset.label,
+        settings: { ...preset.settings }
+      };
+      activePresetVoiceIndex = voiceIndex;
+      setSlidersFromPreset(preset.settings);
+      updateVoicePresetDisplay(voiceIndex);
+    }
+
+    function clearVoicePresetSelection(voiceIndex) {
+      voicePresetSelections[voiceIndex] = null;
+      if (activePresetVoiceIndex === voiceIndex) {
+        activePresetVoiceIndex = null;
+      }
+      updateVoicePresetDisplay(voiceIndex);
+    }
+
+    window.applyVoicePreset = applyVoicePreset;
+
     // Load voices from API
     async function loadVoices() {
       const apiKey = document.getElementById('api-key').value;
       if (!apiKey) {
-        alert('Please enter your API key first');
+        showFlashMessage('Please enter your API key first', 'warning', 5000);
         return;
       }
       
@@ -1629,9 +2420,9 @@ function getHTML() {
           voice2.appendChild(option2);
         });
         
-        alert('Voices loaded successfully!');
+        showFlashMessage('Voices loaded successfully!', 'success');
       } catch (error) {
-        alert('Error loading voices: ' + error.message);
+        showFlashMessage('Error loading voices: ' + error.message, 'error', 6000);
       }
     }
     
@@ -1649,10 +2440,13 @@ function getHTML() {
         }
         
         container.innerHTML = projects.map(project => {
-          const completedChapters = project.chapters.filter(ch => ch.status === 'completed').length;
+          const completedChapters = project.chapters.filter(ch => ch.status === 'completed' && ch.file).length;
           const totalChapters = project.chapters.length;
           const plannedChapters = project.demoMode ? Math.min(project.chapterLimit || 1, 1) : (project.chapterLimit || totalChapters);
           const progress = plannedChapters > 0 ? (completedChapters / plannedChapters * 100) : 0;
+          const dualVoiceBadge = project.mode === 'dual'
+            ? '<span class="status-badge ' + (project.dualVoiceSummary && project.dualVoiceSummary.ready ? 'status-completed' : 'status-warning') + '">Dual Voices ' + (project.dualVoiceSummary && project.dualVoiceSummary.ready ? 'Ready' : 'Check markers') + '</span>'
+            : '';
           
           return \`
             <div class="project-card" onclick="openProject('\${project.id}')">
@@ -1664,6 +2458,7 @@ function getHTML() {
                 <div class="progress-fill" style="width: \${progress}%"></div>
               </div>
               <span class="status-badge status-\${project.status}">\${project.status.toUpperCase()}</span>
+              \${dualVoiceBadge}
             </div>
           \`;
         }).join('');
@@ -1671,7 +2466,15 @@ function getHTML() {
         console.error('Error loading projects:', error);
       }
     }
-    
+
+    document.getElementById('demo-mode').addEventListener('change', updateDemoOptionsVisibility);
+    document.getElementById('demo-preset-showcase').addEventListener('change', updatePresetSampleVisibility);
+
+    updateDemoOptionsVisibility();
+    updatePresetSampleVisibility();
+    updateVoicePresetDisplay(0);
+    updateVoicePresetDisplay(1);
+
     // Create new project
     document.getElementById('new-book-form').addEventListener('submit', async (e) => {
       e.preventDefault();
@@ -1708,11 +2511,30 @@ function getHTML() {
         }
       }
       data.demoMode = document.getElementById('demo-mode').checked;
+      if (data.demoMode && document.getElementById('demo-preset-showcase').checked) {
+        data.demoPresetShowcase = true;
+        const sampleOverride = document.getElementById('demo-preset-sample').value.trim();
+        if (sampleOverride) {
+          data.demoPresetSample = sampleOverride;
+        }
+      }
       const voiceSwitchTokenValue = document.getElementById('voice-change-token').value.trim();
       if (voiceSwitchTokenValue) {
         data.voiceSwitchToken = voiceSwitchTokenValue;
       }
-      
+      const presetSelections = voicePresetSelections.slice(0, mode === 'dual' ? 2 : 1);
+      if (presetSelections.some(selection => selection)) {
+        const voiceSettingsPayload = presetSelections.map(selection => selection ? { ...selection.settings } : null);
+        const voicePresetLabelsPayload = presetSelections.map(selection => selection ? selection.label : null);
+        if (mode !== 'dual') {
+          // Ensure second voice slot is preserved as null for backend consistency
+          voiceSettingsPayload.push(null);
+          voicePresetLabelsPayload.push(null);
+        }
+        data.voiceSettings = voiceSettingsPayload;
+        data.voicePresetLabels = voicePresetLabelsPayload;
+      }
+
       try {
         const response = await fetch('/api/projects', {
           method: 'POST',
@@ -1726,7 +2548,7 @@ function getHTML() {
         }
         
         const result = await response.json();
-        alert(\`Project created successfully! \${result.chapters} chapters detected.\`);
+        showFlashMessage(\`Project created successfully! \${result.chapters} chapters detected.\`, 'success', 7000);
         
         // Reset form
         document.getElementById('new-book-form').reset();
@@ -1735,12 +2557,17 @@ function getHTML() {
         updateSliderValue('style');
         updateSliderValue('speed');
         updateVoiceSelectors();
+        updateDemoOptionsVisibility();
+        updatePresetSampleVisibility();
+        clearVoicePresetSelection(0);
+        clearVoicePresetSelection(1);
+        applyVoicePreset(0, 'balanced');
         
         // Switch to dashboard
         switchTab('dashboard');
         loadProjects();
       } catch (error) {
-        alert('Error creating project: ' + error.message);
+        showFlashMessage('Error creating project: ' + error.message, 'error', 7000);
       }
     });
     
@@ -1756,9 +2583,111 @@ function getHTML() {
         const content = document.getElementById('modal-content');
         const totalChapters = project.chapters.length;
         const plannedChapters = project.demoMode ? Math.min(project.chapterLimit || 1, 1) : (project.chapterLimit || totalChapters);
-        
+        const completedChapters = project.chapters.filter(ch => ch.status === 'completed' && ch.file).length;
+        const manualCompileDisabled = completedChapters === 0;
+        let lastCompiledAt = null;
+        if (project.bookGeneratedAt) {
+          const parsedDate = new Date(project.bookGeneratedAt);
+          if (!Number.isNaN(parsedDate.getTime())) {
+            lastCompiledAt = parsedDate.toLocaleString();
+          }
+        }
+
+        const escapeHtml = (value) => {
+          if (typeof value !== 'string') {
+            return value;
+          }
+          return value.replace(/[&<>"']/g, (char) => {
+            switch (char) {
+              case '&':
+                return '&amp;';
+              case '<':
+                return '&lt;';
+              case '>':
+                return '&gt;';
+              case '"':
+                return '&quot;';
+              case "'":
+                return '&#39;';
+              default:
+                return char;
+            }
+          });
+        };
+        const manualCompileLabel = manualCompileDisabled
+          ? 'Compile Completed Chapters'
+          : 'Compile ' + completedChapters + ' Completed ' + (completedChapters === 1 ? 'Chapter' : 'Chapters');
+        const manualCompileLabelSafe = escapeHtml(manualCompileLabel);
+        const lastCompiledBlock = lastCompiledAt
+          ? '<p><strong>Last Compiled:</strong> ' + escapeHtml(lastCompiledAt) + '</p>'
+          : '';
+        let presetShowcaseBlock = '';
+        if (project.demoPresetShowcase) {
+          let samplePreview = project.demoPresetSampleText || '';
+          if (samplePreview.length > 220) {
+            samplePreview = samplePreview.slice(0, 220).trim() + '…';
+          }
+          presetShowcaseBlock = \`<p><strong>Preset Showcase:</strong> Enabled (5 presets)</p>\`;
+          if (samplePreview) {
+            presetShowcaseBlock += \`<p><strong>Showcase Sample:</strong> \${escapeHtml(samplePreview)}</p>\`;
+          }
+        }
+        let voicePresetBlock = '';
+        if (Array.isArray(project.voicePresetLabels)) {
+          const entries = project.voicePresetLabels
+            .map((label, idx) => (label ? \`Voice \${idx + 1}: \${escapeHtml(label)}\` : null))
+            .filter(Boolean);
+          if (entries.length > 0) {
+            voicePresetBlock = \`<p><strong>Voice Presets:</strong><br>\${entries.join('<br>')}</p>\`;
+          }
+        }
+
+        let dualVoiceInfoBlock = '';
+        let startButtonDisabled = project.status === 'processing';
+        let startButtonTitle = '';
+
+        if (project.mode === 'dual') {
+          const summary = project.dualVoiceSummary || { ready: false, chapterSummaries: [], pendingChapters: [], totalSegments: 0 };
+          if (summary.ready) {
+            const chapterCount = Array.isArray(summary.chapterSummaries) ? summary.chapterSummaries.length : 0;
+            const totalSegments = typeof summary.totalSegments === 'number' ? summary.totalSegments : 0;
+            const chapterLabel = chapterCount === 1 ? 'chapter' : 'chapters';
+            const segmentLabel = totalSegments === 1 ? 'segment' : 'segments';
+            const segmentText = totalSegments > 0 ? (totalSegments + ' ' + segmentLabel) : 'Voice markers';
+            const chapterSection = chapterCount > 0 ? (chapterCount + ' ' + chapterLabel) : 'the manuscript';
+            dualVoiceInfoBlock = '<div class="dual-voice-success"><strong>Dual voice markers detected.</strong> ' + segmentText + ' across ' + chapterSection + '. You can start generation when ready.</div>';
+          } else {
+            const fallbackSummaries = Array.isArray(summary.chapterSummaries) ? summary.chapterSummaries : [];
+            const pending = Array.isArray(summary.pendingChapters) && summary.pendingChapters.length > 0
+              ? summary.pendingChapters
+              : fallbackSummaries.filter(item => Array.isArray(item.issues) && item.issues.length > 0);
+            const issuesList = pending.length > 0
+              ? '<ul>' + pending.map(item => {
+                  const title = escapeHtml(item.chapterTitle || ('Chapter ' + ((item.chapterIndex || 0) + 1)));
+                  const issues = Array.isArray(item.issues) && item.issues.length > 0
+                    ? escapeHtml(item.issues.join('; '))
+                    : 'Add additional voice change tokens';
+                  return '<li>' + title + ': ' + issues + '</li>';
+                }).join('') + '</ul>'
+              : '';
+            dualVoiceInfoBlock = '<div class="dual-voice-warning"><strong>Dual voice markers not detected in every chapter.</strong> Add the token <code>' + escapeHtml(project.voiceSwitchToken || '***') + '</code> between speaker sections.' + issuesList + '</div>';
+            if (!startButtonDisabled) {
+              startButtonDisabled = true;
+              startButtonTitle = 'Dual voice markers not detected yet';
+            }
+          }
+        }
+
+        let startButtonAttributes = '';
+        if (startButtonDisabled) {
+          startButtonAttributes = 'disabled';
+          if (startButtonTitle) {
+            startButtonAttributes += ' title="' + escapeHtml(startButtonTitle) + '"';
+          }
+        }
+
         document.getElementById('modal-title').textContent = project.title;
-        
+
         content.innerHTML = \`
           <div>
             <p><strong>Author:</strong> \${project.author || 'Unknown'}</p>
@@ -1766,12 +2695,17 @@ function getHTML() {
             <p><strong>Mode:</strong> \${project.mode === 'single' ? 'Single Voice' : 'Dual Voice'}</p>
             <p><strong>Chapters Planned:</strong> \${plannedChapters} of \${totalChapters}</p>
             <p><strong>Demo Mode:</strong> \${project.demoMode ? 'Enabled' : 'Disabled'}</p>
+            \${presetShowcaseBlock}
+            \${voicePresetBlock}
+            \${dualVoiceInfoBlock}
             <p><strong>Voice Changeover Token:</strong> \${project.voiceSwitchToken || '***'}</p>
+            \${lastCompiledBlock}
             
             <div class="controls">
-              <button onclick="startProject('\${project.id}')" \${project.status === 'processing' ? 'disabled' : ''}>Start Generation</button>
+              <button onclick="startProject('\${project.id}')" \${startButtonAttributes}>Start Generation</button>
               <button onclick="pauseProject('\${project.id}')" class="btn-secondary" \${project.status !== 'processing' ? 'disabled' : ''}>Pause</button>
               <button onclick="resumeProject('\${project.id}')" class="btn-success" \${project.status !== 'paused' ? 'disabled' : ''}>Resume</button>
+              <button id="build-book-button" onclick="buildBook('\${project.id}')" class="btn-secondary" \${manualCompileDisabled ? 'disabled' : ''}>\${manualCompileLabelSafe}</button>
               \${project.bookUrl ? \`<a href="\${project.bookUrl}" download><button class="btn-success">Download Full Audiobook</button></a>\` : ''}
             </div>
             
@@ -1808,8 +2742,8 @@ function getHTML() {
                       <tbody>
                         \${chapter.segments.map((seg, i) => \`
                           <tr>
-                            <td>#\${i + 1}</td>
-                            <td><span class="voice-indicator voice-\${seg.voiceIndex || seg.voice || 0}"></span>Voice \${(seg.voiceIndex || seg.voice || 0) + 1}</td>
+                            <td>\${seg.label || \`#\${i + 1}\`}</td>
+                            <td><span class="voice-indicator voice-\${seg.voiceIndex || seg.voice || 0}"></span>Voice \${(seg.voiceIndex || seg.voice || 0) + 1}\${seg.presetName ? \` – \${seg.presetName}\${seg.presetStage === 'announcement' ? ' (intro)' : ''}\` : ''}</td>
                             <td>\${(seg.status || 'pending').toUpperCase()}</td>
                           </tr>
                         \`).join('')}
@@ -1828,7 +2762,7 @@ function getHTML() {
         connectToEvents(projectId);
         
       } catch (error) {
-        alert('Error loading project: ' + error.message);
+        showFlashMessage('Error loading project: ' + error.message, 'error', 7000);
       }
     }
     
@@ -1877,9 +2811,15 @@ function getHTML() {
           break;
         case 'segment_start':
           message = \`Processing segment \${event.segmentIndex + 1}\`;
+          if (event.preset) {
+            message += \` (\${event.preset}\${event.stage === 'announcement' ? ' intro' : ''})\`;
+          }
           break;
         case 'segment_complete':
           message = \`Completed segment \${event.segmentIndex + 1}\`;
+          if (event.preset) {
+            message += \` (\${event.preset}\${event.stage === 'announcement' ? ' intro' : ''})\`;
+          }
           break;
         case 'chapter_complete':
           message = \`Completed chapter: \${currentProject.chapters[event.chapterIndex].title}\`;
@@ -1895,8 +2835,29 @@ function getHTML() {
           message = \`Skipped chapter \${(event.chapterIndex || 0) + 1} (demo mode)\`;
           break;
         case 'book_merging':
-          message = 'Merging chapters into full audiobook...';
+          if (event.manual) {
+            const manualCount = typeof event.chapters === 'number'
+              ? ' (' + event.chapters + ' chapter' + (event.chapters === 1 ? '' : 's') + ')'
+              : '';
+            message = 'Manual compilation in progress' + manualCount + '...';
+          } else {
+            message = 'Merging chapters into full audiobook...';
+          }
           break;
+        case 'book_ready': {
+          if (event.manual) {
+            const manualSuffix = typeof event.chapters === 'number'
+              ? ' (' + event.chapters + ' completed chapter' + (event.chapters === 1 ? '' : 's') + ')'
+              : '';
+            message = 'Manual compilation finished' + manualSuffix + '.';
+            if (currentProject) {
+              openProject(currentProject.id);
+            }
+          } else {
+            message = 'Audiobook compilation ready.';
+          }
+          break;
+        }
         case 'project_complete':
           message = 'Audiobook generation complete!';
           // Reload project
@@ -1924,36 +2885,84 @@ function getHTML() {
     
     // Project controls
     async function startProject(projectId) {
+      if (currentProject && currentProject.id === projectId && currentProject.mode === 'dual') {
+        const summary = currentProject.dualVoiceSummary || { ready: false };
+        if (!summary.ready) {
+          showFlashMessage('Dual voice markers not detected yet. Please add the changeover token between speaker sections before starting generation.', 'warning', 7000);
+          return;
+        }
+      }
+
       try {
-        await fetch(\`/api/projects/\${projectId}/start\`, { method: 'POST' });
-        alert('Generation started!');
+        const response = await fetch(\`/api/projects/\${projectId}/start\`, { method: 'POST' });
+        const result = await response.json().catch(() => ({}));
+
+        if (!response.ok) {
+          const errorMessage = result && result.error ? result.error : 'Unable to start generation';
+          throw new Error(errorMessage);
+        }
+
+        if (currentProject && currentProject.id === projectId) {
+          currentProject.status = 'processing';
+        }
+        showFlashMessage('Generation started!', 'success');
         openProject(projectId);
       } catch (error) {
-        alert('Error: ' + error.message);
+        showFlashMessage('Failed to start generation: ' + error.message, 'error', 7000);
       }
     }
     
     async function pauseProject(projectId) {
       try {
         await fetch(\`/api/projects/\${projectId}/pause\`, { method: 'POST' });
-        alert('Generation paused');
+        showFlashMessage('Generation paused.', 'info');
         openProject(projectId);
       } catch (error) {
-        alert('Error: ' + error.message);
+        showFlashMessage('Failed to pause generation: ' + error.message, 'error', 7000);
       }
     }
     
     async function resumeProject(projectId) {
       try {
         await fetch(\`/api/projects/\${projectId}/resume\`, { method: 'POST' });
-        alert('Generation resumed');
+        showFlashMessage('Generation resumed!', 'success');
         openProject(projectId);
       } catch (error) {
-        alert('Error: ' + error.message);
+        showFlashMessage('Failed to resume generation: ' + error.message, 'error', 7000);
       }
     }
-    
+
+    async function buildBook(projectId) {
+      const button = document.getElementById('build-book-button');
+      if (button) {
+        button.disabled = true;
+      }
+
+      try {
+        showFlashMessage('Compiling audiobook from completed chapters...', 'info');
+        const response = await fetch(\`/api/projects/\${projectId}/book\`, { method: 'POST' });
+        const result = await response.json();
+
+        if (!response.ok) {
+          throw new Error(result.error || 'Unable to compile audiobook');
+        }
+
+        const chapterCount = typeof result.chapters === 'number' ? result.chapters : null;
+        const successMessage = chapterCount !== null
+          ? 'Audiobook compiled from ' + chapterCount + ' completed chapter' + (chapterCount === 1 ? '' : 's') + '.'
+          : 'Audiobook compiled from completed chapters.';
+        showFlashMessage(successMessage, 'success', 6000);
+        openProject(projectId);
+      } catch (error) {
+        showFlashMessage('Failed to compile audiobook: ' + error.message, 'error', 7000);
+        if (button) {
+          button.disabled = false;
+        }
+      }
+    }
+
     // Initial load
+    applyVoicePreset(0, 'balanced');
     updateVoiceSelectors();
     loadProjects();
   </script>
