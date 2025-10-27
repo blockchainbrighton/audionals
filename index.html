@@ -1,673 +1,855 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Audionals - On-Chain Music Production on Bitcoin</title>
-    <meta name="description" content="Audionals is a pioneering protocol that transforms music production, distribution and rights management by offering an on-chain digital audio workstation built on the Bitcoin blockchain.">
-    <link rel="icon" type="image/jpeg" href="audionals/AudionalsLogo.jpg">
-    <link rel="apple-touch-icon" href="audionals/AudionalsLogo.jpg">
-    <link rel="stylesheet" href="audionals/styles.css" />
-    <style>
-        /* --- Styles for Logo Area (Ensure horizontal alignment) --- */
-        .logo {
-            display: flex; /* Arrange items horizontally */
-            align-items: center; /* Vertically center items */
-            gap: 10px; /* Add space between logo items (img, h1, button) */
-        }
-        /* Ensure logo image doesn't take up too much space if needed */
-        .logo img {
-            height: 40px; /* Example height, adjust as needed */
-            width: auto;
-        }
-        /* Adjust H1 margin if needed */
-        .logo h1 {
-             margin: 0; /* Remove default H1 margins */
-        }
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Web3 Generative SoundToy — Modular Audio-Visual Instrument</title>
+  <meta name="description" content="A seed-powered Web3 audio-visual soundtoy using Tone.js (on-chain) with modular, stateless components." />
+  <style>
+    :root {
+      --bg: #0d0f12;
+      --panel: #151922;
+      --text: #e7ecf3;
+      --muted: #a9b3c6;
+      --accent: #6ae3ff;
+      --accent-2: #b476ff;
+      --good: #5af79e;
+      --warn: #ffcc66;
+      --danger: #ff6a6a;
+      --grid-on: #1f7ae0;
+      --grid-off: #1b2231;
+      --grid-playhead: #313b52;
+      --grid-on-playing: #8dd0ff;
+      --chip-bg: #1a2130;
+      --chip-border: #2b364b;
+      --btn: #22304a;
+      --btn-hover: #2b3b5a;
+    }
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, "Apple Color Emoji", "Segoe UI Emoji";
+      overflow: hidden;
+    }
+    canvas#viz {
+      position: fixed;
+      inset: 0;
+      width: 100vw;
+      height: 100vh;
+      display: block;
+      background: radial-gradient(1200px 800px at 70% 30%, #0b0d13 0%, #0a0c10 40%, #0a0c10 100%);
+      filter: saturate(1.05) contrast(1.05);
+    }
+    .chrome {
+      position: fixed;
+      inset: 0;
+      display: grid;
+      grid-template-rows: auto auto 1fr auto;
+      gap: 12px;
+      padding: 14px;
+      pointer-events: none;
+    }
+    .row { display: flex; gap: 10px; align-items: center; pointer-events: auto; }
+    .row.wrap { flex-wrap: wrap; }
+    .panel {
+      background: color-mix(in oklab, var(--panel) 88%, black 12%);
+      border: 1px solid var(--chip-border);
+      border-radius: 12px;
+      padding: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.35), inset 0 1px 0 rgba(255,255,255,0.03);
+      backdrop-filter: blur(8px) saturate(1.1);
+    }
+    .title { font-weight: 700; letter-spacing: 0.3px; }
+    .muted { color: var(--muted); }
+    .controls { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .chip {
+      background: var(--chip-bg);
+      border: 1px solid var(--chip-border);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 9px;
+      display: inline-flex;
+      gap: 8px;
+      align-items: center;
+      min-height: 36px;
+    }
+    .chip input[type="text"] {
+      background: transparent; border: none; outline: none; color: var(--text);
+      font-size: 14px; min-width: 220px;
+    }
+    .btn {
+      background: var(--btn);
+      border: 1px solid var(--chip-border);
+      color: var(--text);
+      padding: 9px 12px;
+      border-radius: 9px;
+      cursor: pointer;
+      transition: transform 0.06s ease, background 0.12s ease, border-color 0.12s ease;
+      user-select: none;
+    }
+    .btn:hover { background: var(--btn-hover); }
+    .btn:active { transform: translateY(1px); }
+    .btn.good { border-color: color-mix(in oklab, var(--good), white 5%); }
+    .btn.warn { border-color: color-mix(in oklab, var(--warn), white 5%); }
+    .btn.outline { background: transparent; }
 
-        /* Optional: Style for image placeholders if real images aren't available */
-        .project-image .placeholder {
-            height: 200px; /* Match project-image height if set in styles.css */
-            background-color: var(--gray-700, #4a5568); /* Added fallback color */
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            color: var(--gray-400, #cbd5e0); /* Added fallback color */
-            font-size: 0.9rem;
-            text-align: center;
-            padding: 10px;
-            box-sizing: border-box; /* Include padding in height */
-        }
-        /* Style for the image link */
-        .project-image a {
-             display: block; /* Ensure link takes up the image div space */
-             line-height: 0; /* Prevent extra space below image */
-        }
-        .project-image img {
-             display: block; /* Remove potential bottom space */
-             width: 100%; /* Ensure image fills container */
-             height: auto; /* Maintain aspect ratio */
-             /* Consider setting a fixed height if all images should be uniform */
-             /* height: 200px; object-fit: cover; */
-        }
+    .grid {
+      overflow: auto;
+      max-height: calc(100vh - 280px);
+      padding: 6px;
+    }
+    .seq {
+      display: grid;
+      grid-auto-rows: 28px;
+      gap: 6px;
+      align-items: center;
+    }
+    .seq-row { display: grid; grid-template-columns: 120px repeat(var(--steps), 1fr); gap: 6px; align-items: center; }
+    .voice-label { font-size: 12px; opacity: 0.8; padding-left: 6px; display: inline-flex; align-items: center; gap: 8px; }
+    .voice-swatch { width: 14px; height: 14px; border-radius: 50%; border: 1px solid rgba(255,255,255,0.22); display: inline-block; }
+    .cell {
+      height: 26px; border-radius: 6px; border: 1px solid #263149; background: var(--grid-off);
+      cursor: pointer; transition: background 60ms linear, border-color 60ms linear, transform 60ms linear;
+    }
+    .cell.on { background: linear-gradient(180deg, #194174, #173b69); border-color: #2d5fa6; }
+    .cell.playing { outline: 2px solid var(--grid-playhead); }
+    .cell.on.playing { background: linear-gradient(180deg, var(--grid-on-playing), #5599d1); border-color: #93c9ff; }
 
-        /* --- ADDED STYLES for Audionals Show Promo Section --- */
-        .audionals-show-promo {
-            background-color: var(--gray-800, #2d3748); /* Match How It Works section bg */
-            padding-top: 3rem; /* Add some top padding */
-            padding-bottom: 3rem; /* Add some bottom padding */
-        }
+    .footer { display: flex; justify-content: space-between; align-items: center; gap: 10px; }
+    .kvs { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+    .kv { background: var(--chip-bg); border: 1px solid var(--chip-border); border-radius: 8px; padding: 6px 10px; }
+    .kv .k { color: var(--muted); font-size: 12px; }
+    .kv .v { font-weight: 700; }
 
-        .show-promo-content {
-            display: flex;
-            align-items: center; /* Vertically align items */
-            gap: 2.5rem; /* Space between image and text */
-            flex-wrap: wrap; /* Allow wrapping on smaller screens */
-        }
+    .topbar { display: flex; justify-content: space-between; align-items: center; }
 
-        .show-promo-image {
-            flex: 0 0 auto; /* Don't grow, don't shrink, base size on content */
-            max-width: 180px; /* Control max image width */
-        }
+    .hidden { display: none !important; }
 
-        .show-promo-image img {
-            display: block;
-            width: 100%;
-            height: auto;
-            border-radius: 8px; /* Optional: slightly rounded corners */
-             box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3); /* Optional: subtle shadow */
-        }
-
-        .show-promo-text {
-            flex: 1 1 300px; /* Allow grow, allow shrink, base width */
-        }
-
-        .show-promo-text h3 {
-            font-size: 1.75rem; /* Adjust heading size as needed */
-            color: var(--primary-color, #4a90e2); /* Use theme color if available */
-            margin-bottom: 1rem;
-        }
-
-        .show-promo-text p {
-            font-size: 1rem;
-            line-height: 1.6;
-            color: var(--gray-300, #e2e8f0); /* Lighter text */
-            margin-bottom: 1rem;
-        }
-        .show-promo-text p:last-child {
-             margin-bottom: 0;
-        }
-
-         .show-promo-links a {
-            color: var(--secondary-color, #50e3c2); /* Use a distinct link color */
-            text-decoration: underline;
-            font-weight: 500;
-         }
-         .show-promo-links a:hover {
-             color: var(--primary-color, #4a90e2);
-             text-decoration: none;
-         }
-
-        .learn-more-link {
-             display: inline-block;
-             margin-top: 0.75rem; /* Space above this link */
-             font-weight: bold;
-        }
-
-        /* Responsive adjustments */
-        @media (max-width: 768px) {
-            .show-promo-content {
-                flex-direction: column; /* Stack image and text vertically */
-                text-align: center; /* Center text */
-                gap: 1.5rem;
-            }
-            .show-promo-image {
-                 max-width: 150px; /* Slightly smaller image on mobile */
-                 margin: 0 auto; /* Center image */
-            }
-            .show-promo-text {
-                 flex-basis: auto; /* Reset flex basis */
-            }
-            /* Adjust logo layout on smaller screens if needed */
-            .logo {
-                /* Example: Maybe stack logo items on very small screens */
-                /* flex-direction: column; */
-                /* gap: 5px; */
-            }
-        }
-        /* --- END ADDED STYLES --- */
-
-        /* --- STYLES for ??? Button (Adjusted margin) --- */
-        .btn-wtf {
-            display: inline-block; /* Needed for padding/margins */
-            padding: 0.5em 1em; /* Button size - adjust as needed */
-            border: none; /* Remove default border */
-            border-radius: 5px; /* Rounded corners */
-            background-image: linear-gradient(to right, red, orange, yellow, green, blue, indigo, violet);
-            color: white; /* Text color */
-            font-weight: bold; /* Bold text */
-            text-decoration: none; /* Remove underline */
-            text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7); /* Text readability */
-            /* margin-left: 10px; */ /* Removed margin-left, using gap on parent instead */
-            vertical-align: middle; /* Align nicely with other items (if not using flex align-items) */
-            cursor: pointer; /* Indicate it's clickable */
-            transition: transform 0.1s ease, opacity 0.2s ease; /* Add transitions */
-            flex-shrink: 0; /* Prevent button from shrinking if space is tight */
-        }
-        .btn-wtf:hover {
-             opacity: 0.9;
-        }
-        .btn-wtf:active {
-             transform: scale(0.98); /* Click feedback */
-        }
-        /* --- END WTF BUTTON STYLES --- */
-
-        /* Styles for sequencer links in Hero section */
-        .sequencer-list-hero { /* This div will now hold multiple items */
-            display: flex;
-            flex-direction: column; /* Stack sequencer items vertically */
-            gap: 2rem; /* Space between each sequencer item */
-        }
-
-        .sequencer-item {
-            display: flex;
-            gap: 1.5rem; /* Space between image and text content */
-            align-items: flex-start; /* Align items to the top */
-        }
-        
-        .sequencer-item-image {
-            flex: 0 0 150px; /* Image width, don't grow or shrink */
-            /* max-width: 180px; */ /* Max width for larger screens if needed */
-        }
-
-        .sequencer-item-image img {
-            width: 100%;
-            height: auto;
-            border-radius: 6px;
-            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-            display: block;
-        }
-
-        .sequencer-item-content {
-            flex: 1; /* Text content takes remaining space */
-        }
-
-        .sequencer-item-content h4 { /* For the sequencer name link */
-            margin-top: 0;
-            margin-bottom: 0.35rem;
-            font-size: 1.1em;
-        }
-        .sequencer-item-content h4 a {
-            font-weight: bold;
-            color: var(--secondary-color, #50e3c2); 
-            text-decoration: none;
-        }
-        .sequencer-item-content h4 a:hover {
-            text-decoration: underline;
-            color: var(--primary-color, #4a90e2);
-        }
-        .sequencer-item-content p {
-            margin-bottom: 0;
-            font-size: 0.95em;
-            line-height: 1.6;
-        }
-        
-        @media (max-width: 600px) { /* Adjust breakpoint as needed */
-            .sequencer-item {
-                flex-direction: column; /* Stack image on top of text on smaller screens */
-                align-items: center; /* Center items when stacked */
-                text-align: center;
-            }
-            .sequencer-item-image {
-                flex-basis: auto; /* Allow image width to be more flexible */
-                margin-bottom: 1rem; /* Space below image when stacked */
-                max-width: 200px; /* Control image size when stacked */
-            }
-        }
-
-    </style>
+    a { color: var(--accent); text-decoration: none; }
+  </style>
 </head>
 <body>
-    <!-- Header -->
-    <header>
-        <div class="container header-container">
-            <div class="logo">
-                <img src="audionals/AudionalsLogo.jpg" alt="Audionals Logo">
-                <h1>Audionals</h1>
-                <a href="/audionals/research/index.html" class="btn-wtf">???</a>
-            </div>
-            <nav>
-                <ul>
-                    <li><a href="index.html">Home</a></li>
-                    <li><a href="audionals/about.html">About</a></li>
-                    <li><a href="audionals/technology.html">Technology</a></li>
-                    <li><a href="audionals/tools.html">Tools</a></li>
-                    <li><a href="audionals/learn.html">Learn</a></li>
-                    <li><a href="audionals/community.html">Community</a></li>
-                    <li><a href="audionals/blog.html">Blog</a></li>
-                    <li><a href="audionals/support.html">Support</a></li>
-                </ul>
-                <button class="mobile-menu-btn" aria-label="Toggle mobile menu">☰</button>
-            </nav>
+  <canvas id="viz"></canvas>
+
+  <div class="chrome">
+    <div class="topbar">
+      <div class="panel row wrap">
+        <div class="title">Web3 Generative SoundToy</div>
+        <div class="muted">— Modular Audio-Visual Instrument</div>
+      </div>
+      <div class="panel controls">
+        <div class="chip">
+          <span class="muted">Seed</span>
+          <input id="seedInput" type="text" placeholder="type seed..." />
+          <button id="applySeedBtn" class="btn">Apply</button>
+          <button id="randomSeedBtn" class="btn outline">Random</button>
         </div>
-    </header>
-    <main>
-               <!-- Hero Section -->
-               <section class="hero">
-                <div class="container">
-                    <div class="hero-content">
-                        <!-- Column 1: Main Hero Text & Buttons -->
-                        <div class="hero-main-text">
-                            <h2>Create Music Directly on the Bitcoin Blockchain</h2>
-                            <p>Audionals is a pioneering protocol that transforms music production, distribution, and rights management by offering an on-chain digital audio workstation built on the Bitcoin blockchain.</p>
-                            <div class="hero-buttons">
-                                <a href="audionals/tools.html" class="btn btn-primary">Explore All Tools</a>
-                                <a href="audionals/learn.html" class="btn btn-secondary">Learn More</a>
-                            </div>
-                        </div>
-    
-                        <!-- Column 2: Sequencers List -->
-                        <div class="hero-sequencers-column">
-                            <h3>Our On-Chain Sequencers:</h3>
-                            <!-- Sequencer 1: B64x -->
-                            <div class="sequencer-item-hero">
-                                <div class="sequencer-item-hero-image">
-                                    <a href="https://audionals.com/B64x/" target="_blank" rel="noopener noreferrer">
-                                        <img src="audionals/images/sequencer.jpg" alt="Audional Sequencer B64x Preview">
-                                    </a>
-                                </div>
-                                <div class="sequencer-item-hero-content">
-                                    <h4>
-                                        <a href="https://audionals.com/B64x/" target="_blank" rel="noopener noreferrer">Audional Sequencer B64x</a>
-                                    </h4>
-                                    <p>
-                                        Our classic 64-channel sequencer for robust on-chain music production.
-                                    </p>
-                                </div>
-                            </div>
-                            <!-- Sequencer 2: ASX -->
-                            <div class="sequencer-item-hero">
-                                <div class="sequencer-item-hero-image">
-                                    <a href="asx/index.html" target="_blank" rel="noopener noreferrer">
-                                        <img src="audionals/images/asx-sequencer.png" alt="Audional Sequencer X (ASX) BitcoinBeats Preview">
-                                    </a>
-                                </div>
-                                <div class="sequencer-item-hero-content">
-                                    <h4>
-                                        <a href="asx/index.html" target="_blank" rel="noopener noreferrer">Audional Sequencer X (ASX)</a>
-                                    </h4>
-                                    <p>
-                                        The next-generation BitcoinBeats sequencer with advanced features and an AI enhanced workflow.
-                                    </p>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
-        <!-- *** NEW SECTION: Audionals Show Promo *** -->
-        <section class="audionals-show-promo section">
-            <div class="container">
-                <div class="show-promo-content">
-                    <div class="show-promo-image">
-                        <a href="audionals/the-audionals-show.html">
-                            <img src="audionals/images/the-audionals-show.png" alt="The Audionals Show Logo">
-                        </a>
-                    </div>
-                    <div class="show-promo-text">
-                        <h3>Tune In: The Audionals Show</h3>
-                        <p>Join host Jim.btc as he dives deep into the world of on-chain music with Audionals. Discover insights, interviews with pioneers, and the latest developments in creating, owning, and distributing music directly on the blockchain.</p>
-                        <p class="show-promo-links">
-                            Follow <a href="https://x.com/jimdotbtc" target="_blank" rel="noopener noreferrer">@jimdotbtc</a> and
-                            <a href="https://x.com/bitcoinlive1?lang=en" target="_blank" rel="noopener noreferrer">@BitcoinLive1</a> on X for show announcements and archives.
-                            <br>
-                            <a href="audionals/the-audionals-show.html" class="learn-more-link">Explore The Show →</a>
-                        </p>
-                    </div>
-                </div>
-            </div>
-        </section>
-        <!-- *** END NEW SECTION *** -->
-
-        <!-- Benefits Section -->
-        <section class="benefits section">
-            <div class="container">
-                <h2 class="section-title">Key Benefits of Audionals Protocol</h2>
-                <div class="benefits-grid">
-                    <div class="benefit-card">
-                        <div class="benefit-icon">🛡️</div>
-                        <h3>True Ownership</h3>
-                        <p>Every element involved in a song's creation is owned and held within individual wallets, eliminating the need for traditional intermediaries.</p>
-                    </div>
-                    <div class="benefit-card">
-                        <div class="benefit-icon">🔗</div>
-                        <h3>On-Chain Production</h3>
-                        <p>Create music directly on the Bitcoin blockchain with our decentralized audio workstation, ensuring immutable recordings of your creative process.</p>
-                    </div>
-                    <div class="benefit-card">
-                        <div class="benefit-icon">🤝</div>
-                        <h3>Transparent Attribution</h3>
-                        <p>Comprehensive and transparent attribution for every component used in creating a song, recognizing all contributors automatically.</p>
-                    </div>
-                </div>
-            </div>
-        </section>
-
-        <!-- How It Works Section -->
-        <section class="how-it-works section" style="background-color: var(--gray-800, #2d3748);"> <!-- Added fallback color -->
-             <div class="container">
-                <h2 class="section-title">How It Works</h2>
-                <div class="how-it-works-content">
-                     <div class="how-it-works-steps">
-                        <div class="step">
-                            <div class="step-number">1</div>
-                            <div class="step-content">
-                                <h3>Create Music</h3>
-                                <p>Use our on-chain digital audio workstation to compose and produce music directly on the Bitcoin blockchain.</p>
-                            </div>
-                        </div>
-                         <div class="step">
-                            <div class="step-number">2</div>
-                            <div class="step-content">
-                                <h3>Secure Ownership</h3>
-                                <p>Every element of your creation is securely managed and transparently documented on the blockchain.</p>
-                            </div>
-                        </div>
-                         <div class="step">
-                            <div class="step-number">3</div>
-                            <div class="step-content">
-                                <h3>Distribute & Collaborate</h3>
-                                <p>Share your music, manage rights, and collaborate with others, all within the transparent framework of Bitcoin.</p>
-                            </div>
-                        </div>
-                    </div>
-                     <!-- Removed empty div: <div class="how-it-works"></div> -->
-                </div>
-            </div>
-        </section>
-
-        <!-- Featured Projects Section - Now dynamically populated -->
-        <section class="featured-projects section">
-            <div class="container">
-                <div class="section-header">
-                     <h2>Featured Ecosystem Projects</h2>
-                     <a href="audionals/community.html">View More →</a>
-                </div>
-                <!-- Grid will be populated by JavaScript -->
-                <div class="projects-grid" id="featured-projects-grid">
-                     <p style="text-align: center; color: var(--gray-400, #cbd5e0);">Loading featured projects...</p> <!-- Added fallback color -->
-                </div>
-            </div>
-        </section>
-
-        <!-- Latest News Section -->
-        <section class="latest-news section" style="background-color: var(--gray-800, #2d3748);"> <!-- Added fallback color -->
-            <div class="container">
-                 <div class="section-header">
-                     <h2>Latest News</h2>
-                     <a href="audionals/blog.html">View All Posts →</a>
-                </div>
-                <div class="news-grid">
-                     <!-- MODIFICATION START: Updated News Card for Sequencers -->
-                     <div class="news-card card">
-                        <div class="news-date">January 20, 2025</div> <!-- Consider updating this date if ASX is a recent launch -->
-                        <h3>Audional Sequencers: B64x & New ASX (BitcoinBeats)</h3>
-                        <p>Our sequencer lineup is growing! Use the robust <strong>Audionals B64x</strong> for 64-channel production, or explore the <strong>Audional Sequencer X (ASX)</strong>, our next-gen BitcoinBeats tool with advanced features for decentralized audio creation.</p>
-                        <div style="margin-top:10px;">
-                            <a href="https://audionals.com/B64x/" target="_blank" rel="noopener noreferrer" class="news-read-more">Explore B64x →</a>
-                            <a href="asx/index.html" target="_blank" rel="noopener noreferrer" class="news-read-more" style="margin-left: 10px;">Explore ASX →</a>
-                        </div>
-                      </div>
-                    <!-- MODIFICATION END: Updated News Card for Sequencers -->
-
-                    <!-- Static Placeholder News 2 -->
-                    <div class="news-card card">
-                        <div class="news-date">April 15, 2025</div>
-                        <h3>Music Rights Reimagined on Bitcoin</h3>
-                        <p>Discover how protocols like Audionals are revolutionizing rights management using the Bitcoin blockchain.</p>
-                        <p>Meet the pioneers and artists leading the way...</p>
-                        <a
-                            href="https://audionals.com/web3/"
-                            class="news-read-more"
-                            target="_blank"
-                            rel="noopener noreferrer"
-                        >
-                            Read More →
-                        </a>
-                    </div>
-            </div>
-        </section>
-
-        <!-- CTA Section -->
-        <section class="cta section">
-            <div class="container">
-                <h2>Join the Future of Music Production</h2>
-                <p>Start creating music directly on the Bitcoin blockchain and take control of your creative rights with Audionals.</p>
-                <div class="cta-buttons">
-                    <a href="audionals/tools.html" class="btn btn-primary">Explore Tools</a>
-                    <a href="audionals/learn.html" class="btn btn-secondary">Learn More</a>
-                </div>
-            </div>
-        </section>
-    </main>
-
-    <!-- Footer -->
-    <footer>
-        <div class="container">
-            <div class="footer-grid">
-                <div class="footer-column">
-                     <div class="footer-logo logo"> <!-- NOTE: Footer logo also has class 'logo' - styles might apply here too -->
-                        <img src="audionals/AudionalsLogo.jpg" alt="Audionals Logo">
-                        <h3>Audionals</h3>
-                    </div>
-                    <p class="footer-about">Revolutionizing music production and rights management on the Bitcoin blockchain.</p>
-                    <div class="social-links">
-                        <!-- Replace # with actual links - Updated below -->
-                        <a href="https://twitter.com/audionals" class="social-link" aria-label="X/Twitter" target="_blank" rel="noopener noreferrer">X</a>
-                        <a href="https://discord.gg/audionals" class="social-link" aria-label="Discord" target="_blank" rel="noopener noreferrer">DS</a> <!-- VERIFY THIS DISCORD LINK -->
-                        <!-- Telegram link removed -->
-                    </div>
-                </div>
-                 <div class="footer-column">
-                    <h3>Quick Links</h3>
-                    <ul class="footer-links">
-                        <li><a href="audionals/about.html">About Us</a></li>
-                        <li><a href="audionals/technology.html">Technology</a></li>
-                        <li><a href="audionals/tools.html">Tools</a></li>
-                        <li><a href="audionals/learn.html">Learn</a></li>
-                        <li><a href="audionals/blog.html">Blog</a></li>
-                    </ul>
-                </div>
-                 <div class="footer-column">
-                     <h3>Resources</h3>
-                     <ul class="footer-links">
-                        <li><a href="audionals/support.html">Support</a></li>
-                        <li><a href="audionals/community.html">Community</a></li>
-                        <li><a href="#">Documentation</a></li> <!-- Add actual link -->
-                        <li><a href="#">Privacy Policy</a></li> <!-- Add actual link -->
-                        <li><a href="#">Terms of Service</a></li> <!-- Add actual link -->
-                    </ul>
-                </div>
-                <div class="footer-column">
-                    <!-- <h3>Stay Updated</h3>
-                     <p class="footer-about">Get the latest news and updates.</p>
-                     <form class="subscribe-form" action="#" method="post">
-                        <label for="footer-email" class="sr-only">Enter your email</label>
-                        <input type="email" id="footer-email" name="email" class="subscribe-input" placeholder="Enter your email" required>
-                        <button type="submit" class="subscribe-button">Go</button>
-                    </form> -->
-                </div>
-            </div>
-            <div class="footer-bottom">
-                <!-- <p>© <span id="year"></span> Audionals - All Rights Reserved.</p> -->
-            </div>
+        <div class="chip">
+          <span class="muted">Steps</span>
+          <button id="steps16" class="btn">16</button>
+          <button id="steps32" class="btn outline">32</button>
         </div>
-    </footer>
+        <div class="chip">
+          <span class="muted">Tempo</span>
+          <input id="tempo" type="range" min="60" max="180" step="1" value="110" />
+          <span id="tempoVal">110</span>
+        </div>
+        <div class="chip">
+          <button id="startAudioBtn" class="btn good">Enable Audio</button>
+          <button id="playBtn" class="btn hidden">Play</button>
+          <button id="stopBtn" class="btn outline hidden">Stop</button>
+        </div>
+        <div class="chip">
+          <button id="exportJSONBtn" class="btn outline">Export Pattern</button>
+          <button id="snapshotBtn" class="btn outline">Snapshot</button>
+          <button id="recordDemoBtn" class="btn warn">Record Demo</button>
+          <input id="importJSONInput" type="file" accept="application/json" class="hidden" />
+          <button id="importJSONBtn" class="btn outline">Import Pattern</button>
+        </div>
+      </div>
+    </div>
 
-    <script>
-        // --- Dynamic Featured Projects Data ---
-        const featuredProjectsData = [
-            {
-                title: "BAM - Bitcoin Audional Matrix",
-                description: "An interactive matrix visualizing and playing Audional components directly from the Bitcoin blockchain.",
-                imageUrl: "audionals/images/bam-logo.png", // Corrected path
-                linkUrl: "https://audionals.com/BAM/",
-                author: "Audionals.com",
-                linkText: "Explore BAM"
-            },
-            {
-                title: "Beatblocks",
-                description: "Create unique, generative music based on real-time Bitcoin block data. Own your beat as an Ordinal inscription.",
-                imageUrl: "audionals/images/beatblocks-logo.png", // Corrected path
-                linkUrl: "https://www.beatblocks.io/",
-                author: "Beatblocks.io",
-                linkText: "Generate Beats"
-            },
-            {
-                title: "OB1 - Ordinal Based 1s",
-                description: "The foundational, CC0 public domain sample library inscribed on Bitcoin Ordinals, providing building blocks for on-chain music creation.",
-                imageUrl: "audionals/images/OB1-logo.png", // Corrected path
-                linkUrl: "https://magiceden.io/ordinals/marketplace/ordinalbased1s",
-                author: "Ordinal Based 1s",
-                linkText: "View Library"
-            },
-            { // New entry for Tiny Vikings & Tiny Records
-                title: "Tiny Vikings & Tiny Records",
-                description: "A deep-dive into the pioneering Bitcoin-native art collective (Tiny Vikings) and their on-chain record label (Tiny Records) bringing music to Ordinals.",
-                imageUrl: "audionals/images/tiny-vikings-records-logo.png", // Corrected path
-                linkUrl: "BAM/bam-related-projects/tiny-vikings.html", // Corrected path (removed ../)
-                author: "Tiny Ecosystem",
-                linkText: "Read Deep-Dive"
+    <div class="panel grid">
+      <div id="seq" class="seq"></div>
+    </div>
+
+    <div class="panel footer">
+      <div class="kvs">
+        <div class="kv"><span class="k">Keys</span> <span class="v">1–0 trigger voices</span></div>
+        <div class="kv"><span class="k">Click</span> <span class="v">Row labels audition voices</span></div>
+        <div class="kv"><span class="k">Demo</span> <span class="v">Auto-generated per-seed</span></div>
+      </div>
+      <div class="muted">Tone.js loaded from on-chain: <a href="#" id="toneLink">ordinals</a></div>
+    </div>
+  </div>
+
+  <script>
+    const TONE_JS_URL = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0';
+    document.getElementById('toneLink').setAttribute('href', TONE_JS_URL);
+
+    // Utility: Seeded PRNG (cyrb128 + sfc32) for deterministic outputs per seed
+    function cyrb128(str) {
+      let h1 = 1779033703, h2 = 3144134277, h3 = 1013904242, h4 = 2773480762;
+      for (let i = 0, k; i < str.length; i++) {
+        k = str.charCodeAt(i);
+        h1 = h2 ^ Math.imul(h1 ^ k, 597399067);
+        h2 = h3 ^ Math.imul(h2 ^ k, 2869860233);
+        h3 = h4 ^ Math.imul(h3 ^ k, 951274213);
+        h4 = h1 ^ Math.imul(h4 ^ k, 2716044179);
+      }
+      h1 = Math.imul(h3 ^ (h1 >>> 18), 597399067);
+      h2 = Math.imul(h4 ^ (h2 >>> 22), 2869860233);
+      h3 = Math.imul(h1 ^ (h3 >>> 17), 951274213);
+      h4 = Math.imul(h2 ^ (h4 >>> 19), 2716044179);
+      return [(h1 ^ h2 ^ h3 ^ h4) >>> 0, (h2 ^ h1) >>> 0, (h3 ^ h1) >>> 0, (h4 ^ h1) >>> 0];
+    }
+    function sfc32(a, b, c, d) {
+      return function() {
+        a >>>= 0; b >>>= 0; c >>>= 0; d >>>= 0;
+        var t = (a + b) | 0; t = (t + d) | 0; d = (d + 1) | 0;
+        a = b ^ (b >>> 9); b = (c + (c << 3)) | 0; c = ((c << 21) | (c >>> 11));
+        c = (c + t) | 0;
+        return (t >>> 0) / 4294967296;
+      }
+    }
+    function makeRng(seedStr) {
+      const [a,b,c,d] = cyrb128(seedStr);
+      return sfc32(a,b,c,d);
+    }
+    function pick(rng, arr) { return arr[Math.floor(rng()*arr.length)]; }
+    function randRange(rng, min, max) { return min + rng() * (max - min); }
+    function randInt(rng, min, max) { return Math.floor(randRange(rng, min, max + 1)); }
+
+    // Color utilities (OKLCH-like simple palette)
+    function hslToHex(h, s, l) {
+      h = h % 360; if (h < 0) h += 360;
+      s = Math.max(0, Math.min(100, s));
+      l = Math.max(0, Math.min(100, l));
+      s/=100; l/=100;
+      const c = (1 - Math.abs(2*l - 1)) * s;
+      const x = c * (1 - Math.abs(((h/60)%2) - 1));
+      const m = l - c/2;
+      let r=0,g=0,b=0;
+      if (0<=h && h<60){r=c;g=x;b=0;} else if (60<=h && h<120){r=x;g=c;b=0;}
+      else if (120<=h && h<180){r=0;g=c;b=x;} else if (180<=h && h<240){r=0;g=x;b=c;}
+      else if (240<=h && h<300){r=x;g=0;b=c;} else {r=c;g=0;b=x;}
+      r = Math.round((r+m)*255); g = Math.round((g+m)*255); b = Math.round((b+m)*255);
+      return `#${r.toString(16).padStart(2,'0')}${g.toString(16).padStart(2,'0')}${b.toString(16).padStart(2,'0')}`;
+    }
+    function derivePalette(seedStr, count) {
+      const rng = makeRng(seedStr + '|palette');
+      const baseHue = rng()*360;
+      const hues = Array.from({length: count}, (_, i) => (baseHue + (i*360/count) + randRange(rng, -12, 12)) % 360);
+      return hues.map((h, i) => hslToHex(h, 75 + (i%2)*10, 58 - (i%3)*6));
+    }
+
+    // URL seed helpers
+    function getParamSeed() {
+      const url = new URL(window.location.href);
+      return url.searchParams.get('seed');
+    }
+    function setParamSeed(seed) {
+      const url = new URL(window.location.href);
+      url.searchParams.set('seed', seed);
+      history.replaceState({}, '', url.toString());
+    }
+    function randomSeed() {
+      const s = Math.random().toString(36).slice(2, 10);
+      return `toy-${s}`;
+    }
+
+    // Visualizer module (stateless): generates per-voice visual recipes and draws frame
+    const Visualizer = {
+      makeVoiceVisualProfile(seedStr, voiceIndex, color) {
+        const rng = makeRng(`${seedStr}|vis|${voiceIndex}`);
+        const shape = pick(rng, ['lissajous', 'rose', 'spiral', 'noiseLine', 'orbit']);
+        const lineWidth = randRange(rng, 1.0, 2.2);
+        const opacity = randRange(rng, 0.35, 0.9);
+        const speed = randRange(rng, 0.3, 1.4);
+        const params = {
+          shape,
+          lineWidth,
+          opacity,
+          color,
+          // shape-specific params
+          a: randInt(rng, 1, 7),
+          b: randInt(rng, 1, 9),
+          k: randRange(rng, 2, 6),
+          turns: randInt(rng, 2, 6),
+          wobble: randRange(rng, 0.4, 2.4),
+          noiseScale: randRange(rng, 0.002, 0.012),
+          speed,
+        };
+        return params;
+      },
+      drawFrame(ctx, nowMs, canvasW, canvasH, activeVoices) {
+        ctx.clearRect(0, 0, canvasW, canvasH);
+        ctx.globalCompositeOperation = 'lighter';
+        const centerX = canvasW / 2;
+        const centerY = canvasH / 2;
+        const minDim = Math.min(canvasW, canvasH);
+        for (const v of activeVoices) {
+          const intensity = Math.max(0, Math.min(1, v.intensity));
+          if (intensity < 0.02) continue;
+          const p = v.profile;
+          ctx.save();
+          ctx.strokeStyle = hexToRgba(p.color, p.opacity * intensity);
+          ctx.lineWidth = p.lineWidth * (1.0 + intensity*0.6);
+          switch (p.shape) {
+            case 'lissajous':
+              drawLissajous(ctx, centerX, centerY, minDim * 0.28 * (0.8+intensity*0.6), p.a, p.b, nowMs * 0.001 * p.speed, intensity);
+              break;
+            case 'rose':
+              drawRose(ctx, centerX, centerY, minDim * 0.35 * (0.8+intensity*0.5), p.k, nowMs * 0.0011 * p.speed, intensity);
+              break;
+            case 'spiral':
+              drawSpiral(ctx, centerX, centerY, minDim * 0.36, p.turns, nowMs * 0.0009 * p.speed, intensity);
+              break;
+            case 'noiseLine':
+              drawNoiseLine(ctx, centerX, centerY, minDim * 0.42, p.noiseScale, nowMs * 0.0012 * p.speed, intensity);
+              break;
+            case 'orbit':
+            default:
+              drawOrbit(ctx, centerX, centerY, minDim * 0.33, p.wobble, nowMs * 0.0010 * p.speed, intensity);
+              break;
+          }
+          ctx.restore();
+        }
+        ctx.globalCompositeOperation = 'source-over';
+      }
+    };
+
+    function hexToRgba(hex, alpha) {
+      const m = /^#?([a-f\d]{2})([a-f\d]{2})([a-f\d]{2})$/i.exec(hex);
+      if (!m) return `rgba(255,255,255,${alpha})`;
+      const r = parseInt(m[1], 16);
+      const g = parseInt(m[2], 16);
+      const b = parseInt(m[3], 16);
+      return `rgba(${r},${g},${b},${alpha})`;
+    }
+    function drawLissajous(ctx, cx, cy, R, a, b, t, intensity) {
+      const points = 360;
+      ctx.beginPath();
+      for (let i = 0; i <= points; i++) {
+        const angle = (i / points) * Math.PI * 2;
+        const x = cx + R * Math.sin(a * angle + t) * (0.9 + intensity*0.2);
+        const y = cy + R * Math.sin(b * angle) * (0.9 + intensity*0.2);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    function drawRose(ctx, cx, cy, R, k, t, intensity) {
+      const points = 420;
+      ctx.beginPath();
+      for (let i = 0; i <= points; i++) {
+        const angle = (i / points) * Math.PI * 2;
+        const r = R * Math.cos(k * angle + t) * (0.9 + intensity*0.2);
+        const x = cx + r * Math.cos(angle);
+        const y = cy + r * Math.sin(angle);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    function drawSpiral(ctx, cx, cy, R, turns, t, intensity) {
+      const points = 600;
+      ctx.beginPath();
+      for (let i = 0; i <= points; i++) {
+        const u = i / points; // 0..1
+        const angle = (turns * Math.PI * 2 * u) + t * 2.0;
+        const r = R * u * (0.6 + intensity*0.3);
+        const x = cx + r * Math.cos(angle);
+        const y = cy + r * Math.sin(angle);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    function drawOrbit(ctx, cx, cy, R, wobble, t, intensity) {
+      const orbits = 3;
+      for (let j = 0; j < orbits; j++) {
+        const r = R * (0.6 + 0.12 * j) * (0.9 + intensity*0.15);
+        ctx.beginPath();
+        for (let i = 0; i <= 360; i++) {
+          const angle = (i/360) * Math.PI * 2;
+          const x = cx + r * Math.cos(angle + t * (0.6 + j*0.15)) * (1.0 + Math.sin(t*1.3 + j) * 0.03 * wobble);
+          const y = cy + r * Math.sin(angle + t * (0.5 + j*0.18)) * (1.0 + Math.cos(t*1.1 + j) * 0.03 * wobble);
+          if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+        }
+        ctx.stroke();
+      }
+    }
+    function drawNoiseLine(ctx, cx, cy, R, scale, t, intensity) {
+      const points = 300;
+      ctx.beginPath();
+      for (let i = 0; i <= points; i++) {
+        const u = i / points;
+        const ang = u * Math.PI * 2;
+        const r = R * (0.6 + 0.3 * simplex2d(Math.cos(ang)*scale*300 + t*0.7, Math.sin(ang)*scale*300 + t*0.9));
+        const x = cx + r * Math.cos(ang);
+        const y = cy + r * Math.sin(ang);
+        if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+      }
+      ctx.stroke();
+    }
+    // Simple pseudo-noise (not true simplex but sufficient for visual wobble)
+    function simplex2d(x, y) {
+      const s = Math.sin(x*12.9898 + y*78.233) * 43758.5453;
+      return (s - Math.floor(s)) * 2 - 1;
+    }
+
+    // AudioBank module: creates 10 contrasting synth voices, given a seed
+    const AudioBank = {
+      create(seedStr) {
+        if (!window.Tone) throw new Error('Tone.js not loaded yet');
+        const rng = makeRng(seedStr + '|audio');
+
+        const masterGain = new Tone.Gain(0.9).toDestination();
+        const limiter = new Tone.Limiter(-1).connect(masterGain);
+        const comp = new Tone.Compressor({ threshold: -18, ratio: 3, attack: 0.003, release: 0.25 }).connect(limiter);
+        const reverb = new Tone.Reverb({ decay: 1.6 + rng()*1.4, wet: 0.15 + rng()*0.15 }).connect(comp);
+        const delay = new Tone.FeedbackDelay({ delayTime: [1/6, 1/8, 1/12, 1/16][Math.floor(rng()*4)], feedback: 0.15 + rng()*0.2, wet: 0.12 + rng()*0.15 }).connect(comp);
+
+        const palette = derivePalette(seedStr, 10);
+
+        const availableTypes = ['sine','triangle','square','sawtooth','fmsine','fmtriangle','fmsquare','fmsawtooth','amsine','amtriangle','amsquare','amsawtooth'];
+        const availableSynths = ['Synth','FMSynth','AMSynth','MonoSynth','PluckSynth'];
+
+        const voices = [];
+        for (let i = 0; i < 10; i++) {
+          const vRng = makeRng(`${seedStr}|voice|${i}`);
+          const synthKind = pick(vRng, availableSynths);
+          const oscType = pick(vRng, availableTypes);
+          const statEnv = { attack: randRange(vRng, 0.003, 0.035), decay: randRange(vRng, 0.05, 0.35), sustain: randRange(vRng, 0.2, 0.8), release: randRange(vRng, 0.15, 0.8) };
+          const filterFreq = randRange(vRng, 800, 6000);
+          const filterQ = randRange(vRng, 0.5, 6);
+          const color = palette[i];
+
+          let synth;
+          try {
+            if (synthKind === 'PluckSynth' && Tone.PluckSynth) {
+              synth = new Tone.PluckSynth({ dampening: filterFreq, resonance: filterQ });
+            } else if (synthKind === 'MonoSynth' && Tone.MonoSynth) {
+              synth = new Tone.MonoSynth({ oscillator: { type: oscType }, envelope: statEnv, filter: { frequency: filterFreq, Q: filterQ }, filterEnvelope: { baseFrequency: filterFreq*0.5, octaves: 2.5, attack: statEnv.attack*0.7, decay: statEnv.decay*0.8 } });
+            } else if (synthKind === 'FMSynth' && Tone.FMSynth) {
+              synth = new Tone.FMSynth({ oscillator: { type: oscType }, envelope: statEnv, modulationIndex: randRange(vRng, 8, 24) });
+            } else if (synthKind === 'AMSynth' && Tone.AMSynth) {
+              synth = new Tone.AMSynth({ oscillator: { type: oscType }, envelope: statEnv });
+            } else {
+              synth = new Tone.Synth({ oscillator: { type: oscType }, envelope: statEnv });
             }
-        ];
+          } catch (e) {
+            synth = new Tone.Synth();
+          }
 
-        // --- Function to Populate Featured Projects ---
-        function populateFeaturedProjects() {
-            const gridContainer = document.getElementById('featured-projects-grid');
-            if (!gridContainer) {
-                console.error("Error: Featured projects grid container '#featured-projects-grid' not found!");
-                return;
+          const pan = new Tone.Panner(randRange(vRng, -0.6, 0.6));
+          const gain = new Tone.Gain(0.0); // pre-warm muted, ramp on trigger
+          const filter = new Tone.Filter(filterFreq, 'lowpass');
+          const chorus = new Tone.Chorus({ frequency: randRange(vRng, 0.6, 2.2), delayTime: randRange(vRng, 2, 6), depth: randRange(vRng, 0.1, 0.45), wet: 0.1 + vRng()*0.15 }).start();
+          const crusher = new Tone.BitCrusher(Math.floor(randRange(vRng, 2, 6)));
+
+          // subtle send options
+          const toReverb = new Tone.Gain(0.25 + vRng()*0.25).connect(reverb);
+          const toDelay = new Tone.Gain(0.25 + vRng()*0.25).connect(delay);
+
+          synth.connect(filter);
+          filter.connect(chorus);
+          chorus.connect(crusher);
+          crusher.connect(gain);
+          gain.connect(pan);
+          pan.connect(comp);
+
+          gain.connect(toReverb);
+          gain.connect(toDelay);
+
+          const analyser = new Tone.Analyser('waveform', 256);
+          gain.connect(analyser);
+
+          const notePool = [
+            'C3','D#3','F3','G3','A#3','C4','D4','F4','G4','A#4','C5','D#5','F5','G5'
+          ];
+          const baseNote = pick(vRng, notePool);
+
+          const voice = {
+            index: i,
+            name: `Voice ${i+1}`,
+            color,
+            synth,
+            gain,
+            analyser,
+            pan,
+            baseNote,
+            trigger(note, velocity = 0.9, duration = '8n') {
+              // smooth open
+              try {
+                gain.gain.cancelScheduledValues(Tone.now());
+                gain.gain.rampTo(1.0 * velocity, 0.008);
+              } catch (e) {}
+              synth.triggerAttackRelease(note || baseNote, duration, undefined, velocity);
+              // smooth close
+              try {
+                const t = Tone.now() + Tone.Time(duration).toSeconds() * 0.75;
+                gain.gain.setTargetAtTime(0.0001, t, 0.03);
+              } catch (e) {}
+            },
+            getIntensity() {
+              const v = analyser.getValue();
+              if (!v || v.length === 0) return 0;
+              let sum = 0;
+              for (let i = 0; i < v.length; i++) sum += Math.abs(v[i]);
+              return Math.min(1, (sum / v.length) * 1.6);
+            },
+            dispose() {
+              try { synth.dispose(); } catch(e) {}
+              try { gain.dispose(); } catch(e) {}
+              try { pan.dispose(); } catch(e) {}
+              try { analyser.dispose(); } catch(e) {}
             }
+          };
+          voices.push(voice);
+        }
 
-            gridContainer.innerHTML = ''; // Clear loading message or old content
+        return {
+          voices,
+          masterGain,
+          dispose() { voices.forEach(v => v.dispose()); try{ masterGain.dispose(); }catch(e){} }
+        };
+      }
+    };
 
-            if (featuredProjectsData.length === 0) {
-                 gridContainer.innerHTML = '<p style="text-align: center; color: var(--gray-400, #cbd5e0);">No featured projects available at the moment.</p>';
-                 return;
-            }
+    // Sequencer module: step data + signature pattern generation
+    const Sequencer = {
+      createEmptyPattern(voiceCount, steps) {
+        const pattern = Array.from({ length: voiceCount }, () => Array.from({ length: steps }, () => false));
+        return pattern;
+      },
+      toggle(pattern, voiceIndex, stepIndex) {
+        pattern[voiceIndex][stepIndex] = !pattern[voiceIndex][stepIndex];
+        return pattern;
+      },
+      generateSignaturePattern(seedStr, voiceCount, steps) {
+        const rng = makeRng(seedStr + '|sig');
+        const pattern = Sequencer.createEmptyPattern(voiceCount, steps);
+        // Use Euclidean-ish spacing per voice with seed variations
+        for (let v = 0; v < voiceCount; v++) {
+          const density = randInt(rng, 3, Math.max(3, Math.floor(steps/2))); // hits per voice
+          const rotate = randInt(rng, 0, steps-1);
+          const spacing = Math.floor(steps / density);
+          for (let i = 0; i < density; i++) {
+            const s = (i * spacing + rotate + randInt(rng, 0, 1)) % steps; // slight humanize
+            pattern[v][s] = true;
+          }
+        }
+        // Sprinkle some chords: choose a few steps where multiple voices fire
+        const chordSteps = randInt(rng, 2, 4);
+        for (let j = 0; j < chordSteps; j++) {
+          const s = randInt(rng, 0, steps-1);
+          for (let v = 0; v < voiceCount; v++) {
+            if (rng() < 0.2) pattern[v][s] = true;
+          }
+        }
+        return pattern;
+      },
+      serialize(pattern) {
+        return JSON.stringify({ version: 1, steps: pattern[0]?.length || 16, voices: pattern.length, grid: pattern }, null, 2);
+      },
+      deserialize(jsonStr) {
+        const data = JSON.parse(jsonStr);
+        if (!data || !Array.isArray(data.grid)) throw new Error('Invalid pattern');
+        return data.grid;
+      }
+    };
 
-            featuredProjectsData.forEach(project => {
-                // --- Create Card Structure ---
-                const card = document.createElement('div');
-                card.className = 'project-card card'; // Added base 'card' class if shared styles exist
+    // MainApp orchestrator
+    const MainApp = (function(){
+      const canvas = document.getElementById('viz');
+      const ctx = canvas.getContext('2d');
+      let width = canvas.width = window.innerWidth; let height = canvas.height = window.innerHeight;
+      window.addEventListener('resize', () => { width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight; });
 
-                // --- Image Container ---
-                const imageDiv = document.createElement('div');
-                imageDiv.className = 'project-image';
+      const seedInput = document.getElementById('seedInput');
+      const applySeedBtn = document.getElementById('applySeedBtn');
+      const randomSeedBtn = document.getElementById('randomSeedBtn');
+      const startAudioBtn = document.getElementById('startAudioBtn');
+      const playBtn = document.getElementById('playBtn');
+      const stopBtn = document.getElementById('stopBtn');
+      const tempoInput = document.getElementById('tempo');
+      const tempoVal = document.getElementById('tempoVal');
+      const steps16Btn = document.getElementById('steps16');
+      const steps32Btn = document.getElementById('steps32');
+      const seqEl = document.getElementById('seq');
+      const exportJSONBtn = document.getElementById('exportJSONBtn');
+      const importJSONBtn = document.getElementById('importJSONBtn');
+      const importJSONInput = document.getElementById('importJSONInput');
+      const snapshotBtn = document.getElementById('snapshotBtn');
+      const recordDemoBtn = document.getElementById('recordDemoBtn');
 
-                // --- Image Link ---
-                const imageLink = document.createElement('a');
-                imageLink.href = project.linkUrl;
-                imageLink.target = '_blank'; // Open in new tab
-                imageLink.rel = 'noopener noreferrer'; // Security best practice
-                imageLink.setAttribute('aria-label', `Link to ${project.title}`); // Accessibility
+      let seed = getParamSeed() || randomSeed();
+      seedInput.value = seed;
 
-                const img = document.createElement('img');
-                img.src = project.imageUrl;
-                img.alt = project.title; // Use project title as alt text
-                img.loading = 'lazy'; // Improve performance by lazy loading images
+      let steps = 16;
+      let bank = null; // AudioBank instance
+      let visualProfiles = []; // per-voice
+      let pattern = Sequencer.generateSignaturePattern(seed, 10, steps);
+      let playing = false;
+      let currentStep = 0;
+      let lastStepAt = 0;
+      let activeVis = Array.from({length: 10}, () => ({ intensity: 0 }));
 
-                // Error handling for image loading
-                img.onerror = function() {
-                    // Display placeholder if image fails
-                    imageDiv.innerHTML = `<div class="placeholder">Image not available for ${project.title}</div>`;
-                    // Ensure the link is removed or handled if image fails
-                    imageLink.remove(); // Remove the broken link wrapper
-                    imageDiv.appendChild(img.parentNode); // Add the placeholder directly
-                };
+      // Lazy status toggles
+      function setSteps(newSteps) {
+        steps = newSteps;
+        document.documentElement.style.setProperty('--steps', String(steps));
+        pattern = Sequencer.generateSignaturePattern(seed, 10, steps);
+        rebuildGrid();
+      }
 
-                imageLink.appendChild(img); // Place the image inside the link
-                imageDiv.appendChild(imageLink); // Place the link (containing the image) inside the image container
+      function applySeed(newSeed) {
+        seed = newSeed;
+        setParamSeed(seed);
+        pattern = Sequencer.generateSignaturePattern(seed, 10, steps);
+        buildVisualProfiles();
+        rebuildGrid();
+      }
 
-                // --- Content Container ---
-                const contentDiv = document.createElement('div');
-                contentDiv.className = 'project-content';
+      function buildVisualProfiles() {
+        const palette = derivePalette(seed, 10);
+        visualProfiles = palette.map((c, i) => Visualizer.makeVoiceVisualProfile(seed, i, c));
+      }
 
-                const titleH3 = document.createElement('h3');
-                titleH3.textContent = project.title;
-
-                const descP = document.createElement('p');
-                descP.textContent = project.description;
-
-                // --- Footer Container ---
-                const footerDiv = document.createElement('div');
-                footerDiv.className = 'project-footer';
-
-                const authorSpan = document.createElement('span');
-                authorSpan.className = 'project-author';
-                authorSpan.textContent = `By ${project.author}`;
-
-                const linkA = document.createElement('a');
-                linkA.href = project.linkUrl;
-                linkA.textContent = `${project.linkText} →`;
-                linkA.target = '_blank'; // Open external links in new tab
-                linkA.rel = 'noopener noreferrer'; // Security best practice
-
-                // --- Assemble Card ---
-                footerDiv.appendChild(authorSpan);
-                footerDiv.appendChild(linkA);
-
-                contentDiv.appendChild(titleH3);
-                contentDiv.appendChild(descP);
-                contentDiv.appendChild(footerDiv);
-
-                card.appendChild(imageDiv);
-                card.appendChild(contentDiv);
-
-                // --- Append Card to Grid ---
-                gridContainer.appendChild(card);
+      function rebuildGrid() {
+        seqEl.innerHTML = '';
+        for (let v = 0; v < 10; v++) {
+          const row = document.createElement('div'); row.className = 'seq-row';
+          const label = document.createElement('div'); label.className = 'voice-label';
+          const sw = document.createElement('span'); sw.className = 'voice-swatch'; sw.style.background = (visualProfiles[v]?.color || '#888');
+          label.appendChild(sw);
+          const name = document.createElement('span'); name.textContent = `Voice ${v+1}`; label.appendChild(name);
+          label.addEventListener('click', () => { if (bank) bank.voices[v].trigger(); flashVis(v, 0.9); });
+          row.appendChild(label);
+          for (let s = 0; s < steps; s++) {
+            const cell = document.createElement('div'); cell.className = 'cell' + (pattern[v][s] ? ' on' : '');
+            cell.dataset.v = String(v); cell.dataset.s = String(s);
+            if (s % 4 === 0) cell.style.borderColor = '#2b3a59';
+            cell.addEventListener('click', () => {
+              pattern = Sequencer.toggle(pattern, v, s);
+              cell.classList.toggle('on', pattern[v][s]);
             });
+            row.appendChild(cell);
+          }
+          seqEl.appendChild(row);
         }
+      }
 
-        // --- Update copyright year ---
-        function updateCopyrightYear() {
-            const yearSpan = document.getElementById('year');
-            if (yearSpan) {
-                yearSpan.textContent = new Date().getFullYear();
-            } else {
-                console.warn("Copyright year span element '#year' not found.");
+      function updatePlayhead(step) {
+        const cells = Array.from(seqEl.querySelectorAll('.cell'));
+        cells.forEach(c => c.classList.remove('playing'));
+        const targets = Array.from(seqEl.querySelectorAll(`.cell:nth-child(${step+2})`)); // +2 for label column
+        targets.forEach(c => c.classList.add('playing'));
+      }
+
+      function flashVis(voiceIndex, amount) {
+        activeVis[voiceIndex].intensity = Math.min(1, (activeVis[voiceIndex].intensity || 0) + amount);
+      }
+
+      function scheduleTransport() {
+        Tone.Transport.cancel();
+        Tone.Transport.scheduleRepeat((time) => {
+          currentStep = (currentStep + 1) % steps;
+          lastStepAt = time;
+          for (let v = 0; v < 10; v++) {
+            if (pattern[v][currentStep]) {
+              const voice = bank.voices[v];
+              const note = transposeNote(voice.baseNote, ((v%5)-2));
+              voice.trigger(note, 0.9, '16n');
+              flashVis(v, 0.8);
             }
+          }
+          // DOM update small delay to align visually
+          setTimeout(() => updatePlayhead(currentStep), 0);
+        }, '16n');
+      }
+
+      function transposeNote(note, semis) {
+        // naive: C4 -> midi -> back
+        const map = {C:0,'C#':1,'Db':1,D:2,'D#':3,'Eb':3,E:4,F:5,'F#':6,'Gb':6,G:7,'G#':8,'Ab':8,A:9,'A#':10,'Bb':10,B:11};
+        const m = note.match(/^([A-G]#?|[A-G]b?)(\d)$/);
+        if (!m) return note;
+        const base = map[m[1]]; const oct = parseInt(m[2], 10);
+        let midi = base + 12*(oct+1);
+        midi += semis;
+        const nn = midi % 12; const no = Math.floor(midi/12) - 1;
+        const names = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+        return `${names[nn]}${no}`;
+      }
+
+      function buildAudio() {
+        if (bank) { bank.dispose(); }
+        bank = AudioBank.create(seed);
+        buildVisualProfiles();
+      }
+
+      function setPlaying(p) {
+        playing = p;
+        playBtn.classList.toggle('hidden', playing);
+        stopBtn.classList.toggle('hidden', !playing);
+        if (playing) {
+          currentStep = 0; updatePlayhead(currentStep);
+          scheduleTransport();
+          Tone.Transport.start();
+        } else {
+          Tone.Transport.stop();
+          updatePlayhead(-1);
         }
+      }
 
-        // --- Mobile Menu Toggle (Basic Example - Requires CSS) ---
-        function setupMobileMenu() {
-            const menuBtn = document.querySelector('.mobile-menu-btn');
-            const nav = document.querySelector('header nav ul'); // Adjust selector if needed
-
-            if (menuBtn && nav) {
-                menuBtn.addEventListener('click', () => {
-                    const isActive = nav.classList.toggle('active'); // Toggle active class
-                    menuBtn.setAttribute('aria-expanded', isActive);
-
-                    // JS logic to hide WTF button is no longer needed here as it's not siblings with the menu anymore
-                });
-            } else {
-                console.warn("Mobile menu button or navigation list not found.");
-            }
+      // Visual animation loop
+      let rafId = 0;
+      function animate(now) {
+        const active = [];
+        for (let i = 0; i < 10; i++) {
+          const profile = visualProfiles[i];
+          const voice = bank ? bank.voices[i] : null;
+          const v = activeVis[i];
+          const intensity = Math.max(0, Math.min(1, (v.intensity || 0) * 0.96 + (voice ? voice.getIntensity() * 0.5 : 0)));
+          v.intensity = intensity;
+          active.push({ profile, intensity });
         }
+        Visualizer.drawFrame(ctx, performance.now(), width, height, active);
+        rafId = requestAnimationFrame(animate);
+      }
 
+      // Recording demo (8 bars) -> download webm/ogg depending on browser
+      async function recordDemoAudio(bars = 4) {
+        if (!window.Tone) return;
+        const ac = Tone.getContext().rawContext;
+        const dest = ac.createMediaStreamDestination();
+        // tap into the master by creating a low-latency merger
+        const tap = new Tone.Gain(1).toDestination();
+        bank.masterGain.connect(tap);
+        tap.connect(new Tone.MediaStreamDestination ? new Tone.MediaStreamDestination() : dest);
+        // If Tone.js doesn't expose MediaStreamDestination wrapper, connect raw
+        try { bank.masterGain.connect(dest); } catch(e) {}
+        let stream = dest.stream;
+        const recorder = new MediaRecorder(stream);
+        const chunks = [];
+        recorder.ondataavailable = e => { if (e.data.size>0) chunks.push(e.data); };
+        const done = new Promise(res => recorder.onstop = res);
+        recorder.start();
+        const prevPos = Tone.Transport.position;
+        const prevState = Tone.Transport.state;
+        const prevBpm = Tone.Transport.bpm.value;
+        const lenSec = Tone.Time(`${bars}m`).toSeconds();
+        const startAt = Tone.now() + 0.1;
+        Tone.Transport.stop();
+        currentStep = 0; scheduleTransport();
+        Tone.Transport.start(startAt);
+        await new Promise(r => setTimeout(r, (lenSec+0.2)*1000));
+        recorder.stop();
+        Tone.Transport.stop();
+        await done;
+        const blob = new Blob(chunks, { type: chunks[0]?.type || 'audio/webm' });
+        downloadBlob(blob, `soundtoy-${seed}-demo.webm`);
+      }
 
-        // --- Run functions after DOM is loaded ---
-        document.addEventListener('DOMContentLoaded', () => {
-            populateFeaturedProjects();
-            updateCopyrightYear();
-            setupMobileMenu(); // Add mobile menu functionality
-        });
+      function downloadBlob(blob, filename) {
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url; a.download = filename; a.click();
+        setTimeout(() => URL.revokeObjectURL(url), 2000);
+      }
 
-     </script>
-    <!-- Consider adding defer attribute to script tag if not interacting with DOM immediately:
-    <script src="your-script.js" defer></script>
-    However, since this script manipulates the DOM right away based on 'DOMContentLoaded', it's fine as is. -->
+      function snapshotCanvas() {
+        canvas.toBlob(blob => {
+          if (blob) downloadBlob(blob, `soundtoy-${seed}-snapshot.png`);
+        }, 'image/png');
+      }
+
+      function exportPattern() {
+        const data = {
+          version: 1,
+          seed,
+          steps,
+          pattern,
+          palette: visualProfiles.map(v => v.color)
+        };
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        downloadBlob(blob, `soundtoy-${seed}-pattern.json`);
+      }
+
+      function importPatternFile(file) {
+        const reader = new FileReader();
+        reader.onload = () => {
+          try {
+            const data = JSON.parse(reader.result);
+            if (data.seed && typeof data.seed === 'string') { seed = data.seed; seedInput.value = seed; setParamSeed(seed); buildAudio(); buildVisualProfiles(); }
+            if (data.steps) { steps = data.steps; }
+            if (Array.isArray(data.pattern)) { pattern = data.pattern; }
+            rebuildGrid();
+          } catch (e) { alert('Invalid pattern file'); }
+        };
+        reader.readAsText(file);
+      }
+
+      // Event wiring
+      applySeedBtn.addEventListener('click', () => applySeed(seedInput.value.trim() || randomSeed()));
+      randomSeedBtn.addEventListener('click', () => { const s = randomSeed(); seedInput.value = s; applySeed(s); });
+      steps16Btn.addEventListener('click', () => { steps16Btn.classList.remove('outline'); steps32Btn.classList.add('outline'); setSteps(16); });
+      steps32Btn.addEventListener('click', () => { steps32Btn.classList.remove('outline'); steps16Btn.classList.add('outline'); setSteps(32); });
+      tempoInput.addEventListener('input', () => { tempoVal.textContent = tempoInput.value; if (window.Tone) Tone.Transport.bpm.rampTo(parseFloat(tempoInput.value), 0.05); });
+
+      startAudioBtn.addEventListener('click', async () => {
+        if (!window.Tone) { alert('Tone.js not ready yet'); return; }
+        await Tone.start();
+        buildAudio();
+        startAudioBtn.classList.add('hidden');
+        playBtn.classList.remove('hidden');
+        stopBtn.classList.add('hidden');
+        Tone.Transport.bpm.value = parseFloat(tempoInput.value);
+        // Prewarm: trigger silent
+        bank.voices.forEach(v => v.gain.gain.value = 0.0001);
+        if (!rafId) rafId = requestAnimationFrame(animate);
+      });
+      playBtn.addEventListener('click', () => setPlaying(true));
+      stopBtn.addEventListener('click', () => setPlaying(false));
+
+      exportJSONBtn.addEventListener('click', exportPattern);
+      importJSONBtn.addEventListener('click', () => importJSONInput.click());
+      importJSONInput.addEventListener('change', (e) => { const f = e.target.files?.[0]; if (f) importPatternFile(f); e.target.value = ''; });
+      snapshotBtn.addEventListener('click', snapshotCanvas);
+      recordDemoBtn.addEventListener('click', () => recordDemoAudio(4));
+
+      // Keyboard: 1..0 map to 10 voices
+      window.addEventListener('keydown', (e) => {
+        const map = { '1':0,'2':1,'3':2,'4':3,'5':4,'6':5,'7':6,'8':7,'9':8,'0':9 };
+        const idx = map[e.key];
+        if (idx !== undefined) {
+          e.preventDefault();
+          if (bank) { bank.voices[idx].trigger(); flashVis(idx, 0.9); }
+        }
+      });
+
+      // Initial UI
+      buildVisualProfiles();
+      rebuildGrid();
+
+      return { applySeed, setSteps };
+    })();
+
+    // Load Tone.js from on-chain URL
+    (function loadTone() {
+      const s = document.createElement('script');
+      s.src = TONE_JS_URL;
+      s.async = true;
+      s.onload = () => {
+        console.log('Tone.js loaded');
+      };
+      s.onerror = () => {
+        alert('Failed to load Tone.js from on-chain URL');
+      };
+      document.head.appendChild(s);
+    })();
+  </script>
 </body>
 </html>
