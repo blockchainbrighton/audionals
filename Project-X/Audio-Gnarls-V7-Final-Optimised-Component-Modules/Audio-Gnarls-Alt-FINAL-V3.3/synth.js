@@ -93,6 +93,12 @@ export function loadPresets(seed, shapes) {
  * Create or rebuild the synthesizer chain for a given shape. This
  * function disposes any existing chain stored on the state and
  * constructs a new one based on the provided deterministic preset.
+ * The chain topology is:
+ * Osc1/2 -> Volume(-12dB) -> Filter -> [split] -> Analyser
+ *                                      -> Reverb -> Limiter -> Output(Gain)
+ *
+ * Output nodes are not connected to the destination here. Activation is
+ * handled by setActiveChain to ensure only one active connection.
  * @param {object} state
  * @param {string} shape
  */
@@ -103,6 +109,7 @@ export async function bufferShapeChain(state, shape) {
   // Dispose any existing chain for this shape
   if (state.chains[shape]) {
     Object.values(state.chains[shape]).forEach(n => {
+      try { n.disconnect?.(); } catch (_) {}
       try { n.stop?.(); } catch (_) {}
       try { n.dispose?.(); } catch (_) {}
     });
@@ -111,13 +118,18 @@ export async function bufferShapeChain(state, shape) {
   try {
     const osc1 = new Tone.Oscillator(pr.osc1[1], pr.osc1[0]).start();
     const osc2 = pr.osc2 ? new Tone.Oscillator(pr.osc2[1], pr.osc2[0]).start() : null;
-    const volume = new Tone.Volume(5);
+    // Lower default volume to give more headroom into the limiter
+    const volume = new Tone.Volume(-12);
     const filter = new Tone.Filter(pr.filter, 'lowpass');
     filter.Q.value = pr.filterQ;
     const lfo = new Tone.LFO(pr.lfo[0], pr.lfo[1], pr.lfo[2]).start();
     const reverb = new Tone.Freeverb().set({ wet: pr.reverb.wet, roomSize: pr.reverb.roomSize });
+    const limiter = new Tone.Limiter(-1);
+    const output = new Tone.Gain(1);
     const analyser = Tone.context.createAnalyser();
     analyser.fftSize = 2048;
+
+    // Modulation and routing
     lfo.connect(filter.frequency);
     if (osc2) lfo.connect(osc2.detune);
     osc1.connect(volume);
@@ -125,7 +137,11 @@ export async function bufferShapeChain(state, shape) {
     volume.connect(filter);
     filter.connect(reverb);
     filter.connect(analyser);
-    state.chains[shape] = { osc1, osc2, volume, filter, lfo, reverb, analyser };
+    // Post‑FX to output chain
+    reverb.connect(limiter);
+    limiter.connect(output);
+
+    state.chains[shape] = { osc1, osc2, volume, filter, lfo, reverb, limiter, output, analyser };
   } catch (e) {
     console.error('Error buffering chain for shape', shape, e);
     delete state.chains[shape];
@@ -134,19 +150,21 @@ export async function bufferShapeChain(state, shape) {
 
 /**
  * Activate a previously buffered chain. Disconnects all existing
- * reverb connections and connects the chosen chain to the destination.
+ * outputs from the destination and connects the chosen chain to the destination.
  * Also updates the analyser reference on the canvas element.
  * @param {object} state
  * @param {string} shape
  * @param {HTMLElement} canvas
  */
 export function setActiveChain(state, shape, canvas) {
-  // Disconnect all reverb outputs
+  const Tone = state.Tone;
+  // Disconnect all outputs from destination
   for (const s in state.chains) {
-    state.chains[s]?.reverb?.disconnect();
+    const ch = state.chains[s];
+    try { ch?.output?.disconnect?.(Tone.Destination); } catch (_) {}
   }
   const chain = state.chains[shape];
-  chain?.reverb?.toDestination();
+  try { chain?.output?.connect?.(Tone.Destination); } catch (_) {}
   state.current = shape;
   // Provide analyser to the canvas
   if (chain?.analyser) {
@@ -164,6 +182,15 @@ export function disposeAllChains(state) {
   for (const shape in state.chains) {
     const chain = state.chains[shape];
     if (!chain) continue;
+    // Ensure disconnection before disposal
+    try { chain.output?.disconnect?.(); } catch (_) {}
+    try { chain.reverb?.disconnect?.(); } catch (_) {}
+    try { chain.filter?.disconnect?.(); } catch (_) {}
+    try { chain.volume?.disconnect?.(); } catch (_) {}
+    try { chain.osc1?.disconnect?.(); } catch (_) {}
+    try { chain.osc2?.disconnect?.(); } catch (_) {}
+    try { chain.lfo?.disconnect?.(); } catch (_) {}
+
     Object.values(chain).forEach(n => {
       try { n.stop?.(); } catch (_) {}
       try { n.dispose?.(); } catch (_) {}

@@ -108,10 +108,9 @@ export function createSequenceUI(state, stepSlotsDiv, playBtn, stepTimeInput, up
 }
 
 /**
- * Start playing the sequence on a loop. Invokes update functions on
- * each step and loops based on state.stepTime. If already playing it
- * does nothing. Passing in callbacks allows decoupling from any
- * specific UI or component.
+ * Start playing the sequence on a loop. If Tone.Transport is available
+ * and the context is unlocked, prefer it for more stable timing. Falls
+ * back to setInterval otherwise.
  * @param {object} state
  * @param {string[]} shapes
  * @param {function} updateControlsFn
@@ -123,34 +122,52 @@ export function playSequence(state, shapes, updateControlsFn, onShapeChangeFn, u
   state.sequencePlaying = true;
   state.sequenceStepIndex = 0;
   updateSequenceUIFn();
-  const stepFn = () => {
+
+  const stepCore = () => {
     const idx = state.sequenceStepIndex;
     const val = state.sequence[idx];
     if (val != null) {
       const shapeKey = shapes[val - 1];
-      if (typeof updateControlsFn === 'function') {
-        updateControlsFn(shapeKey);
-      }
-      if (typeof onShapeChangeFn === 'function') {
-        onShapeChangeFn(shapeKey);
-      }
+      if (typeof updateControlsFn === 'function') updateControlsFn(shapeKey);
+      if (typeof onShapeChangeFn === 'function') onShapeChangeFn(shapeKey);
     }
     state.sequenceStepIndex = (state.sequenceStepIndex + 1) % state.sequence.length;
     updateSequenceUIFn();
   };
-  stepFn();
-  state.sequenceIntervalId = setInterval(stepFn, state.stepTime);
+
+  // Prefer Tone.Transport if available
+  const Tone = state.Tone;
+  if (Tone && Tone.Transport && typeof Tone.Transport.scheduleRepeat === 'function') {
+    // Convert ms stepTime to seconds interval
+    const intervalSec = Math.max(0.05, state.stepTime / 1000);
+    // Ensure transport is running
+    try { Tone.Transport.start(); } catch (_) {}
+    const id = Tone.Transport.scheduleRepeat(() => stepCore(), intervalSec);
+    state.sequenceIntervalId = { type: 'transport', id };
+  } else {
+    // Fallback to setInterval
+    stepCore();
+    const id = setInterval(stepCore, state.stepTime);
+    state.sequenceIntervalId = { type: 'interval', id };
+  }
 }
 
 /**
- * Stop playing the sequence. Clears the interval and resets the
- * sequence position. Invokes the provided update callback.
+ * Stop playing the sequence. Clears the interval/transport event and
+ * resets the sequence position. Invokes the provided update callback.
  * @param {object} state
  * @param {function} updateSequenceUIFn
  */
 export function stopSequence(state, updateSequenceUIFn) {
   if (!state.sequencePlaying) return;
-  clearInterval(state.sequenceIntervalId);
+  const handle = state.sequenceIntervalId;
+  if (handle) {
+    if (handle.type === 'transport' && state.Tone?.Transport) {
+      try { state.Tone.Transport.clear(handle.id); } catch (_) {}
+    } else if (handle.type === 'interval') {
+      clearInterval(handle.id);
+    }
+  }
   state.sequenceIntervalId = null;
   state.sequencePlaying = false;
   state.sequenceStepIndex = 0;
