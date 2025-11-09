@@ -1,5 +1,6 @@
 # TODO Backlog (Priority Order)
 
+
 1. **Testing** Add Vitest suites for sequencing edge cases (transport start delay, sampler overlap) using `withDom` to cover UI rendering and prevent regressions in the transport pipeline.
 2. **Performance** Move sample preloads in `modules/sequencer/sequencer-main.js:14` to a streaming loader with prioritised background fetch so first render happens faster on large kits.
 3. **Performance** Profile Tone.js node graph creation in `modules/sequencer/sequencer-instrument.js:42` and cache synth outputs per patch to eliminate instantiation spikes when switching instruments.

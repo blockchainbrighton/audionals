@@ -3,12 +3,84 @@ import { TOTAL_STEPS } from './sequencer-config.js';
 import { playSamplerChannel } from './sequencer-sampler-playback.js';
 import { updateAllChannelGains } from './sequencer-channel-mixer.js';
 import { INSTRUMENT_PLAYBACK_READY_TIMEOUT_MS } from './sequencer-instrument-constants.js';
+import { requestRecorderDensityReduction } from './sequencer-instrument-recorder-helpers.js';
 
 const WORKLET_URL = './modules/sequencer/worklet/sequencer-scheduler-processor.js';
 const LOOKAHEAD_SECONDS = 0.12;
 export const TRANSPORT_START_DELAY = 0.08;
 const STEP_SUBDIVISION = 4; // 16th notes
 const PLAYBACK_READY_TIMEOUT_SECONDS = INSTRUMENT_PLAYBACK_READY_TIMEOUT_MS / 1000;
+const SEQUENCE_DIAGNOSTIC_INTERVAL_MS = 4500;
+
+let lastSequenceDiagnosticTimestamp = 0;
+let lastLoopDiagnosticCycle = -1;
+let baselineHeapMb = null;
+
+function logSequenceDiagnostics(detail = {}) {
+    const now = (typeof performance !== 'undefined' && typeof performance.now === 'function')
+        ? performance.now()
+        : Date.now();
+    if (now - lastSequenceDiagnosticTimestamp < SEQUENCE_DIAGNOSTIC_INTERVAL_MS) return;
+    lastSequenceDiagnosticTimestamp = now;
+
+    let samplerVoiceEntries = 0;
+    let samplerVoicesPlaying = 0;
+    if (runtimeState.samplerVoices) {
+        runtimeState.samplerVoices.forEach(voice => {
+            if (!voice) return;
+            const set = Array.isArray(voice.voices) ? voice.voices : [];
+            samplerVoiceEntries += set.length;
+            set.forEach(entry => { if (entry?.isPlaying) samplerVoicesPlaying += 1; });
+        });
+    }
+    const instrumentCount = runtimeState.instrumentRack ? Object.keys(runtimeState.instrumentRack).length : 0;
+    const insertChains = runtimeState.channelInsertChains?.size ?? 0;
+    const auxBuses = runtimeState.auxBuses?.size ?? 0;
+    const sampleBuffers = runtimeState.allSampleBuffers ? Object.keys(runtimeState.allSampleBuffers).length : 0;
+    const sampleCacheMeta = runtimeState.sampleCacheMeta?.size ?? 0;
+    let recorderEvents = 0;
+    if (runtimeState.instrumentRack) {
+        Object.values(runtimeState.instrumentRack).forEach(instrument => {
+            const seq = instrument?.logic?.modules?.recorder?.state?.seq;
+            if (Array.isArray(seq)) recorderEvents += seq.length;
+        });
+    }
+    const activeSequences = projectState.sequences?.length ?? 0;
+    const playbackSequence = runtimeState.currentPlaybackSequenceIndex ?? projectState.currentSequenceIndex ?? 0;
+    const activeInstrumentPlayback = runtimeState.instrumentPlaybackState?.size ?? 0;
+    const heapUsedMb = (typeof performance !== 'undefined' && performance.memory)
+        ? (performance.memory.usedJSHeapSize / 1048576)
+        : NaN;
+    const heapText = Number.isFinite(heapUsedMb) ? `${heapUsedMb.toFixed(1)}MB` : 'n/a';
+    if (Number.isFinite(heapUsedMb)) {
+        if (baselineHeapMb === null || heapUsedMb < baselineHeapMb - 2) {
+            baselineHeapMb = heapUsedMb;
+        }
+    }
+
+    const issues = [];
+    if (recorderEvents > 24) issues.push('trim synth sequences');
+    if (samplerVoiceEntries > 12) issues.push('reduce sampler overlap');
+    if (insertChains > 4) issues.push('bypass inserts');
+    if (sampleBuffers > 16 || sampleCacheMeta > 16) issues.push('prune samples');
+    if (Number.isFinite(heapUsedMb) && baselineHeapMb !== null && heapUsedMb - baselineHeapMb > 12) {
+        issues.push('heap rising');
+    }
+    const advice = issues.length ? issues.join(', ') : 'normal';
+
+    if (recorderEvents > 40 && instrumentCount > 0 && typeof requestRecorderDensityReduction === 'function') {
+        Object.values(runtimeState.instrumentRack || {}).forEach(instrument => {
+            requestRecorderDensityReduction(instrument?.logic, { maxEvents: 24 });
+        });
+    }
+
+    const summary = `[SEQ-DIAG] seq${playbackSequence} cyc${runtimeState.sequenceCycle ?? 0} ` +
+        `step${detail?.nextStep ?? runtimeState.currentStepIndex ?? 0} ` +
+        `voices ${samplerVoiceEntries}/${samplerVoicesPlaying} inst ${instrumentCount} ` +
+        `rec ${recorderEvents} ins ${insertChains} samp ${sampleBuffers} heap ${heapText} | ${advice}`;
+
+    console.log(summary);
+}
 
 function computeStepCount(sequence) {
     const defaultSteps = Number.isInteger(TOTAL_STEPS) && TOTAL_STEPS > 0 ? TOTAL_STEPS : 64;
@@ -286,6 +358,10 @@ export class SequencerSchedulerHost {
         runtimeState.currentStepIndex = stepIndex;
         runtimeState.sequenceCycle = cycle;
         runtimeState.lastStepIndex = stepIndex;
+        if (stepIndex === 0 && cycle !== lastLoopDiagnosticCycle) {
+            lastLoopDiagnosticCycle = cycle;
+            logSequenceDiagnostics({ scheduledTime, nextStep: 0, cycle });
+        }
         if (typeof window !== 'undefined' && window?.dispatchEvent) {
             window.dispatchEvent(new CustomEvent('step', { detail: { stepIndex, cycle, scheduledTime } }));
         }
@@ -382,6 +458,7 @@ export class SequencerSchedulerHost {
             scheduledTime,
             nextStep: Number.isInteger(nextStep) ? nextStep : 0
         };
+        logSequenceDiagnostics(detail);
         if (typeof this.onSequenceAdvance === 'function') {
             this.onSequenceAdvance(detail);
         } else {

@@ -397,6 +397,18 @@ export class EnhancedRecorder {
         this.eventBus.dispatchEvent(new CustomEvent('sequence-changed'));
     }
 
+    reduceDensity(maxEvents = 8) {
+        if (!Array.isArray(this.state.seq) || this.state.seq.length <= maxEvents) {
+            return false;
+        }
+        const sorted = [...this.state.seq].sort((a, b) => (a.start ?? 0) - (b.start ?? 0));
+        const trimmed = sorted.slice(0, maxEvents).map(note => ({ ...note }));
+        this.state.seq = trimmed;
+        this.updateState();
+        console.info('[Recorder] Sequence pruned to', maxEvents, 'events to preserve timing stability.');
+        return true;
+    }
+
     clearSequence() {
         this.stopAll();
         this.state.seq = [];
@@ -404,6 +416,34 @@ export class EnhancedRecorder {
         this.recordBpm = this.state.seqMeta.recordBpm;
         this.updateState();
         this.eventBus.dispatchEvent(new CustomEvent('sequence-changed'));
+    }
+
+    flushCompletedTakes() {
+        if (this.isRecording || this.isPlaying) return;
+        try { this.state.activeNotes?.clear?.(); } catch { /* ignore */ }
+        try { this.state.activeNoteIds?.clear?.(); } catch { /* ignore */ }
+        this.scheduledEventIds = [];
+        if (this._pendingLiveReschedule) {
+            clearTimeout(this._pendingLiveReschedule);
+            this._pendingLiveReschedule = null;
+        }
+        this.hostSyncActive = false;
+        this.startedOwnTransport = false;
+    }
+
+    destroy() {
+        try {
+            this.abortCurrentPlayback({
+                dispatchRelease: true,
+                emitStatus: false,
+                resetTransport: true,
+                notifyRelease: false,
+                suppressPlaybackStopEvent: true
+            });
+        } catch (err) {
+            console.warn('[Recorder] Failed to abort playback during destroy:', err);
+        }
+        this.flushCompletedTakes();
     }
 
     getSequenceDuration(timeScale = 1) {
