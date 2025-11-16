@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>NarcotiX V3 - Modular Tactical Stealth</title>
+    <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="uiOverlay">
+            <div id="loadingScreen">
+                <h1 style="color: #ff00ff; text-shadow: 0 0 20px #ff00ff;">NARCOTIX V3</h1>
+                <p style="color: #00ffff;">Initializing enhanced tactical world...</p>
+                <div class="loading-bar">
+                    <div class="loading-fill" id="loadingFill"></div>
+                </div>
+            </div>
+
+            <div id="crosshair" class="crosshair" style="display: none;">
+                <svg viewBox="0 0 20 20" width="20" height="20">
+                    <circle cx="10" cy="10" r="9" fill="none" stroke="#ff00ff" stroke-width="1" />
+                    <line x1="10" y1="0" x2="10" y2="6" stroke="#ff00ff" stroke-width="1" />
+                    <line x1="10" y1="14" x2="10" y2="20" stroke="#ff00ff" stroke-width="1" />
+                    <line x1="0" y1="10" x2="6" y2="10" stroke="#ff00ff" stroke-width="1" />
+                    <line x1="14" y1="10" x2="20" y2="10" stroke="#ff00ff" stroke-width="1" />
+                </svg>
+            </div>
+
+            <div id="tipsPanel">
+                <h4 style="color: #ff00ff; margin-bottom: 8px; text-shadow: 0 0 10px #ff00ff;">📚 TACTICAL TIPS</h4>
+                <div id="tipContent" style="line-height: 1.4;">Welcome to NarcotiX V3! Use WASD to move strategically...</div>
+                <div style="margin-top: 8px; font-size: 9px; color: #888;">
+                    Tip <span id="tipCounter">1</span>/<span id="totalTips">30</span>
+                </div>
+            </div>
+
+            <div id="statsPanel" class="panel">
+                <h3 style="color: #ff00ff; text-shadow: 0 0 10px #ff00ff;">🔥 PLAYER STATS</h3>
+                <div>Score: <span id="score">0</span></div>
+                <div>Cash: $<span id="cash">500</span></div>
+                <div>Territory: <span id="territory">0</span> tiles</div>
+                <div>Income: $<span id="income">0</span>/min</div>
+                <div>Health: <span id="health">100</span>/<span id="maxHealth">100</span></div>
+                <div>Armor: <span id="armor">0</span>/<span id="maxArmor">100</span></div>
+                <div>Speed: <span id="speed">1.0</span>x</div>
+                <div>Stamina: <span id="stamina">100</span></div>
+                <div>Stealth: <span id="stealth">0</span>%</div>
+                <div>Luck: <span id="luck">0</span>%</div>
+                <div>Vision: <span id="visionRange">100</span></div>
+                <div>Wanted: <span id="wantedLevel">0</span> ⭐</div>
+                <div>Hustle: <span id="hustleMultiplier">1.0x</span> (Streak <span id="hustleStreak">0</span>)</div>
+                <div>Weapon: <span id="currentWeapon">Fists (∞)</span></div>
+                <div>Active Effects:</div>
+                <div id="activeEffects" style="min-height: 20px;"></div>
+                <div style="margin-top: 8px;">Pill Log:</div>
+                <ul id="pillLog" style="font-size: 10px; max-height: 80px; overflow-y: auto; padding-left: 15px;"></ul>
+            </div>
+            
+            <div id="inventoryPanel" class="panel">
+                <h3 style="color: #00ffff; text-shadow: 0 0 10px #00ffff;">💊 INVENTORY (<span id="invCount">0</span>/25)</h3>
+                <div id="inventoryGrid" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+                <div style="margin-top: 12px;">
+                    <button id="closeInvBtn">Close [I]</button>
+                    <button id="usePillBtn">Use Selected</button>
+                    <button id="equipWeaponBtn">Equip Weapon</button>
+                </div>
+            </div>
+            
+            <div id="questPanel" class="panel">
+                <h3 style="color: #ff0; text-shadow: 0 0 10px #ff0;">📜 QUESTS & STORY</h3>
+                <div id="questList"></div>
+            </div>
+            
+            <div id="shopPanel" class="panel">
+                <h3 style="color: #00ffff; text-shadow: 0 0 10px #00ffff;">🏪 STASH HOUSE</h3>
+                <div id="shopInventory"></div>
+                <button id="closeShopBtn">Close</button>
+            </div>
+
+            <div id="tradePanel" class="panel" style="display: none; width: 320px; top: 50%; left: 50%; transform: translate(-50%, -50%);">
+                <h3 style="color: #33ffaa; text-shadow: 0 0 10px #33ffaa;">🤝 STREET TRADE</h3>
+                <div id="tradeDetails"></div>
+                <div id="tradeOptions" style="margin-top: 10px;"></div>
+                <button id="closeTradeBtn">Close</button>
+            </div>
+            
+            <div id="legendPanel" class="panel">
+                <h3 style="color: #ff00ff; text-shadow: 0 0 10px #ff00ff;">🎨 COLOR KEY & LEGEND</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff0; border-radius: 50%; border: 2px solid #fff;"></div>
+                    <span><strong>Yellow Circle:</strong> YOU (the player) - Size: Small tactical unit</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8B4513; border-radius: 50%;"></div>
+                    <span><strong>Brown Circle:</strong> Thug (security, patrols only)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff4500; border-radius: 50%;"></div>
+                    <span><strong>Orange Circle:</strong> Rogue (short detect, very fast)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0000ff; border-radius: 50%;"></div>
+                    <span><strong>Blue Circle:</strong> Police (medium detect, patrols routes)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff0000; border-radius: 50%;"></div>
+                    <span><strong>Red Circle:</strong> BOSS (rare, long patrol, very dangerous)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #5555ff; border-radius: 50%;"></div>
+                    <span><strong>Blue Ring:</strong> Traffic (cars stay on streets, heavy impact)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #cccccc; border-radius: 50%;"></div>
+                    <span><strong>Gray Dot:</strong> Civilians (neutral pedestrians)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff8800; border-radius: 50%;"></div>
+                    <span><strong>Orange Dot:</strong> Hustlers (faster pedestrians)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #33ffaa; border-radius: 50%;"></div>
+                    <span><strong>Green Dot:</strong> Buyers (seek specific pill effects)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff33aa; border-radius: 50%;"></div>
+                    <span><strong>Pink Dot:</strong> Dealers (rare merchants on foot)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ffff00; border-radius: 50%;"></div>
+                    <span><strong>Stars:</strong> Wanted level (police response GTA-style)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #00ffff;"></div>
+                    <span><strong>Cyan Square:</strong> Stash House (shop - buy/sell items)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #654321; border-radius: 50%;"></div>
+                    <span><strong>Brown Square:</strong> Enterable Building (shelter, blocks enemies)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #666;"></div>
+                    <span><strong>Dark Gray Square:</strong> Normal Building (blocks movement)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #333;"></div>
+                    <span><strong>Dark Gray Tile:</strong> Street (fast movement +2%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0a4a0a;"></div>
+                    <span><strong>Green Tile:</strong> Grass (normal speed -2%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff00ff;"></div>
+                    <span><strong>Magenta Square:</strong> Drug Lab (rare pills, high risk)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0066cc;"></div>
+                    <span><strong>Blue Water:</strong> Water (slow movement -10%)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgba(0, 255, 0, 0.2);"></div>
+                    <span><strong>Green Overlay:</strong> Your claimed territory</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0f0; border-radius: 50%;"></div>
+                    <span><strong>Green Dot:</strong> Dropped pill pickup</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff0; width: 4px; height: 4px; border-radius: 50%;"></div>
+                    <span><strong>Yellow Dot:</strong> Bullet/Projectile</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: radial-gradient(circle, #ff0, #f00, transparent); border-radius: 50%;"></div>
+                    <span><strong>Explosion:</strong> Weapon impact area</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgba(255, 255, 255, 0.1);"></div>
+                    <span><strong>White Overlay:</strong> Inside building (shelter)</span>
+                </div>
+                <button id="closeLegendBtn" style="margin-top: 12px; width: 100%;">Close [K]</button>
+            </div>
+            
+            <div id="controls" style="color: #00ffff;">
+                [WASD/Arrows] Move | MOUSE Aim | [LMB] Fire | [R] Reload | [SPACE] Use Pill | [I] Inventory | [E] Interact | [Q] Quests | [K] Legend | [1-4] Fists/Pistol/Shotgun/Rifle
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="./js/game.js"></script>
+</body>
+</html>
