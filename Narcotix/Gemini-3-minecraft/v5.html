@@ -1,0 +1,481 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NarcotiX: Fixed Distortion</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+        
+        /* UI LAYOUT */
+        #ui-layer {
+            position: absolute; width: 100%; height: 100%; pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+
+        /* TOP: HUD */
+        #hud-top {
+            padding: 20px; text-align: center;
+            text-shadow: 2px 2px 0 #000;
+        }
+        #notification-area {
+            font-weight: bold; color: #ffff00; font-size: 1.5em;
+            opacity: 0; transition: opacity 0.5s;
+        }
+
+        /* CENTER: Instructions */
+        #instructions {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center; color: white;
+            background: rgba(0,0,0,0.85); padding: 40px;
+            border: 4px solid white; border-radius: 10px;
+            pointer-events: auto; cursor: pointer; z-index: 10;
+        }
+
+        /* BOTTOM: Active Effects & Inventory */
+        #hud-bottom {
+            display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 30px;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+        }
+
+        /* EFFECT DISPLAY BOX */
+        #active-effect-container {
+            display: none;
+            width: 400px;
+            background: rgba(20, 20, 20, 0.9);
+            border: 2px solid #fff;
+            border-radius: 10px;
+            padding: 15px;
+            color: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #timer-bar {
+            height: 10px; background: #444; margin-bottom: 10px; width: 100%;
+        }
+        #timer-fill {
+            height: 100%; background: #00ff00; width: 100%; transition: width 0.1s linear;
+        }
+        #effect-timer-text {
+            font-size: 2em; font-weight: 900; float: right; color: #00ff00;
+        }
+        #effect-title { font-size: 1.2em; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+        .stat-text { font-size: 0.9em; margin: 4px 0; line-height: 1.2; }
+        .side-effect { color: #ff6b6b; font-style: italic; margin-top: 8px; border-top: 1px solid #555; padding-top: 5px;}
+
+        /* INVENTORY */
+        #inventory-box {
+            text-align: right; color: white;
+        }
+        .count-display { font-size: 3em; font-weight: bold; color: #00ffff; }
+
+        /* CROSSHAIR */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            transform: translate(-50%, -50%);
+            mix-blend-mode: difference; pointer-events: none;
+        }
+        #crosshair::before { content: ''; position: absolute; top: 9px; left: 0; width: 20px; height: 2px; background: white; }
+        #crosshair::after { content: ''; position: absolute; top: 0; left: 9px; width: 2px; height: 20px; background: white; }
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="hud-top">
+            <h1>NARCOTIX V7</h1>
+            <div id="notification-area">Picked up item</div>
+        </div>
+        
+        <div id="hud-bottom">
+            <div id="active-effect-container">
+                <div id="timer-bar"><div id="timer-fill"></div></div>
+                <div id="effect-timer-text">0.0s</div>
+                <div id="effect-title" style="color: magenta;">PILL NAME</div>
+                <div class="stat-text" id="effect-desc">Effect description...</div>
+                <div class="stat-text side-effect" id="effect-side">Side Effect...</div>
+            </div>
+
+            <div id="inventory-box">
+                <div>PILLS IN POCKET</div>
+                <div class="count-display" id="pill-counter">0</div>
+                <div>Press <b>'Q'</b> to Consume</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="instructions">
+        <h1>NARCOTIX V7</h1>
+        <p>CLICK TO ENTER</p>
+        <hr>
+        <p><b>WASD</b> Move | <b>SPACE</b> Jump</p>
+        <p><b>Left Click</b> Break Blocks (Find Pills)</p>
+        <p><b>Right Click</b> Place Blocks</p>
+        <p><b>Q</b> Consume Pill</p>
+    </div>
+    <div id="crosshair"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- 1. DATA & MAPPINGS ---
+        const EXPRESSION_MAP = {
+            '#9900ff': 'X(', '#ff00ff': 'X)', '#38761d': 'X]', '#ff9900': 'X{}',
+            '#cb97ff': 'XO', '#ffd966': 'XI', '#ffff00': 'X\\', '#0000ff': 'X{.',
+            '#741b47': 'X*', '#00ffff': 'CV', '#000000': 'XQ', '#00ff00': 'XD',
+            '#7f6000': 'XU', '#ea9999': 'XP', '#b4a7d6': 'XB', '#999999': 'XJ',
+            '#ead1dc': 'Xstx', '#fff2cc': 'Xbtc', '#ff0000': 'Xstx', '#d4b351': 'Xbtc'
+        };
+
+        const PILL_DB = [
+            { name: "Gangles", color: "#ffff00", effect: "Power to resist laughing at puns.", side: "Hallucinatory experiences with a lopsided chicken.", type: "speed" },
+            { name: "Numinousex", color: "#38761d", effect: "Ability to split skateboards with your index finger.", side: "Preference for wonky lines.", type: "jump" },
+            { name: "Rondeaux16", color: "#9900ff", effect: "Feel fulfilled at the start of every weekend.", side: "Temptation to set fire to own legs.", type: "float" },
+            { name: "Sylph", color: "#ff00ff", effect: "Feel like you're riding a unicycle across a tightrope.", side: "Obsession with alibis.", type: "wild" },
+            { name: "Cherimoya", color: "#ff9900", effect: "Make the user amazing at cycling.", side: "Proclivity for deep dives into heavy topics.", type: "speed_jump" },
+            { name: "Jeeveless", color: "#38761d", effect: "Create disorder by playing crying baby sounds.", side: "Rash in reaction to iPhone users.", type: "heavy" },
+            { name: "Klimzona", color: "#0000ff", effect: "Strength of an iguana.", side: "Temporary colour blindness.", type: "zoom" },
+            { name: "Xzipp", color: "#741b47", effect: "Make the user an expert in histonomy.", side: "Frequent time-travel daydreams.", type: "rage" },
+            { name: "Pyrique", color: "#b4a7d6", effect: "Dumbfound yeomen with stamp collecting.", side: "Fear of hand sanitiser.", type: "float" },
+            { name: "Sponza", color: "#7f6000", effect: "Speak to fire.", side: "Mild heartburn.", type: "wild" }
+        ];
+
+        const DEFAULTS = { speed: 8.0, jump: 12.0, gravity: 30.0, fov: 75 };
+        let currentStats = { ...DEFAULTS };
+        let activeEffectTimer = 0, maxEffectTime = 0, isHigh = false;
+
+        // --- 2. THREE.JS SETUP ---
+        const scene = new THREE.Scene();
+        const baseSkyColor = new THREE.Color(0x87CEEB);
+        scene.background = baseSkyColor.clone();
+        scene.fog = new THREE.Fog(baseSkyColor, 10, 60);
+
+        const camera = new THREE.PerspectiveCamera(DEFAULTS.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(50, 100, 50);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- 3. TEXTURE LOGIC (FIXED) ---
+
+        function createBlockTexture(c) {
+            const cvs = document.createElement('canvas'); cvs.width=64; cvs.height=64;
+            const ctx = cvs.getContext('2d'); ctx.fillStyle = c; ctx.fillRect(0,0,64,64);
+            for(let i=0;i<200;i++) {
+                ctx.fillStyle = `rgba(0,0,0,0.2)`;
+                ctx.fillRect(Math.random()*64, Math.random()*64, 4, 4);
+            }
+            const t = new THREE.CanvasTexture(cvs); t.magFilter = THREE.NearestFilter;
+            return t;
+        }
+
+        // FIXED PILL TEXTURE
+        function createPillTexture(color, symbol) {
+            const cvs = document.createElement('canvas');
+            // 256x512 texture for capsule
+            cvs.width = 256; 
+            cvs.height = 512; 
+            const ctx = cvs.getContext('2d');
+
+            // 1. Base Color
+            ctx.fillStyle = color;
+            ctx.fillRect(0, 0, cvs.width, cvs.height);
+
+            // 2. Texture Noise
+            ctx.fillStyle = 'rgba(0,0,0,0.1)';
+            for(let i=0; i<400; i++) ctx.fillRect(Math.random()*cvs.width, Math.random()*cvs.height, 5, 5);
+
+            // 3. Highlight
+            ctx.fillStyle = 'rgba(255,255,255,0.2)';
+            ctx.fillRect(40, 0, 50, cvs.height);
+
+            // 4. Expression
+            if (symbol) {
+                ctx.save();
+                ctx.translate(cvs.width / 2, cvs.height / 2);
+                
+                // Rotate 90 deg Clockwise
+                ctx.rotate(Math.PI / 2); 
+                
+                // FONT SETTINGS
+                // Reduced size to 50px to ensure it fits inside the cylinder body
+                // Used 'Courier New' Bold so characters stack perfectly
+                ctx.font = "bold 50px 'Courier New'"; 
+                ctx.fillStyle = "rgba(0,0,0,0.8)";
+                ctx.textAlign = "center";
+                ctx.textBaseline = "middle";
+                
+                // Draw Text
+                ctx.fillText(symbol, 0, 0);
+                
+                ctx.restore();
+            }
+            
+            const t = new THREE.CanvasTexture(cvs);
+            return t;
+        }
+        
+        const matGrass = new THREE.MeshStandardMaterial({ map: createBlockTexture('#5da130') });
+        const matDirt = new THREE.MeshStandardMaterial({ map: createBlockTexture('#754d29') });
+        const geoBlock = new THREE.BoxGeometry(1,1,1);
+
+        // --- 4. WORLD GEN ---
+        const objects = []; 
+        const droppedItems = [];
+        const stash = [];
+
+        for(let x=-15; x<15; x++) {
+            for(let z=-15; z<15; z++) {
+                if(Math.random() < 0.10) continue; 
+                const mesh = new THREE.Mesh(geoBlock, matGrass);
+                mesh.position.set(x, 0, z);
+                scene.add(mesh);
+                objects.push(mesh);
+                if(Math.random() < 0.1) {
+                    const m2 = new THREE.Mesh(geoBlock, matDirt);
+                    m2.position.set(x, 1, z);
+                    scene.add(m2);
+                    objects.push(m2);
+                }
+            }
+        }
+
+        // --- 5. GAMEPLAY ---
+        function resetStats() {
+            currentStats = { ...DEFAULTS };
+            camera.fov = DEFAULTS.fov;
+            camera.updateProjectionMatrix();
+            scene.background.copy(baseSkyColor);
+            scene.fog.color.copy(baseSkyColor);
+            scene.fog.near = 10; scene.fog.far = 60;
+            isHigh = false;
+            document.getElementById('active-effect-container').style.display = 'none';
+            showNotification("Effect Wore Off.");
+        }
+
+        function applyPillEffect(pill) {
+            maxEffectTime = 15 + Math.random() * 10;
+            activeEffectTimer = maxEffectTime;
+            isHigh = true;
+
+            switch (pill.type) {
+                case 'speed': currentStats.speed = 20.0; camera.fov = 110; break;
+                case 'jump': currentStats.jump = 25.0; currentStats.gravity = 20.0; break;
+                case 'float': currentStats.gravity = 5.0; currentStats.speed = 4.0; break;
+                case 'heavy': currentStats.speed = 3.0; currentStats.jump = 5.0; currentStats.gravity = 80.0; break;
+                case 'wild': currentStats.speed = 15.0; currentStats.jump = 20.0; camera.fov = 130; break;
+                case 'rage': camera.fov = 40; currentStats.speed = 12.0; break;
+                default: currentStats.speed = 10.0;
+            }
+            camera.updateProjectionMatrix();
+
+            const ui = document.getElementById('active-effect-container');
+            ui.style.display = 'block';
+            ui.style.borderColor = pill.color;
+            document.getElementById('effect-title').innerText = pill.name;
+            document.getElementById('effect-title').style.color = pill.color;
+            document.getElementById('effect-desc').innerText = pill.effect;
+            document.getElementById('effect-side').innerText = pill.side;
+
+            scene.background.set(pill.color);
+            scene.fog.color.set(pill.color);
+            scene.fog.near = 2; scene.fog.far = 30;
+        }
+
+        function spawnPill(pos) {
+            if(Math.random() > 0.4) return; 
+            const data = PILL_DB[Math.floor(Math.random() * PILL_DB.length)];
+            const symbol = EXPRESSION_MAP[data.color] || "";
+
+            const geo = new THREE.CapsuleGeometry(0.15, 0.4, 4, 8);
+            const tex = createPillTexture(data.color, symbol);
+            const mat = new THREE.MeshStandardMaterial({ map: tex, roughness: 0.3 });
+            
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(pos);
+            mesh.userData = data;
+            
+            scene.add(mesh);
+            droppedItems.push(mesh);
+        }
+
+        function consumePill() {
+            if (stash.length === 0) { showNotification("Stash Empty!"); return; }
+            if (activeEffectTimer > 0) resetStats();
+            const pill = stash.pop();
+            document.getElementById('pill-counter').innerText = stash.length;
+            applyPillEffect(pill);
+        }
+
+        function showNotification(msg) {
+            const el = document.getElementById('notification-area');
+            el.innerText = msg; el.style.opacity = 1;
+            setTimeout(() => el.style.opacity = 0, 2000);
+        }
+
+        // --- 6. LOOP & PHYSICS ---
+        const controls = new PointerLockControls(camera, document.body);
+        const instructions = document.getElementById('instructions');
+        instructions.onclick = () => controls.lock();
+        controls.addEventListener('lock', () => instructions.style.display = 'none');
+        controls.addEventListener('unlock', () => instructions.style.display = 'block');
+
+        const moveState = { fwd: false, bwd: false, left: false, right: false };
+        const velocity = new THREE.Vector3();
+        let canJump = false;
+
+        document.addEventListener('keydown', (e) => {
+            if(e.code==='KeyW') moveState.fwd=true;
+            if(e.code==='KeyS') moveState.bwd=true;
+            if(e.code==='KeyA') moveState.left=true;
+            if(e.code==='KeyD') moveState.right=true;
+            if(e.code==='Space' && canJump) { velocity.y = currentStats.jump; canJump=false; }
+            if(e.code==='KeyQ') consumePill();
+        });
+        document.addEventListener('keyup', (e) => {
+            if(e.code==='KeyW') moveState.fwd=false;
+            if(e.code==='KeyS') moveState.bwd=false;
+            if(e.code==='KeyA') moveState.left=false;
+            if(e.code==='KeyD') moveState.right=false;
+        });
+
+        let prevTime = performance.now();
+        const raycaster = new THREE.Raycaster();
+        camera.position.set(0, 5, 0);
+
+        function checkHorizontalCollision(pos) {
+            const pBox = new THREE.Box3(
+                new THREE.Vector3(pos.x-0.3, pos.y-1.0, pos.z-0.3),
+                new THREE.Vector3(pos.x+0.3, pos.y+0.5, pos.z+0.3)
+            );
+            for(let obj of objects) {
+                if(obj.position.distanceToSquared(pos) > 9) continue; 
+                const bBox = new THREE.Box3().setFromObject(obj);
+                if(pBox.intersectsBox(bBox)) return true;
+            }
+            return false;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            // Timer
+            if (activeEffectTimer > 0) {
+                activeEffectTimer -= delta;
+                document.getElementById('effect-timer-text').innerText = activeEffectTimer.toFixed(1) + "s";
+                document.getElementById('timer-fill').style.width = ((activeEffectTimer / maxEffectTime) * 100) + "%";
+                if (isHigh) {
+                    camera.fov = currentStats.fov + (Math.sin(time * 0.005) * 5);
+                    camera.updateProjectionMatrix();
+                }
+                if (activeEffectTimer <= 0) resetStats();
+            }
+
+            // Items
+            for(let i=droppedItems.length-1; i>=0; i--) {
+                const item = droppedItems[i];
+                item.rotation.y += 2 * delta; 
+                item.rotation.z = Math.sin(time * 0.002) * 0.5;
+                item.position.y += Math.sin(time * 0.003 + i) * 0.005;
+                if(camera.position.distanceTo(item.position) < 1.5) {
+                    stash.push(item.userData);
+                    document.getElementById('pill-counter').innerText = stash.length;
+                    showNotification(`Found: ${item.userData.name}`);
+                    scene.remove(item);
+                    droppedItems.splice(i, 1);
+                }
+            }
+
+            // Movement
+            if(controls.isLocked) {
+                velocity.y -= currentStats.gravity * delta;
+                
+                raycaster.set(camera.position, new THREE.Vector3(0,-1,0));
+                const intersects = raycaster.intersectObjects(objects);
+                let onGround = false;
+                if(intersects.length > 0) {
+                    if(velocity.y <= 0 && intersects[0].distance < 1.6) {
+                        velocity.y = 0;
+                        camera.position.y = intersects[0].point.y + 1.6;
+                        canJump = true; onGround = true;
+                    }
+                }
+                if(!onGround) canJump = false;
+                if(velocity.y < -50) velocity.y = -50;
+
+                const dir = new THREE.Vector3(); camera.getWorldDirection(dir); dir.y=0; dir.normalize();
+                const right = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
+                const zIn = Number(moveState.fwd)-Number(moveState.bwd);
+                const xIn = Number(moveState.right)-Number(moveState.left);
+                const speed = currentStats.speed * delta;
+
+                const dx = (dir.x*zIn - right.x*xIn) * speed;
+                camera.position.x += dx;
+                if(checkHorizontalCollision(camera.position)) camera.position.x -= dx;
+
+                const dz = (dir.z*zIn - right.z*xIn) * speed;
+                camera.position.z += dz;
+                if(checkHorizontalCollision(camera.position)) camera.position.z -= dz;
+
+                camera.position.y += velocity.y * delta;
+                if(camera.position.y < -30) { camera.position.set(0,10,0); velocity.set(0,0,0); resetStats(); }
+            }
+
+            raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+            const hits = raycaster.intersectObjects(objects);
+            if(hits.length > 0 && hits[0].distance < 5 && controls.isLocked) {
+                if(mouseClick.left) {
+                    spawnPill(hits[0].object.position.clone());
+                    scene.remove(hits[0].object);
+                    objects.splice(objects.indexOf(hits[0].object), 1);
+                    mouseClick.left = false;
+                }
+                if(mouseClick.right) {
+                    const pos = hits[0].object.position.clone().add(hits[0].face.normal);
+                    if(pos.distanceTo(camera.position)>1.5) {
+                        const b = new THREE.Mesh(geoBlock, matDirt);
+                        b.position.copy(pos);
+                        scene.add(b); objects.push(b);
+                    }
+                    mouseClick.right = false;
+                }
+            } else { mouseClick.left=false; mouseClick.right=false; }
+
+            renderer.render(scene, camera);
+        }
+
+        const mouseClick = { left: false, right: false };
+        document.addEventListener('mousedown', (e) => {
+            if(!controls.isLocked) return;
+            if(e.button===0) mouseClick.left=true;
+            if(e.button===2) mouseClick.right=true;
+        });
+
+        animate();
+        window.onresize = () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+    </script>
+</body>
+</html>
