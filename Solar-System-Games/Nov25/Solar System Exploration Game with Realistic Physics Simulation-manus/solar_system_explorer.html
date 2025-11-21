@@ -1,0 +1,1469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Solar System Explorer - Realistic Space Simulation</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background: #000;
+            color: #0ff;
+            overflow: hidden;
+            height: 100vh;
+        }
+
+        #gameCanvas {
+            display: block;
+            width: 100%;
+            height: 100%;
+            background: #000;
+        }
+
+        .ui-overlay {
+            position: absolute;
+            pointer-events: none;
+        }
+
+        #topBar {
+            top: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 20, 40, 0.85);
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 2px solid #0ff;
+        }
+
+        #leftPanel {
+            top: 60px;
+            left: 0;
+            width: 280px;
+            background: rgba(0, 20, 40, 0.85);
+            padding: 15px;
+            border-right: 2px solid #0ff;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        #rightPanel {
+            top: 60px;
+            right: 0;
+            width: 280px;
+            background: rgba(0, 20, 40, 0.85);
+            padding: 15px;
+            border-left: 2px solid #0ff;
+            max-height: calc(100vh - 120px);
+            overflow-y: auto;
+        }
+
+        #bottomBar {
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background: rgba(0, 20, 40, 0.85);
+            padding: 10px 20px;
+            border-top: 2px solid #0ff;
+        }
+
+        .panel-section {
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 1px solid #0ff;
+        }
+
+        .panel-section:last-child {
+            border-bottom: none;
+        }
+
+        .panel-title {
+            color: #ff0;
+            font-weight: bold;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .info-row {
+            display: flex;
+            justify-content: space-between;
+            margin: 4px 0;
+            font-size: 12px;
+        }
+
+        .info-label {
+            color: #0ff;
+        }
+
+        .info-value {
+            color: #fff;
+            text-align: right;
+        }
+
+        .body-item {
+            padding: 6px;
+            margin: 4px 0;
+            background: rgba(0, 100, 150, 0.3);
+            border-left: 3px solid #0ff;
+            cursor: pointer;
+            pointer-events: auto;
+            font-size: 11px;
+            transition: all 0.2s;
+        }
+
+        .body-item:hover {
+            background: rgba(0, 150, 200, 0.5);
+            border-left-color: #ff0;
+        }
+
+        .body-item.selected {
+            background: rgba(0, 200, 255, 0.6);
+            border-left-color: #f0f;
+        }
+
+        .body-item.discovered {
+            border-left-color: #0f0;
+        }
+
+        .controls-help {
+            font-size: 11px;
+            line-height: 1.6;
+        }
+
+        .control-key {
+            display: inline-block;
+            background: rgba(0, 255, 255, 0.2);
+            padding: 2px 6px;
+            border-radius: 3px;
+            margin: 0 2px;
+            color: #ff0;
+            font-weight: bold;
+        }
+
+        .time-warp-indicator {
+            font-size: 18px;
+            font-weight: bold;
+            color: #f0f;
+        }
+
+        .paused {
+            color: #f00;
+            animation: blink 1s infinite;
+        }
+
+        @keyframes blink {
+            0%, 50% { opacity: 1; }
+            51%, 100% { opacity: 0.3; }
+        }
+
+        .science-points {
+            color: #0f0;
+            font-size: 16px;
+            font-weight: bold;
+        }
+
+        .warning {
+            color: #f00;
+            font-weight: bold;
+        }
+
+        .success {
+            color: #0f0;
+            font-weight: bold;
+        }
+
+        button {
+            background: rgba(0, 150, 200, 0.6);
+            color: #fff;
+            border: 1px solid #0ff;
+            padding: 6px 12px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 11px;
+            pointer-events: auto;
+            transition: all 0.2s;
+        }
+
+        button:hover {
+            background: rgba(0, 200, 255, 0.8);
+            border-color: #ff0;
+        }
+
+        button:active {
+            background: rgba(0, 100, 150, 0.8);
+        }
+
+        .module-button {
+            margin: 4px 2px;
+        }
+
+        .module-button.active {
+            background: rgba(0, 255, 100, 0.6);
+            border-color: #0f0;
+        }
+
+        #centerHUD {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+        }
+
+        .crosshair {
+            width: 40px;
+            height: 40px;
+            border: 2px solid #0ff;
+            border-radius: 50%;
+            position: relative;
+        }
+
+        .crosshair::before,
+        .crosshair::after {
+            content: '';
+            position: absolute;
+            background: #0ff;
+        }
+
+        .crosshair::before {
+            width: 20px;
+            height: 2px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .crosshair::after {
+            width: 2px;
+            height: 20px;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+        }
+
+        .notification {
+            position: absolute;
+            top: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 200, 100, 0.9);
+            color: #fff;
+            padding: 12px 24px;
+            border-radius: 5px;
+            border: 2px solid #0f0;
+            font-size: 14px;
+            font-weight: bold;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        .notification.show {
+            opacity: 1;
+        }
+
+        ::-webkit-scrollbar {
+            width: 8px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: rgba(0, 20, 40, 0.5);
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: #0ff;
+            border-radius: 4px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: #0af;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="gameCanvas"></canvas>
+    
+    <!-- UI Overlays -->
+    <div class="ui-overlay" id="topBar">
+        <div>
+            <div style="font-size: 16px; font-weight: bold;">SOLAR SYSTEM EXPLORER</div>
+            <div style="font-size: 12px; margin-top: 4px;" id="dateDisplay">Date: Loading...</div>
+        </div>
+        <div style="text-align: center;">
+            <div class="time-warp-indicator" id="timeWarpDisplay">Time: 1x</div>
+            <div style="font-size: 11px; margin-top: 4px;" id="selectedBodyName">Selected: None</div>
+        </div>
+        <div style="text-align: right;">
+            <div class="science-points" id="sciencePoints">Science: 0</div>
+            <div style="font-size: 11px; margin-top: 4px;" id="discoveryCount">Discovered: 0/50</div>
+        </div>
+    </div>
+
+    <div class="ui-overlay" id="leftPanel">
+        <div class="panel-section">
+            <div class="panel-title">PROBE STATUS</div>
+            <div class="info-row">
+                <span class="info-label">Velocity:</span>
+                <span class="info-value" id="probeVelocity">0.00 km/s</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Altitude:</span>
+                <span class="info-value" id="probeAltitude">N/A</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Fuel:</span>
+                <span class="info-value" id="probeFuel">100%</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Energy:</span>
+                <span class="info-value" id="probeEnergy">100%</span>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <div class="panel-title">TARGET INFO</div>
+            <div class="info-row">
+                <span class="info-label">Body:</span>
+                <span class="info-value" id="targetName">None</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Distance:</span>
+                <span class="info-value" id="targetDistance">N/A</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Type:</span>
+                <span class="info-value" id="targetType">N/A</span>
+            </div>
+            <div class="info-row">
+                <span class="info-label">Diameter:</span>
+                <span class="info-value" id="targetDiameter">N/A</span>
+            </div>
+        </div>
+
+        <div class="panel-section">
+            <div class="panel-title">PROBE MODULES</div>
+            <button class="module-button" id="scanBtn" onclick="game.activateScanner()">
+                <span class="control-key">S</span> SCAN
+            </button>
+            <button class="module-button" id="mapBtn" onclick="game.activateMapper()">
+                <span class="control-key">M</span> MAP
+            </button>
+            <button class="module-button" id="landBtn" onclick="game.attemptLanding()">
+                <span class="control-key">L</span> LAND
+            </button>
+            <button class="module-button" id="cameraBtn" onclick="game.takePhoto()">
+                <span class="control-key">C</span> PHOTO
+            </button>
+        </div>
+    </div>
+
+    <div class="ui-overlay" id="rightPanel">
+        <div class="panel-section">
+            <div class="panel-title">CELESTIAL BODIES</div>
+            <div id="bodyList"></div>
+        </div>
+    </div>
+
+    <div class="ui-overlay" id="bottomBar">
+        <div class="controls-help">
+            <strong>CONTROLS:</strong>
+            <span class="control-key">WASD</span> Thrust |
+            <span class="control-key">Q/E</span> Rotate |
+            <span class="control-key">SPACE</span> Boost |
+            <span class="control-key">T</span> Time+ |
+            <span class="control-key">R</span> Time- |
+            <span class="control-key">P</span> Pause |
+            <span class="control-key">TAB</span> Next Body |
+            <span class="control-key">F</span> Follow |
+            <span class="control-key">Mouse</span> Camera |
+            <span class="control-key">Scroll</span> Zoom
+        </div>
+    </div>
+
+    <div id="centerHUD">
+        <div class="crosshair"></div>
+    </div>
+
+    <div class="notification" id="notification"></div>
+
+    <script>
+        // ==================== CONSTANTS ====================
+        const AU = 149597870.7; // km
+        const G = 6.67430e-11; // m^3 kg^-1 s^-2
+        const SUN_MASS = 1.989e30; // kg
+        const MU_SUN = 1.32712440018e20; // m^3/s^2
+        const EARTH_YEAR = 365.256; // days
+        const SCALE_FACTOR = 1e-7; // Visual scale for rendering
+        const SIZE_SCALE = 0.0001; // Planet size scale for visibility
+
+        // ==================== CELESTIAL BODY DATA ====================
+        const celestialBodies = [
+            // Sun
+            {
+                name: "Sun", type: "star", parent: null,
+                mass: 1.989e30, radius: 696340, color: "#FDB813",
+                semiMajorAxis: 0, eccentricity: 0, inclination: 0,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 0, rotationPeriod: 25.05, axialTilt: 7.25,
+                atmosphere: "H/He plasma", temperature: 5778, discovered: true
+            },
+            // Planets
+            {
+                name: "Mercury", type: "planet", parent: "Sun",
+                mass: 3.3011e23, radius: 2439.7, color: "#8C7853",
+                semiMajorAxis: 0.387 * AU, eccentricity: 0.2056, inclination: 7.005,
+                longitudeOfAscendingNode: 48.331, argumentOfPeriapsis: 29.124,
+                orbitalPeriod: 87.969, rotationPeriod: 58.785 * 24, axialTilt: 0.034,
+                atmosphere: "None", temperature: 440, discovered: false
+            },
+            {
+                name: "Venus", type: "planet", parent: "Sun",
+                mass: 4.8675e24, radius: 6051.8, color: "#FFC649",
+                semiMajorAxis: 0.723 * AU, eccentricity: 0.0068, inclination: 3.3947,
+                longitudeOfAscendingNode: 76.680, argumentOfPeriapsis: 54.884,
+                orbitalPeriod: 224.701, rotationPeriod: -243.686 * 24, axialTilt: 177.36,
+                atmosphere: "CO2", temperature: 737, discovered: false
+            },
+            {
+                name: "Earth", type: "planet", parent: "Sun",
+                mass: 5.9724e24, radius: 6371, color: "#4169E1",
+                semiMajorAxis: 1.000 * AU, eccentricity: 0.0167, inclination: 0.0,
+                longitudeOfAscendingNode: 0.0, argumentOfPeriapsis: 114.207,
+                orbitalPeriod: 365.256, rotationPeriod: 23.9345, axialTilt: 23.44,
+                atmosphere: "N2/O2", temperature: 288, discovered: true
+            },
+            {
+                name: "Mars", type: "planet", parent: "Sun",
+                mass: 6.4171e23, radius: 3389.5, color: "#CD5C5C",
+                semiMajorAxis: 1.524 * AU, eccentricity: 0.0934, inclination: 1.851,
+                longitudeOfAscendingNode: 49.558, argumentOfPeriapsis: 286.502,
+                orbitalPeriod: 686.98, rotationPeriod: 24.6229, axialTilt: 25.19,
+                atmosphere: "CO2", temperature: 210, discovered: false
+            },
+            {
+                name: "Jupiter", type: "planet", parent: "Sun",
+                mass: 1.8982e27, radius: 69911, color: "#DAA520",
+                semiMajorAxis: 5.203 * AU, eccentricity: 0.0484, inclination: 1.305,
+                longitudeOfAscendingNode: 100.464, argumentOfPeriapsis: 273.867,
+                orbitalPeriod: 11.862 * 365.256, rotationPeriod: 9.925, axialTilt: 3.13,
+                atmosphere: "H2/He", temperature: 165, discovered: false
+            },
+            {
+                name: "Saturn", type: "planet", parent: "Sun",
+                mass: 5.6834e26, radius: 58232, color: "#F4A460",
+                semiMajorAxis: 9.537 * AU, eccentricity: 0.0542, inclination: 2.484,
+                longitudeOfAscendingNode: 113.665, argumentOfPeriapsis: 339.392,
+                orbitalPeriod: 29.457 * 365.256, rotationPeriod: 10.656, axialTilt: 26.73,
+                atmosphere: "H2/He", temperature: 134, discovered: false
+            },
+            {
+                name: "Uranus", type: "planet", parent: "Sun",
+                mass: 8.6810e25, radius: 25362, color: "#4FD0E0",
+                semiMajorAxis: 19.191 * AU, eccentricity: 0.0472, inclination: 0.770,
+                longitudeOfAscendingNode: 74.006, argumentOfPeriapsis: 96.998,
+                orbitalPeriod: 84.011 * 365.256, rotationPeriod: -17.24, axialTilt: 97.77,
+                atmosphere: "H2/He/CH4", temperature: 76, discovered: false
+            },
+            {
+                name: "Neptune", type: "planet", parent: "Sun",
+                mass: 1.02413e26, radius: 24622, color: "#4169E1",
+                semiMajorAxis: 30.069 * AU, eccentricity: 0.0086, inclination: 1.769,
+                longitudeOfAscendingNode: 131.784, argumentOfPeriapsis: 276.336,
+                orbitalPeriod: 164.79 * 365.256, rotationPeriod: 16.11, axialTilt: 28.32,
+                atmosphere: "H2/He/CH4", temperature: 72, discovered: false
+            },
+            // Dwarf Planets
+            {
+                name: "Ceres", type: "dwarf", parent: "Sun",
+                mass: 9.38e20, radius: 469.7, color: "#A0A0A0",
+                semiMajorAxis: 2.77 * AU, eccentricity: 0.078, inclination: 10.6,
+                longitudeOfAscendingNode: 80.3, argumentOfPeriapsis: 73.6,
+                orbitalPeriod: 4.61 * 365.256, rotationPeriod: 9.074, axialTilt: 4,
+                atmosphere: "None", temperature: 168, discovered: false
+            },
+            {
+                name: "Pluto", type: "dwarf", parent: "Sun",
+                mass: 1.303e22, radius: 1188.3, color: "#D2B48C",
+                semiMajorAxis: 39.482 * AU, eccentricity: 0.2488, inclination: 17.14,
+                longitudeOfAscendingNode: 110.299, argumentOfPeriapsis: 113.834,
+                orbitalPeriod: 247.94 * 365.256, rotationPeriod: -6.387 * 24, axialTilt: 122.53,
+                atmosphere: "N2", temperature: 44, discovered: false
+            },
+            {
+                name: "Eris", type: "dwarf", parent: "Sun",
+                mass: 1.66e22, radius: 1200, color: "#E0E0E0",
+                semiMajorAxis: 67.7 * AU, eccentricity: 0.44, inclination: 44.0,
+                longitudeOfAscendingNode: 35.9, argumentOfPeriapsis: 151.4,
+                orbitalPeriod: 557.56 * 365.256, rotationPeriod: 25.9, axialTilt: 78,
+                atmosphere: "None", temperature: 30, discovered: false
+            },
+            {
+                name: "Makemake", type: "dwarf", parent: "Sun",
+                mass: 3.1e21, radius: 715, color: "#C8A890",
+                semiMajorAxis: 45.5 * AU, eccentricity: 0.16, inclination: 29.0,
+                longitudeOfAscendingNode: 79.4, argumentOfPeriapsis: 294.8,
+                orbitalPeriod: 307.54 * 365.256, rotationPeriod: 22.5, axialTilt: 0,
+                atmosphere: "None", temperature: 30, discovered: false
+            },
+            {
+                name: "Haumea", type: "dwarf", parent: "Sun",
+                mass: 4.0e21, radius: 870, color: "#F0E0D0",
+                semiMajorAxis: 43.1 * AU, eccentricity: 0.19, inclination: 28.2,
+                longitudeOfAscendingNode: 122.0, argumentOfPeriapsis: 239.0,
+                orbitalPeriod: 284.81 * 365.256, rotationPeriod: 3.9, axialTilt: 0,
+                atmosphere: "None", temperature: 32, discovered: false
+            },
+            // Major Moons
+            {
+                name: "Moon", type: "moon", parent: "Earth",
+                mass: 7.346e22, radius: 1737.5, color: "#C0C0C0",
+                semiMajorAxis: 384400, eccentricity: 0.0549, inclination: 5.145,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 27.3217, rotationPeriod: 27.3217 * 24, axialTilt: 6.68,
+                atmosphere: "None", temperature: 220, discovered: false
+            },
+            {
+                name: "Io", type: "moon", parent: "Jupiter",
+                mass: 8.932e22, radius: 1821.6, color: "#FFD700",
+                semiMajorAxis: 421800, eccentricity: 0.004, inclination: 0.05,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 1.769, rotationPeriod: 1.769 * 24, axialTilt: 0,
+                atmosphere: "SO2", temperature: 130, discovered: false
+            },
+            {
+                name: "Europa", type: "moon", parent: "Jupiter",
+                mass: 4.800e22, radius: 1560.8, color: "#F0E8D8",
+                semiMajorAxis: 671100, eccentricity: 0.009, inclination: 0.47,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 3.551, rotationPeriod: 3.551 * 24, axialTilt: 0.1,
+                atmosphere: "O2", temperature: 102, discovered: false
+            },
+            {
+                name: "Ganymede", type: "moon", parent: "Jupiter",
+                mass: 1.4819e23, radius: 2634.1, color: "#A0A0A0",
+                semiMajorAxis: 1070400, eccentricity: 0.001, inclination: 0.2,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 7.155, rotationPeriod: 7.155 * 24, axialTilt: 0.33,
+                atmosphere: "O2", temperature: 110, discovered: false
+            },
+            {
+                name: "Callisto", type: "moon", parent: "Jupiter",
+                mass: 1.0759e23, radius: 2410.3, color: "#8B7355",
+                semiMajorAxis: 1882700, eccentricity: 0.007, inclination: 0.51,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 16.689, rotationPeriod: 16.689 * 24, axialTilt: 0,
+                atmosphere: "CO2", temperature: 134, discovered: false
+            },
+            {
+                name: "Titan", type: "moon", parent: "Saturn",
+                mass: 1.3455e23, radius: 2575, color: "#FFA500",
+                semiMajorAxis: 1221870, eccentricity: 0.0292, inclination: 0.34,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 15.945, rotationPeriod: 15.945 * 24, axialTilt: 0,
+                atmosphere: "N2/CH4", temperature: 94, discovered: false
+            },
+            {
+                name: "Enceladus", type: "moon", parent: "Saturn",
+                mass: 1.08e20, radius: 252.1, color: "#FFFFFF",
+                semiMajorAxis: 238040, eccentricity: 0.0045, inclination: 0.009,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 1.370, rotationPeriod: 1.370 * 24, axialTilt: 0,
+                atmosphere: "H2O", temperature: 75, discovered: false
+            },
+            {
+                name: "Mimas", type: "moon", parent: "Saturn",
+                mass: 3.75e19, radius: 198.2, color: "#D0D0D0",
+                semiMajorAxis: 185540, eccentricity: 0.0196, inclination: 1.574,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 0.942, rotationPeriod: 0.942 * 24, axialTilt: 0,
+                atmosphere: "None", temperature: 64, discovered: false
+            },
+            {
+                name: "Tethys", type: "moon", parent: "Saturn",
+                mass: 6.18e20, radius: 531.1, color: "#E8E8E8",
+                semiMajorAxis: 294670, eccentricity: 0.0001, inclination: 1.12,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 1.888, rotationPeriod: 1.888 * 24, axialTilt: 0,
+                atmosphere: "None", temperature: 86, discovered: false
+            },
+            {
+                name: "Dione", type: "moon", parent: "Saturn",
+                mass: 1.10e21, radius: 561.4, color: "#F0F0F0",
+                semiMajorAxis: 377420, eccentricity: 0.0022, inclination: 0.019,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 2.737, rotationPeriod: 2.737 * 24, axialTilt: 0,
+                atmosphere: "O2", temperature: 87, discovered: false
+            },
+            {
+                name: "Rhea", type: "moon", parent: "Saturn",
+                mass: 2.31e21, radius: 763.8, color: "#D8D8D8",
+                semiMajorAxis: 527040, eccentricity: 0.001, inclination: 0.345,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 4.518, rotationPeriod: 4.518 * 24, axialTilt: 0,
+                atmosphere: "O2/CO2", temperature: 76, discovered: false
+            },
+            {
+                name: "Iapetus", type: "moon", parent: "Saturn",
+                mass: 1.81e21, radius: 734.5, color: "#A08070",
+                semiMajorAxis: 3560820, eccentricity: 0.0283, inclination: 15.47,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: 79.330, rotationPeriod: 79.330 * 24, axialTilt: 0,
+                atmosphere: "None", temperature: 90, discovered: false
+            },
+            {
+                name: "Triton", type: "moon", parent: "Neptune",
+                mass: 2.14e22, radius: 1353.4, color: "#FFB6C1",
+                semiMajorAxis: 354759, eccentricity: 0.000016, inclination: 156.885,
+                longitudeOfAscendingNode: 0, argumentOfPeriapsis: 0,
+                orbitalPeriod: -5.877, rotationPeriod: 5.877 * 24, axialTilt: 0,
+                atmosphere: "N2", temperature: 38, discovered: false
+            },
+            // Major Asteroids
+            {
+                name: "Vesta", type: "asteroid", parent: "Sun",
+                mass: 2.59e20, radius: 262.7, color: "#B0B0B0",
+                semiMajorAxis: 2.36 * AU, eccentricity: 0.089, inclination: 7.1,
+                longitudeOfAscendingNode: 103.8, argumentOfPeriapsis: 150.8,
+                orbitalPeriod: 3.63 * 365.256, rotationPeriod: 5.342, axialTilt: 29,
+                atmosphere: "None", temperature: 85, discovered: false
+            },
+            {
+                name: "Pallas", type: "asteroid", parent: "Sun",
+                mass: 2.04e20, radius: 256, color: "#A8A8A8",
+                semiMajorAxis: 2.77 * AU, eccentricity: 0.231, inclination: 34.8,
+                longitudeOfAscendingNode: 173.1, argumentOfPeriapsis: 310.0,
+                orbitalPeriod: 4.62 * 365.256, rotationPeriod: 7.813, axialTilt: 84,
+                atmosphere: "None", temperature: 164, discovered: false
+            },
+            {
+                name: "Hygiea", type: "asteroid", parent: "Sun",
+                mass: 8.67e19, radius: 217, color: "#909090",
+                semiMajorAxis: 3.14 * AU, eccentricity: 0.117, inclination: 3.8,
+                longitudeOfAscendingNode: 283.2, argumentOfPeriapsis: 312.4,
+                orbitalPeriod: 5.56 * 365.256, rotationPeriod: 27.623, axialTilt: 0,
+                atmosphere: "None", temperature: 164, discovered: false
+            }
+        ];
+
+        // ==================== GAME STATE ====================
+        class Game {
+            constructor() {
+                this.canvas = document.getElementById('gameCanvas');
+                this.ctx = this.canvas.getContext('2d');
+                this.resizeCanvas();
+                
+                // Time management
+                this.time = 0; // days since epoch
+                this.timeWarp = 1;
+                this.timeWarpLevels = [1, 10, 100, 1000, 10000, 100000];
+                this.paused = false;
+                this.lastFrameTime = Date.now();
+                
+                // Camera
+                this.camera = {
+                    x: 0,
+                    y: 0,
+                    z: 5e8, // km
+                    rotX: 0,
+                    rotY: 0,
+                    zoom: 1,
+                    following: null
+                };
+                
+                // Probe
+                this.probe = {
+                    x: AU, // Start near Earth
+                    y: 0,
+                    z: 0,
+                    vx: 0,
+                    vy: 29.78, // Earth's orbital velocity km/s
+                    vz: 0,
+                    rotation: 0,
+                    fuel: 100,
+                    energy: 100,
+                    discoveries: new Set(),
+                    scanned: new Set(),
+                    mapped: new Set(),
+                    landed: new Set(),
+                    photos: 0
+                };
+                
+                // Game state
+                this.selectedBody = null;
+                this.bodies = this.initializeBodies();
+                this.sciencePoints = 0;
+                this.keys = {};
+                this.mouseDown = false;
+                this.lastMouseX = 0;
+                this.lastMouseY = 0;
+                
+                this.setupEventListeners();
+                this.updateBodyList();
+                this.gameLoop();
+            }
+            
+            resizeCanvas() {
+                this.canvas.width = window.innerWidth;
+                this.canvas.height = window.innerHeight;
+            }
+            
+            initializeBodies() {
+                return celestialBodies.map(data => {
+                    const body = {...data};
+                    body.angle = Math.random() * Math.PI * 2; // Random starting position
+                    body.rotation = 0;
+                    body.x = 0;
+                    body.y = 0;
+                    body.z = 0;
+                    return body;
+                });
+            }
+            
+            setupEventListeners() {
+                window.addEventListener('resize', () => this.resizeCanvas());
+                
+                window.addEventListener('keydown', (e) => {
+                    this.keys[e.key.toLowerCase()] = true;
+                    
+                    if (e.key.toLowerCase() === 'p') {
+                        this.paused = !this.paused;
+                    } else if (e.key.toLowerCase() === 't') {
+                        this.increaseTimeWarp();
+                    } else if (e.key.toLowerCase() === 'r') {
+                        this.decreaseTimeWarp();
+                    } else if (e.key.toLowerCase() === 'tab') {
+                        e.preventDefault();
+                        this.selectNextBody();
+                    } else if (e.key.toLowerCase() === 'f') {
+                        this.toggleFollow();
+                    } else if (e.key.toLowerCase() === 's') {
+                        this.activateScanner();
+                    } else if (e.key.toLowerCase() === 'm') {
+                        this.activateMapper();
+                    } else if (e.key.toLowerCase() === 'l') {
+                        this.attemptLanding();
+                    } else if (e.key.toLowerCase() === 'c') {
+                        this.takePhoto();
+                    }
+                });
+                
+                window.addEventListener('keyup', (e) => {
+                    this.keys[e.key.toLowerCase()] = false;
+                });
+                
+                this.canvas.addEventListener('mousedown', (e) => {
+                    this.mouseDown = true;
+                    this.lastMouseX = e.clientX;
+                    this.lastMouseY = e.clientY;
+                });
+                
+                this.canvas.addEventListener('mouseup', () => {
+                    this.mouseDown = false;
+                });
+                
+                this.canvas.addEventListener('mousemove', (e) => {
+                    if (this.mouseDown) {
+                        const dx = e.clientX - this.lastMouseX;
+                        const dy = e.clientY - this.lastMouseY;
+                        this.camera.rotY += dx * 0.005;
+                        this.camera.rotX += dy * 0.005;
+                        this.camera.rotX = Math.max(-Math.PI / 2, Math.min(Math.PI / 2, this.camera.rotX));
+                        this.lastMouseX = e.clientX;
+                        this.lastMouseY = e.clientY;
+                    }
+                });
+                
+                this.canvas.addEventListener('wheel', (e) => {
+                    e.preventDefault();
+                    const zoomFactor = e.deltaY > 0 ? 1.1 : 0.9;
+                    this.camera.zoom *= zoomFactor;
+                    this.camera.zoom = Math.max(0.01, Math.min(100, this.camera.zoom));
+                });
+            }
+            
+            increaseTimeWarp() {
+                const currentIndex = this.timeWarpLevels.indexOf(this.timeWarp);
+                if (currentIndex < this.timeWarpLevels.length - 1) {
+                    this.timeWarp = this.timeWarpLevels[currentIndex + 1];
+                    this.showNotification(`Time Warp: ${this.timeWarp}x`);
+                }
+            }
+            
+            decreaseTimeWarp() {
+                const currentIndex = this.timeWarpLevels.indexOf(this.timeWarp);
+                if (currentIndex > 0) {
+                    this.timeWarp = this.timeWarpLevels[currentIndex - 1];
+                    this.showNotification(`Time Warp: ${this.timeWarp}x`);
+                }
+            }
+            
+            selectNextBody() {
+                const currentIndex = this.selectedBody ? this.bodies.indexOf(this.selectedBody) : -1;
+                const nextIndex = (currentIndex + 1) % this.bodies.length;
+                this.selectedBody = this.bodies[nextIndex];
+                this.updateBodyList();
+            }
+            
+            toggleFollow() {
+                if (this.camera.following === this.selectedBody) {
+                    this.camera.following = null;
+                    this.showNotification('Camera Free');
+                } else if (this.selectedBody) {
+                    this.camera.following = this.selectedBody;
+                    this.showNotification(`Following ${this.selectedBody.name}`);
+                }
+            }
+            
+            activateScanner() {
+                if (this.probe.energy < 10) {
+                    this.showNotification('Insufficient Energy!', 'warning');
+                    return;
+                }
+                
+                const nearbyBodies = this.bodies.filter(body => {
+                    const dx = body.x - this.probe.x;
+                    const dy = body.y - this.probe.y;
+                    const dz = body.z - this.probe.z;
+                    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    return distance < body.radius * 100 && !this.probe.scanned.has(body.name);
+                });
+                
+                if (nearbyBodies.length > 0) {
+                    nearbyBodies.forEach(body => {
+                        this.probe.scanned.add(body.name);
+                        this.sciencePoints += 10;
+                        if (!body.discovered) {
+                            body.discovered = true;
+                            this.probe.discoveries.add(body.name);
+                            this.sciencePoints += 50;
+                            this.showNotification(`Discovered ${body.name}! +50 Science`);
+                        } else {
+                            this.showNotification(`Scanned ${body.name}! +10 Science`);
+                        }
+                    });
+                    this.probe.energy -= 10;
+                } else {
+                    this.showNotification('No bodies in range', 'warning');
+                }
+                
+                this.updateBodyList();
+            }
+            
+            activateMapper() {
+                if (this.probe.energy < 20) {
+                    this.showNotification('Insufficient Energy!', 'warning');
+                    return;
+                }
+                
+                if (!this.selectedBody) {
+                    this.showNotification('No target selected', 'warning');
+                    return;
+                }
+                
+                const dx = this.selectedBody.x - this.probe.x;
+                const dy = this.selectedBody.y - this.probe.y;
+                const dz = this.selectedBody.z - this.probe.z;
+                const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                
+                if (distance < this.selectedBody.radius * 50 && distance > this.selectedBody.radius * 2) {
+                    if (!this.probe.mapped.has(this.selectedBody.name)) {
+                        this.probe.mapped.add(this.selectedBody.name);
+                        this.sciencePoints += 30;
+                        this.showNotification(`Mapped ${this.selectedBody.name}! +30 Science`);
+                        this.probe.energy -= 20;
+                    } else {
+                        this.showNotification('Already mapped', 'warning');
+                    }
+                } else {
+                    this.showNotification('Not in mapping orbit', 'warning');
+                }
+            }
+            
+            attemptLanding() {
+                if (this.probe.fuel < 20) {
+                    this.showNotification('Insufficient Fuel!', 'warning');
+                    return;
+                }
+                
+                if (!this.selectedBody) {
+                    this.showNotification('No target selected', 'warning');
+                    return;
+                }
+                
+                const dx = this.selectedBody.x - this.probe.x;
+                const dy = this.selectedBody.y - this.probe.y;
+                const dz = this.selectedBody.z - this.probe.z;
+                const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                const altitude = distance - this.selectedBody.radius;
+                
+                const speed = Math.sqrt(this.probe.vx**2 + this.probe.vy**2 + this.probe.vz**2);
+                
+                if (altitude < this.selectedBody.radius * 0.1 && speed < 5) {
+                    if (!this.probe.landed.has(this.selectedBody.name)) {
+                        this.probe.landed.add(this.selectedBody.name);
+                        this.sciencePoints += 100;
+                        this.showNotification(`Landed on ${this.selectedBody.name}! +100 Science`);
+                        this.probe.fuel -= 20;
+                    } else {
+                        this.showNotification('Already landed here', 'warning');
+                    }
+                } else if (altitude > this.selectedBody.radius * 0.1) {
+                    this.showNotification('Too high to land', 'warning');
+                } else {
+                    this.showNotification('Speed too high!', 'warning');
+                }
+            }
+            
+            takePhoto() {
+                if (this.probe.energy < 5) {
+                    this.showNotification('Insufficient Energy!', 'warning');
+                    return;
+                }
+                
+                this.probe.photos++;
+                this.sciencePoints += 5;
+                this.probe.energy -= 5;
+                this.showNotification(`Photo taken! Total: ${this.probe.photos} +5 Science`);
+            }
+            
+            showNotification(message, type = 'success') {
+                const notif = document.getElementById('notification');
+                notif.textContent = message;
+                notif.style.background = type === 'warning' ? 
+                    'rgba(200, 50, 50, 0.9)' : 'rgba(0, 200, 100, 0.9)';
+                notif.style.borderColor = type === 'warning' ? '#f00' : '#0f0';
+                notif.classList.add('show');
+                setTimeout(() => notif.classList.remove('show'), 2000);
+            }
+            
+            updateBodyList() {
+                const bodyList = document.getElementById('bodyList');
+                bodyList.innerHTML = '';
+                
+                const sortedBodies = [...this.bodies].sort((a, b) => {
+                    if (a.type !== b.type) {
+                        const typeOrder = {star: 0, planet: 1, dwarf: 2, moon: 3, asteroid: 4};
+                        return typeOrder[a.type] - typeOrder[b.type];
+                    }
+                    return a.semiMajorAxis - b.semiMajorAxis;
+                });
+                
+                sortedBodies.forEach(body => {
+                    const item = document.createElement('div');
+                    item.className = 'body-item';
+                    if (body === this.selectedBody) item.classList.add('selected');
+                    if (body.discovered) item.classList.add('discovered');
+                    
+                    item.innerHTML = `
+                        <div style="font-weight: bold;">${body.name}</div>
+                        <div style="font-size: 10px; color: #aaa;">${body.type.toUpperCase()}</div>
+                    `;
+                    
+                    item.onclick = () => {
+                        this.selectedBody = body;
+                        this.updateBodyList();
+                    };
+                    
+                    bodyList.appendChild(item);
+                });
+            }
+            
+            update(dt) {
+                if (this.paused) return;
+                
+                // Update time
+                const timeStep = dt * this.timeWarp / 86400; // Convert to days
+                this.time += timeStep;
+                
+                // Update celestial bodies
+                this.bodies.forEach(body => {
+                    if (body.semiMajorAxis > 0) {
+                        this.updateBodyPosition(body, this.time);
+                    }
+                    
+                    // Update rotation
+                    if (body.rotationPeriod !== 0) {
+                        body.rotation += (360 / (body.rotationPeriod * 3600)) * dt * this.timeWarp;
+                    }
+                });
+                
+                // Update probe
+                this.updateProbe(dt);
+                
+                // Update camera
+                if (this.camera.following) {
+                    this.camera.x = this.camera.following.x;
+                    this.camera.y = this.camera.following.y;
+                    this.camera.z = this.camera.following.z + this.camera.following.radius * 5;
+                }
+                
+                // Regenerate energy
+                this.probe.energy = Math.min(100, this.probe.energy + dt * 0.5);
+                
+                // Update UI
+                this.updateUI();
+            }
+            
+            updateBodyPosition(body, time) {
+                if (body.parent === "Sun") {
+                    // Calculate orbital position using Kepler's equations
+                    const n = 2 * Math.PI / body.orbitalPeriod; // Mean motion (rad/day)
+                    const M = n * time; // Mean anomaly
+                    const E = this.solveKeplerEquation(M, body.eccentricity); // Eccentric anomaly
+                    
+                    // True anomaly
+                    const nu = 2 * Math.atan2(
+                        Math.sqrt(1 + body.eccentricity) * Math.sin(E / 2),
+                        Math.sqrt(1 - body.eccentricity) * Math.cos(E / 2)
+                    );
+                    
+                    // Orbital radius
+                    const r = body.semiMajorAxis * (1 - body.eccentricity * body.eccentricity) / 
+                              (1 + body.eccentricity * Math.cos(nu));
+                    
+                    // Position in orbital plane
+                    const x_orb = r * Math.cos(nu);
+                    const y_orb = r * Math.sin(nu);
+                    
+                    // Convert to 3D coordinates with inclination
+                    const i = body.inclination * Math.PI / 180;
+                    const omega = body.argumentOfPeriapsis * Math.PI / 180;
+                    const Omega = body.longitudeOfAscendingNode * Math.PI / 180;
+                    
+                    // Rotation matrices
+                    body.x = (Math.cos(Omega) * Math.cos(omega) - Math.sin(Omega) * Math.sin(omega) * Math.cos(i)) * x_orb +
+                             (-Math.cos(Omega) * Math.sin(omega) - Math.sin(Omega) * Math.cos(omega) * Math.cos(i)) * y_orb;
+                    
+                    body.y = (Math.sin(Omega) * Math.cos(omega) + Math.cos(Omega) * Math.sin(omega) * Math.cos(i)) * x_orb +
+                             (-Math.sin(Omega) * Math.sin(omega) + Math.cos(Omega) * Math.cos(omega) * Math.cos(i)) * y_orb;
+                    
+                    body.z = (Math.sin(omega) * Math.sin(i)) * x_orb + (Math.cos(omega) * Math.sin(i)) * y_orb;
+                    
+                } else if (body.parent) {
+                    // Moon orbiting a planet
+                    const parentBody = this.bodies.find(b => b.name === body.parent);
+                    if (parentBody) {
+                        const n = 2 * Math.PI / body.orbitalPeriod;
+                        const M = n * time;
+                        const E = this.solveKeplerEquation(M, body.eccentricity);
+                        
+                        const nu = 2 * Math.atan2(
+                            Math.sqrt(1 + body.eccentricity) * Math.sin(E / 2),
+                            Math.sqrt(1 - body.eccentricity) * Math.cos(E / 2)
+                        );
+                        
+                        const r = body.semiMajorAxis * (1 - body.eccentricity * body.eccentricity) / 
+                                  (1 + body.eccentricity * Math.cos(nu));
+                        
+                        // Simple circular orbit around parent for moons
+                        body.x = parentBody.x + r * Math.cos(nu);
+                        body.y = parentBody.y + r * Math.sin(nu) * Math.cos(body.inclination * Math.PI / 180);
+                        body.z = parentBody.z + r * Math.sin(nu) * Math.sin(body.inclination * Math.PI / 180);
+                    }
+                }
+            }
+            
+            solveKeplerEquation(M, e, tolerance = 1e-6) {
+                // Newton-Raphson method to solve Kepler's equation: M = E - e*sin(E)
+                let E = M; // Initial guess
+                for (let i = 0; i < 10; i++) {
+                    const dE = (E - e * Math.sin(E) - M) / (1 - e * Math.cos(E));
+                    E -= dE;
+                    if (Math.abs(dE) < tolerance) break;
+                }
+                return E;
+            }
+            
+            updateProbe(dt) {
+                // Apply thrust based on input
+                const thrustPower = 0.1; // km/s^2
+                const boostMultiplier = this.keys[' '] ? 3 : 1;
+                
+                if (this.keys['w'] && this.probe.fuel > 0) {
+                    const angle = this.probe.rotation * Math.PI / 180;
+                    this.probe.vx += Math.cos(angle) * thrustPower * dt * boostMultiplier;
+                    this.probe.vy += Math.sin(angle) * thrustPower * dt * boostMultiplier;
+                    this.probe.fuel -= dt * 0.5 * boostMultiplier;
+                }
+                if (this.keys['s'] && this.probe.fuel > 0) {
+                    const angle = this.probe.rotation * Math.PI / 180;
+                    this.probe.vx -= Math.cos(angle) * thrustPower * dt * boostMultiplier;
+                    this.probe.vy -= Math.sin(angle) * thrustPower * dt * boostMultiplier;
+                    this.probe.fuel -= dt * 0.5 * boostMultiplier;
+                }
+                if (this.keys['a'] && this.probe.fuel > 0) {
+                    const angle = (this.probe.rotation - 90) * Math.PI / 180;
+                    this.probe.vx += Math.cos(angle) * thrustPower * dt * boostMultiplier;
+                    this.probe.vy += Math.sin(angle) * thrustPower * dt * boostMultiplier;
+                    this.probe.fuel -= dt * 0.5 * boostMultiplier;
+                }
+                if (this.keys['d'] && this.probe.fuel > 0) {
+                    const angle = (this.probe.rotation + 90) * Math.PI / 180;
+                    this.probe.vx += Math.cos(angle) * thrustPower * dt * boostMultiplier;
+                    this.probe.vy += Math.sin(angle) * thrustPower * dt * boostMultiplier;
+                    this.probe.fuel -= dt * 0.5 * boostMultiplier;
+                }
+                
+                if (this.keys['q']) {
+                    this.probe.rotation -= 90 * dt;
+                }
+                if (this.keys['e']) {
+                    this.probe.rotation += 90 * dt;
+                }
+                
+                this.probe.fuel = Math.max(0, this.probe.fuel);
+                
+                // Apply gravity from nearby bodies
+                this.bodies.forEach(body => {
+                    if (body.mass > 0) {
+                        const dx = body.x - this.probe.x;
+                        const dy = body.y - this.probe.y;
+                        const dz = body.z - this.probe.z;
+                        const distSq = dx*dx + dy*dy + dz*dz;
+                        const dist = Math.sqrt(distSq);
+                        
+                        if (dist > body.radius) {
+                            const G_km = 6.67430e-20; // G in km^3 kg^-1 s^-2
+                            const force = G_km * body.mass / distSq;
+                            const ax = force * dx / dist;
+                            const ay = force * dy / dist;
+                            const az = force * dz / dist;
+                            
+                            this.probe.vx += ax * dt * this.timeWarp;
+                            this.probe.vy += ay * dt * this.timeWarp;
+                            this.probe.vz += az * dt * this.timeWarp;
+                        }
+                    }
+                });
+                
+                // Update position
+                this.probe.x += this.probe.vx * dt * this.timeWarp;
+                this.probe.y += this.probe.vy * dt * this.timeWarp;
+                this.probe.z += this.probe.vz * dt * this.timeWarp;
+            }
+            
+            updateUI() {
+                // Date display
+                const startDate = new Date(2024, 0, 1);
+                const currentDate = new Date(startDate.getTime() + this.time * 86400000);
+                document.getElementById('dateDisplay').textContent = 
+                    `Date: ${currentDate.toLocaleDateString()} ${currentDate.toLocaleTimeString()}`;
+                
+                // Time warp
+                const timeWarpDisplay = document.getElementById('timeWarpDisplay');
+                timeWarpDisplay.textContent = this.paused ? 'PAUSED' : `Time: ${this.timeWarp}x`;
+                timeWarpDisplay.className = this.paused ? 'time-warp-indicator paused' : 'time-warp-indicator';
+                
+                // Selected body
+                document.getElementById('selectedBodyName').textContent = 
+                    this.selectedBody ? `Selected: ${this.selectedBody.name}` : 'Selected: None';
+                
+                // Science points
+                document.getElementById('sciencePoints').textContent = `Science: ${this.sciencePoints}`;
+                const discoverableBodies = this.bodies.filter(b => b.type !== 'star').length;
+                document.getElementById('discoveryCount').textContent = 
+                    `Discovered: ${this.probe.discoveries.size}/${discoverableBodies}`;
+                
+                // Probe status
+                const speed = Math.sqrt(this.probe.vx**2 + this.probe.vy**2 + this.probe.vz**2);
+                document.getElementById('probeVelocity').textContent = `${speed.toFixed(2)} km/s`;
+                document.getElementById('probeFuel').textContent = `${this.probe.fuel.toFixed(0)}%`;
+                document.getElementById('probeEnergy').textContent = `${this.probe.energy.toFixed(0)}%`;
+                
+                // Target info
+                if (this.selectedBody) {
+                    const dx = this.selectedBody.x - this.probe.x;
+                    const dy = this.selectedBody.y - this.probe.y;
+                    const dz = this.selectedBody.z - this.probe.z;
+                    const distance = Math.sqrt(dx*dx + dy*dy + dz*dz);
+                    const altitude = distance - this.selectedBody.radius;
+                    
+                    document.getElementById('targetName').textContent = this.selectedBody.name;
+                    document.getElementById('targetDistance').textContent = 
+                        distance > 1e6 ? `${(distance / AU).toFixed(3)} AU` : `${distance.toFixed(0)} km`;
+                    document.getElementById('targetType').textContent = this.selectedBody.type.toUpperCase();
+                    document.getElementById('targetDiameter').textContent = `${(this.selectedBody.radius * 2).toFixed(0)} km`;
+                    document.getElementById('probeAltitude').textContent = 
+                        altitude > 1e6 ? `${(altitude / AU).toFixed(3)} AU` : `${altitude.toFixed(0)} km`;
+                } else {
+                    document.getElementById('targetName').textContent = 'None';
+                    document.getElementById('targetDistance').textContent = 'N/A';
+                    document.getElementById('targetType').textContent = 'N/A';
+                    document.getElementById('targetDiameter').textContent = 'N/A';
+                    document.getElementById('probeAltitude').textContent = 'N/A';
+                }
+            }
+            
+            render() {
+                const ctx = this.ctx;
+                const w = this.canvas.width;
+                const h = this.canvas.height;
+                
+                // Clear canvas
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, w, h);
+                
+                // Draw starfield
+                this.drawStarfield();
+                
+                // Draw orbital paths
+                this.bodies.forEach(body => {
+                    if (body.semiMajorAxis > 0 && body.parent === "Sun") {
+                        this.drawOrbit(body);
+                    }
+                });
+                
+                // Draw celestial bodies
+                const sortedBodies = [...this.bodies].sort((a, b) => {
+                    const distA = Math.sqrt((a.x - this.camera.x)**2 + (a.y - this.camera.y)**2 + (a.z - this.camera.z)**2);
+                    const distB = Math.sqrt((b.x - this.camera.x)**2 + (b.y - this.camera.y)**2 + (b.z - this.camera.z)**2);
+                    return distB - distA;
+                });
+                
+                sortedBodies.forEach(body => {
+                    this.drawBody(body);
+                });
+                
+                // Draw probe
+                this.drawProbe();
+            }
+            
+            drawStarfield() {
+                const ctx = this.ctx;
+                ctx.fillStyle = '#fff';
+                
+                // Generate consistent stars based on camera rotation
+                const starCount = 200;
+                for (let i = 0; i < starCount; i++) {
+                    const angle1 = (i * 137.508) % (Math.PI * 2);
+                    const angle2 = (i * 2.399) % (Math.PI * 2);
+                    
+                    const x = this.canvas.width / 2 + Math.cos(angle1 + this.camera.rotY) * 400;
+                    const y = this.canvas.height / 2 + Math.sin(angle2 + this.camera.rotX) * 300;
+                    
+                    if (x > 0 && x < this.canvas.width && y > 0 && y < this.canvas.height) {
+                        const size = Math.random() * 1.5 + 0.5;
+                        ctx.beginPath();
+                        ctx.arc(x, y, size, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                }
+            }
+            
+            drawOrbit(body) {
+                const ctx = this.ctx;
+                const points = 100;
+                
+                ctx.strokeStyle = 'rgba(0, 255, 255, 0.2)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                
+                let firstPoint = true;
+                for (let i = 0; i <= points; i++) {
+                    const nu = (i / points) * Math.PI * 2;
+                    const r = body.semiMajorAxis * (1 - body.eccentricity * body.eccentricity) / 
+                              (1 + body.eccentricity * Math.cos(nu));
+                    
+                    const x_orb = r * Math.cos(nu);
+                    const y_orb = r * Math.sin(nu);
+                    
+                    const i_rad = body.inclination * Math.PI / 180;
+                    const omega = body.argumentOfPeriapsis * Math.PI / 180;
+                    const Omega = body.longitudeOfAscendingNode * Math.PI / 180;
+                    
+                    const x = (Math.cos(Omega) * Math.cos(omega) - Math.sin(Omega) * Math.sin(omega) * Math.cos(i_rad)) * x_orb +
+                             (-Math.cos(Omega) * Math.sin(omega) - Math.sin(Omega) * Math.cos(omega) * Math.cos(i_rad)) * y_orb;
+                    
+                    const y = (Math.sin(Omega) * Math.cos(omega) + Math.cos(Omega) * Math.sin(omega) * Math.cos(i_rad)) * x_orb +
+                             (-Math.sin(Omega) * Math.sin(omega) + Math.cos(Omega) * Math.cos(omega) * Math.cos(i_rad)) * y_orb;
+                    
+                    const z = (Math.sin(omega) * Math.sin(i_rad)) * x_orb + (Math.cos(omega) * Math.sin(i_rad)) * y_orb;
+                    
+                    const screenPos = this.worldToScreen(x, y, z);
+                    if (screenPos) {
+                        if (firstPoint) {
+                            ctx.moveTo(screenPos.x, screenPos.y);
+                            firstPoint = false;
+                        } else {
+                            ctx.lineTo(screenPos.x, screenPos.y);
+                        }
+                    }
+                }
+                
+                ctx.stroke();
+            }
+            
+            drawBody(body) {
+                const screenPos = this.worldToScreen(body.x, body.y, body.z);
+                if (!screenPos) return;
+                
+                const ctx = this.ctx;
+                const distance = Math.sqrt(
+                    (body.x - this.camera.x)**2 + 
+                    (body.y - this.camera.y)**2 + 
+                    (body.z - this.camera.z)**2
+                );
+                
+                // Calculate apparent size
+                let radius = body.radius * SIZE_SCALE / this.camera.zoom;
+                if (body.type === 'star') radius *= 5;
+                else if (body.type === 'planet') radius *= 2;
+                else if (body.type === 'dwarf') radius *= 1.5;
+                
+                // Minimum visible size
+                radius = Math.max(radius, 3);
+                
+                // Draw body
+                ctx.beginPath();
+                ctx.arc(screenPos.x, screenPos.y, radius, 0, Math.PI * 2);
+                
+                // Glow effect for Sun
+                if (body.type === 'star') {
+                    const gradient = ctx.createRadialGradient(
+                        screenPos.x, screenPos.y, 0,
+                        screenPos.x, screenPos.y, radius * 2
+                    );
+                    gradient.addColorStop(0, body.color);
+                    gradient.addColorStop(0.5, body.color + '80');
+                    gradient.addColorStop(1, body.color + '00');
+                    ctx.fillStyle = gradient;
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x, screenPos.y, radius * 2, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                ctx.fillStyle = body.color;
+                ctx.fill();
+                
+                // Atmosphere glow for planets with atmospheres
+                if (body.atmosphere !== "None" && body.type !== 'star') {
+                    ctx.strokeStyle = body.color + '40';
+                    ctx.lineWidth = 2;
+                    ctx.stroke();
+                }
+                
+                // Selection indicator
+                if (body === this.selectedBody) {
+                    ctx.strokeStyle = '#f0f';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x, screenPos.y, radius + 5, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+                
+                // Discovery indicator
+                if (body.discovered && body.type !== 'star') {
+                    ctx.fillStyle = '#0f0';
+                    ctx.beginPath();
+                    ctx.arc(screenPos.x - radius, screenPos.y - radius, 3, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+                
+                // Label
+                if (radius > 3 || body === this.selectedBody || body.discovered) {
+                    ctx.fillStyle = '#0ff';
+                    ctx.font = '11px Courier New';
+                    ctx.textAlign = 'center';
+                    ctx.fillText(body.name, screenPos.x, screenPos.y + radius + 15);
+                }
+            }
+            
+            drawProbe() {
+                const screenPos = this.worldToScreen(this.probe.x, this.probe.y, this.probe.z);
+                if (!screenPos) return;
+                
+                const ctx = this.ctx;
+                const size = 8;
+                
+                ctx.save();
+                ctx.translate(screenPos.x, screenPos.y);
+                ctx.rotate(this.probe.rotation * Math.PI / 180);
+                
+                // Probe body
+                ctx.fillStyle = '#0ff';
+                ctx.beginPath();
+                ctx.moveTo(size, 0);
+                ctx.lineTo(-size, size);
+                ctx.lineTo(-size, -size);
+                ctx.closePath();
+                ctx.fill();
+                
+                // Thrust indicator
+                if (this.keys['w'] && this.probe.fuel > 0) {
+                    ctx.strokeStyle = '#ff0';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(-size, 0);
+                    ctx.lineTo(-size * 2, 0);
+                    ctx.stroke();
+                }
+                
+                ctx.restore();
+                
+                // Velocity vector
+                const vMag = Math.sqrt(this.probe.vx**2 + this.probe.vy**2 + this.probe.vz**2);
+                if (vMag > 0.1) {
+                    const vScale = 50 / vMag;
+                    const vx = this.probe.vx * vScale;
+                    const vy = this.probe.vy * vScale;
+                    
+                    ctx.strokeStyle = '#ff0';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(screenPos.x, screenPos.y);
+                    ctx.lineTo(screenPos.x + vx, screenPos.y + vy);
+                    ctx.stroke();
+                }
+            }
+            
+            worldToScreen(x, y, z) {
+                // Simple perspective projection
+                const dx = x - this.camera.x;
+                const dy = y - this.camera.y;
+                const dz = z - this.camera.z;
+                
+                // Apply camera rotation
+                const cosX = Math.cos(this.camera.rotX);
+                const sinX = Math.sin(this.camera.rotX);
+                const cosY = Math.cos(this.camera.rotY);
+                const sinY = Math.sin(this.camera.rotY);
+                
+                const x1 = dx * cosY - dz * sinY;
+                const z1 = dx * sinY + dz * cosY;
+                const y1 = dy * cosX - z1 * sinX;
+                const z2 = dy * sinX + z1 * cosX;
+                
+                const scale = SCALE_FACTOR / this.camera.zoom;
+                const screenX = this.canvas.width / 2 + x1 * scale;
+                const screenY = this.canvas.height / 2 - y1 * scale;
+                
+                return {x: screenX, y: screenY, z: z2};
+            }
+            
+            gameLoop() {
+                const now = Date.now();
+                const dt = Math.min((now - this.lastFrameTime) / 1000, 0.1); // Cap at 100ms
+                this.lastFrameTime = now;
+                
+                this.update(dt);
+                this.render();
+                
+                requestAnimationFrame(() => this.gameLoop());
+            }
+        }
+        
+        // Initialize game when page loads
+        let game;
+        window.addEventListener('load', () => {
+            game = new Game();
+        });
+    </script>
+</body>
+</html>

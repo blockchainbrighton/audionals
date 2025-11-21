@@ -1,0 +1,553 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NarcotiX Physics & Effects Update</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+        
+        /* UI LAYOUT */
+        #ui-layer {
+            position: absolute; width: 100%; height: 100%; pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+
+        /* TOP: Notifications */
+        #hud-top {
+            padding: 20px; text-align: center;
+            text-shadow: 2px 2px 0 #000;
+        }
+        #notification-area {
+            font-weight: bold; color: #ffff00; font-size: 1.5em;
+            opacity: 0; transition: opacity 0.5s;
+        }
+
+        /* CENTER: Instructions */
+        #instructions {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center; color: white;
+            background: rgba(0,0,0,0.85); padding: 40px;
+            border: 4px solid white; border-radius: 10px;
+            pointer-events: auto; cursor: pointer; z-index: 10;
+        }
+
+        /* BOTTOM: Active Effects & Inventory */
+        #hud-bottom {
+            display: flex; align-items: flex-end; justify-content: space-between;
+            padding: 30px;
+            background: linear-gradient(to top, rgba(0,0,0,0.9), transparent);
+        }
+
+        /* EFFECT DISPLAY BOX */
+        #active-effect-container {
+            display: none; /* Hidden by default */
+            width: 400px;
+            background: rgba(20, 20, 20, 0.9);
+            border: 2px solid #fff;
+            border-radius: 10px;
+            padding: 15px;
+            color: white;
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+        }
+        #timer-bar {
+            height: 10px; background: #444; margin-bottom: 10px; width: 100%;
+        }
+        #timer-fill {
+            height: 100%; background: #00ff00; width: 100%; transition: width 0.1s linear;
+        }
+        #effect-timer-text {
+            font-size: 2em; font-weight: 900; float: right; color: #00ff00;
+        }
+        #effect-title { font-size: 1.2em; font-weight: bold; text-transform: uppercase; margin-bottom: 5px; }
+        .stat-text { font-size: 0.9em; margin: 4px 0; line-height: 1.2; }
+        .side-effect { color: #ff6b6b; font-style: italic; margin-top: 8px; border-top: 1px solid #555; padding-top: 5px;}
+
+        /* INVENTORY */
+        #inventory-box {
+            text-align: right; color: white;
+        }
+        .count-display { font-size: 3em; font-weight: bold; color: #00ffff; }
+
+        /* CROSSHAIR */
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            transform: translate(-50%, -50%);
+            mix-blend-mode: difference; pointer-events: none;
+        }
+        #crosshair::before { content: ''; position: absolute; top: 9px; left: 0; width: 20px; height: 2px; background: white; }
+        #crosshair::after { content: ''; position: absolute; top: 0; left: 9px; width: 2px; height: 20px; background: white; }
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="hud-top">
+            <h1>NARCOTIX WORLD</h1>
+            <div id="notification-area">Picked up item</div>
+        </div>
+        
+        <div id="hud-bottom">
+            <div id="active-effect-container">
+                <div id="timer-bar"><div id="timer-fill"></div></div>
+                <div id="effect-timer-text">0.0s</div>
+                <div id="effect-title" style="color: magenta;">PILL NAME</div>
+                <div class="stat-text" id="effect-desc">Effect description...</div>
+                <div class="stat-text side-effect" id="effect-side">Side Effect...</div>
+            </div>
+
+            <div id="inventory-box">
+                <div>PILLS IN POCKET</div>
+                <div class="count-display" id="pill-counter">0</div>
+                <div>Press <b>'Q'</b> to Consume</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="instructions">
+        <h1>NARCOTIX SIMULATION</h1>
+        <p>CLICK TO ENTER</p>
+        <hr>
+        <p><b>WASD</b> Move | <b>SPACE</b> Jump</p>
+        <p><b>Left Click</b> Break Blocks (Find Pills)</p>
+        <p><b>Right Click</b> Place Blocks</p>
+        <p><b>Q</b> Consume Pill</p>
+        <p style="color:orange; font-size: 0.8em;">Warning: Floors contain holes. Watch your step.</p>
+    </div>
+    <div id="crosshair"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- 1. GAME CONSTANTS & STATE ---
+        
+        // Default Stats
+        const DEFAULTS = {
+            speed: 8.0,
+            jump: 12.0,
+            gravity: 30.0,
+            fov: 75
+        };
+
+        // Current Stats (Mutable)
+        let currentStats = { ...DEFAULTS };
+        let activeEffectTimer = 0;
+        let maxEffectTime = 0;
+        let isHigh = false;
+
+        // Sample Data (Subset of your CSV)
+        const PILL_DB = [
+            { name: "Gangles", color: "#ffff00", effect: "Power to resist laughing at puns.", side: "Hallucinatory experiences with a lopsided chicken.", type: "speed" },
+            { name: "Numinousex", color: "#38761d", effect: "Ability to split skateboards with your index finger.", side: "Preference for wonky lines.", type: "jump" },
+            { name: "Rondeaux16", color: "#9900ff", effect: "Feel fulfilled at the start of every weekend.", side: "Temptation to set fire to own legs.", type: "float" },
+            { name: "Sylph", color: "#ff00ff", effect: "Feel like you're riding a unicycle across a tightrope.", side: "Obsession with alibis.", type: "wild" },
+            { name: "Cherimoya", color: "#ff9900", effect: "Make the user amazing at cycling.", side: "Proclivity for deep dives into heavy topics.", type: "speed_jump" },
+            { name: "Jeeveless", color: "#38761d", effect: "Create disorder by playing crying baby sounds.", side: "Rash in reaction to iPhone users.", type: "heavy" },
+            { name: "Klimzona", color: "#0000ff", effect: "Strength of an iguana.", side: "Temporary colour blindness.", type: "zoom" },
+            { name: "Xstx", color: "#ff0000", effect: "Singular focus.", side: "Everything looks red.", type: "rage" }
+        ];
+
+        // --- 2. THREE.JS SETUP ---
+        const scene = new THREE.Scene();
+        const baseSkyColor = new THREE.Color(0x87CEEB);
+        scene.background = baseSkyColor.clone();
+        scene.fog = new THREE.Fog(baseSkyColor, 10, 60);
+
+        const camera = new THREE.PerspectiveCamera(DEFAULTS.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lights
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        dirLight.position.set(50, 100, 50);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+
+        // --- 3. WORLD GENERATION ---
+        const objects = []; // Blocks for collision
+        const droppedItems = [];
+        const stash = [];
+
+        // Texture Gen
+        function createColorTexture(c) {
+            const cvs = document.createElement('canvas'); cvs.width=64; cvs.height=64;
+            const ctx = cvs.getContext('2d'); ctx.fillStyle = c; ctx.fillRect(0,0,64,64);
+            // Noise
+            for(let i=0;i<200;i++) {
+                ctx.fillStyle = `rgba(0,0,0,0.2)`;
+                ctx.fillRect(Math.random()*64, Math.random()*64, 4, 4);
+            }
+            const t = new THREE.CanvasTexture(cvs); t.magFilter = THREE.NearestFilter;
+            return t;
+        }
+        
+        const matGrass = new THREE.MeshStandardMaterial({ map: createColorTexture('#5da130') });
+        const matDirt = new THREE.MeshStandardMaterial({ map: createColorTexture('#754d29') });
+        const geoBlock = new THREE.BoxGeometry(1,1,1);
+
+        // Generate Map with HOLES
+        for(let x=-15; x<15; x++) {
+            for(let z=-15; z<15; z++) {
+                // 10% chance to leave a hole (no block)
+                if(Math.random() < 0.10) continue;
+
+                const mesh = new THREE.Mesh(geoBlock, matGrass);
+                mesh.position.set(x, 0, z);
+                scene.add(mesh);
+                objects.push(mesh);
+
+                // Random hills
+                if(Math.random() < 0.1) {
+                    const m2 = new THREE.Mesh(geoBlock, matDirt);
+                    m2.position.set(x, 1, z);
+                    scene.add(m2);
+                    objects.push(m2);
+                }
+            }
+        }
+
+        // --- 4. PILL LOGIC & STATS ---
+
+        function resetStats() {
+            currentStats = { ...DEFAULTS };
+            camera.fov = DEFAULTS.fov;
+            camera.updateProjectionMatrix();
+            
+            scene.background.copy(baseSkyColor);
+            scene.fog.color.copy(baseSkyColor);
+            scene.fog.near = 10;
+            scene.fog.far = 60;
+            
+            isHigh = false;
+            
+            // Hide UI
+            document.getElementById('active-effect-container').style.display = 'none';
+            showNotification("Sobered Up.");
+        }
+
+        function applyPillEffect(pill) {
+            // 1. Determine Duration (10 to 25 seconds)
+            maxEffectTime = 15 + Math.random() * 10;
+            activeEffectTimer = maxEffectTime;
+            isHigh = true;
+
+            // 2. Apply Stat Mods based on Pill Type/Color
+            switch (pill.type) {
+                case 'speed': // Yellows
+                    currentStats.speed = 20.0; // Super speed
+                    camera.fov = 110;
+                    break;
+                case 'jump': // Greens
+                    currentStats.jump = 25.0; // Super jump
+                    currentStats.gravity = 20.0; // Lower gravity
+                    break;
+                case 'float': // Purples
+                    currentStats.gravity = 5.0; // Moon gravity
+                    currentStats.speed = 4.0; // Slow walk
+                    break;
+                case 'heavy': // Browns
+                    currentStats.speed = 3.0;
+                    currentStats.jump = 5.0;
+                    currentStats.gravity = 80.0; // Very heavy
+                    break;
+                case 'wild': // Magentas
+                    currentStats.speed = 15.0;
+                    currentStats.jump = 20.0;
+                    camera.fov = 130; // Fish eye
+                    break;
+                case 'rage': // Red
+                    camera.fov = 40; // Zoom in
+                    currentStats.speed = 12.0;
+                    break;
+                default:
+                    currentStats.speed = 10.0;
+            }
+
+            camera.updateProjectionMatrix();
+
+            // 3. Update UI
+            const ui = document.getElementById('active-effect-container');
+            ui.style.display = 'block';
+            ui.style.borderColor = pill.color;
+            document.getElementById('effect-title').innerText = pill.name;
+            document.getElementById('effect-title').style.color = pill.color;
+            document.getElementById('effect-desc').innerText = pill.effect;
+            document.getElementById('effect-side').innerText = pill.side;
+
+            // 4. Initial Visuals
+            scene.background.set(pill.color);
+            scene.fog.color.set(pill.color);
+            scene.fog.near = 2;
+            scene.fog.far = 30;
+        }
+
+        function updateEffectTimer(delta) {
+            if (activeEffectTimer > 0) {
+                activeEffectTimer -= delta;
+
+                // Update Text
+                document.getElementById('effect-timer-text').innerText = activeEffectTimer.toFixed(2) + "s";
+                
+                // Update Bar
+                const pct = (activeEffectTimer / maxEffectTime) * 100;
+                document.getElementById('timer-fill').style.width = pct + "%";
+
+                // Breathing effect
+                if (isHigh) {
+                    const pulse = Math.sin(performance.now() * 0.005) * 0.1;
+                    camera.fov = currentStats.fov + (pulse * 10);
+                    camera.updateProjectionMatrix();
+                }
+
+                if (activeEffectTimer <= 0) {
+                    resetStats();
+                }
+            }
+        }
+
+        // --- 5. ITEM SPAWNING & COLLECTION ---
+        function spawnPill(pos) {
+            if(Math.random() > 0.4) return; // 40% drop rate
+            
+            const data = PILL_DB[Math.floor(Math.random() * PILL_DB.length)];
+            
+            // Create Geometry
+            const geo = new THREE.CapsuleGeometry(0.15, 0.4, 4, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: data.color });
+            const mesh = new THREE.Mesh(geo, mat);
+            mesh.position.copy(pos);
+            mesh.userData = data;
+            
+            scene.add(mesh);
+            droppedItems.push(mesh);
+        }
+
+        function consumePill() {
+            if (stash.length === 0) {
+                showNotification("No pills in inventory!");
+                return;
+            }
+            // Stop current effect if exists
+            if (activeEffectTimer > 0) resetStats();
+
+            const pill = stash.pop();
+            document.getElementById('pill-counter').innerText = stash.length;
+            applyPillEffect(pill);
+        }
+
+        function showNotification(msg) {
+            const el = document.getElementById('notification-area');
+            el.innerText = msg;
+            el.style.opacity = 1;
+            setTimeout(() => el.style.opacity = 0, 2000);
+        }
+
+        // --- 6. PHYSICS ENGINE (UPDATED) ---
+        const controls = new PointerLockControls(camera, document.body);
+        const instructions = document.getElementById('instructions');
+        
+        instructions.addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => instructions.style.display = 'none');
+        controls.addEventListener('unlock', () => instructions.style.display = 'block');
+
+        const moveState = { fwd: false, bwd: false, left: false, right: false };
+        const velocity = new THREE.Vector3();
+        let canJump = false;
+
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'KeyW': moveState.fwd = true; break;
+                case 'KeyS': moveState.bwd = true; break;
+                case 'KeyA': moveState.left = true; break;
+                case 'KeyD': moveState.right = true; break;
+                case 'Space': 
+                    if(canJump) {
+                        velocity.y = currentStats.jump; 
+                        canJump = false;
+                    }
+                    break;
+                case 'KeyQ': consumePill(); break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': moveState.fwd = false; break;
+                case 'KeyS': moveState.bwd = false; break;
+                case 'KeyA': moveState.left = false; break;
+                case 'KeyD': moveState.right = false; break;
+            }
+        });
+
+        // --- 7. MAIN LOOP ---
+        let prevTime = performance.now();
+        const raycaster = new THREE.Raycaster();
+        const downVector = new THREE.Vector3(0, -1, 0);
+
+        // Player start pos
+        camera.position.set(0, 5, 0);
+
+        function checkHorizontalCollision(pos) {
+            const pBox = new THREE.Box3(
+                new THREE.Vector3(pos.x-0.3, pos.y-1.0, pos.z-0.3),
+                new THREE.Vector3(pos.x+0.3, pos.y+0.5, pos.z+0.3)
+            );
+            for(let obj of objects) {
+                if(obj.position.distanceToSquared(pos) > 9) continue; 
+                const bBox = new THREE.Box3().setFromObject(obj);
+                if(pBox.intersectsBox(bBox)) return true;
+            }
+            return false;
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            // 1. Update Effects
+            updateEffectTimer(delta);
+
+            // 2. Animate Floating Items
+            for(let i=droppedItems.length-1; i>=0; i--) {
+                const item = droppedItems[i];
+                item.rotation.y += 2 * delta;
+                item.position.y += Math.sin(time * 0.003 + i) * 0.005; // Bobbing
+                
+                // Pickup
+                if(camera.position.distanceTo(item.position) < 1.5) {
+                    stash.push(item.userData);
+                    document.getElementById('pill-counter').innerText = stash.length;
+                    showNotification(`Found: ${item.userData.name}`);
+                    scene.remove(item);
+                    droppedItems.splice(i, 1);
+                }
+            }
+
+            if(controls.isLocked) {
+                // --- NEW GRAVITY LOGIC ---
+                // Always apply gravity
+                velocity.y -= currentStats.gravity * delta;
+                
+                // Raycast DOWN to find the floor
+                raycaster.set(camera.position, downVector);
+                // We only check objects, not items
+                const intersects = raycaster.intersectObjects(objects);
+
+                const playerHeight = 1.6; 
+                let onGround = false;
+
+                if(intersects.length > 0) {
+                    const dist = intersects[0].distance;
+                    // If we are falling and close to ground
+                    if(velocity.y <= 0 && dist < playerHeight) {
+                        velocity.y = 0;
+                        // Snap to top of block
+                        camera.position.y = intersects[0].point.y + playerHeight;
+                        canJump = true;
+                        onGround = true;
+                    }
+                }
+                
+                if(!onGround) {
+                    canJump = false;
+                }
+
+                // Limit fall speed (terminal velocity)
+                if(velocity.y < -50) velocity.y = -50;
+
+                // --- HORIZONTAL MOVEMENT ---
+                const dir = new THREE.Vector3();
+                camera.getWorldDirection(dir);
+                dir.y = 0; dir.normalize();
+                const right = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
+
+                const zInput = Number(moveState.fwd) - Number(moveState.bwd);
+                const xInput = Number(moveState.right) - Number(moveState.left);
+
+                const moveSpeed = currentStats.speed * delta;
+                
+                // Move X
+                const dx = (dir.x*zInput - right.x*xInput) * moveSpeed;
+                camera.position.x += dx;
+                if(checkHorizontalCollision(camera.position)) camera.position.x -= dx;
+
+                // Move Z
+                const dz = (dir.z*zInput - right.z*xInput) * moveSpeed;
+                camera.position.z += dz;
+                if(checkHorizontalCollision(camera.position)) camera.position.z -= dz;
+
+                // Move Y
+                camera.position.y += velocity.y * delta;
+                
+                // Death floor (fall into void)
+                if(camera.position.y < -30) {
+                    camera.position.set(0, 10, 0);
+                    velocity.set(0,0,0);
+                    resetStats(); // Sober up on death
+                }
+            }
+
+            // Interaction Raycaster
+            raycaster.setFromCamera(new THREE.Vector2(0,0), camera);
+            const hits = raycaster.intersectObjects(objects);
+            if(hits.length > 0 && hits[0].distance < 5 && controls.isLocked) {
+                if(mouseClick.left) {
+                    spawnPill(hits[0].object.position.clone());
+                    scene.remove(hits[0].object);
+                    objects.splice(objects.indexOf(hits[0].object), 1);
+                    mouseClick.left = false;
+                }
+                if(mouseClick.right) {
+                     const pos = hits[0].object.position.clone().add(hits[0].face.normal);
+                     const b = new THREE.Mesh(geoBlock, matDirt);
+                     b.position.copy(pos);
+                     // Simple check to not place inside self
+                     if(pos.distanceTo(camera.position) > 1.5) {
+                        scene.add(b);
+                        objects.push(b);
+                     }
+                     mouseClick.right = false;
+                }
+            } else {
+                // Reset clicks if missed
+                mouseClick.left = false;
+                mouseClick.right = false;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        // Input handling for clicks
+        const mouseClick = { left: false, right: false };
+        document.addEventListener('mousedown', (e) => {
+            if(!controls.isLocked) return;
+            if(e.button === 0) mouseClick.left = true;
+            if(e.button === 2) mouseClick.right = true;
+        });
+
+        animate();
+
+        window.onresize = () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+
+    </script>
+</body>
+</html>
