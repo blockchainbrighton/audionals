@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!-- ADD THIS LINE BELOW -->
+    <meta name="referrer" content="no-referrer">
+    
+    <title>The Museum of Bitcoin Ordinals: Modular Edition</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --bg-panel: #121212;
+            --text-main: #e0e0e0;
+            --text-muted: #9ca3af;
+            --accent: #f7931a;
+            --accent-hover: #ffb04d;
+            --border: #333;
+            --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: "Courier New", Courier, monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 340px;
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .brand {
+            padding: 24px;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--accent);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        .collection-group { padding: 15px 0; border-bottom: 1px solid #222; }
+
+        .group-title {
+            padding: 5px 24px 10px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            font-weight: 700;
+            opacity: 0.8;
+        }
+
+        .nav-item {
+            padding: 12px 24px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #bbb;
+        }
+
+        .nav-item span:first-child {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+
+        .nav-item:hover { background-color: #1f1f1f; color: #fff; }
+        .nav-item.active { 
+            background-color: #2a2a2a; 
+            border-left: 4px solid var(--accent); 
+            color: white; 
+            padding-left: 20px; 
+        }
+
+        /* Main Content */
+        .main-stage {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: row;
+            height: 100%;
+        }
+
+        /* Viewer Area (Left) */
+        .viewer-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #050505;
+            position: relative;
+            padding: 20px;
+            border-right: 1px solid var(--border);
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .artifact-frame-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+        }
+
+        /* Media Handling */
+        iframe, img.artifact-media {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        img.artifact-media {
+            object-fit: contain;
+            max-height: 90vh;
+            max-width: 90vw;
+        }
+
+        /* Full Frame Fix */
+        .full-frame-fix iframe {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+        }
+
+        /* Pixel Art Specific Handling */
+        .pixelated {
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .viewer-controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            background: rgba(20, 20, 20, 0.95);
+            padding: 10px 20px;
+            border-radius: 50px;
+            border: 1px solid #333;
+            z-index: 10;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        button {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        button:hover { border-color: var(--accent); color: var(--accent); }
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+        
+        .toggle-btn { background: #222; border-color: #444; }
+        .toggle-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+        /* Info Panel (Right) */
+        .info-panel {
+            width: 450px;
+            background-color: var(--bg-dark);
+            overflow-y: auto;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            border-left: 1px solid #222;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            background: #1a1a1a;
+            color: var(--accent);
+            width: fit-content;
+            margin-bottom: 15px;
+            border: 1px solid #333;
+        }
+
+        h1 { font-size: 2rem; margin-bottom: 8px; line-height: 1.1; font-weight: 700; letter-spacing: -1px;}
+        h2 { font-size: 1.1rem; color: var(--text-muted); font-weight: normal; margin-bottom: 25px; font-family: var(--font-mono); }
+
+        .description { 
+            line-height: 1.7; 
+            font-size: 0.95rem; 
+            color: #d0d0d0; 
+            margin-bottom: 20px;
+        }
+
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid var(--border);
+        }
+
+        .meta-item strong { display: block; color: var(--text-muted); font-size: 0.7rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;}
+        .meta-item span { font-family: var(--font-mono); font-size: 0.85rem; word-break: break-all; color: #fff; }
+
+        a.ord-link { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); transition: color 0.2s;}
+        a.ord-link:hover { color: #fff; border-color: #fff;}
+
+        .loading-text {
+            position: absolute;
+            color: #666;
+            z-index: -1;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .main-stage { flex-direction: column; overflow-y: auto; }
+            .viewer-container { height: 50vh; flex: none; border-right: none; border-bottom: 1px solid var(--border); }
+            .info-panel { width: 100%; height: auto; }
+            .sidebar { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Layout Structure -->
+    <div class="sidebar">
+        <div class="brand">
+            <span>ORDINALS MUSEUM</span>
+        </div>
+        <div id="nav-container"></div>
+    </div>
+
+    <div class="main-stage">
+        <div class="viewer-container">
+            <div id="wrapper" class="artifact-frame-wrapper">
+                <div class="loading-text">Loading Artifact...</div>
+            </div>
+            
+            <div class="viewer-controls">
+                <button id="btn-prev">← Prev</button>
+                <span id="counter" style="font-family: var(--font-mono); font-size: 0.8rem; color: #fff;"></span>
+                <button id="btn-next">Next →</button>
+                <div style="width: 1px; height: 20px; background: #444; margin: 0 10px;"></div>
+                <button id="btn-mode" class="toggle-btn" title="Switch Viewer Mode">Mode: Auto</button>
+            </div>
+        </div>
+
+        <div class="info-panel" id="info-panel">
+            <div>
+                <span class="badge" id="collection-badge">Collection</span>
+                <h1 id="artifact-title">Title</h1>
+                <h2 id="artifact-number">#0</h2>
+                <div class="description" id="artifact-desc"></div>
+                
+                <div class="metadata-grid">
+                    <div class="meta-item">
+                        <strong>Inscription ID</strong>
+                        <span id="meta-id">...</span>
+                    </div>
+                    <div class="meta-item">
+                        <strong>File Type</strong>
+                        <span id="meta-type">...</span>
+                    </div>
+                    <div class="meta-item">
+                        <strong>On-Chain Source</strong>
+                        <span><a id="meta-link" href="#" target="_blank" class="ord-link">View on Ordinals.com</a></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Load Data First -->
+    <script src="./exhibits.js"></script>
+    
+    <!-- Load Logic Last (Defer to ensure DOM is ready) -->
+    <script src="./logic.js" defer></script>
+
+</body>
+</html>
