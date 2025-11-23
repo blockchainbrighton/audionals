@@ -1,0 +1,981 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Museum of Ordinals - Guided Tour</title>
+    <style>
+        :root {
+            --primary-color: #1a1a2e;
+            --secondary-color: #16213e;
+            --accent-color: #0f3460;
+            --highlight-color: #e94560;
+            --text-color: #f1f1f1;
+            --border-radius: 8px;
+            --transition: all 0.3s ease;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        body {
+            background-color: var(--primary-color);
+            color: var(--text-color);
+            line-height: 1.6;
+        }
+
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            padding: 20px;
+        }
+
+        header {
+            text-align: center;
+            padding: 20px 0;
+            margin-bottom: 30px;
+            border-bottom: 1px solid var(--accent-color);
+        }
+
+        h1 {
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            color: var(--highlight-color);
+        }
+
+        .subtitle {
+            font-size: 1.2rem;
+            opacity: 0.8;
+        }
+
+        .museum-layout {
+            display: flex;
+            gap: 20px;
+            height: calc(100vh - 200px);
+        }
+
+        .collections-sidebar {
+            width: 300px;
+            background-color: var(--secondary-color);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .collection-item {
+            padding: 12px 15px;
+            margin-bottom: 10px;
+            background-color: var(--accent-color);
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .collection-item:hover {
+            background-color: var(--highlight-color);
+            transform: translateX(5px);
+        }
+
+        .collection-item.active {
+            background-color: var(--highlight-color);
+            font-weight: bold;
+        }
+
+        .main-display {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .viewer-container {
+            flex: 1;
+            display: flex;
+            gap: 20px;
+        }
+
+        .iframe-viewer {
+            flex: 2;
+            background-color: var(--secondary-color);
+            border-radius: var(--border-radius);
+            overflow: hidden;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .iframe-viewer iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background-color: white;
+        }
+
+        .info-panel {
+            flex: 1;
+            background-color: var(--secondary-color);
+            border-radius: var(--border-radius);
+            padding: 20px;
+            overflow-y: auto;
+        }
+
+        .info-panel h2 {
+            margin-bottom: 15px;
+            color: var(--highlight-color);
+            border-bottom: 1px solid var(--accent-color);
+            padding-bottom: 10px;
+        }
+
+        .info-section {
+            margin-bottom: 20px;
+        }
+
+        .info-section h3 {
+            margin-bottom: 10px;
+            color: var(--highlight-color);
+        }
+
+        .ordinal-item {
+            padding: 10px;
+            background-color: rgba(255, 255, 255, 0.05);
+            border-radius: var(--border-radius);
+            margin-bottom: 10px;
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .ordinal-item:hover {
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+
+        .ordinal-item.active {
+            background-color: var(--highlight-color);
+        }
+
+        .navigation {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background-color: var(--secondary-color);
+            border-radius: var(--border-radius);
+            padding: 15px 20px;
+        }
+
+        .nav-btn {
+            padding: 10px 20px;
+            background-color: var(--accent-color);
+            color: var(--text-color);
+            border: none;
+            border-radius: var(--border-radius);
+            cursor: pointer;
+            transition: var(--transition);
+        }
+
+        .nav-btn:hover {
+            background-color: var(--highlight-color);
+        }
+
+        .nav-btn:disabled {
+            opacity: 0.5;
+            cursor: not-allowed;
+        }
+
+        .progress-bar {
+            flex: 1;
+            height: 8px;
+            background-color: var(--accent-color);
+            border-radius: 4px;
+            margin: 0 20px;
+            overflow: hidden;
+        }
+
+        .progress {
+            height: 100%;
+            background-color: var(--highlight-color);
+            width: 0%;
+            transition: width 0.3s ease;
+        }
+
+        .tour-info {
+            text-align: center;
+            font-size: 0.9rem;
+            opacity: 0.8;
+        }
+
+        @media (max-width: 1024px) {
+            .museum-layout {
+                flex-direction: column;
+                height: auto;
+            }
+            
+            .collections-sidebar {
+                width: 100%;
+                max-height: 300px;
+            }
+            
+            .viewer-container {
+                flex-direction: column;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Museum of Ordinals</h1>
+            <div class="subtitle">A Guided Tour Through Bitcoin's Digital Artifacts</div>
+        </header>
+
+        <div class="museum-layout">
+            <div class="collections-sidebar" id="collections-sidebar">
+                <!-- Collections will be populated by JavaScript -->
+            </div>
+
+            <div class="main-display">
+                <div class="viewer-container">
+                    <div class="iframe-viewer">
+                        <iframe id="ordinal-viewer" src="about:blank"></iframe>
+                    </div>
+                    <div class="info-panel" id="info-panel">
+                        <!-- Information will be populated by JavaScript -->
+                    </div>
+                </div>
+
+                <div class="navigation">
+                    <button class="nav-btn" id="prev-btn">Previous</button>
+                    <div class="progress-bar">
+                        <div class="progress" id="progress-bar"></div>
+                    </div>
+                    <button class="nav-btn" id="next-btn">Next</button>
+                </div>
+                <div class="tour-info" id="tour-info">
+                    <!-- Tour info will be populated by JavaScript -->
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Museum data with all collections and their details
+        const museumData = {
+            "collections": [
+                {
+                    "id": "nodemonkes",
+                    "name": "NodeMonkes",
+                    "symbol": "btc-nodemonkes",
+                    "description": "NodeMonkes is one of the earliest and most prominent PFP (Profile Picture) collections on Bitcoin Ordinals. Launched in early 2023, it features 10,000 unique pixel art monkey characters with various traits and rarities. The collection quickly gained popularity for its nostalgic pixel art style and strong community.",
+                    "historicalContext": "NodeMonkes emerged during the early days of the Ordinals protocol, establishing a blueprint for PFP collections on Bitcoin. Its success demonstrated that Bitcoin could support vibrant NFT ecosystems beyond just Ethereum and other chains.",
+                    "creator": "Anonymous creator(s) operating under the pseudonym 'NodeMonkes'",
+                    "themes": "Digital identity, pixel art nostalgia, community building, Bitcoin maximalism",
+                    "technologies": "Ordinals protocol, Bitcoin blockchain, pixel art generation",
+                    "items": [
+                        {
+                            "id": "83526",
+                            "inscriptionId": "053c67c5b118511203e89541386bd37dac451c0e41ea7ae82f065b805b2ae703i0",
+                            "name": "NodeMonke #83526",
+                            "description": "A unique pixel art monkey character from the NodeMonkes collection.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "83528",
+                            "inscriptionId": "b099cd5b41a50c4af026c99e08cabbd7b611a8879aa90dcdf9f768dd8f77e605i0",
+                            "name": "NodeMonke #83528",
+                            "description": "Another distinctive pixel art monkey showcasing the variety in the collection.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "bitcoin-puppets",
+                    "name": "Bitcoin Puppets",
+                    "symbol": "bitcoin-puppets",
+                    "description": "Bitcoin Puppets is a distinctive Ordinals collection featuring puppet-like characters with a unique art style. The collection gained attention for its unconventional aesthetic and strong community engagement.",
+                    "historicalContext": "Launched in mid-2023, Bitcoin Puppets contributed to the diversification of art styles within the Bitcoin Ordinals ecosystem, demonstrating that non-traditional NFT aesthetics could find success on Bitcoin.",
+                    "creator": "Anonymous creator known as 'Puppeteer'",
+                    "themes": "Surrealism, character art, digital puppetry, unconventional beauty",
+                    "technologies": "Ordinals protocol, digital illustration techniques",
+                    "items": [
+                        {
+                            "id": "53105615",
+                            "inscriptionId": "dc87ce1caca5ab3449daf60ea5363be107ce31fb091916b8063a7974bd5997b0i0",
+                            "name": "Bitcoin Puppet #53105615",
+                            "description": "A distinctive puppet character from the Bitcoin Puppets collection.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "53105622",
+                            "inscriptionId": "db52aedec9ed58d640639d84447eccac766e8d591d8d76c69785efb462bc3240i0",
+                            "name": "Bitcoin Puppet #53105622",
+                            "description": "Another unique puppet showcasing the collection's varied character designs.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "quantum-cats",
+                    "name": "Quantum Cats",
+                    "symbol": "quantum-cats",
+                    "description": "Quantum Cats is a technically innovative Ordinals collection that pays homage to Bitcoin's Taproot upgrade. The collection features 3,333 cats with quantum-themed attributes and was notable for its connection to Bitcoin core developer Casey Rodarmor.",
+                    "historicalContext": "Released in early 2024, Quantum Cats was designed to celebrate and educate about Bitcoin's Taproot upgrade. The collection gained significant attention due to its technical underpinnings and association with key Bitcoin developers.",
+                    "creator": "Developed by Taproot Wizards, with involvement from Bitcoin core developers",
+                    "themes": "Quantum physics, cryptography, Bitcoin technology, feline characters",
+                    "technologies": "Taproot technology, Ordinals protocol, generative art algorithms",
+                    "items": [
+                        {
+                            "id": "54332480",
+                            "inscriptionId": "30a89b436feef5a8cdb2ee4c77550dd795f82d58061bb8980b4d266debb0f147i0",
+                            "name": "Genesis Cat",
+                            "description": "The genesis Quantum Cat, representing the beginning of this technically significant collection.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "53785861",
+                            "inscriptionId": "4b31771df21656d2a77e6fa18720a6dd94b04510b9065a7c67250d5c89ad2079i1",
+                            "name": "Quantum Cat #53785861",
+                            "description": "A unique quantum-themed cat from the collection.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "53785865",
+                            "inscriptionId": "4b31771df21656d2a77e6fa18720a6dd94b04510b9065a7c67250d5c89ad2079i5",
+                            "name": "Quantum Cat #53785865",
+                            "description": "Another quantum cat showcasing different attributes and traits.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "bitcoin-frogs",
+                    "name": "Bitcoin Frogs",
+                    "symbol": "bitcoin-frogs",
+                    "description": "Bitcoin Frogs is one of the earliest PFP collections on Bitcoin Ordinals, featuring 10,000 unique frog characters. The collection gained popularity for its simple yet charming art style and strong community ethos.",
+                    "historicalContext": "Launched in early 2023, Bitcoin Frogs was among the first successful PFP projects on Bitcoin, helping establish the viability of profile picture collections on the Bitcoin blockchain.",
+                    "creator": "Anonymous creator known as 'Frog Dev'",
+                    "themes": "Amphibian characters, simplicity, community, early Ordinals adoption",
+                    "technologies": "Ordinals protocol, generative art, blockchain metadata",
+                    "items": [
+                        {
+                            "id": "395511",
+                            "inscriptionId": "bb56c09acb0a47e57e888d1af0e4793a5354701b9e913e5a1f90acdf52c1f139i0",
+                            "name": "Bitcoin Frog #395511",
+                            "description": "A unique frog character from the early Bitcoin Frogs collection.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "395742",
+                            "inscriptionId": "980049220f76e88588897edc2f2c7e41dffce04c47b9054aa964f99006b85100i0",
+                            "name": "Bitcoin Frog #395742",
+                            "description": "Another distinctive frog showcasing the collection's variety.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "omb",
+                    "name": "OMB (Ordinals Maxi Biz)",
+                    "symbol": "omb",
+                    "description": "OMB is a unique Ordinals collection featuring business-themed characters with a maximalist Bitcoin ethos. The collection combines corporate aesthetics with Bitcoin culture in a satirical yet respectful manner.",
+                    "historicalContext": "Emerging during the growth phase of Bitcoin Ordinals in 2023, OMB captured the intersection of traditional business concepts with Bitcoin maximalism, reflecting the evolving narrative around Bitcoin's role in finance.",
+                    "creator": "Anonymous team operating under the OMB brand",
+                    "themes": "Business culture, Bitcoin maximalism, satire, corporate aesthetics",
+                    "technologies": "Ordinals protocol, character design, digital illustration",
+                    "items": [
+                        {
+                            "id": "111913",
+                            "inscriptionId": "c591abf263fea77f2c824412d906f0edb02d4e6181f6b8c72edc297b85ab4911i0",
+                            "name": "OMB #111913",
+                            "description": "A business-themed character from the OMB collection.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "111915",
+                            "inscriptionId": "0e773e1440f0b07db9610f87462e1a19c74770526b8b2e29202cb3e6a8fca126i0",
+                            "name": "OMB #111915",
+                            "description": "Another OMB character showcasing the collection's business maximalist theme.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "pizza-ninjas",
+                    "name": "Pizza Ninjas",
+                    "symbol": "pizza-ninjas",
+                    "description": "Pizza Ninjas is a creative Ordinals collection that combines two unlikely themes: pizza and ninjas. The collection features ninja characters with pizza-themed attributes and weapons.",
+                    "historicalContext": "Launched in 2023, Pizza Ninjas represents the creative diversity emerging in the Bitcoin Ordinals space, showing that niche and humorous concepts could find audience and value on Bitcoin.",
+                    "creator": "Anonymous creator known as 'Pizza Master'",
+                    "themes": "Japanese culture, food humor, stealth, culinary arts",
+                    "technologies": "Ordinals protocol, character illustration, thematic storytelling",
+                    "items": [
+                        {
+                            "id": "56246169",
+                            "inscriptionId": "39399e536443446eda3f26ce7038178ec3b69157f38eaed19caea4614aabaf62i0",
+                            "name": "Pizza Ninja #56246169",
+                            "description": "A ninja character with pizza-themed attributes from the collection.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "56122947",
+                            "inscriptionId": "9ad43b591e58b23d8550dfdae431432b6ea3a7079d09ef80ee1554c5a3f8d543i0",
+                            "name": "Pizza Ninja #56122947",
+                            "description": "Another pizza ninja showcasing different weapons and pizza elements.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "rsic",
+                    "name": "RSIC Metaprotocol",
+                    "symbol": "rsic-metaprotocol",
+                    "description": "RSIC Metaprotocol is an innovative Ordinals project that combines digital artifacts with a gamified ecosystem. The collection represents a significant step in the evolution of Bitcoin Ordinals beyond simple collectibles.",
+                    "historicalContext": "Launched in 2023, RSIC introduced complex game mechanics and utility to Bitcoin Ordinals, pushing the boundaries of what's possible with digital artifacts on Bitcoin and inspiring similar metaprotocol projects.",
+                    "creator": "Anonymous development team behind RSIC",
+                    "themes": "Gamification, utility, ecosystem building, digital scarcity",
+                    "technologies": "Ordinals protocol, blockchain gaming mechanics, metadata utilization",
+                    "items": [
+                        {
+                            "id": "56718388",
+                            "inscriptionId": "f7e51efdc501516efaaf27634ae71382d621a607123c2ab32174f3dd5001ea93i2",
+                            "name": "RSIC #56718388",
+                            "description": "An RSIC artifact representing participation in the metaprotocol ecosystem.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "56718390",
+                            "inscriptionId": "f7e51efdc501516efaaf27634ae71382d621a607123c2ab32174f3dd5001ea93i4",
+                            "name": "RSIC #56718390",
+                            "description": "Another RSIC artifact with different attributes and potential utilities.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "ocm",
+                    "name": "OnChainMonkeys (OCM)",
+                    "symbol": "ocm-genesis",
+                    "description": "OnChainMonkeys is a pioneering NFT project that originally launched on Ethereum before bridging to Bitcoin via Ordinals. The collection features 10,000 unique algorithmically generated monkeys with proof of ownership fully on-chain.",
+                    "historicalContext": "OCM was one of the first major NFT projects to successfully bridge from Ethereum to Bitcoin using the Ordinals protocol, demonstrating cross-chain compatibility and expanding the Bitcoin NFT ecosystem.",
+                    "creator": "Team led by 'Dingaling' and 'OnChainMonkey' founders",
+                    "themes": "Cross-chain interoperability, algorithmic art, community governance, digital ownership",
+                    "technologies": "Ordinals protocol, cross-chain bridging, algorithmic generation, on-chain metadata",
+                    "items": [
+                        {
+                            "id": "-263423",
+                            "inscriptionId": "4e15c01681e9d82dddf7909daa5f23fc96a212119ded93c55e93c086a1a8fea6i657",
+                            "name": "OCM Genesis #-263423",
+                            "description": "A genesis OnChainMonkey that made the transition from Ethereum to Bitcoin.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "-263399",
+                            "inscriptionId": "4e15c01681e9d82dddf7909daa5f23fc96a212119ded93c55e93c086a1a8fea6i633",
+                            "name": "OCM Genesis #-263399",
+                            "description": "Another OCM genesis character showcasing the collection's algorithmic variety.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "ink",
+                    "name": "Ink",
+                    "symbol": "ink",
+                    "description": "Ink is an experimental Ordinals collection focused on abstract and generative art. The project explores the boundaries of digital creation on Bitcoin through unique visual compositions.",
+                    "historicalContext": "Emerging in 2023, Ink represents the artistic exploration happening within the Bitcoin Ordinals space, moving beyond character-based collections to pure digital art and abstraction.",
+                    "creator": "Anonymous artist or collective known as 'Ink'",
+                    "themes": "Abstract art, generative processes, digital experimentation, visual exploration",
+                    "technologies": "Ordinals protocol, generative algorithms, digital painting techniques",
+                    "items": [
+                        {
+                            "id": "66120395",
+                            "inscriptionId": "696952619460d5b5ebad0cfff81084f4db30fab52e48a13ce046389eb1572113i0",
+                            "name": "Ink #66120395",
+                            "description": "An abstract generative artwork from the Ink collection.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "66120406",
+                            "inscriptionId": "696952619460d5b5ebad0cfff81084f4db30fab52e48a13ce046389eb1572113i11",
+                            "name": "Ink #66120406",
+                            "description": "Another experimental piece showcasing the collection's artistic diversity.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "bitcoin-wizards",
+                    "name": "Bitcoin Wizards",
+                    "symbol": "bitcoin-wizards",
+                    "description": "Bitcoin Wizards is a prominent Ordinals collection featuring wizard characters with Bitcoin-themed attributes. The collection gained popularity for its strong thematic connection to Bitcoin culture and mythology.",
+                    "historicalContext": "Launched in 2023, Bitcoin Wizards tapped into the mystical and technological narratives surrounding Bitcoin, positioning wizards as metaphorical representations of Bitcoin developers and enthusiasts.",
+                    "creator": "Anonymous creator known as 'The Archmage'",
+                    "themes": "Magic, cryptography, Bitcoin mythology, technological wizardry",
+                    "technologies": "Ordinals protocol, character design, thematic storytelling",
+                    "items": [
+                        {
+                            "id": "139898",
+                            "inscriptionId": "0623d9b1ee252ccc57507b93615a5c3d221e184826358ae02888cdcf6a40c406i0",
+                            "name": "Bitcoin Wizard #139898",
+                            "description": "A wizard character with Bitcoin-themed magical attributes.",
+                            "type": "image"
+                        },
+                        {
+                            "id": "139899",
+                            "inscriptionId": "a51db697e257b0c6775f3a57f13cbf5b00dae2840b05be95bd201ca35f54f926i0",
+                            "name": "Bitcoin Wizard #139899",
+                            "description": "Another Bitcoin wizard showcasing different magical elements and traits.",
+                            "type": "image"
+                        }
+                    ]
+                },
+                {
+                    "id": "audionals",
+                    "name": "Audionals",
+                    "symbol": "audionals",
+                    "description": "Audionals represents a groundbreaking development in Bitcoin Ordinals - the ability to store and play audio directly on the Bitcoin blockchain. This collection includes the first audio inscriptions, players, and recursive audio applications.",
+                    "historicalContext": "Audionals emerged in 2023 as developers explored the technical limits of Ordinals, pushing beyond images to include audio files. The project demonstrated that Bitcoin could host interactive media and complex applications, not just static images.",
+                    "creator": "Various developers in the Ordinals community, including 'Ordinal Labs'",
+                    "themes": "Audio preservation, on-chain media, recursive technology, digital sound art",
+                    "technologies": "Base64 encoding, JavaScript audio players, recursive inscriptions, Web Audio API",
+                    "items": [
+                        {
+                            "id": "12435054",
+                            "inscriptionId": "0b8eff3f39f4095d0f129bb8dd75f29159f8725c7e66046bf41f70ebb9f60d93i0",
+                            "name": "First Base64 Audio Sample",
+                            "description": "The first audio sample encoded in base64 and inscribed on Bitcoin.",
+                            "type": "audio"
+                        },
+                        {
+                            "id": "12206104",
+                            "inscriptionId": "7d058415fb8b6d35fddd375208648254bcb0e4e470b4b25da3dac32d8b04b935i0",
+                            "name": "First Audional Player",
+                            "description": "The first player capable of decoding and playing base64 encoded audio on Bitcoin.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "14426517",
+                            "inscriptionId": "e990695d00d326498207acbda321657aa16b8e5731597b6cdd94b1a64a6da8e4i0",
+                            "name": "First Recursive Step Sequencer",
+                            "description": "The first recursive step sequencer engine for creating music on Bitcoin.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "13078824",
+                            "inscriptionId": "09e0b0c471a6a89c1385c67016e5e6a97f6a6df38207c2d79da67cadf0774368i0",
+                            "name": "First Test Sequencer",
+                            "description": "An early test sequencer for experimenting with on-chain music creation.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "21048916",
+                            "inscriptionId": "4521e117df5bf3f9495f22e2b453d1d379b2432ac7ec56403d46b35474e490eai0",
+                            "name": "First Recursive JSON Song File",
+                            "description": "The first song file stored as recursive JSON data on Bitcoin.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "28712154",
+                            "inscriptionId": "cea4d582a419e6c7561af335ed08b6b47384d6f2c25d0f682c3019c7f2a305e4i0",
+                            "name": "First Recursive Song: I Love Cheese",
+                            "description": "The first complete recursive song created using the Audional sequencer.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "30908005",
+                            "inscriptionId": "70a1f609af492aed8dcc6eeab5f496b44f60c994c682aaf4530e7c29a94fb4fai0",
+                            "name": "Color Remix",
+                            "description": "An interactive audio-visual experience combining color and sound.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "35259459",
+                            "inscriptionId": "598a448d0e134e90855e6fba03d7b2e2610423f185ba513d3c1a8022a9d0d591i0",
+                            "name": "First Synth Inscription",
+                            "description": "The first synthesizer inscribed on Bitcoin, enabling sound generation.",
+                            "type": "html"
+                        }
+                    ]
+                },
+                {
+                    "id": "recursive-songs",
+                    "name": "Recursive Songs",
+                    "symbol": "recursive-songs",
+                    "description": "This collection features complete musical compositions created using recursive Ordinals technology. These songs represent the cutting edge of on-chain media, with entire musical works stored and executable directly from the Bitcoin blockchain.",
+                    "historicalContext": "Building on the Audionals foundation, recursive songs emerged in 2023-2024 as developers mastered the technique of creating complex, interactive media through recursive inscriptions. This demonstrated Bitcoin's potential as a media storage and execution platform.",
+                    "creator": "Various artists and developers in the Ordinals ecosystem",
+                    "themes": "On-chain music, recursive technology, digital composition, blockchain as medium",
+                    "technologies": "Recursive inscriptions, JavaScript, Web Audio API, digital audio workstations (DAW)",
+                    "items": [
+                        {
+                            "id": "72602366",
+                            "inscriptionId": "9f2ec8bcab1d134437e5d2f87e435c8141011125e6ea940c292c242fb4660109i0",
+                            "name": "TRUTH Song Part 1",
+                            "description": "First part of the TRUTH recursive song composition.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "72602367",
+                            "inscriptionId": "9f2ec8bcab1d134437e5d2f87e435c8141011125e6ea940c292c242fb4660109i1",
+                            "name": "TRUTH Song Part 2",
+                            "description": "Second part of the TRUTH recursive song composition.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "73172817",
+                            "inscriptionId": "decf97659d9a13ed8ecdae0752d0a76ec822d13c8ddea6db39cbb9331a4ac0dfi1",
+                            "name": "FREEDOM Song Part 1",
+                            "description": "First part of the FREEDOM recursive song about financial sovereignty.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "73172818",
+                            "inscriptionId": "decf97659d9a13ed8ecdae0752d0a76ec822d13c8ddea6db39cbb9331a4ac0dfi2",
+                            "name": "FREEDOM Song Part 2",
+                            "description": "Second part of the FREEDOM recursive song composition.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "73805227",
+                            "inscriptionId": "4f6f53c59e8ed57b495f273a263b04d94c82c31f2172856959f39d6745000003i0",
+                            "name": "I Love Cheese Part 1",
+                            "description": "First part of the humorous 'I Love Cheese' recursive song.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "73805228",
+                            "inscriptionId": "4f6f53c59e8ed57b495f273a263b04d94c82c31f2172856959f39d6745000003i1",
+                            "name": "I Love Cheese Part 2",
+                            "description": "Second part of the 'I Love Cheese' recursive song.",
+                            "type": "html"
+                        },
+                        {
+                            "id": "on-day-one",
+                            "inscriptionId": "9052cc9fbaf147a44f1c7043477b97c44a07de2d69250cf1fb345a771ea48088i0",
+                            "name": "On Day One / Free Ross",
+                            "description": "A recursive song created using the Audional sequencer, advocating for Ross Ulbricht's freedom.",
+                            "type": "html"
+                        }
+                    ]
+                },
+                {
+                    "id": "other-music",
+                    "name": "Other Music Ordinals",
+                    "symbol": "other-music",
+                    "description": "This category includes significant musical inscriptions that don't fit into the Audionals ecosystem but represent important milestones in Bitcoin's journey as a media storage platform.",
+                    "historicalContext": "As Ordinals technology matured, artists began experimenting with larger and more complex audio files, pushing the boundaries of what could be stored on Bitcoin. These inscriptions represent both technical achievements and artistic expressions.",
+                    "creator": "Various artists and developers",
+                    "themes": "Music preservation, large-file storage, artistic expression, technical innovation",
+                    "technologies": "Audio compression, large-block inscriptions, media encoding",
+                    "items": [
+                        {
+                            "id": "64333690",
+                            "inscriptionId": "3eb5b8f249759c7a3fa6683a7f51d288af0aeffa847904a18c0fb382ca46c1b2i0",
+                            "name": "French Montana - 4MB Song",
+                            "description": "A 4 megabyte song by French Montana, one of the larger audio files inscribed on Bitcoin.",
+                            "type": "audio"
+                        }
+                    ]
+                },
+                {
+                    "id": "gaming",
+                    "name": "Gaming on Bitcoin",
+                    "symbol": "gaming",
+                    "description": "This collection showcases the integration of gaming with Bitcoin Ordinals, demonstrating that interactive experiences can be stored and executed directly from the blockchain.",
+                    "historicalContext": "The inscription of games on Bitcoin represents a significant expansion of the protocol's capabilities, moving from static media to interactive experiences. This development opened new possibilities for blockchain-based gaming.",
+                    "creator": "Various developers in the Ordinals community",
+                    "themes": "Interactive media, blockchain gaming, retro gaming preservation, on-chain execution",
+                    "technologies": "JavaScript, HTML5, game engines, blockchain integration",
+                    "items": [
+                        {
+                            "id": "466",
+                            "inscriptionId": "521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79dai0",
+                            "name": "DOOM on Bitcoin",
+                            "description": "A version of the classic game DOOM inscribed on Bitcoin, demonstrating interactive media capabilities.",
+                            "type": "html"
+                        }
+                    ]
+                }
+            ]
+        };
+
+        // Additional historical ordinals data
+        const historicalOrdinals = [
+            {
+                "id": "0",
+                "inscriptionId": "6fb976ab49dcec017f1e201e84395983204ae1a7c2abf7ced0a85d692e442799i0",
+                "name": "The Genesis Inscription",
+                "description": "The very first inscription on Bitcoin, created by Casey Rodarmor on December 14, 2022. This landmark piece marked the beginning of the Ordinals protocol and the Bitcoin NFT ecosystem.",
+                "type": "image",
+                "historicalSignificance": "This inscription represents the birth of digital artifacts on Bitcoin. It demonstrated that arbitrary content could be inscribed onto individual satoshis, opening up entirely new use cases for the Bitcoin blockchain."
+            },
+            {
+                "id": "19",
+                "inscriptionId": "9163af650dcdeeeb9a7e1f47f693b51921dce3bdf2475e69360ec83d9956f5d7i0",
+                "name": "Bitcoin Shrooms Genesis",
+                "description": "Early 'Bitcoin Shrooms' genesis piece; one of the first collectible series on Ordinals.",
+                "type": "image",
+                "historicalSignificance": "Bitcoin Shrooms was among the earliest PFP-style collections on Bitcoin, helping establish the model for collectible series that would later explode in popularity."
+            },
+            {
+                "id": "73",
+                "inscriptionId": "ad99172fce60028406f62725b91b5c508edd95bf21310de5afeb0966ddd89be3i0",
+                "name": "The Bitcoin Shanty",
+                "description": "The first audio inscription on Bitcoin - a sea shanty about Bitcoin.",
+                "type": "audio",
+                "historicalSignificance": "This inscription proved that audio could be stored on Bitcoin, expanding the protocol beyond images and paving the way for more complex media types."
+            }
+        ];
+
+        // Museum application state
+        let currentState = {
+            currentCollectionIndex: 0,
+            currentItemIndex: 0,
+            totalItems: calculateTotalItems()
+        };
+
+        // Initialize the museum
+        function initMuseum() {
+            renderCollectionsSidebar();
+            renderCurrentCollection();
+            updateNavigation();
+            updateProgressBar();
+        }
+
+        // Calculate total number of items across all collections
+        function calculateTotalItems() {
+            let total = 0;
+            museumData.collections.forEach(collection => {
+                total += collection.items.length;
+            });
+            return total;
+        }
+
+        // Render the collections sidebar
+        function renderCollectionsSidebar() {
+            const sidebar = document.getElementById('collections-sidebar');
+            sidebar.innerHTML = '';
+            
+            museumData.collections.forEach((collection, index) => {
+                const collectionElement = document.createElement('div');
+                collectionElement.className = `collection-item ${index === currentState.currentCollectionIndex ? 'active' : ''}`;
+                collectionElement.textContent = collection.name;
+                collectionElement.addEventListener('click', () => {
+                    currentState.currentCollectionIndex = index;
+                    currentState.currentItemIndex = 0;
+                    renderCurrentCollection();
+                    updateNavigation();
+                    updateProgressBar();
+                });
+                sidebar.appendChild(collectionElement);
+            });
+        }
+
+        // Render the current collection and its items
+        function renderCurrentCollection() {
+            const currentCollection = museumData.collections[currentState.currentCollectionIndex];
+            const currentItem = currentCollection.items[currentState.currentItemIndex];
+            
+            // Update the iframe viewer
+            const iframe = document.getElementById('ordinal-viewer');
+            iframe.src = `https://ordinals.com/preview/${currentItem.inscriptionId}`;
+            
+            // Update the info panel
+            renderInfoPanel(currentCollection, currentItem);
+            
+            // Update tour info
+            updateTourInfo();
+            
+            // Update active states in sidebar
+            updateActiveStates();
+        }
+
+        // Render the information panel
+        function renderInfoPanel(collection, item) {
+            const infoPanel = document.getElementById('info-panel');
+            
+            let itemsListHTML = '';
+            collection.items.forEach((collectionItem, index) => {
+                itemsListHTML += `
+                    <div class="ordinal-item ${index === currentState.currentItemIndex ? 'active' : ''}" 
+                         onclick="selectItem(${index})">
+                        <strong>${collectionItem.name}</strong><br>
+                        <small>Inscription #${collectionItem.id}</small>
+                    </div>
+                `;
+            });
+            
+            infoPanel.innerHTML = `
+                <h2>${collection.name}</h2>
+                
+                <div class="info-section">
+                    <h3>About This Collection</h3>
+                    <p>${collection.description}</p>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Historical Context</h3>
+                    <p>${collection.historicalContext}</p>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Creator</h3>
+                    <p>${collection.creator}</p>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Themes & Concepts</h3>
+                    <p>${collection.themes}</p>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Technologies Used</h3>
+                    <p>${collection.technologies}</p>
+                </div>
+                
+                <div class="info-section">
+                    <h3>Items in This Collection</h3>
+                    ${itemsListHTML}
+                </div>
+                
+                <div class="info-section">
+                    <h3>Current Item: ${item.name}</h3>
+                    <p>${item.description}</p>
+                    <p><strong>Inscription ID:</strong> ${item.inscriptionId}</p>
+                    <p><strong>Type:</strong> ${item.type}</p>
+                </div>
+            `;
+        }
+
+        // Update the tour information display
+        function updateTourInfo() {
+            const currentCollection = museumData.collections[currentState.currentCollectionIndex];
+            const currentItem = currentCollection.items[currentState.currentItemIndex];
+            const tourInfo = document.getElementById('tour-info');
+            
+            const collectionNumber = currentState.currentCollectionIndex + 1;
+            const itemNumber = currentState.currentItemIndex + 1;
+            const totalCollections = museumData.collections.length;
+            const totalItemsInCollection = currentCollection.items.length;
+            
+            tourInfo.textContent = `Collection ${collectionNumber} of ${totalCollections} | Item ${itemNumber} of ${totalItemsInCollection} | ${currentCollection.name}: ${currentItem.name}`;
+        }
+
+        // Update active states in the sidebar
+        function updateActiveStates() {
+            const collectionItems = document.querySelectorAll('.collection-item');
+            collectionItems.forEach((item, index) => {
+                if (index === currentState.currentCollectionIndex) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+            
+            const ordinalItems = document.querySelectorAll('.ordinal-item');
+            ordinalItems.forEach((item, index) => {
+                if (index === currentState.currentItemIndex) {
+                    item.classList.add('active');
+                } else {
+                    item.classList.remove('active');
+                }
+            });
+        }
+
+        // Update navigation buttons state
+        function updateNavigation() {
+            const currentCollection = museumData.collections[currentState.currentCollectionIndex];
+            const prevBtn = document.getElementById('prev-btn');
+            const nextBtn = document.getElementById('next-btn');
+            
+            // Enable/disable previous button
+            if (currentState.currentCollectionIndex === 0 && currentState.currentItemIndex === 0) {
+                prevBtn.disabled = true;
+            } else {
+                prevBtn.disabled = false;
+            }
+            
+            // Enable/disable next button
+            if (currentState.currentCollectionIndex === museumData.collections.length - 1 && 
+                currentState.currentItemIndex === currentCollection.items.length - 1) {
+                nextBtn.disabled = true;
+            } else {
+                nextBtn.disabled = false;
+            }
+        }
+
+        // Update progress bar
+        function updateProgressBar() {
+            const progressBar = document.getElementById('progress-bar');
+            let currentItemCount = 0;
+            
+            // Calculate current position in the overall tour
+            for (let i = 0; i < currentState.currentCollectionIndex; i++) {
+                currentItemCount += museumData.collections[i].items.length;
+            }
+            currentItemCount += currentState.currentItemIndex + 1;
+            
+            const progressPercentage = (currentItemCount / currentState.totalItems) * 100;
+            progressBar.style.width = `${progressPercentage}%`;
+        }
+
+        // Navigation functions
+        function nextItem() {
+            const currentCollection = museumData.collections[currentState.currentCollectionIndex];
+            
+            if (currentState.currentItemIndex < currentCollection.items.length - 1) {
+                // Move to next item in current collection
+                currentState.currentItemIndex++;
+            } else if (currentState.currentCollectionIndex < museumData.collections.length - 1) {
+                // Move to first item in next collection
+                currentState.currentCollectionIndex++;
+                currentState.currentItemIndex = 0;
+            }
+            
+            renderCurrentCollection();
+            updateNavigation();
+            updateProgressBar();
+        }
+
+        function prevItem() {
+            if (currentState.currentItemIndex > 0) {
+                // Move to previous item in current collection
+                currentState.currentItemIndex--;
+            } else if (currentState.currentCollectionIndex > 0) {
+                // Move to last item in previous collection
+                currentState.currentCollectionIndex--;
+                const previousCollection = museumData.collections[currentState.currentCollectionIndex];
+                currentState.currentItemIndex = previousCollection.items.length - 1;
+            }
+            
+            renderCurrentCollection();
+            updateNavigation();
+            updateProgressBar();
+        }
+
+        function selectItem(itemIndex) {
+            currentState.currentItemIndex = itemIndex;
+            renderCurrentCollection();
+            updateNavigation();
+            updateProgressBar();
+        }
+
+        // Event listeners
+        document.getElementById('next-btn').addEventListener('click', nextItem);
+        document.getElementById('prev-btn').addEventListener('click', prevItem);
+
+        // Keyboard navigation
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'ArrowRight') {
+                nextItem();
+            } else if (e.key === 'ArrowLeft') {
+                prevItem();
+            }
+        });
+
+        // Initialize the museum when the page loads
+        window.addEventListener('DOMContentLoaded', initMuseum);
+    </script>
+</body>
+</html>

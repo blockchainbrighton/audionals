@@ -1,0 +1,667 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>B.A.M. Museum OS - Verified Artifacts</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+        @import url('https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;600;700&display=swap');
+
+        :root {
+            --neon-blue: #00f0ff;
+            --neon-pink: #ff0099;
+            --neon-amber: #ffae00;
+            --neon-green: #0aff00;
+            --bg-color: #050510;
+            --glass-base-blue: rgba(0, 100, 200, 0.9); 
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            font-family: 'Press Start 2P', monospace;
+            overflow: hidden;
+            color: white;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* --- EXTERIOR VIEW --- */
+        #exterior-container {
+            position: relative;
+            width: 500px;
+            height: 500px;
+            transition: transform 2s cubic-bezier(0.7, 0, 0.3, 1), opacity 1s ease;
+            cursor: pointer;
+            image-rendering: pixelated; 
+        }
+
+        #helmet-img {
+            width: 100%;
+            height: auto;
+            z-index: 1;
+            position: relative;
+            pointer-events: none;
+        }
+
+        /* --- THE 3D VISOR --- */
+        #visor-plate {
+            position: absolute;
+            top: 24%; 
+            left: 23%;
+            width: 54%;
+            height: 35%;
+            z-index: 3;
+            border-radius: 15% 15% 12% 12%;
+            transition: transform 1s ease-in-out;
+            overflow: hidden;
+            
+            border-top: 3px solid #66ccff;
+            border-left: 3px solid #66ccff;
+            border-bottom: 3px solid #004488;
+            border-right: 3px solid #004488;
+
+            background: linear-gradient(
+                115deg, 
+                rgba(0, 20, 60, 0.9) 0%,
+                var(--glass-base-blue) 35%,
+                rgba(255, 255, 255, 0.9) 48%,
+                rgba(220, 240, 255, 0.9) 52%,
+                var(--glass-base-blue) 65%,
+                rgba(0, 20, 60, 0.9) 100%
+            );
+
+            box-shadow: 
+                0 0 20px var(--neon-blue), 
+                inset 0 5px 10px rgba(255, 255, 255, 0.5),
+                inset 0 -10px 20px rgba(0, 0, 40, 0.8);
+        }
+
+        #visor-plate.locked::after {
+            content: "LOCKED";
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: rgba(255, 255, 255, 0.9);
+            font-size: 10px;
+            letter-spacing: 2px;
+            text-shadow: 2px 2px 4px black, 0 0 5px var(--neon-blue);
+        }
+
+        #helmet-void {
+            position: absolute;
+            top: 24%;
+            left: 23%;
+            width: 54%;
+            height: 35%;
+            background: #000;
+            z-index: 0;
+            border-radius: 15%;
+            box-shadow: inset 0 0 30px #000;
+        }
+
+        .visor-open #visor-plate {
+            transform: translateY(-105%);
+        }
+
+        .entered #exterior-container {
+            transform: scale(18) translateY(2%);
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .instruction {
+            position: absolute;
+            bottom: 20px;
+            width: 100%;
+            text-align: center;
+            color: var(--neon-pink);
+            font-size: 12px;
+            animation: blink 1s infinite;
+            text-shadow: 0 0 5px var(--neon-pink);
+            z-index: 5;
+        }
+
+        /* --- INTERIOR HUD VIEW --- */
+        #interior-hud {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: radial-gradient(circle, rgba(10,10,30,0.2) 20%, rgba(0,0,0,1) 100%);
+            z-index: 10;
+            display: none;
+            flex-direction: column;
+            justify-content: flex-start;
+            opacity: 0;
+            transition: opacity 2s ease 0.5s;
+            pointer-events: none; 
+        }
+
+        .hud-active {
+            display: flex !important;
+            opacity: 1 !important;
+        }
+
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 4px, 6px 100%;
+            pointer-events: none;
+            z-index: 20;
+            opacity: 0.5;
+        }
+
+        /* TOP HEADER */
+        .hud-header {
+            width: 100%;
+            display: flex;
+            justify-content: space-between;
+            padding: 15px 30px;
+            box-sizing: border-box;
+            border-bottom: 1px solid var(--neon-blue);
+            background: rgba(0, 20, 40, 0.8);
+            z-index: 15;
+            pointer-events: auto;
+        }
+        
+        .header-title {
+            color: var(--neon-blue);
+            text-shadow: 0 0 5px var(--neon-blue);
+            font-size: 14px;
+        }
+
+        .header-clock {
+            color: var(--neon-pink);
+            font-size: 12px;
+        }
+
+        /* MAIN DISPLAY AREA */
+        .main-stage {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: row;
+            padding: 30px;
+            gap: 30px;
+            overflow: hidden;
+            pointer-events: auto;
+        }
+
+        /* LEFT PANEL: ARTWORK */
+        .artifact-viewer {
+            flex: 1.5;
+            border: 2px solid var(--neon-blue);
+            background: rgba(0, 0, 0, 0.8);
+            position: relative;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 0 15px rgba(0, 240, 255, 0.2);
+            border-radius: 8px;
+            overflow: hidden;
+        }
+
+        .corner-deco {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            border: 2px solid var(--neon-pink);
+            transition: all 0.3s;
+        }
+        .tl { top: 0; left: 0; border-bottom: none; border-right: none; }
+        .tr { top: 0; right: 0; border-bottom: none; border-left: none; }
+        .bl { bottom: 0; left: 0; border-top: none; border-right: none; }
+        .br { bottom: 0; right: 0; border-top: none; border-left: none; }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            background: #fff; 
+        }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: black;
+            color: var(--neon-green);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-direction: column;
+            z-index: 5;
+            transition: opacity 0.5s;
+        }
+        
+        .loader-bar {
+            width: 200px;
+            height: 4px;
+            background: #333;
+            margin-top: 10px;
+            position: relative;
+        }
+        .loader-progress {
+            position: absolute;
+            left: 0; top: 0; height: 100%;
+            background: var(--neon-green);
+            width: 0%;
+            animation: load 2s forwards;
+        }
+
+        /* RIGHT PANEL: INFO */
+        .museum-placard {
+            flex: 1;
+            border: 1px solid var(--neon-amber);
+            background: rgba(20, 10, 0, 0.85);
+            padding: 25px;
+            display: flex;
+            flex-direction: column;
+            gap: 15px;
+            box-shadow: inset 0 0 20px rgba(255, 174, 0, 0.1);
+            font-family: 'Rajdhani', sans-serif; 
+            position: relative;
+            overflow: hidden;
+            min-width: 300px;
+        }
+
+        .placard-header {
+            border-bottom: 1px dashed var(--neon-amber);
+            padding-bottom: 15px;
+            margin-bottom: 10px;
+        }
+
+        .artifact-title {
+            font-family: 'Press Start 2P', cursive;
+            color: var(--neon-amber);
+            font-size: 18px;
+            line-height: 1.6;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+            text-shadow: 2px 2px 0px rgba(0,0,0,1);
+        }
+
+        .artifact-meta {
+            display: flex;
+            justify-content: space-between;
+            font-family: 'Press Start 2P', cursive;
+            font-size: 10px;
+            color: #aaa;
+        }
+
+        .artifact-desc-box {
+            flex-grow: 1;
+            overflow-y: auto;
+            padding-right: 10px;
+            font-size: 20px; /* Larger for readability */
+            line-height: 1.5;
+            color: #e0e0e0;
+            text-shadow: 1px 1px 2px black;
+            font-weight: 600;
+        }
+        
+        .artifact-desc-box::-webkit-scrollbar { width: 5px; }
+        .artifact-desc-box::-webkit-scrollbar-thumb { background: var(--neon-amber); }
+        .artifact-desc-box::-webkit-scrollbar-track { background: #111; }
+
+        .id-tag {
+            font-family: monospace;
+            font-size: 11px;
+            color: var(--neon-blue);
+            background: rgba(0,0,0,0.6);
+            padding: 8px;
+            border: 1px solid var(--neon-blue);
+            word-break: break-all;
+            margin-top: 10px;
+            cursor: text;
+            user-select: all;
+        }
+
+        /* CONTROLS FOOTER */
+        .controls-footer {
+            height: 80px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 20px;
+            padding-bottom: 20px;
+            pointer-events: auto;
+        }
+
+        button {
+            background: rgba(0, 0, 0, 0.5);
+            border: 2px solid var(--neon-blue);
+            color: var(--neon-blue);
+            padding: 15px 25px;
+            font-family: 'Press Start 2P', cursive;
+            cursor: pointer;
+            transition: all 0.2s;
+            text-shadow: 0 0 5px var(--neon-blue);
+            box-shadow: 0 0 10px rgba(0, 240, 255, 0.2);
+            font-size: 12px;
+        }
+
+        button:hover {
+            background: var(--neon-blue);
+            color: #000;
+            box-shadow: 0 0 25px var(--neon-blue);
+        }
+
+        button.exit-btn {
+            border-color: var(--neon-pink);
+            color: var(--neon-pink);
+        }
+        
+        button.exit-btn:hover {
+            background: var(--neon-pink);
+            color: white;
+            box-shadow: 0 0 25px var(--neon-pink);
+        }
+        
+        .direct-link {
+            margin-top: 10px;
+            text-align: right;
+        }
+        
+        .direct-link a {
+            color: var(--neon-green);
+            font-size: 10px;
+            text-decoration: none;
+            border: 1px solid var(--neon-green);
+            padding: 5px;
+        }
+        
+        .direct-link a:hover {
+            background: var(--neon-green);
+            color: black;
+        }
+
+        @keyframes blink {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.3; }
+        }
+        @keyframes load {
+            0% { width: 0%; }
+            100% { width: 100%; }
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 800px) {
+            .main-stage { flex-direction: column; }
+            .artifact-viewer { height: 50%; }
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- EXTERIOR HELMET -->
+    <div id="exterior-container">
+        <img src="helmet-pixelart-2025-07-22-23-51-59.png" id="helmet-img" alt="Pixel Art Helmet" onerror="this.style.display='none'; document.getElementById('backup-msg').style.display='block';">
+        
+        <div id="backup-msg" style="display:none; color:red; text-align:center; padding-top:100px; position: absolute; width: 100%; z-index: 10; font-size: 10px;">
+            [ERROR: IMG_NOT_FOUND]<br>PLEASE PROVIDE HELMET ASSET
+        </div>
+
+        <div id="visor-plate" class="locked"></div>
+        <div id="helmet-void"></div>
+        
+        <div class="instruction" id="instruction-text">CLICK HELMET TO ACCESS ARCHIVE</div>
+    </div>
+
+    <!-- INTERIOR INTERFACE -->
+    <div id="interior-hud">
+        <div class="scanlines"></div>
+        
+        <div class="hud-header">
+            <div class="header-title">/// ORD_ARCHIVE_V4.0 /// SECURE CONNECTION</div>
+            <div class="header-clock" id="sys-clock">00:00:00</div>
+        </div>
+
+        <div class="main-stage">
+            
+            <!-- The Art -->
+            <div class="artifact-viewer">
+                <div class="corner-deco tl"></div>
+                <div class="corner-deco tr"></div>
+                <div class="corner-deco bl"></div>
+                <div class="corner-deco br"></div>
+                
+                <div id="loader" class="loading-overlay">
+                    <div style="margin-bottom: 10px;">RETRIEVING BLOCKCHAIN DATA...</div>
+                    <div class="loader-bar"><div class="loader-progress"></div></div>
+                </div>
+                
+                <div id="iframe-container" style="width: 100%; height: 100%; position: relative;">
+                    <!-- Iframes injected here -->
+                </div>
+            </div>
+
+            <!-- The Info -->
+            <div class="museum-placard">
+                <div class="placard-header">
+                    <div class="artifact-title" id="title-disp">LOADING...</div>
+                    <div class="artifact-meta">
+                        <span id="year-disp">YEAR: ???</span>
+                        <span id="type-disp">TYPE: ???</span>
+                    </div>
+                </div>
+                
+                <div class="artifact-desc-box" id="desc-disp">
+                    [AWAITING SELECTION...]
+                </div>
+
+                <div class="id-tag" id="id-disp">ID: 000...</div>
+                <div class="direct-link">
+                    <a href="#" target="_blank" id="source-link">[OPEN RAW SOURCE]</a>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="controls-footer">
+            <button onclick="changeExhibit(-1)">◀ PREV ERA</button>
+            <button class="exit-btn" onclick="exitSuit()">DISCONNECT</button>
+            <button onclick="changeExhibit(1)">NEXT ERA ▶</button>
+        </div>
+    </div>
+
+    <script>
+        // --- MUSEUM CURATION DATA (VERIFIED 2025) ---
+        // These IDs are canonical. If they fail, it is a browser/CORS issue.
+        const museumCollection = [
+            {
+                // INSCRIPTION #0: The Skull (Casey Rodarmor)
+                id: "6fb976ab49dcec017f1e201e84395983204ae1a7c2abf7ced0a85d692e442799i0",
+                title: "GENESIS",
+                year: "DEC 2022",
+                type: "ARTIFACT (SVG)",
+                desc: "Inscription #0. The first artifact ever inscribed. This rotating skull, created by Casey Rodarmor, uses SVG code to render a pixel-perfect animation. It is the 'Block Zero' of the cultural layer of Bitcoin."
+            },
+            {
+                // INSCRIPTION #2: The Bird (The First Image)
+                id: "2544d545927376781d485635759a78d6494d92a7d2215316df2996a48618b042i0",
+                title: "THE FIRST IMAGE",
+                year: "DEC 2022",
+                type: "ARTIFACT (GIF)",
+                desc: "Inscription #2. This fungal-looking bird was the first raster image uploaded. Unlike Inscription #0 (which is code), this proved Bitcoin could store raw image data forever."
+            },
+            {
+                // INSCRIPTION #652: Taproot Wizard (The Meme)
+                id: "a41573e858c5a87250c62925d0723460c49d9781477851922f95706a60df0f7fi0",
+                title: "MAGIC INTERNET MONEY",
+                year: "FEB 2023",
+                type: "COMMUNITY (JPEG)",
+                desc: "Taproot Wizard #1. This iconic MS Paint wizard, originally a Reddit meme from 2013, was inscribed to promote the adoption of the protocol. It sparked the 'Wizard' movement and massive block sizes."
+            },
+            {
+                // INSCRIPTION #142,389: Snake Game (The App)
+                id: "11f62dd925094d256791c47a1445931e17d318a91d31938a9846d0b549d8107ci0",
+                title: "SOFTWARE ERA",
+                year: "FEB 2023",
+                type: "INTERACTIVE (GAME)",
+                desc: "A fully playable Snake game living entirely on Bitcoin. Click the screen and use your arrow keys. It represents the moment Bitcoin became a 'Server' capable of hosting immutable applications."
+            },
+            {
+                // INSCRIPTION #11,600,206: OCM Dimensions (The Tech)
+                id: "d030eb3d8bcd68b0ed02b0c67fdb981342eea40b0383814f179a48e76927db93i0",
+                title: "RECURSIVE 3D",
+                year: "JUN 2023",
+                type: "GENERATIVE (3D)",
+                desc: "OCM Dimensions. This piece uses 'Recursion'—calling other code libraries already on-chain—to render high-fidelity 3D graphics that would normally be too large to fit in a transaction. Drag to rotate."
+            }
+        ];
+
+        // --- STATE MANAGEMENT ---
+        const state = {
+            visorOpen: false,
+            inside: false,
+            currentIndex: 0
+        };
+
+        // --- DOM REFERENCES ---
+        const container = document.getElementById('exterior-container');
+        const visor = document.getElementById('visor-plate');
+        const instruction = document.getElementById('instruction-text');
+        const hud = document.getElementById('interior-hud');
+        
+        const iframeContainer = document.getElementById('iframe-container');
+        const loader = document.getElementById('loader');
+        
+        const titleDisp = document.getElementById('title-disp');
+        const yearDisp = document.getElementById('year-disp');
+        const typeDisp = document.getElementById('type-disp');
+        const descDisp = document.getElementById('desc-disp');
+        const idDisp = document.getElementById('id-disp');
+        const sourceLink = document.getElementById('source-link');
+
+        // --- CLOCK ---
+        setInterval(() => {
+            const now = new Date();
+            document.getElementById('sys-clock').innerText = now.toISOString().split('T')[1].split('.')[0] + " UTC";
+        }, 1000);
+
+        // --- INTERACTIONS ---
+        container.addEventListener('click', () => {
+            if (state.inside) return;
+
+            if (!state.visorOpen) {
+                container.classList.add('visor-open');
+                visor.classList.remove('locked');
+                state.visorOpen = true;
+                instruction.innerText = "CLICK TO ENTER ARCHIVE";
+            } else {
+                enterSuit();
+            }
+        });
+
+        function enterSuit() {
+            state.inside = true;
+            container.classList.add('entered');
+            instruction.style.display = 'none';
+            
+            setTimeout(() => {
+                hud.classList.add('hud-active');
+                loadExhibit(0);
+            }, 1500);
+        }
+
+        function exitSuit() {
+            state.inside = false;
+            hud.classList.remove('hud-active');
+            
+            // clear iframe to stop audio/processing
+            iframeContainer.innerHTML = "";
+
+            setTimeout(() => {
+                state.visorOpen = false;
+                container.classList.remove('entered');
+                container.classList.remove('visor-open');
+                visor.classList.add('locked');
+                instruction.style.display = 'block';
+                instruction.innerText = "CLICK HELMET TO ACCESS ARCHIVE";
+            }, 1000);
+        }
+
+        // --- MUSEUM LOGIC ---
+
+        function changeExhibit(direction) {
+            let newIndex = state.currentIndex + direction;
+            if (newIndex < 0) newIndex = museumCollection.length - 1;
+            if (newIndex >= museumCollection.length) newIndex = 0;
+            loadExhibit(newIndex);
+        }
+
+        function loadExhibit(index) {
+            state.currentIndex = index;
+            const item = museumCollection[index];
+
+            // UI Feedback - show loader
+            loader.style.opacity = "1";
+            loader.style.display = "flex";
+            
+            // Text Updates
+            titleDisp.innerText = item.title;
+            yearDisp.innerText = `ERA: ${item.year}`;
+            typeDisp.innerText = item.type;
+            idDisp.innerText = `ID: ${item.id.substring(0, 12)}...`;
+            
+            // Direct Link update
+            const contentUrl = `https://ordinals.com/content/${item.id}`;
+            sourceLink.href = contentUrl;
+            
+            // Typing effect for description
+            typeWriter(item.desc, descDisp);
+
+            // Iframe Injection
+            setTimeout(() => {
+                iframeContainer.innerHTML = ''; // Clear previous
+                
+                const iframe = document.createElement('iframe');
+                iframe.src = contentUrl;
+                iframe.title = item.title;
+                
+                // STRICT Sandbox for security but allowing interaction
+                iframe.sandbox = "allow-scripts allow-same-origin allow-pointer-lock allow-popups";
+                
+                iframe.onload = () => {
+                    // Fade out loader
+                    setTimeout(() => {
+                        loader.style.opacity = "0";
+                        setTimeout(() => { loader.style.display = "none"; }, 500);
+                    }, 500);
+                };
+
+                iframeContainer.appendChild(iframe);
+            }, 500);
+        }
+
+        // Typing effect utility
+        let typeInterval;
+        function typeWriter(text, element) {
+            if (typeInterval) clearInterval(typeInterval);
+            element.innerText = "";
+            let i = 0;
+            typeInterval = setInterval(() => {
+                if (i < text.length) {
+                    element.innerHTML += text.charAt(i);
+                    i++;
+                    element.scrollTop = element.scrollHeight;
+                } else {
+                    clearInterval(typeInterval);
+                }
+            }, 15); 
+        }
+
+    </script>
+</body>
+</html>

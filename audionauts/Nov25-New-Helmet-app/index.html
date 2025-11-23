@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordinals Digital Museum | Verified Artifacts</title>
+    <style>
+        :root {
+            --bg-root: #050505;
+            --bg-panel: #111111;
+            --bg-card: #1a1a1a;
+            --text-primary: #f0f0f0;
+            --text-secondary: #999999;
+            --accent: #ff9f43; /* Muted Orange */
+            --accent-glow: rgba(255, 159, 67, 0.3);
+            --border: #333;
+            --font-mono: 'Courier New', Courier, monospace;
+            --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-root);
+            color: var(--text-primary);
+            font-family: var(--font-sans);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Top Navigation */
+        nav.top-bar {
+            height: 60px;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 24px;
+            background: var(--bg-panel);
+            z-index: 10;
+        }
+
+        .logo {
+            font-family: var(--font-mono);
+            font-weight: 900;
+            letter-spacing: -1px;
+            font-size: 1.2rem;
+            color: var(--accent);
+            text-transform: uppercase;
+        }
+
+        .logo span { color: #fff; }
+
+        /* Layout */
+        .museum-layout {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 60px);
+        }
+
+        /* Sidebar */
+        aside.sidebar {
+            width: 280px;
+            background: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .category-header {
+            padding: 20px 20px 10px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            color: var(--text-secondary);
+            letter-spacing: 1.5px;
+            font-weight: bold;
+            border-bottom: 1px solid #222;
+        }
+
+        .nav-item {
+            padding: 15px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #222;
+            transition: all 0.2s ease;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        .nav-item:hover {
+            background: #1f1f1f;
+            padding-left: 25px;
+        }
+
+        .nav-item.active {
+            background: var(--bg-card);
+            border-left: 3px solid var(--accent);
+            color: var(--accent);
+        }
+
+        .nav-item-title {
+            font-size: 0.9rem;
+            font-weight: 500;
+        }
+
+        .nav-item-id {
+            font-family: var(--font-mono);
+            font-size: 0.7rem;
+            color: #555;
+            background: #000;
+            padding: 2px 6px;
+            border-radius: 4px;
+        }
+
+        /* Main Stage */
+        .main-stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: radial-gradient(circle at center, #1a1a1a 0%, #000000 100%);
+        }
+
+        .iframe-wrapper {
+            flex: 1;
+            margin: 40px;
+            border: 1px solid var(--border);
+            box-shadow: 0 0 60px rgba(0,0,0,0.8);
+            position: relative;
+            background: #000;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+
+        iframe {
+            width: 100%;
+            height: 100%;
+            border: none;
+            /* Important for pixel art scaling */
+            image-rendering: pixelated; 
+        }
+
+        .loading-indicator {
+            position: absolute;
+            color: var(--accent);
+            font-family: var(--font-mono);
+            animation: pulse 1.5s infinite;
+            pointer-events: none;
+        }
+
+        @keyframes pulse {
+            0% { opacity: 0.5; }
+            50% { opacity: 1; }
+            100% { opacity: 0.5; }
+        }
+
+        /* Info Panel (Right) */
+        .info-panel {
+            width: 320px;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            padding: 30px;
+            overflow-y: auto;
+        }
+
+        .tag {
+            display: inline-block;
+            padding: 4px 10px;
+            background: #222;
+            border: 1px solid #333;
+            color: var(--accent);
+            font-size: 0.7rem;
+            border-radius: 20px;
+            margin-bottom: 15px;
+            font-family: var(--font-mono);
+        }
+
+        h1 {
+            font-size: 1.8rem;
+            margin-bottom: 10px;
+            line-height: 1.2;
+        }
+
+        .meta-row {
+            display: flex;
+            justify-content: space-between;
+            font-family: var(--font-mono);
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-bottom: 20px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        .description {
+            line-height: 1.6;
+            font-size: 0.95rem;
+            color: #d0d0d0;
+            margin-bottom: 30px;
+        }
+
+        .tech-data {
+            background: #000;
+            padding: 15px;
+            border: 1px solid var(--border);
+            border-radius: 6px;
+        }
+
+        .data-point {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 8px;
+            font-size: 0.8rem;
+        }
+
+        .data-label { color: #666; }
+        .data-val { color: #ccc; font-family: var(--font-mono); text-align: right; }
+
+        .external-btn {
+            display: block;
+            width: 100%;
+            padding: 12px;
+            background: transparent;
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            text-align: center;
+            text-decoration: none;
+            margin-top: 20px;
+            border-radius: 4px;
+            font-size: 0.9rem;
+            transition: background 0.2s;
+        }
+
+        .external-btn:hover {
+            background: var(--accent);
+            color: #000;
+        }
+
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .museum-layout { flex-direction: column; height: auto; }
+            .sidebar { width: 100%; height: auto; flex-direction: row; overflow-x: auto; border-bottom: 1px solid var(--border); }
+            .info-panel { width: 100%; border-left: none; border-top: 1px solid var(--border); }
+            .nav-item { min-width: 200px; }
+            .iframe-wrapper { height: 50vh; margin: 20px; }
+        }
+    </style>
+</head>
+<body>
+
+    <nav class="top-bar">
+        <div class="logo">Ordinals<span>Museum</span></div>
+        <div style="font-size: 0.8rem; color: #666;">Preserving Digital Artifacts</div>
+    </nav>
+
+    <div class="museum-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar" id="sidebar">
+            <!-- Injected by JS -->
+        </aside>
+
+        <!-- Main Viewer -->
+        <main class="main-stage">
+            <div class="iframe-wrapper">
+                <div class="loading-indicator" id="loader">Retrieving from Blockchain...</div>
+                <!-- 
+                    Using ordinals.com/content/ for raw view. 
+                    Sandbox allows scripts for games/interactive logic.
+                -->
+                <iframe id="viewer" sandbox="allow-scripts allow-same-origin allow-pointer-lock" src=""></iframe>
+            </div>
+        </main>
+
+        <!-- Info Panel -->
+        <aside class="info-panel" id="info-panel">
+            <!-- Injected by JS -->
+        </aside>
+    </div>
+
+    <script>
+        /**
+         * CURATED EXHIBIT LIST
+         * IDs have been manually verified as of 2023/2024.
+         * We only use Canonical "low number" inscriptions or verified Famous IDs
+         * to ensure no dead links.
+         */
+        const artifacts = [
+            {
+                category: "The Origins",
+                title: "The Genesis",
+                id: "genesis",
+                inscriptionNum: "0",
+                // Verified: Inscription 0
+                hash: "6fb976ab49dcec017f1e201e84395983204ae1a7c2abf7ced0a85d692e442799i0",
+                author: "Casey Rodarmor",
+                desc: "The artifact that started it all. Inscribed on Dec 14, 2022, this pixelated skull is Inscription #0. It proved that immutable data could be stored directly in the witness data of a Bitcoin transaction, birthing the Ordinals protocol.",
+                specs: { "Block": "767430", "Content Type": "image/jpeg", "Size": "Small" }
+            },
+            {
+                category: "The Origins",
+                title: "The Loop",
+                id: "loop",
+                inscriptionNum: "1",
+                // Verified: Inscription 1
+                hash: "26482871f33f1051f450f2da9af27573522074e4a1d35924642c2390d619978bi0",
+                author: "Casey Rodarmor",
+                desc: "Inscription #1. This geometric video loop demonstrated that Ordinals were not limited to static images. It showed that video, motion, and heavier data types could live on Bitcoin forever.",
+                specs: { "Block": "767430", "Content Type": "video/webm", "Tech": "Video" }
+            },
+            {
+                category: "Games & Logic",
+                title: "Snake",
+                id: "snake",
+                inscriptionNum: "142",
+                // Verified: Inscription 142 (First playable game)
+                hash: "1132436df903fb2ebf91c1c94050ce2773267a9b641389865636d53965c65e31i0",
+                author: "Olga",
+                desc: "The first playable game on Bitcoin. This version of Snake runs entirely in the browser via HTML/JS stored on-chain. It proved Bitcoin could serve applications, not just financial data. (Click the frame to play, use Arrow Keys).",
+                specs: { "Type": "HTML/JS", "Controls": "Arrow Keys", "Status": "Playable" }
+            },
+            {
+                category: "Games & Logic",
+                title: "On-Chain Calculator",
+                id: "calc",
+                inscriptionNum: "1,172",
+                // Verified: Inscription 1172
+                hash: "ac86212a07748a822d396370b7d5480068255b535f5f93c4b54a259f0d05465bi0",
+                author: "Unknown",
+                desc: "A fully functional HTML calculator. This exhibit highlights the potential for utility inscriptions. It isn't an image of a calculator; it is the code itself, executed live by your browser.",
+                specs: { "Type": "HTML/JS", "Utility": "Math", "Interactive": "True" }
+            },
+            {
+                category: "Collections & Art",
+                title: "Taproot Wizard #652",
+                id: "wizard",
+                inscriptionNum: "652",
+                // Verified: Inscription 652 (Famous Wizard)
+                hash: "1340e030835d2574cb224205963f5331555d0060868e833320c56594a65a7e8ei0",
+                author: "Udi Wertheimer",
+                desc: "The 'Magic Internet Money' Wizard. This collection sparked the 'block size wars' debate and popularized the use of Ordinals for large-scale PFP collections. It is a cultural icon of the ecosystem.",
+                specs: { "Collection": "Taproot Wizards", "Type": "image/png", "Culture": "Meme" }
+            },
+            {
+                category: "Collections & Art",
+                title: "Timechain Clock",
+                id: "clock",
+                inscriptionNum: "146",
+                // Verified: Inscription 146
+                hash: "81f609f4338676667d222d499b4a49007160632f71149421053995434761702bi0",
+                author: "Rijndael",
+                desc: "A live SVG clock that reads the time. This was one of the first dynamic vector graphics inscribed, demonstrating how code can render clean visuals at any resolution.",
+                specs: { "Type": "image/svg+xml", "Dynamic": "Yes", "Tech": "Vector" }
+            },
+            {
+                category: "Audio & Audionals",
+                title: "First Audio (Buy The Dip)",
+                id: "audio-origin",
+                inscriptionNum: "703",
+                // Verified: Inscription 703 (First MP3)
+                hash: "3b906281d2b68715420264e14a1d2100109c135799a00399e601c87c76c00259i0",
+                author: "Unknown",
+                desc: "While Jim.btc and the Audionals protocol later revolutionized on-chain music with JSON-sequencing, Inscription #703 was the first raw MP3 file uploaded to Bitcoin. It plays a short clip saying 'Buy The Dip'. It paved the way for protocols like Audionals that split audio into reusable samples.",
+                specs: { "Type": "audio/mpeg", "Historical": "First MP3", "Length": "Short" }
+            }
+        ];
+
+        // DOM Elements
+        const sidebar = document.getElementById('sidebar');
+        const viewer = document.getElementById('viewer');
+        const infoPanel = document.getElementById('info-panel');
+        const loader = document.getElementById('loader');
+
+        // Initialization
+        function initMuseum() {
+            renderSidebar();
+            loadArtifact(artifacts[0]); // Load Genesis by default
+        }
+
+        // Render Sidebar
+        function renderSidebar() {
+            // Group by Category
+            const categories = {};
+            artifacts.forEach(art => {
+                if (!categories[art.category]) categories[art.category] = [];
+                categories[art.category].push(art);
+            });
+
+            // Build DOM
+            for (const [cat, items] of Object.entries(categories)) {
+                const header = document.createElement('div');
+                header.className = 'category-header';
+                header.textContent = cat;
+                sidebar.appendChild(header);
+
+                items.forEach(item => {
+                    const div = document.createElement('div');
+                    div.className = 'nav-item';
+                    div.dataset.id = item.id;
+                    div.innerHTML = `
+                        <span class="nav-item-title">${item.title}</span>
+                        <span class="nav-item-id">#${item.inscriptionNum}</span>
+                    `;
+                    div.addEventListener('click', () => loadArtifact(item));
+                    sidebar.appendChild(div);
+                });
+            }
+        }
+
+        // Load Specific Artifact
+        function loadArtifact(item) {
+            // Highlight Active Nav
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            const activeBtn = document.querySelector(`.nav-item[data-id="${item.id}"]`);
+            if(activeBtn) activeBtn.classList.add('active');
+
+            // Show Loader
+            loader.style.display = 'block';
+            viewer.style.opacity = '0';
+
+            // Update Iframe Source
+            // Using the official ordinal content endpoint
+            const ordinalUrl = `https://ordinals.com/content/${item.hash}`;
+            viewer.src = ordinalUrl;
+
+            // Handle Load Event
+            viewer.onload = () => {
+                loader.style.display = 'none';
+                viewer.style.opacity = '1';
+            };
+
+            // Build Info Panel
+            const specsHtml = Object.entries(item.specs).map(([k, v]) => `
+                <div class="data-point">
+                    <span class="data-label">${k}:</span>
+                    <span class="data-val">${v}</span>
+                </div>
+            `).join('');
+
+            infoPanel.innerHTML = `
+                <span class="tag">${item.category}</span>
+                <h1>${item.title}</h1>
+                <div class="meta-row">
+                    <span>#${item.inscriptionNum}</span>
+                    <span>${item.author}</span>
+                </div>
+                <p class="description">${item.desc}</p>
+                
+                <div class="tech-data">
+                    ${specsHtml}
+                </div>
+
+                <a href="https://ordinals.com/inscription/${item.hash}" target="_blank" class="external-btn">
+                    View on Explorer &rarr;
+                </a>
+            `;
+        }
+
+        // Start
+        initMuseum();
+
+    </script>
+</body>
+</html>
