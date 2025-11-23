@@ -1,0 +1,923 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Museum of Bitcoin Ordinals: Educational Edition</title>
+    <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --bg-panel: #121212;
+            --text-main: #e0e0e0;
+            --text-muted: #9ca3af;
+            --accent: #f7931a;
+            --accent-hover: #ffb04d;
+            --border: #333;
+            --font-main: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            --font-mono: "Courier New", Courier, monospace;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-main);
+            height: 100vh;
+            display: flex;
+            overflow: hidden;
+        }
+
+        /* Sidebar */
+        .sidebar {
+            width: 340px;
+            background-color: var(--bg-panel);
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow-y: auto;
+            flex-shrink: 0;
+        }
+
+        .brand {
+            padding: 24px;
+            font-size: 1.2rem;
+            font-weight: 800;
+            color: var(--accent);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            letter-spacing: -0.5px;
+        }
+
+        .collection-group { padding: 15px 0; border-bottom: 1px solid #222; }
+
+        .group-title {
+            padding: 5px 24px 10px;
+            font-size: 0.7rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            font-weight: 700;
+            opacity: 0.8;
+        }
+
+        .nav-item {
+            padding: 12px 24px;
+            cursor: pointer;
+            transition: all 0.2s;
+            font-size: 0.85rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            color: #bbb;
+        }
+
+        .nav-item span:first-child {
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            max-width: 180px;
+        }
+
+        .nav-item:hover { background-color: #1f1f1f; color: #fff; }
+        .nav-item.active { 
+            background-color: #2a2a2a; 
+            border-left: 4px solid var(--accent); 
+            color: white; 
+            padding-left: 20px; 
+        }
+
+        /* Main Content */
+        .main-stage {
+            flex-grow: 1;
+            display: flex;
+            flex-direction: row;
+            height: 100%;
+        }
+
+        /* Viewer Area (Left) */
+        .viewer-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background-color: #050505;
+            position: relative;
+            padding: 20px;
+            border-right: 1px solid var(--border);
+            
+            /* Modern Grid Background */
+            background-image: 
+                linear-gradient(rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                linear-gradient(90deg, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            background-size: 40px 40px;
+        }
+
+        .artifact-frame-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            position: relative;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,0.5);
+        }
+
+        /* Media Handling */
+        iframe, img.artifact-media {
+            width: 100%;
+            height: 100%;
+            border: none;
+            display: block;
+        }
+
+        /* CRITICAL: This ensures large images (like Genesis Cat) shrink to fit */
+        img.artifact-media {
+            object-fit: contain;
+            max-height: 90vh;
+            max-width: 90vw;
+        }
+
+        /* Full Frame Fix for Legacy Art */
+        .full-frame-fix iframe {
+            width: 100%;
+            height: 100%;
+            position: absolute;
+            top: 0; left: 0; bottom: 0; right: 0;
+        }
+
+        /* Pixel Art Specific Handling */
+        .pixelated {
+            image-rendering: pixelated;
+            image-rendering: -moz-crisp-edges;
+            image-rendering: crisp-edges;
+        }
+
+        .viewer-controls {
+            margin-top: 20px;
+            display: flex;
+            gap: 15px;
+            align-items: center;
+            background: rgba(20, 20, 20, 0.95);
+            padding: 10px 20px;
+            border-radius: 50px;
+            border: 1px solid #333;
+            z-index: 10;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        button {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: var(--font-mono);
+            text-transform: uppercase;
+            font-size: 0.75rem;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+
+        button:hover { border-color: var(--accent); color: var(--accent); }
+        button:disabled { opacity: 0.3; cursor: not-allowed; }
+        
+        .toggle-btn { background: #222; border-color: #444; }
+        .toggle-btn.active { background: var(--accent); color: #000; border-color: var(--accent); }
+
+        /* Info Panel (Right) */
+        .info-panel {
+            width: 450px;
+            background-color: var(--bg-dark);
+            overflow-y: auto;
+            padding: 40px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            border-left: 1px solid #222;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 6px 10px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            background: #1a1a1a;
+            color: var(--accent);
+            width: fit-content;
+            margin-bottom: 15px;
+            border: 1px solid #333;
+        }
+
+        h1 { font-size: 2rem; margin-bottom: 8px; line-height: 1.1; font-weight: 700; letter-spacing: -1px;}
+        h2 { font-size: 1.1rem; color: var(--text-muted); font-weight: normal; margin-bottom: 25px; font-family: var(--font-mono); }
+
+        .description { 
+            line-height: 1.7; 
+            font-size: 0.95rem; 
+            color: #d0d0d0; 
+            margin-bottom: 20px;
+        }
+
+        .metadata-grid {
+            display: grid;
+            grid-template-columns: 1fr;
+            gap: 15px;
+            margin-top: 30px;
+            padding-top: 30px;
+            border-top: 1px solid var(--border);
+        }
+
+        .meta-item strong { display: block; color: var(--text-muted); font-size: 0.7rem; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 1px;}
+        .meta-item span { font-family: var(--font-mono); font-size: 0.85rem; word-break: break-all; color: #fff; }
+
+        a.ord-link { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); transition: color 0.2s;}
+        a.ord-link:hover { color: #fff; border-color: #fff;}
+
+        .loading-text {
+            position: absolute;
+            color: #666;
+            z-index: -1;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+        }
+
+        /* Responsive */
+        @media (max-width: 1100px) {
+            .main-stage { flex-direction: column; overflow-y: auto; }
+            .viewer-container { height: 50vh; flex: none; border-right: none; border-bottom: 1px solid var(--border); }
+            .info-panel { width: 100%; height: auto; }
+            .sidebar { display: none; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="sidebar">
+        <div class="brand">
+            <span>ORDINALS MUSEUM</span>
+        </div>
+        <div id="nav-container"></div>
+    </div>
+
+    <div class="main-stage">
+        <div class="viewer-container">
+            <div id="wrapper" class="artifact-frame-wrapper">
+                <div class="loading-text">Loading Artifact...</div>
+            </div>
+            
+            <div class="viewer-controls">
+                <button id="btn-prev">← Prev</button>
+                <span id="counter" style="font-family: var(--font-mono); font-size: 0.8rem; color: #fff;"></span>
+                <button id="btn-next">Next →</button>
+                <div style="width: 1px; height: 20px; background: #444; margin: 0 10px;"></div>
+                <button id="btn-mode" class="toggle-btn" title="Switch Viewer Mode">Mode: Auto</button>
+            </div>
+        </div>
+
+        <div class="info-panel" id="info-panel">
+            <div>
+                <span class="badge" id="collection-badge">Collection</span>
+                <h1 id="artifact-title">Title</h1>
+                <h2 id="artifact-number">#0</h2>
+                <div class="description" id="artifact-desc"></div>
+                
+                <div class="metadata-grid">
+                    <div class="meta-item">
+                        <strong>Inscription ID</strong>
+                        <span id="meta-id">...</span>
+                    </div>
+                    <div class="meta-item">
+                        <strong>File Type</strong>
+                        <span id="meta-type">...</span>
+                    </div>
+                    <div class="meta-item">
+                        <strong>On-Chain Source</strong>
+                        <span><a id="meta-link" href="#" target="_blank" class="ord-link">View on Ordinals.com</a></span>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+<script>
+const database = [
+    // --- 1. NodeMonkes ---
+    {
+        group: "Blue Chip Collections",
+        collection: "NodeMonkes",
+        title: "NodeMonke #83526",
+        number: 83526,
+        id: "053c67c5b118511203e89541386bd37dac451c0e41ea7ae82f065b805b2ae703i0",
+        type: "image",
+        pixelated: true,
+        desc: "NodeMonkes are widely considered the premier 10k PFP on Bitcoin. Unlike early ports from Ethereum (like Punks), NodeMonkes were created specifically for Bitcoin with a distinct, abstract, pixel-art aesthetic. The collection honors the 'node' infrastructure of Bitcoin and helped solidify the trend of 'Bitcoin Native' art styles."
+    },
+    {
+        group: "Blue Chip Collections",
+        collection: "NodeMonkes",
+        title: "NodeMonke #83528",
+        number: 83528,
+        id: "b099cd5b41a50c4af026c99e08cabbd7b611a8879aa90dcdf9f768dd8f77e605i0",
+        type: "image",
+        pixelated: true,
+        desc: "Another prime example of the NodeMonkes collection. Launched by an anonymous team, the project emphasizes 'provenance'—referring to the specific inscriptions being etched on early or significant Satoshis. This specific monke features the characteristic blocky design that has become a status symbol in the Ordinals ecosystem."
+    },
+
+    // --- 2. Bitcoin Puppets ---
+    {
+        group: "Blue Chip Collections",
+        collection: "Bitcoin Puppets",
+        title: "Bitcoin Puppet #53105615",
+        number: 53105615,
+        id: "dc87ce1caca5ab3449daf60ea5363be107ce31fb091916b8063a7974bd5997b0i0",
+        type: "image",
+        pixelated: true,
+        desc: "Bitcoin Puppets represent the chaotic, 'grimy', and irreverent side of Bitcoin culture. Drawn in MS Paint style, they reject the polished corporate aesthetic of typical NFTs. The Puppets community is famous for its high energy and meme culture ('OPIUM'). They are not just art but a statement against institutionalization."
+    },
+    {
+        group: "Blue Chip Collections",
+        collection: "Bitcoin Puppets",
+        title: "Bitcoin Puppet #53105622",
+        number: 53105622,
+        id: "db52aedec9ed58d640639d84447eccac766e8d591d8d76c69785efb462bc3240i0",
+        type: "image",
+        pixelated: true,
+        desc: "Created by 'Le Puppeteer', this collection has spawned a massive ecosystem, including the Rune Pups (airdropped tokens on the Runes protocol). The monkey/puppet motifs are deliberately crude, celebrating the raw, permissionless nature of the blockchain."
+    },
+
+    // --- 3. Quantum Cats ---
+    {
+        group: "Blue Chip Collections",
+        collection: "Quantum Cats",
+        title: "Genesis Cat",
+        number: 54332480,
+        id: "30a89b436feef5a8cdb2ee4c77550dd795f82d58061bb8980b4d266debb0f147i0",
+        type: "image", /* FIXED: Changed to image to allow object-fit scaling */
+        pixelated: false,
+        desc: "The Quantum Cats are a project by Taproot Wizards created to promote 'OP_CAT', a disabled opcode in Bitcoin that, if restored, would enable smart contracts (covenants) on Bitcoin. This Genesis Cat is a historical piece of political art, advocating for technical upgrades to the Bitcoin core network."
+    },
+    {
+        group: "Blue Chip Collections",
+        collection: "Quantum Cats",
+        title: "Quantum Cat Variant #1",
+        number: 53785861,
+        id: "4b31771df21656d2a77e6fa18720a6dd94b04510b9065a7c67250d5c89ad2079i1",
+        type: "html",
+        desc: "Quantum Cats utilized 'Evolving Inscriptions'. The artwork can change or 'evolve' over time using recursive techniques, where the inscription code checks specific conditions (like block height) to determine which image to display. This showcases dynamic on-chain art."
+    },
+    {
+        group: "Blue Chip Collections",
+        collection: "Quantum Cats",
+        title: "Quantum Cat Variant #5",
+        number: 53785865,
+        id: "4b31771df21656d2a77e6fa18720a6dd94b04510b9065a7c67250d5c89ad2079i5",
+        type: "html",
+        desc: "Another variant of the Quantum Cats. The project raised significant funds to support 'Bitcoin Renaissance'—a movement to build more utility on Bitcoin Layer 1. The imagery of the dead/alive cat references Schrödinger's cat, symbolizing the potential states of Bitcoin's future utility."
+    },
+
+    // --- 4. Bitcoin Frogs ---
+    {
+        group: "Blue Chip Collections",
+        collection: "Bitcoin Frogs",
+        title: "Bitcoin Frog #395511",
+        number: 395511,
+        id: "bb56c09acb0a47e57e888d1af0e4793a5354701b9e913e5a1f90acdf52c1f139i0",
+        type: "image",
+        pixelated: true,
+        desc: "Bitcoin Frogs was one of the first 10k collections to successfully mint out and gain massive volume on Ordinals. While they resemble the 'Pepe' meme, they are distinct art assets. They played a crucial role in proving the market demand for collectibles on Bitcoin during the early 'Inscriptions Era'."
+    },
+    {
+        group: "Blue Chip Collections",
+        collection: "Bitcoin Frogs",
+        title: "Bitcoin Frog #395742",
+        number: 395742,
+        id: "980049220f76e88588897edc2f2c7e41dffce04c47b9054aa964f99006b85100i0",
+        type: "image",
+        pixelated: true,
+        desc: "Frogs are notable for their clean vector-like art style and community organization. They have been leaders in cross-chain adoption, bringing many Ethereum users over to Bitcoin wallets like Xverse and Unisat."
+    },
+
+    // --- 5. OMB ---
+    {
+        group: "Blue Chip Collections",
+        collection: "Ordinals Maxi Biz",
+        title: "OMB #111913",
+        number: 111913,
+        id: "c591abf263fea77f2c824412d906f0edb02d4e6181f6b8c72edc297b85ab4911i0",
+        type: "image",
+        pixelated: false,
+        desc: "Ordinals Maxi Biz (OMB) is a project closely associated with the 'zk-shark' and Udi Wertheimer sphere. The art style is deliberately crude, mocking the 'maximalist' culture while simultaneously being a part of it. Many OMBs are inscribed on 'Block 9' Satoshis—some of the oldest Bitcoin in existence, mined by Satoshi Nakamoto in 2009."
+    },
+    {
+        group: "Blue Chip Collections",
+        collection: "Ordinals Maxi Biz",
+        title: "OMB #111915",
+        number: 111915,
+        id: "0e773e1440f0b07db9610f87462e1a19c74770526b8b2e29202cb3e6a8fca126i0",
+        type: "image",
+        pixelated: false,
+        desc: "Three distinct collections usually fall under OMB (Red, Blue, Green eyes). They represent an exclusive club of high-conviction Ordinal holders. The project explores the intersection of rare Satoshis (Rare Sats) and PFP art."
+    },
+
+    // --- 6. Pizza Ninjas ---
+    {
+        group: "Interactive & Tech",
+        collection: "Pizza Ninjas",
+        title: "Pizza Ninja #56246169",
+        number: 56246169,
+        id: "39399e536443446eda3f26ce7038178ec3b69157f38eaed19caea4614aabaf62i0",
+        type: "html",
+        desc: "Pizza Ninjas by the Ninjalerts team is a technological marvel. They inscribed a full Super Nintendo (SNES) emulator on Bitcoin. The art is recursive—meaning the image is constructed from code referencing other inscriptions. This reduces fees and allows for high fidelity."
+    },
+    {
+        group: "Interactive & Tech",
+        collection: "Pizza Ninjas",
+        title: "Pizza Ninja #56122947",
+        number: 56122947,
+        id: "9ad43b591e58b23d8550dfdae431432b6ea3a7079d09ef80ee1554c5a3f8d543i0",
+        type: "html",
+        desc: "The Pizza Ninjas reflect the 'Pizza Day' history of Bitcoin (the first real-world purchase). Users can actually play games inside the inscription via the embedded emulator, pushing the boundary of what an NFT is: from a static image to a functional application."
+    },
+
+    // --- 7. RSIC ---
+    {
+        group: "Interactive & Tech",
+        collection: "RSIC Metaprotocol",
+        title: "RSIC #56718388",
+        number: 56718388,
+        id: "f7e51efdc501516efaaf27634ae71382d621a607123c2ab32174f3dd5001ea93i2",
+        type: "html",
+        desc: "RSIC (Rune Specific Inscription Circuits) was a gamified airdrop campaign. Holding these inscriptions 'mined' tokens for the then-upcoming Runes protocol. The inscription features changing symbols (Runes) and visualizes the mining process."
+    },
+    {
+        group: "Interactive & Tech",
+        collection: "RSIC Metaprotocol",
+        title: "RSIC #56718390",
+        number: 56718390,
+        id: "f7e51efdc501516efaaf27634ae71382d621a607123c2ab32174f3dd5001ea93i4",
+        type: "html",
+        desc: "This project introduced the concept of 'Metaprotocols'—using Ordinals not just as art, but as machines to distribute fungible tokens. It set the standard for pre-Rune marketing campaigns."
+    },
+
+    // --- 8. OCM ---
+    {
+        group: "Interactive & Tech",
+        collection: "OnChainMonkeys",
+        title: "OCM Genesis -263423",
+        number: -263423,
+        id: "4e15c01681e9d82dddf7909daa5f23fc96a212119ded93c55e93c086a1a8fea6i657",
+        type: "html",
+        desc: "OnChainMonkey (OCM) began on Ethereum but migrated powerfully to Bitcoin. They are pioneers in 'Recursion'. The negative inscription number indicates a cursed inscription (created before the indexer recognized certain types of transactions), which are now canonized. OCM uses p5.js and compression to store 3D data efficiently."
+    },
+    {
+        group: "Interactive & Tech",
+        collection: "OnChainMonkeys",
+        title: "OCM Genesis -263399",
+        number: -263399,
+        id: "4e15c01681e9d82dddf7909daa5f23fc96a212119ded93c55e93c086a1a8fea6i633",
+        type: "html",
+        desc: "This item demonstrates high-efficiency coding. The entire collection is generated from a small amount of code inscribed on-chain, rather than uploading 10,000 individual JPEGs. This saves block space and ensures the art lives as long as Bitcoin exists."
+    },
+
+    // --- 9. Ink ---
+    {
+        group: "Art Collections",
+        collection: "Ink",
+        title: "Ink #66120395",
+        number: 66120395,
+        id: "696952619460d5b5ebad0cfff81084f4db30fab52e48a13ce046389eb1572113i0",
+        type: "html",
+        desc: "Ink is a distinct brand within the ecosystem, known for its hand-drawn aesthetic and vibrant orange branding (matching the Bitcoin logo). It focuses on storytelling and building a recognizable IP within the Ordinals space."
+    },
+    {
+        group: "Art Collections",
+        collection: "Ink",
+        title: "Ink #66120406",
+        number: 66120406,
+        id: "696952619460d5b5ebad0cfff81084f4db30fab52e48a13ce046389eb1572113i11",
+        type: "html",
+        desc: "The Ink collection moves away from pixel art, offering a more fluid, illustrative style. It represents the diversification of artistic mediums being stored on the blockchain."
+    },
+
+    // --- 10. Bitcoin Wizards ---
+    {
+        group: "Art Collections",
+        collection: "Bitcoin Wizards",
+        title: "Bitcoin Wizard #139898",
+        number: 139898,
+        id: "0623d9b1ee252ccc57507b93615a5c3d221e184826358ae02888cdcf6a40c406i0",
+        type: "image",
+        pixelated: true,
+        desc: "Created by Mavensbot, these wizards are the original 'Magic Internet Money' characters used in the famous Reddit ad that promoted Bitcoin in 2013. By inscribing them, the community canonized a piece of internet history directly onto the blockchain."
+    },
+    {
+        group: "Art Collections",
+        collection: "Bitcoin Wizards",
+        title: "Bitcoin Wizard #139899",
+        number: 139899,
+        id: "a51db697e257b0c6775f3a57f13cbf5b00dae2840b05be95bd201ca35f54f926i0",
+        type: "image",
+        pixelated: true,
+        desc: "This collection bridges the gap between 2013 Bitcoin culture and the modern 2023/2024 Ordinals movement. It serves as a digital heritage project."
+    },
+
+    // --- 11. Audionals ---
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "First Base64 Audio",
+        number: 12435054,
+        id: "0b8eff3f39f4095d0f129bb8dd75f29159f8725c7e66046bf41f70ebb9f60d93i0",
+        type: "html",
+        desc: "A landmark innovation by **Jim.btc**. Before this, storing audio was inefficient. This inscription proved that Base64 encoded audio text could be rendered as media by the browser. It laid the groundwork for the Audionals protocol, which allows musicians to store immutable 'stems' (isolated tracks) on-chain."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "First Audional Player",
+        number: 12206104,
+        id: "7d058415fb8b6d35fddd375208648254bcb0e4e470b4b25da3dac32d8b04b935i0",
+        type: "html",
+        desc: "This is the 'read head' for the blockchain tape. Created by **Jim.btc**, this code decodes Base64 data from other inscriptions and plays it. This separation of player (code) and song (data) allows for efficient, collaborative music creation, where multiple songs can reference the same audio sample without re-uploading it."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "Step Sequencer Engine",
+        number: 14426517,
+        id: "e990695d00d326498207acbda321657aa16b8e5731597b6cdd94b1a64a6da8e4i0",
+        type: "html",
+        desc: "A recursive Digital Audio Workstation (DAW) inscribed on Bitcoin. It enables users to sequence beats and melodies using audio samples stored in other inscriptions. This fulfills Jim.btc's vision of a decentralized studio where the tools and the sounds live permanently on the ledger."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "First Test Sequencer",
+        number: 13078824,
+        id: "09e0b0c471a6a89c1385c67016e5e6a97f6a6df38207c2d79da67cadf0774368i0",
+        type: "html",
+        desc: "The prototype for the sequencer engine. It demonstrated that interactive music creation tools could live inside a Bitcoin block."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "First Recursive JSON Song",
+        number: 21048916,
+        id: "4521e117df5bf3f9495f22e2b453d1d379b2432ac7ec56403d46b35474e490eai0",
+        type: "html",
+        desc: "A JSON text file that becomes a song when interpreted by the player. It references samples by their inscription IDs, arranging them in time."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "I Love Cheese (Song)",
+        number: 28712154,
+        id: "cea4d582a419e6c7561af335ed08b6b47384d6f2c25d0f682c3019c7f2a305e4i0",
+        type: "html",
+        desc: "The first recursive Audional song. A humorous title for a serious technical achievement: a full musical composition constructed entirely from on-chain references."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "Color Remix",
+        number: 30908005,
+        id: "70a1f609af492aed8dcc6eeab5f496b44f60c994c682aaf4530e7c29a94fb4fai0",
+        type: "html",
+        desc: "An evolution of the Audional visualizer, adding color and interactivity. It represents the visual component of the Audionals protocol, making on-chain music an audiovisual experience."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "First Synth Inscription",
+        number: 35259459,
+        id: "598a448d0e134e90855e6fba03d7b2e2610423f185ba513d3c1a8022a9d0d591i0",
+        type: "html",
+        desc: "Moving beyond samples, this inscription generates audio through synthesis (mathematical waveforms) directly in the browser. This proves that Bitcoin can host not just recordings, but the instruments themselves."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "Opus of Efficiency",
+        number: 95768432,
+        id: "d2dcd06a64ccd36f43f451ae47a8b4d9b7b05214264ad7a19680e38c671cd924i0",
+        type: "html",
+        desc: "A milestone by **Jim.btc** demonstrating the first high-resolution Opus encoded audio on Bitcoin. The Opus codec is crucial for the future of on-chain music because of its superior compression efficiency, allowing near-studio quality audio to fit within the strict 4MB block limit of Bitcoin. It paves the way for high-fidelity decentralized music streaming."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Audionals",
+        title: "Infinite Remix",
+        number: 77741750,
+        id: "a5e9d3fe0cb8e3378e478b2c2ae1f222d01536f069ce4d42ac2c9b7989b74a75i0",
+        type: "html",
+        desc: "A recursive masterpiece that pulls audio data from other inscriptions to create a continuously evolving remix. It fulfills the promise of the **Audionals Protocol**: a future where music is not a static file, but a living, user-participatory organism. By referencing existing stems on-chain, it generates infinite unique versions without bloating the blockchain."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Songs (Truth/Freedom)",
+        title: "TRUTH",
+        number: 72602366,
+        id: "9f2ec8bcab1d134437e5d2f87e435c8141011125e6ea940c292c242fb4660109i0",
+        type: "html",
+        desc: "A recursive song produced using the Audionals on-chain DAW. Symbol: truth."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Songs (Truth/Freedom)",
+        title: "FREEDOM",
+        number: 73172817,
+        id: "decf97659d9a13ed8ecdae0752d0a76ec822d13c8ddea6db39cbb9331a4ac0dfi1",
+        type: "html",
+        desc: "Another produced track using the 'Freedom to Transact' symbol. These tracks serve as demos for the capability of decentralized music composition."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Songs (Truth/Freedom)",
+        title: "I Love Cheese (Remix)",
+        number: 73805227,
+        id: "4f6f53c59e8ed57b495f273a263b04d94c82c31f2172856959f39d6745000003i0",
+        type: "html",
+        desc: "A remix or variant of the original I Love Cheese track, showing how stems can be reused and remixed on-chain."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Songs (Truth/Freedom)",
+        title: "On Day One / Free Ross",
+        number: 0,
+        id: "9052cc9fbaf147a44f1c7043477b97c44a07de2d69250cf1fb345a771ea48088i0",
+        type: "html",
+        desc: "A recursive song created using the Audional Sequencer, dedicated to Ross Ulbricht (Free Ross), a common cause within the libertarian Bitcoin community."
+    },
+    {
+        group: "Audionals & Music",
+        collection: "Other Music",
+        title: "French Montana - Mac & Cheese",
+        number: 64333690,
+        id: "3eb5b8f249759c7a3fa6683a7f51d288af0aeffa847904a18c0fb382ca46c1b2i0",
+        type: "html",
+        desc: "The 'Mac & Cheese 5' inscription. This is a massive 3.96MB file that took up an entire Bitcoin block. It was controversial for crowding out other transactions but demonstrated that the Bitcoin blockchain could host entire commercial music albums."
+    },
+
+    // --- 12. Gaming ---
+    {
+        group: "Gaming & Interactive",
+        collection: "Gaming",
+        title: "DOOM",
+        number: 466,
+        id: "521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79dai0",
+        type: "html",
+        desc: "A fully playable clone of the classic FPS 'DOOM'. Inscribed incredibly early (Inscription #466), it uses WebAssembly (WASM) to run the game inside the browser. This was a pivotal moment proving Ordinals could be interactive software, not just static images."
+    },
+
+    // --- Timeline ---
+    {
+        group: "Historical Timeline",
+        collection: "The Firsts",
+        title: "Inscription #0",
+        number: 0,
+        id: "6fb976ab49dcec017f1e201e84395983204ae1a7c2abf7ced0a85d692e442799i0",
+        type: "image",
+        pixelated: true,
+        desc: "The Genesis Inscription. Created by **Casey Rodarmor** on Dec 14, 2022. The image is a crude, pixelated black skull with white markings. It represents the 'memento mori' of the old financial system and the birth of immutable digital artifacts on Bitcoin."
+    },
+    {
+        group: "Historical Timeline",
+        collection: "The Firsts",
+        title: "Bitcoin Shroom #19",
+        number: 19,
+        id: "9163af650dcdeeeb9a7e1f47f693b51921dce3bdf2475e69360ec83d9956f5d7i0",
+        type: "image",
+        pixelated: true,
+        desc: "Part of the **Bitcoin Shrooms** collection by the anonymous artist **Shroomtoshi**. Inscribed early (starting at #19), this 210-piece collection encapsulates Bitcoin's history and culture (memes, figures, concepts) in 8-bit pixel art. It is widely considered the first proper 'collection' on Ordinals."
+    },
+    {
+        group: "Historical Timeline",
+        collection: "The Firsts",
+        title: "The Bitcoin Shanty",
+        number: 73,
+        id: "ad99172fce60028406f62725b91b5c508edd95bf21310de5afeb0966ddd89be3i0",
+        type: "html",
+        desc: "The first audio inscription on Bitcoin. A short sea shanty loop. It proved that Bitcoin could store sound, paving the way for the Audionals protocol and full songs later."
+    },
+    {
+        group: "Historical Timeline",
+        collection: "Generative Art",
+        title: "Ornate Ms",
+        number: 294,
+        id: "e7915ae9daeafcc99135c8704b2c00fbd33a928248cd4ae48a2d1c6582222f01i0",
+        type: "html",
+        desc: "An early example of generative art on Bitcoin. The collection features M-shaped figures that resemble the Metallica logo or abstract architectural forms. Its creator and precise algorithm remain one of the early mysteries of the chain."
+    },
+    {
+        group: "Historical Timeline",
+        collection: "Generative Art",
+        title: "Toruses",
+        number: 341,
+        id: "85dc48c7097323397366f03a6bfc10d643b68147f64fcfd25b157acd0e38a6fdi0",
+        type: "html",
+        fullFrame: true,
+        desc: "A mysterious set of rotating torus shapes. These esoteric animations were among the first to test the browser's rendering capabilities within the Ordinals sandbox. The minimalist, mathematical aesthetic set a tone for much of the generative art that followed."
+    },
+    {
+        group: "Historical Timeline",
+        collection: "Taproot Wizards",
+        title: "Taproot Wizard #652",
+        number: 652,
+        id: "0301e0480b374b32851a9462db29dc19fe830a7f7d7a88b81612b9d42099c0aei0",
+        type: "image",
+        pixelated: true,
+        desc: "The inscription that arguably started the 'movement'. Udi Wertheimer inscribed this wizard (drawn by Mavensbot) to provoke the Bitcoin maximalists. It symbolizes the 'Magic Internet Money' returning to Bitcoin and the utilization of the Taproot upgrade."
+    },
+    {
+        group: "Historical Timeline",
+        collection: "Milestones",
+        title: "Block Size & Capacity",
+        number: 10000,
+        id: "5cb45900adcc0bd5f6aed90554d261cbe4896cafa96413bca0f7e8773b23509ci0",
+        type: "image",
+        pixelated: false,
+        desc: "Inscription #10,000. A clean round number that marked the end of the 'early' era and the beginning of mass adoption. By this point, wallet infrastructure was starting to be built."
+    },
+    {
+        group: "Historical Timeline",
+        collection: "Milestones",
+        title: "Large File Era",
+        number: 2500000,
+        id: "d8022155ea3de3e03710cf072bc990eddac6053017f367d1023c0911254ed425i0",
+        type: "image",
+        pixelated: false,
+        desc: "Around the 2.5M mark, larger file sizes became more common as miners began selling 'space' in blocks specifically for large art or video files."
+    },
+    {
+        group: "Historical Timeline",
+        collection: "Bridging",
+        title: "On The Edge Of Oblivion",
+        number: 9978,
+        id: "f0d35042249166706470873166f2617c639f0e3a06362600a43bf31b4921025ai0",
+        type: "html",
+        desc: "A significant piece of ETH-to-BTC bridging history. This artwork by **Rhett Mankind** represents the migration of digital artists from the ephemeral storage of Ethereum/IPFS to the permanent storage of Bitcoin. It connects the two cultures."
+    },
+    {
+        group: "Historical Timeline",
+        collection: "Insignia",
+        title: "Insignia Art Start",
+        number: 7976,
+        id: "71bd54cc3ce51cdfac96999c9c830870b9c624286c12979be01ac92d6e200055i0",
+        type: "html",
+        desc: "Start of the Insignia Art collection (approx. 16 items). These are described as 'composable art primitives'. The minimalist shapes resemble military patches or guild marks, exploring how simple forms can carry weight and meaning in a permanent digital ledger."
+    }
+];
+
+// --- ENGINE ---
+
+let currentIndex = 0;
+let forceMode = null; 
+
+const wrapper = document.getElementById('wrapper');
+const title = document.getElementById('artifact-title');
+const number = document.getElementById('artifact-number');
+const desc = document.getElementById('artifact-desc');
+const metaId = document.getElementById('meta-id');
+const metaType = document.getElementById('meta-type');
+const metaLink = document.getElementById('meta-link');
+const collectionBadge = document.getElementById('collection-badge');
+const navContainer = document.getElementById('nav-container');
+const counter = document.getElementById('counter');
+const btnMode = document.getElementById('btn-mode');
+
+// Render Navigation
+function renderNav() {
+    const groups = {};
+    database.forEach((item, index) => {
+        if (!groups[item.group]) groups[item.group] = [];
+        groups[item.group].push({ ...item, originalIndex: index });
+    });
+
+    for (const [groupName, items] of Object.entries(groups)) {
+        const groupDiv = document.createElement('div');
+        groupDiv.className = 'collection-group';
+        
+        const titleDiv = document.createElement('div');
+        titleDiv.className = 'group-title';
+        titleDiv.innerText = groupName;
+        groupDiv.appendChild(titleDiv);
+
+        // Check if this group should display TITLES instead of Collections
+        const showTitle = groupName.includes("Audionals") || 
+                          groupName.includes("Songs") || 
+                          groupName.includes("Music") ||
+                          groupName.includes("Gaming") ||
+                          groupName.includes("Timeline");
+
+        items.forEach(item => {
+            const navItem = document.createElement('div');
+            navItem.className = 'nav-item';
+            
+            const label = showTitle ? item.title : item.collection;
+            
+            navItem.innerHTML = `<span>${label}</span> <span style="opacity:0.5">#${item.number}</span>`;
+            navItem.onclick = () => loadArtifact(item.originalIndex);
+            navItem.dataset.index = item.originalIndex;
+            groupDiv.appendChild(navItem);
+        });
+
+        navContainer.appendChild(groupDiv);
+    }
+}
+
+// Render Media
+function renderMedia(item) {
+    wrapper.innerHTML = '';
+    wrapper.className = 'artifact-frame-wrapper'; 
+    if (item.fullFrame) wrapper.classList.add('full-frame-fix');
+
+    const url = `https://ordinals.com/content/${item.id}`;
+    let mode = forceMode ? forceMode : item.type;
+
+    if (mode === 'image') {
+        const img = document.createElement('img');
+        img.src = url;
+        img.className = 'artifact-media';
+        if (item.pixelated) img.classList.add('pixelated');
+        
+        img.onerror = () => {
+            console.warn("Image load failed. Switching to Iframe fallback.");
+            forceMode = 'html';
+            renderMedia(item);
+        };
+
+        wrapper.appendChild(img);
+        btnMode.innerText = "Mode: Image";
+        btnMode.classList.remove('active');
+    } else {
+        const iframe = document.createElement('iframe');
+        iframe.src = url;
+        iframe.sandbox = "allow-scripts allow-same-origin allow-pointer-lock";
+        iframe.className = 'artifact-media';
+        wrapper.appendChild(iframe);
+        btnMode.innerText = "Mode: Live";
+        btnMode.classList.add('active');
+    }
+}
+
+// Load Artifact
+function loadArtifact(index) {
+    if (index < 0 || index >= database.length) return;
+    currentIndex = index;
+    const item = database[index];
+    
+    forceMode = null; 
+
+    title.innerText = item.title;
+    number.innerText = `Inscription #${item.number}`;
+    desc.innerHTML = item.desc; // Allow HTML in descriptions for bolding
+    metaId.innerText = item.id;
+    metaType.innerText = item.type.toUpperCase();
+    collectionBadge.innerText = item.collection;
+    metaLink.href = `https://ordinals.com/inscription/${item.id}`;
+    counter.innerText = `${currentIndex + 1} / ${database.length}`;
+
+    renderMedia(item);
+
+    document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+    const activeNav = document.querySelector(`.nav-item[data-index="${index}"]`);
+    if (activeNav) {
+        activeNav.classList.add('active');
+        activeNav.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+
+    document.getElementById('btn-prev').disabled = index === 0;
+    document.getElementById('btn-next').disabled = index === database.length - 1;
+}
+
+// Toggle Mode
+btnMode.onclick = () => {
+    const item = database[currentIndex];
+    const currentMode = forceMode ? forceMode : item.type;
+    forceMode = currentMode === 'image' ? 'html' : 'image';
+    renderMedia(item);
+};
+
+// Controls
+document.getElementById('btn-prev').onclick = () => loadArtifact(currentIndex - 1);
+document.getElementById('btn-next').onclick = () => loadArtifact(currentIndex + 1);
+
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'ArrowLeft') loadArtifact(currentIndex - 1);
+    if (e.key === 'ArrowRight') loadArtifact(currentIndex + 1);
+});
+
+// Init
+renderNav();
+loadArtifact(0);
+
+</script>
+</body>
+</html>

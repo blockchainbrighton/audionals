@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Museum of Ordinals</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chosen Palette: Tailwind Default (with Grays, Blues, and White) -->
+    <!-- Application Structure Plan: A two-column SPA. Left column is a persistent navigation list of all collections (the "exhibits"). Right column is the main content area. Selecting an exhibit loads its description and a "guided tour" module. This tour module features a large iframe viewer, a dedicated info "plaque" for details, and "Next/Previous" buttons. This structure is chosen for its high usability and intuitive "museum" metaphor, allowing users to browse the "wings" (collections) and then inspect individual "artifacts" (inscriptions) in a structured, guided manner. -->
+    <!-- Visualization & Content Choices: The primary "visualization" is the Ordinal content itself, rendered in an iframe. This is the most direct way to display diverse media (images, audio, interactive HTML) as requested. Report Info: Ordinal Inscription. Goal: Display artifact. Viz: Iframe. Interaction: Content is interactive (if HTML), user can also navigate between items. Justification: Directly fulfills the request to show all media types. The secondary info is textual (collection lore, item specifics). Goal: Inform/Contextualize. Viz: HTML text panel. Interaction: Read. Justification: Provides the "museum plaque" context essential for understanding. -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+        
+        .nav-button.active {
+            background-color: #F3F4F6; /* tailwind gray-100 */
+            font-weight: 600;
+            color: #1F2937; /* tailwind gray-800 */
+        }
+        .nav-button {
+            transition: all 0.15s ease-in-out;
+        }
+        .nav-button:hover {
+            background-color: #F9FAFB; /* tailwind gray-50 */
+        }
+    </style>
+</head>
+<body class="bg-gray-100 text-gray-900 antialiased">
+
+    <div class="flex h-screen">
+        
+        <!-- Left Navigation Panel -->
+        <nav id="nav-panel" class="w-full md:w-1/4 h-screen bg-white shadow-lg overflow-y-auto p-4 md:p-6 flex-shrink-0">
+            <h1 class="text-2xl font-bold mb-5 text-gray-800">Museum of Ordinals</h1>
+            <ul id="collection-list" class="space-y-1">
+                <!-- Navigation items will be dynamically populated by JavaScript -->
+            </ul>
+        </nav>
+
+        <!-- Main Content Panel -->
+        <main id="main-panel" class="w-full md:w-3/4 h-screen overflow-y-auto p-4 md:p-8">
+            
+            <!-- Exhibit Introduction -->
+            <div id="exhibit-intro" class="mb-6">
+                <h2 id="exhibit-title" class="text-4xl font-bold mb-2"></h2>
+                <p id="exhibit-description" class="text-lg text-gray-700 leading-relaxed"></p>
+            </div>
+
+            <!-- Tour Viewer -->
+            <div id="tour-viewer" class="hidden">
+                
+                <!-- Main Viewer Layout (Grid) -->
+                <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+                    
+                    <!-- Iframe Display Case -->
+                    <div class="lg:col-span-2 bg-black rounded-lg shadow-inner p-2 flex items-center justify-center" style="height: 60vh; min-height: 400px;">
+                        <iframe id="item-iframe" 
+                                src="" 
+                                class="w-full h-full border-0 rounded-md bg-white" 
+                                sandbox="allow-scripts allow-same-origin"
+                                loading="lazy">
+                        </iframe>
+                    </div>
+
+                    <!-- Info Plaque -->
+                    <div class="lg:col-span-1 bg-white p-4 rounded-lg shadow-md self-start">
+                        <h3 id="item-name" class="text-2xl font-semibold mb-3"></h3>
+                        <div class="space-y-3">
+                            <div>
+                                <span class="font-medium text-gray-600 block mb-1">Inscription #</span>
+                                <span id="item-inscription" class="font-mono bg-gray-100 px-3 py-1 rounded text-lg"></span>
+                            </div>
+                            <div>
+                                <span class="font-medium text-gray-600 block mb-1">Inscription ID</span>
+                                <span id="item-id" class="font-mono bg-gray-100 px-3 py-1 rounded text-xs break-all block"></span>
+                            </div>
+                        </div>
+                        <p id="item-notes" class="text-gray-700 mt-4 border-t pt-4"></p>
+                    </div>
+
+                </div>
+
+                <!-- Tour Navigation -->
+                <div class="flex items-center justify-between mt-6">
+                    <button id="prev-item" class="px-5 py-2 bg-blue-600 text-white rounded-lg shadow font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors">
+                        Previous
+                    </button>
+                    <span id="item-counter" class="text-gray-600 font-medium text-lg"></span>
+                    <button id="next-item" class="px-5 py-2 bg-blue-600 text-white rounded-lg shadow font-medium hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors">
+                        Next
+                    </button>
+                </div>
+
+            </div>
+        </main>
+    </div>
+
+    <script>
+        const museumData = [
+            {
+                id: 'welcome',
+                name: 'Welcome to the Museum',
+                description: 'This museum is a curated collection of Bitcoin Ordinals, showcasing the history, technology, and culture that has emerged from inscribing digital artifacts directly onto the Bitcoin blockchain. Ordinal Theory, proposed by Casey Rodarmor in December 2022, allows for tracking and transferring individual satoshis, and "inscribing" them with data. This created a new world of on-chain digital art, collectibles, applications, and more. Use the navigation on the left to explore the different "wings" of the museum.',
+                items: [
+                    {
+                        name: 'Inscription 0',
+                        inscription: 0,
+                        id: '6fb976ab49dcec017f1e201e84395983204ae1a7c2abf7ced0a85d692e442799i0',
+                        url: 'https://ordinals.com/inscription/6fb976ab49dcec017f1e201e84395983204ae1a7c2abf7ced0a85d692e442799i0',
+                        notes: 'The genesis. The very first inscription, created by Casey Rodarmor. It is a recursive inscription that displays the text "SATOSHI", the pseudonymous creator of Bitcoin.'
+                    },
+                    {
+                        name: 'Inscription 19: Bitcoin Shrooms',
+                        inscription: 19,
+                        id: '9163af650dcdeeeb9a7e1f47f693b51921dce3bdf2475e69360ec83d9956f5d7i0',
+                        url: 'https://ordinals.com/inscription/9163af650dcdeeeb9a7e1f47f693b51921dce3bdf2475e69360ec83d9956f5d7i0',
+                        notes: 'The genesis piece for "Bitcoin Shrooms," one of the very first collectible sets on Ordinals, marking the beginning of PFP culture on Bitcoin.'
+                    },
+                    {
+                        name: 'Inscription 73: The Bitcoin Shanty',
+                        inscription: 73,
+                        id: 'ad99172fce60028406f62725b91b5c508edd95bf21310de5afeb0966ddd89be3i0',
+                        url: 'https://ordinals.com/inscription/ad99172fce60028406f62725b91b5c508edd95bf21310de5afeb0966ddd89be3i0',
+                        notes: 'The first-ever audio inscription (.wav file) on Bitcoin. It proved that sound could be stored immutably on-chain, long before more advanced audio protocols were developed.'
+                    }
+                ]
+            },
+            {
+                id: 'pfp_collections',
+                name: 'PFP Collections',
+                description: 'Profile Picture (PFP) collections are a cornerstone of digital-native culture. On Bitcoin, these collections were among the first to gain widespread recognition, often pushing the boundaries of file size, artistic style, and on-chain storage. This exhibit features some of the most iconic PFP collections.',
+                items: [
+                    {
+                        name: 'NodeMonke #83526',
+                        inscription: 83526,
+                        id: '053c67c5b118511203e8954138bd37dac451c0e41ea7ae82f065b805b2ae703i0',
+                        url: 'https://ordinals.com/inscription/053c67c5b118511203e8954138bd37dac451c0e41ea7ae82f065b805b2ae703i0',
+                        notes: 'From the "NodeMonkes" collection, widely considered the first original 10k PFP collection inscribed on Bitcoin. Known for their "on-chain" ethos and fair launch.'
+                    },
+                    {
+                        name: 'NodeMonke #83528',
+                        inscription: 83528,
+                        id: 'b099cd5b41a50c4af026c99e08cabbd7b611a8879aa90dcdf9f768dd8f77e605i0',
+                        url: 'https://ordinals.com/inscription/b099cd5b41a50c4af026c99e08cabbd7b611a8879aa90dcdf9f768dd8f77e605i0',
+                        notes: 'Another example from the "NodeMonkes" collection, demonstrating the pixel-art style and trait variations.'
+                    },
+                    {
+                        name: 'Bitcoin Puppet #53105615',
+                        inscription: 53105615,
+                        id: 'dc87ce1caca5ab3449daf60ea5363be107ce31fb091916b8063a7974bd5997b0i0',
+                        url: 'https://ordinals.com/inscription/dc87ce1caca5ab3449daf60ea5363be107ce31fb091916b8063a7974bd5997b0i0',
+                        notes: 'From the "Bitcoin Puppets" collection, known for its intentionally raw, "lo-fi" MS Paint aesthetic. This style is a form of cultural commentary against high-production-value art.'
+                    },
+                    {
+                        name: 'Bitcoin Puppet #53105622',
+                        inscription: 53105622,
+                        id: 'db52aedec9ed58d640639d84447eccac766e8d591d8d76c69785efb462bc3240i0',
+                        url: 'https://ordinals.com/inscription/db52aedec9ed58d640639d84447eccac766e8d591d8d76c69785efb462bc3240i0',
+                        notes: 'Another "Bitcoin Puppet," embracing the crude art style that defines the collection\'s counter-culture identity.'
+                    },
+                    {
+                        name: 'Bitcoin Frog #395511',
+                        inscription: 395511,
+                        id: 'bb56c09acb0a47e57e888d1af0e4793a5354701b9e913e5a1f90acdf52c1f139i0',
+                        url: 'https://ordinals.com/inscription/bb56c09acb0a47e57e888d1af0e4793a5354701b9e913e5a1f90acdf52c1f139i0',
+                        notes: 'From "Bitcoin Frogs," one of the earliest and most popular 10k PFP collections, helping to solidify the PFP meta on Ordinals. The art is inspired by the "Pepe the Frog" meme.'
+                    },
+                    {
+                        name: 'Bitcoin Frog #395742',
+                        inscription: 395742,
+                        id: '980049220f76e88588897edc2f2c7e41dffce04c47b9054aa964f99006b85100i0',
+                        url: 'https://ordinals.com/inscription/980049220f76e88588897edc2f2c7e41dffce04c47b9054aa964f99006b85100i0',
+                        notes: 'Another example from the "Bitcoin Frogs" collection.'
+                    },
+                    {
+                        name: 'Pizza Ninja #56246169',
+                        inscription: 56246169,
+                        id: '39399e536443446eda3f26ce7038178ec3b69157f38eaed19caea4614aabaf62i0',
+                        url: 'https://ordinals.com/inscription/39399e536443446eda3f26ce7038178ec3b69157f38eaed19caea4614aabaf62i0',
+                        notes: 'From the "Pizza Ninjas" collection, created by the team behind the Taproot Wizards. This collection is known for its high-quality pixel art and strong community.'
+                    },
+                    {
+                        name: 'Pizza Ninja #56122947',
+                        inscription: 56122947,
+                        id: '9ad43b591e58b23d8550dfdae431432b6ea3a7079d09ef80ee1554c5a3f8d543i0',
+                        url: 'https://ordinals.com/inscription/9ad43b591e58b23d8550dfdae431432b6ea3a7079d09ef80ee1554c5a3f8d543i0',
+                        notes: 'Another "Pizza Ninja," showcasing the detailed pixel art style.'
+                    },
+                    {
+                        name: 'OCM Genesis #-263423',
+                        inscription: -263423,
+                        id: '4e15c01681e9d82dddf7909daa5f23fc96a212119ded93c55e93c086a1a8fea6i657',
+                        url: 'https://ordinals.com/inscription/4e15c01681e9d82dddf7909daa5f23fc96a212119ded93c55e93c086a1a8fea6i657',
+                        notes: 'From "OnChainMonkeys (OCM)," a prominent Ethereum collection that "bridged" to Bitcoin. This OCM Genesis collection was famous for inscribing 10,000 images in a single Bitcoin transaction, a major technical feat at the time.'
+                    },
+                    {
+                        name: 'OCM Genesis #-263399',
+                        inscription: -263399,
+                        id: '4e15c01681e9d82dddf7909daa5f23fc96a212119ded93c55e93c086a1a8fea6i633',
+                        url: 'https://ordinals.com/inscription/4e15c01681e9d82dddf7909daa5f23fc96a212119ded93c55e93c086a1a8fea6i633',
+                        notes: 'Another "OnChainMonkey" from the single-transaction inscription batch.'
+                    }
+                ]
+            },
+            {
+                id: 'tech_and_protocols',
+                name: 'Technology & Metaprotocols',
+                description: 'This exhibit explores collections that are more than just art; they are technical marvels or building blocks for new "metaprotocols" on Bitcoin. These inscriptions often contain code, define new standards, or introduce dynamic, interactive elements to the blockchain.',
+                items: [
+                    {
+                        name: 'Quantum Cat (Genesis)',
+                        inscription: 54332480,
+                        id: '30a89b436feef5a8cdb2ee4c77550dd795f82d58061bb8980b4d266debb0f147i0',
+                        url: 'https://ordinals.com/inscription/30a89b436feef5a8cdb2ee4c77550dd795f82d58061bb8980b4d266debb0f147i0',
+                        notes: 'From "Quantum Cats," a collection by the Taproot Wizards team. These are "evolving" inscriptions whose images can change over time, controlled by on-chain logic. This piece is one of the "Genesis Cats." (Note: Inscription may appear blank or static if viewed at a time when its logic is not active).'
+                    },
+                    {
+                        name: 'Quantum Cat (Evolved)',
+                        inscription: 53785861,
+                        id: '4b31771df21656d2a77e6fa18720a6dd94b04510b9065a7c67250d5c89ad2079i1',
+                        url: 'https://ordinals.com/inscription/4b31771df21656d2a77e6fa18720a6dd94b04510b9065a7c67250d5c89ad2079i1',
+                        notes: 'An example of a Quantum Cat inscription that demonstrates the "evolving" or animated nature of the collection, pushing the boundaries of dynamic on-chain art.'
+                    },
+                    {
+                        name: 'Quantum Cat (Evolved)',
+                        inscription: 53785865,
+                        id: '4b31771df21656d2a77e6fa18720a6dd94b04510b9065a7c67250d5c89ad2079i5',
+                        url: 'https://ordinals.com/inscription/4b31771df21656d2a77e6fa18720a6dd94b04510b9065a7c67250d5c89ad2079i5',
+                        notes: 'Another "evolving" Quantum Cat, showcasing the complex recursive code used to generate dynamic and interactive on-chain experiences.'
+                    },
+                    {
+                        name: 'OMB (Ordinals Maxi Biz) #111913',
+                        inscription: 111913,
+                        id: 'c591abf263fea77f2c824412d906f0edb02d4e6181f6b8c72edc297b85ab4911i0',
+                        url: 'https://ordinals.com/inscription/c591abf263fea77f2c824412d906f0edb02d4e6181f6b8c72edc297b85ab4911i0',
+                        notes: 'From "Ordinals Maxi Biz," a collection known for its stark, minimalist, and "glitchy" aesthetic. OMB is tied to the BRC-20 token standard, representing a cultural touchpoint for early Ordinals enthusiasts.'
+                    },
+                    {
+                        name: 'OMB #111915',
+                        inscription: 111915,
+                        id: '0e773e1440f0b07db9610f87462e1a19c74770526b8b2e29202cb3e6a8fca126i0',
+                        url: 'https://ordinals.com/inscription/0e773e1440f0b07db9610f87462e1a19c74770526b8b2e29202cb3e6a8fca126i0',
+                        notes: 'Another OMB piece, highlighting the collection\'s generative, code-based art style.'
+                    },
+                    {
+                        name: 'RSIC Metaprotocol #56718388',
+                        inscription: 56718388,
+                        id: 'f7e51efdc501516efaaf27634ae71382d621a607123c2ab32174f3dd5001ea93i2',
+                        url: 'https://ordinals.com/inscription/f7e51efdc501516efaaf27634ae71382d621a607123c2ab32174f3dd5001ea93i2',
+                        notes: 'This inscription is part of the "RSIC Metaprotocol." These generative art pieces also function as "miners" for the upcoming Runes protocol, a new fungible token standard for Bitcoin. Holding a RSIC allows you to "mine" runes.'
+                    },
+                    {
+                        name: 'RSIC Metaprotocol #56718390',
+                        inscription: 56718390,
+                        id: 'f7e51efdc501516efaaf27634ae71382d621a607123c2ab32174f3dd5001ea93i4',
+                        url: 'https://ordinals.com/inscription/f7e51efdc501516efaaf27634ae71382d621a607123c2ab32174f3dd5001ea93i4',
+                        notes: 'Another RSIC inscription. The symbols and text on the art are not just aesthetic; they contain information about the "mine" and its allocation of runes.'
+                    },
+                    {
+                        name: 'Bitcoin Wizard #139898',
+                        inscription: 139898,
+                        id: '0623d9b1ee252ccc57507b93615a5c3d221e184826358ae02888cdcf6a40c406i0',
+                        url: 'https://ordinals.com/inscription/0623d9b1ee252ccc57507b93615a5c3d221e184826358ae02888cdcf6a40c406i0',
+                        notes: 'From the "Bitcoin Wizards" collection, created by Udi Wertheimer. The collection is famous for its massive 4MB genesis inscription and its role in promoting the "magic" of Bitcoin and the Taproot upgrade.'
+                    },
+                    {
+                        name: 'Bitcoin Wizard #139899',
+                        inscription: 139899,
+                        id: 'a51db697e257b0c6775f3a57f13cbf5b00dae2840b05be95bd201ca35f54f926i0',
+                        url: 'https://ordinals.com/inscription/a51db697e257b0c6775f3a57f13cbf5b00dae2840b05be95bd201ca35f54f926i0',
+                        notes: 'Another "Bitcoin Wizard," part of the community that formed around the collection and its "Taproot Wizard" school.'
+                    },
+                    {
+                        name: 'Ink #66120395',
+                        inscription: 66120395,
+                        id: '696952619460d5b5ebad0cfff81084f4db30fab52e48a13ce046389eb1572113i0',
+                        url: 'https://ordinals.com/inscription/696952619460d5b5ebad0cfff81084f4db30fab52e48a13ce046389eb1572113i0',
+                        notes: '"Ink" is a generative art collection that creates complex, beautiful patterns entirely from on-chain code. It represents the "art-first" side of generative inscriptions.'
+                    },
+                    {
+                        name: 'Ink #66120406',
+                        inscription: 66120406,
+                        id: '696952619460d5b5ebad0cfff81084f4db30fab52e48a13ce046389eb1572113i11',
+                        url: 'https://ordinals.com/inscription/696952619460d5b5ebad0cfff81084f4db30fab52e48a13ce046389eb1572113i11',
+                        notes: 'Another piece from the "Ink" collection, demonstrating the variety of outputs from the same generative algorithm.'
+                    }
+                ]
+            },
+            {
+                id: 'audionals',
+                name: 'Audionals: On-Chain Music',
+                description: 'Audionals represent the birth of on-chain music on Bitcoin. This is not a single collection but a *metaprotocol* and a series of technical breakthroughs. It started with simple base64 encoded audio and evolved into a fully recursive, on-chain Digital Audio Workstation (DAW) with sequencers, synths, and JSON-based song files. This allows for complex music to be created and stored 100% on-chain.',
+                items: [
+                    {
+                        name: 'First Base64 Text Audional',
+                        inscription: 12435054,
+                        id: '0b8eff3f39f4095d0f129bb8dd75f29159f8725c7e66046bf41f70ebb9f60d93i0',
+                        url: 'https://ordinals.com/inscription/0b8eff3f39f4095d0f129bb8dd75f29159f8725c7e66046bf41f70ebb9f60d93i0',
+                        notes: 'A foundational piece: the first audio sample inscribed as base64 text, a proof-of-concept for on-chain audio.'
+                    },
+                    {
+                        name: 'First Audional Player',
+                        inscription: 12206104,
+                        id: '7d058415fb8b6d35fddd375208648254bcb0e4e470b4b25da3dac32d8b04b935i0',
+                        url: 'https://ordinals.com/inscription/7d058415fb8b6d35fddd375208648254bcb0e4e470b4b25da3dac32d8b04b935i0',
+                        notes: 'The other half of the magic: an interactive HTML inscription that decodes and plays the first base64 audional, demonstrating an on-chain player.'
+                    },
+                    {
+                        name: 'First Recursive Audional Step Sequencer',
+                        inscription: 14426517,
+                        id: 'e990695d00d326498207acbda321657aa16b8e5731597b6cdd94b1a64a6da8e4i0',
+                        url: 'https://ordinals.com/inscription/e990695d00d326498207acbda321657aa16b8e5731597b6cdd94b1a64a6da8e4i0',
+                        notes: 'A major leap: a fully on-chain step sequencer engine, the core of a Digital Audio Workstation (DAW). This is an interactive application.'
+                    },
+                    {
+                        name: 'First Test Sequencer',
+                        inscription: 13078824,
+                        id: '09e0b0c471a6a89c1385c67016e5e6a97f6a6df38207c2d79da67cadf0774368i0',
+                        url: 'https://ordinals.com/inscription/09e0b0c471a6a89c1385c67016e5e6a97f6a6df38207c2d79da67cadf0774368i0',
+                        notes: 'An early test of the sequencer technology, showing the development process of on-chain music tools.'
+                    },
+                    {
+                        name: 'First Recursive Audional JSON Song',
+                        inscription: 21048916,
+                        id: '4521e117df5bf3f9495f22e2b453d1d379b2432ac7ec56403d46b35474e490eai0',
+                        url: 'https://ordinals.com/inscription/4521e117df5bf3f9495f22e2b453d1d379b2432ac7ec56403d46b35474e490eai0',
+                        notes: 'This inscription defines a "song" using JSON data, which can then be read by a player inscription. This separates the "sheet music" from the "instrument," a key concept in recursive inscriptions.'
+                    },
+                    {
+                        name: 'First Recursive Song: "I Love Cheese"',
+                        inscription: 28712154,
+                        id: 'cea4d582a419e6c7561af335ed08b6b47384d6f2c25d0f682c3019c7f2a305e4i0',
+                        url: 'https://ordinals.com/inscription/cea4d582a419e6c7561af335ed08b6b47384d6f2c25d0f682c3019c7f2a305e4i0',
+                        notes: 'The first complete, recursive song ("I Love Cheese") created using the on-chain Audionals DAW. This is a fully interactive musical piece.'
+                    },
+                    {
+                        name: 'Color Remix',
+                        inscription: 30908005,
+                        id: '70a1f609af492aed8dcc6eeab5f496b44f60c994c682aaf4530e7c29a94fb4fai0',
+                        url: 'https://ordinals.com/inscription/70a1f609af492aed8dcc6eeab5f496b44f60c994c682aaf4530e7c29a94fb4fai0',
+                        notes: 'A "remix" created with the Audionals sequencer, showing how the on-chain tools can be used to create new derivative works.'
+                    },
+                    {
+                        name: 'First Synth Inscription',
+                        inscription: 35259459,
+                        id: '598a448d0e134e90855e6fba03d7b2e2610423f185ba513d3c1a8022a9d0d591i0',
+                        url: 'https://ordinals.com/inscription/598a448d0e134e90855e6fba03d7b2e2610423f185ba513d3c1a8022a9d0d591i0',
+                        notes: 'An on-chain synthesizer. This inscription is an interactive musical instrument that can be "played" to generate sounds.'
+                    },
+                    {
+                        name: 'Recursive Song: TRUTH',
+                        inscription: 72602366,
+                        id: '9f2ec8bcab1d134437e5d2f87e435c8141011125e6ea940c292c242fb4660109i0',
+                        url: 'https://ordinals.com/inscription/9f2ec8bcab1d134437e5d2f87e435c8141011125e6ea940c292c242fb4660109i0',
+                        notes: 'A full song ("TRUTH") produced with the on-chain Audionals DAW.'
+                    },
+                    {
+                        name: 'Recursive Song: FREEDOM',
+                        inscription: 73172817,
+                        id: 'decf97659d9a13ed8ecdae0752d0a76ec822d13c8ddea6db39cbb9331a4ac0dfi1',
+                        url: 'https://ordinals.com/inscription/decf97659d9a13ed8ecdae0752d0a76ec822d13c8ddea6db39cbb9331a4ac0dfi1',
+                        notes: 'A full song ("Freedom to Transact") produced with the on-chain Audionals DAW.'
+                    },
+                    {
+                        name: 'Recursive Song: I Love Cheese (Hi-Fi)',
+                        inscription: 73805227,
+                        id: '4f6f53c59e8ed57b495f273a263b04d94c82c31f2172856959f39d6745000003i0',
+                        url: 'https://ordinals.com/inscription/4f6f53c59e8ed57b495f273a263b04d94c82c31f2172856959f39d6745000003i0',
+                        notes: 'A higher-fidelity version of the classic "I Love Cheese" song, demonstrating the evolution of the on-chain music tools.'
+                    },
+                    {
+                        name: 'Song: On Day One / Free Ross',
+                        inscription: 64333690,
+                        id: '9052cc9fbaf147a44f1c7043477b97c44a07de2d69250cf1fb345a771ea48088i0',
+                        url: 'https://ordinals.com/inscription/9052cc9fbaf147a44f1c7043477b97c44a07de2d69250cf1fb345a771ea48088i0',
+                        notes: 'A recursive song with a political message ("Free Ross"), created using the Audional sequencer.'
+                    },
+                    {
+                        name: 'French Montana (4MB Song)',
+                        inscription: 64333690,
+                        id: '3eb5b8f249759c7a3fa6683a7f51d288af0aeffa847904a18c0fb382ca46c1b2i0',
+                        url: 'https://ordinals.com/inscription/3eb5b8f249759c7a3fa6683a7f51d288af0aeffa847904a18c0fb382ca46c1b2i0',
+                        notes: 'This inscription by the artist French Montana was a landmark moment, as it pushed the Bitcoin block size limit to its maximum (4MB) to store a full, high-quality song on-chain.'
+                    }
+                ]
+            },
+            {
+                id: 'gaming',
+                name: 'On-Chain Gaming',
+                description: 'The Ordinals protocol allows for complex applications, including entire video games, to be inscribed on-chain. This exhibit showcases early and significant examples of interactive entertainment stored immutably on Bitcoin.',
+                items: [
+                    {
+                        name: 'DOOM (Recursive)',
+                        inscription: 466,
+                        id: '521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79dai0',
+                        url: 'https://ordinals.com/inscription/521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79dai0',
+                        notes: 'Inscription 466 is one of the most famous early inscriptions: a playable, recursive version of the classic game DOOM. This demonstrated the potential for complex, interactive applications to live entirely on Bitcoin.'
+                    }
+                ]
+            },
+            {
+                id: 'landmarks',
+                name: 'Historical Landmarks',
+                description: 'This exhibit showcases inscriptions that represent significant "firsts," technical milestones, or the genesis of important cultural movements within the Ordinals ecosystem. These are the building blocks of on-chain history, showing the rapid evolution of the protocol and its community.',
+                items: [
+                    {
+                        name: 'Inscription 294: Ornate Ms',
+                        inscription: 294,
+                        id: 'e7915ae9daeafcc99135c8704b2c00fbd33a928248cd4ae48a2d1c6582222f01i0',
+                        url: 'https://ordinals.com/inscription/e7915ae9daeafcc99135c8704b2c00fbd33a928248cd4ae48a2d1c6582222f01i0',
+                        notes: 'The start of the "Ornate Ms" series, a mysterious and early example of generative art on Bitcoin.'
+                    },
+                    {
+                        name: 'Inscription 341: Toruses',
+                        inscription: 341,
+                        id: '85dc48c7097323397366f03a6bfc10d643b68147f64fcfd25b157acd0e38a6fdi0',
+                        url: 'https://ordinals.com/inscription/85dc48c7097323397366f03a6bfc10d643b68147f64fcfd25b157acd0e38a6fdi0',
+                        notes: 'The genesis of the "Toruses" collection, showcasing esoteric animated shapes and early generative 3D art.'
+                    },
+                    {
+                        name: 'Inscription 356: Timechain Collectibles',
+                        inscription: 356,
+                        id: '4d0ed12142149be2343754faa96d56969fb3e2f44b9a8f09e6d12539e73e8129i0',
+                        url: 'https://ordinals.com/inscription/4d0ed12142149be2343754faa96d56969fb3e2f44b9a8f09e6d12539e73e8129i0',
+                        notes: 'The genesis piece for "Timechain Collectibles," an early set of 21 unique 3D-rendered clocks.'
+                    },
+                    {
+                        name: 'Inscription 500: Early Snippet',
+                        inscription: 500,
+                        id: '12dab11fa0f2162605c016a5b19665f03cdde18539e83a2113a70637875680bei0',
+                        url: 'https://ordinals.com/inscription/12dab11fa0f2162605c016a5b19665f03cdde18539e83a2113a70637875680bei0',
+                        notes: 'A simple, early text inscription. Pieces like this are valuable for their low number, representing the "Inscripter Zero" era of experimentation.'
+                    },
+                    {
+                        name: 'Inscription 652: Taproot Wizards (Early)',
+                        inscription: 652,
+                        id: '0301e0480b374b32851a9462db29dc19fe830a7f7d7a88b81612b9d42099c0aei0',
+                        url: 'https://ordinals.com/inscription/0301e0480b374b32851a9462db29dc19fe830a7f7d7a88b81612b9d42099c0aei0',
+                        notes: 'An early "Taproot Wizard" inscription, part of the movement led by Udi Wertheimer to celebrate the Bitcoin Taproot upgrade and protest perceived "maxi" culture.'
+                    },
+                    {
+                        name: 'Inscription 846: "I Existed"',
+                        inscription: 846,
+                        id: 'f132acf92239936c0c19ac0c40e96b60db0300ebdcf7c6b22330b58ffcdb2cbbi0',
+                        url: 'https://ordinals.com/inscription/f132acf92239936c0c19ac0c40e96b60db0300ebdcf7c6b22330b58ffcdb2cbbi0',
+                        notes: 'An early conceptual art piece from the "Dan" catalogue, simply stating "I Existed." This highlights the use of Ordinals for permanent, immutable statements.'
+                    },
+                    {
+                        name: 'Inscription 957: Shadow Hats',
+                        inscription: 957,
+                        id: '2ee9ee004d2e9fef7f490370304e62a63db359c9bd5143f7d08853d893b17b03i0',
+                        url: 'https://ordinals.com/inscription/2ee9ee004d2e9fef7f490370304e62a63db359c9bd5143f7d08853d893b17b03i0',
+                        notes: 'The start of the "Shadow Hats" series, an atmospheric and early generative collection.'
+                    },
+                    {
+                        name: 'Inscription 2728: Ordinal Birds',
+                        inscription: 2728,
+                        id: '0a6bb0887af1ced974f141ee2bc93022df8eb0402b6982b3fd9fcddcb7462a87i0',
+                        url: 'https://ordinals.com/inscription/0a6bb0887af1ced974f141ee2bc93022df8eb0402b6982b3fd9fcddcb7462a87i0',
+                        notes: 'The genesis of "Ordinal Birds," a popular early derivative collection based on the Ethereum "Moonbirds" but with a unique on-chain style.'
+                    },
+                    {
+                        name: 'Inscription 6323: Squiggs',
+                        inscription: 6323,
+                        id: '4d699b383baabc3527f3fa6b69efa96ec7e421729ff9eef5377d5a22023e88dfi0',
+                        url: 'https://ordinals.com/inscription/4d699b383baabc3527f3fa6b69efa96ec7e421729ff9eef5377d5a22023e88dfi0',
+                        notes: 'The start of "Squiggs," an abstract generative art collection known for its colorful, flowing forms.'
+                    },
+                    {
+                        name: 'Inscription 7976: Insignia Art',
+                        inscription: 7976,
+                        id: '71bd54cc3ce51cdfac96999c9c830870b9c624286c12979be01ac92d6e200055i0',
+                        url: 'https://ordinals.com/inscription/71bd54cc3ce51cdfac96999c9c830870b9c624286c12979be01ac92d6e200055i0',
+                        notes: 'The start of the "Insignia Art" collection, a small set of art primitives.'
+                    },
+                    {
+                        name: 'Inscription 9978: On The Edge Of Oblivion',
+                        inscription: 9978,
+                        id: 'f0d35042249166706470873166f2617c639f0e3a06362600a43bf31b4921025ai0',
+                        url: 'https://ordinals.com/inscription/f0d35042249166706470873166f2617c639f0e3a06362600a43bf31b4921025ai0',
+                        notes: 'The genesis piece of "On The Edge Of Oblivion," an art piece by photographer Justin Aversano, notable for "bridging" art from Ethereum to Bitcoin.'
+                    },
+                    {
+                        name: 'Inscription 10000: Milestone',
+                        inscription: 10000,
+                        id: '5cb45900adcc0bd5f6aed90554d261cbe4896cafa96413bca0f7e8773b23509ci0',
+                        url: 'https://ordinals.com/inscription/5cb45900adcc0bd5f6aed90554d261cbe4896cafa96413bca0f7e8773b23509ci0',
+                        notes: 'A significant numerical milestone. Inscriptions with "round" numbers like 10,000 are often sought after by collectors for their historical significance.'
+                    },
+                    {
+                        name: 'Inscription 20219: OCM Genesis',
+                        inscription: 20219,
+                        id: 'fb162a46943e5d7d31d72ee2c8c850e66c1ca5d0d453068aa63883528285ed21i0',
+                        url: 'https://ordinals.com/inscription/fb162a46943e5d7d31d72ee2c8c850e66c1ca5d0d453068aa63883528285ed21i0',
+                        notes: 'The genesis inscription for OnChainMonkey (OCM) on Bitcoin, representing a major collection from Ethereum bridging to the new protocol.'
+                    },
+                    {
+                        name: 'Inscription 10,000,000: Growth Milestone',
+                        inscription: 10000000,
+                        id: 'daa32a021a1ff87978342e849a65677b86ebc929fd3b9fecacd765c377a39b8fi0',
+                        url: 'https://ordinals.com/inscription/daa32a021a1ff87978342e849a65677b86ebc929fd3b9fecacd765c377a39b8fi0',
+                        notes: 'This inscription marks the 10 millionth inscription, showcasing the explosive growth of the Ordinals protocol in just a few months.'
+                    }
+                ]
+            }
+        ];
+
+        let currentCollectionId = null;
+        let currentItemIndex = 0;
+        let activeCollection = null;
+
+        const collectionList = document.getElementById('collection-list');
+        const exhibitTitle = document.getElementById('exhibit-title');
+        const exhibitDescription = document.getElementById('exhibit-description');
+        const tourViewer = document.getElementById('tour-viewer');
+        const itemIframe = document.getElementById('item-iframe');
+        const itemName = document.getElementById('item-name');
+        const itemInscription = document.getElementById('item-inscription');
+        const itemId = document.getElementById('item-id');
+        const itemNotes = document.getElementById('item-notes');
+        const prevButton = document.getElementById('prev-item');
+        const nextButton = document.getElementById('next-item');
+        const itemCounter = document.getElementById('item-counter');
+
+        function populateNav() {
+            museumData.forEach(collection => {
+                const li = document.createElement('li');
+                const button = document.createElement('button');
+                button.textContent = collection.name;
+                button.dataset.collectionId = collection.id;
+                button.className = 'nav-button w-full text-left p-2 rounded-md text-gray-600 font-medium';
+                button.addEventListener('click', handleNavClick);
+                li.appendChild(button);
+                collectionList.appendChild(li);
+            });
+        }
+
+        function handleNavClick(e) {
+            const collectionId = e.currentTarget.dataset.collectionId;
+            loadExhibit(collectionId);
+        }
+
+        function loadExhibit(collectionId) {
+            currentItemIndex = 0;
+            activeCollection = museumData.find(c => c.id === collectionId);
+            currentCollectionId = collectionId;
+
+            document.querySelectorAll('.nav-button').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.collectionId === collectionId) {
+                    btn.classList.add('active');
+                }
+            });
+
+            exhibitTitle.textContent = activeCollection.name;
+            exhibitDescription.textContent = activeCollection.description;
+
+            if (activeCollection.items && activeCollection.items.length > 0) {
+                tourViewer.classList.remove('hidden');
+                loadItem(currentItemIndex);
+            } else {
+                tourViewer.classList.add('hidden');
+            }
+        }
+
+        function loadItem(index) {
+            if (!activeCollection || !activeCollection.items[index]) return;
+
+            const item = activeCollection.items[index];
+            
+            itemIframe.src = 'about:blank';
+            setTimeout(() => {
+                itemIframe.src = item.url;
+            }, 50);
+
+            itemName.textContent = item.name;
+            itemInscription.textContent = item.inscription;
+            itemId.textContent = item.id;
+            itemNotes.textContent = item.notes;
+
+            itemCounter.textContent = `Item ${index + 1} of ${activeCollection.items.length}`;
+
+            prevButton.disabled = (index === 0);
+            nextButton.disabled = (index === activeCollection.items.length - 1);
+        }
+
+        function showNextItem() {
+            if (currentItemIndex < activeCollection.items.length - 1) {
+                currentItemIndex++;
+                loadItem(currentItemIndex);
+            }
+        }
+
+        function showPrevItem() {
+            if (currentItemIndex > 0) {
+                currentItemIndex--;
+                loadItem(currentItemIndex);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            populateNav();
+            loadExhibit(museumData[0].id);
+            
+            prevButton.addEventListener('click', showPrevItem);
+            nextButton.addEventListener('click', showNextItem);
+        });
+
+    </script>
+</body>
+</html>

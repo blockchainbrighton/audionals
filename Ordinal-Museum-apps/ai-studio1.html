@@ -1,0 +1,735 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Ordinals Archive | A Living Museum</title>
+    <style>
+        :root {
+            --bg-dark: #0f0f12;
+            --bg-panel: #1a1a1e;
+            --accent: #f7931a; /* Bitcoin Orange */
+            --text-main: #e0e0e0;
+            --text-muted: #a0a0a0;
+            --border: #333;
+            --font-heading: 'Georgia', serif;
+            --font-body: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+        }
+
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+
+        body {
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* Header */
+        header {
+            height: 60px;
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+            flex-shrink: 0;
+            z-index: 20;
+        }
+
+        h1 {
+            font-family: var(--font-heading);
+            font-size: 1.2rem;
+            letter-spacing: 1px;
+            color: var(--accent);
+        }
+
+        /* Main Layout */
+        #museum-container {
+            display: flex;
+            flex: 1;
+            height: calc(100vh - 60px);
+        }
+
+        /* Sidebar Navigation */
+        #sidebar {
+            width: 280px;
+            background: #141416;
+            border-right: 1px solid var(--border);
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .category-header {
+            padding: 15px 20px;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            letter-spacing: 1.5px;
+            color: var(--text-muted);
+            background: #0a0a0c;
+            position: sticky;
+            top: 0;
+            z-index: 10;
+            border-bottom: 1px solid #222;
+        }
+
+        .nav-item {
+            padding: 12px 20px;
+            cursor: pointer;
+            border-bottom: 1px solid #222;
+            transition: background 0.2s;
+            font-size: 0.9rem;
+        }
+
+        .nav-item:hover { background: #25252a; }
+        .nav-item.active { 
+            background: #2c2c33; 
+            border-left: 4px solid var(--accent);
+            color: #fff;
+        }
+
+        .nav-item .num {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            display: block;
+            margin-bottom: 4px;
+        }
+
+        /* Main Viewing Area */
+        #stage {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+            background: #000;
+        }
+
+        #viewer-container {
+            flex: 1;
+            position: relative;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background-image: radial-gradient(#222 1px, transparent 1px);
+            background-size: 20px 20px;
+            overflow: hidden; /* Prevent spillover */
+        }
+
+        /* Media Handling Classes */
+        
+        /* General Asset Sizing */
+        .asset-view {
+            width: 100%;
+            height: 100%;
+            display: block;
+            border: none;
+        }
+
+        /* For standard images/vectors - maintain aspect ratio */
+        img.asset-view {
+            object-fit: contain;
+        }
+
+        /* For Pixel Art - Forces Nearest-Neighbor scaling (Crisp edges, no blur) */
+        .pixel-art {
+            image-rendering: -moz-crisp-edges;
+            image-rendering: -webkit-crisp-edges;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* Info Panel (Right Side) */
+        #info-panel {
+            width: 350px;
+            background: var(--bg-panel);
+            border-left: 1px solid var(--border);
+            padding: 30px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+        }
+
+        .badge {
+            display: inline-block;
+            background: var(--accent);
+            color: #000;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.7rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            width: fit-content;
+        }
+
+        .inscription-title {
+            font-family: var(--font-heading);
+            font-size: 1.8rem;
+            line-height: 1.2;
+        }
+
+        .inscription-meta {
+            font-size: 0.85rem;
+            color: var(--text-muted);
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 15px;
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 10px;
+        }
+
+        .meta-label { display: block; font-size: 0.7rem; opacity: 0.6; text-transform: uppercase; }
+
+        .description {
+            line-height: 1.6;
+            font-size: 0.95rem;
+        }
+
+        .tech-note {
+            background: #222;
+            padding: 15px;
+            border-radius: 6px;
+            font-size: 0.85rem;
+            border-left: 3px solid #555;
+        }
+
+        .tech-note h4 { margin-bottom: 8px; color: #fff; }
+
+        /* Controls */
+        #controls {
+            display: flex;
+            gap: 10px;
+            padding: 10px 20px;
+            background: var(--bg-panel);
+            border-top: 1px solid var(--border);
+        }
+
+        button {
+            background: #333;
+            color: #fff;
+            border: none;
+            padding: 10px 20px;
+            cursor: pointer;
+            border-radius: 4px;
+            font-weight: 600;
+            transition: 0.2s;
+        }
+
+        button:hover { background: #444; }
+        button.primary { background: var(--accent); color: #111; }
+        button.primary:hover { background: #ffaa33; }
+
+        /* Loading Overlay */
+        #loader {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.8);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            color: #fff;
+            z-index: 100;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 0.3s;
+        }
+
+        /* Welcome Modal */
+        #modal-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: rgba(0,0,0,0.9);
+            z-index: 1000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        
+        .modal {
+            background: var(--bg-panel);
+            padding: 40px;
+            max-width: 500px;
+            text-align: center;
+            border: 1px solid var(--border);
+            border-radius: 8px;
+        }
+
+        .modal h2 { color: var(--accent); margin-bottom: 15px; font-family: var(--font-heading); }
+        .modal p { margin-bottom: 25px; line-height: 1.5; color: #ccc; }
+
+        /* Responsive */
+        @media (max-width: 1024px) {
+            #museum-container { flex-direction: column; height: auto; overflow-y: auto; }
+            #sidebar { width: 100%; height: 200px; flex-shrink: 0; }
+            #stage { height: 50vh; flex-shrink: 0; }
+            #info-panel { width: 100%; height: auto; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Welcome Modal -->
+    <div id="modal-overlay">
+        <div class="modal">
+            <h2>Welcome to The Ordinals Archive</h2>
+            <p>Explore the history of Bitcoin Inscriptions. <br>This interactive tour features pixel-perfect art scaling, recursive audio, and history.</p>
+            <p><em>Audio items may require a click to play.</em></p>
+            <button class="primary" onclick="startApp()">Enter Museum</button>
+        </div>
+    </div>
+
+    <header>
+        <h1>THE ORDINALS ARCHIVE</h1>
+        <div style="display: flex; gap: 10px; align-items: center;">
+            <span id="status-text" style="font-size: 0.8rem; color: #666;">Ready</span>
+            <button id="auto-tour-btn" onclick="toggleTour()">Start Auto-Tour</button>
+        </div>
+    </header>
+
+    <div id="museum-container">
+        <!-- Navigation Sidebar -->
+        <nav id="sidebar">
+            <!-- Injected via JS -->
+        </nav>
+
+        <!-- Main Viewer -->
+        <main id="stage">
+            <div id="viewer-container">
+                <div id="loader">Loading Artifact...</div>
+                <!-- Content injected here via JS (iframe, img, or video) -->
+            </div>
+            <div id="controls">
+                <button onclick="navigate(-1)">&#8592; Previous</button>
+                <button class="primary" onclick="navigate(1)">Next Exhibit &#8594;</button>
+            </div>
+        </main>
+
+        <!-- Information Panel -->
+        <aside id="info-panel">
+            <div id="info-content">
+                <!-- Injected via JS -->
+            </div>
+        </aside>
+    </div>
+
+    <script>
+        /**
+         * RENDER TYPES:
+         * 'pixel': Forces Nearest-Neighbor scaling (Good for low-res pixel art)
+         * 'image': Standard smooth scaling (Good for paintings/high-res)
+         * 'html': Uses Iframe (Good for interactive/recursive)
+         * 'video': Uses HTML5 Video tag
+         * 'audio': Uses HTML5 Audio tag visualization
+         */
+        
+        const exhibits = [
+            // --- BLUE CHIP COLLECTIONS ---
+            {
+                category: "Blue Chip Collections",
+                title: "NodeMonkes #83526",
+                id: "053c67c5b118511203e89541386bd37dac451c0e41ea7ae82f065b805b2ae703i0",
+                number: "83,526",
+                type: "pixel",
+                collection: "NodeMonkes",
+                artist: "Anonymous",
+                desc: "NodeMonkes is widely considered the first 10,000-count PFP collection inscribed on Bitcoin. The art is extremely low-resolution pixel art. By rendering this with 'pixelated' CSS settings, we can scale the tiny image to full screen without it becoming blurry.",
+                tech: "Pixel Art (Image). Rendered here with Nearest-Neighbor upscaling."
+            },
+            {
+                category: "Blue Chip Collections",
+                title: "NodeMonkes #83528",
+                id: "b099cd5b41a50c4af026c99e08cabbd7b611a8879aa90dcdf9f768dd8f77e605i0",
+                number: "83,528",
+                type: "pixel",
+                collection: "NodeMonkes",
+                artist: "Anonymous",
+                desc: "Another example of the NodeMonkes aesthetic. The blocky nature of the art pays homage to the block-based nature of the chain.",
+                tech: "Pixel Art (Image)."
+            },
+            {
+                category: "Blue Chip Collections",
+                title: "Bitcoin Puppet #1615",
+                id: "dc87ce1caca5ab3449daf60ea5363be107ce31fb091916b8063a7974bd5997b0i0",
+                number: "53,105,615",
+                type: "pixel",
+                collection: "Bitcoin Puppets",
+                artist: "Le Puppeteer",
+                desc: "Bitcoin Puppets represent the chaotic energy of the Ordinals community. Drawn in MS Paint, they reject the polished corporate aesthetic. The 'pixelated' rendering preserves the sharp, crude edges intended by the artist.",
+                tech: "Low-fidelity MS Paint Art. Upscaled without smoothing."
+            },
+            {
+                category: "Blue Chip Collections",
+                title: "Genesis Cat",
+                id: "30a89b436feef5a8cdb2ee4c77550dd795f82d58061bb8980b4d266debb0f147i0",
+                number: "54,332,480",
+                type: "html",
+                collection: "Quantum Cats",
+                artist: "Taproot Wizards",
+                desc: "Created by the Taproot Wizards team to honor the OP_CAT opcode. This image changes over time using code. Because it uses recursion and dynamic layering, it must be viewed in an iframe to execute the script.",
+                tech: "Recursive HTML/SVG. Evolves dynamically."
+            },
+            {
+                category: "Blue Chip Collections",
+                title: "Bitcoin Frog #395511",
+                id: "bb56c09acb0a47e57e888d1af0e4793a5354701b9e913e5a1f90acdf52c1f139i0",
+                number: "395,511",
+                type: "image",
+                collection: "Bitcoin Frogs",
+                artist: "Frogtoshi",
+                desc: "Bitcoin Frogs was one of the earliest high-volume collections. These are standard web graphics.",
+                tech: "Standard WebP Image."
+            },
+            {
+                category: "Blue Chip Collections",
+                title: "OMB (Green Eyes)",
+                id: "c591abf263fea77f2c824412d906f0edb02d4e6181f6b8c72edc297b85ab4911i0",
+                number: "111,913",
+                type: "pixel",
+                collection: "Ordinals Maxi Biz",
+                artist: "ZK Shark",
+                desc: "OMB features hand-drawn traits that mock serious financial assets. The crude, punk style benefits from sharp pixel-scaling.",
+                tech: "Hand-drawn Pixel traits."
+            },
+             {
+                category: "Blue Chip Collections",
+                title: "Ink",
+                id: "696952619460d5b5ebad0cfff81084f4db30fab52e48a13ce046389eb1572113i0",
+                number: "66,120,395",
+                type: "image",
+                collection: "Ink",
+                artist: "Unknown",
+                desc: "Ink is a collection characterized by distinctive orange-on-black abstract forms. Unlike pixel art, these organic shapes require standard rendering to look their best.",
+                tech: "High-contrast Image."
+            },
+
+            // --- INTERACTIVE & TECH ---
+            {
+                category: "Interactive & Tech",
+                title: "Pizza Ninja (Interactive)",
+                id: "39399e536443446eda3f26ce7038178ec3b69157f38eaed19caea4614aabaf62i0",
+                number: "56,246,169",
+                type: "html",
+                collection: "Pizza Ninjas",
+                artist: "Ninjalerts",
+                desc: "Pizza Ninjas are full HTML applications. This specific Ninja renders entirely in code within your browser.",
+                tech: "Recursive HTML Application."
+            },
+            {
+                category: "Interactive & Tech",
+                title: "RSIC Metaprotocol",
+                id: "f7e51efdc501516efaaf27634ae71382d621a607123c2ab32174f3dd5001ea93i2",
+                number: "56,718,388",
+                type: "html",
+                collection: "RSIC",
+                artist: "Unknown",
+                desc: "The RSIC was an interactive 'mining' device. It is an SVG animation embedded in HTML.",
+                tech: "HTML/SVG Animation."
+            },
+            {
+                category: "Interactive & Tech",
+                title: "OnChainMonkey Genesis",
+                id: "4e15c01681e9d82dddf7909daa5f23fc96a212119ded93c55e93c086a1a8fea6i657",
+                number: "-263,423 (Cursed)",
+                type: "html",
+                collection: "OnChainMonkeys",
+                artist: "Metagood",
+                desc: "OCM renders 3D graphics entirely in code using the p5.js library recursively.",
+                tech: "Recursive p5.js Script."
+            },
+            {
+                category: "Interactive & Tech",
+                title: "Bitcoin Wizards",
+                id: "0623d9b1ee252ccc57507b93615a5c3d221e184826358ae02888cdcf6a40c406i0",
+                number: "139,898",
+                type: "pixel",
+                collection: "Bitcoin Wizards",
+                artist: "Unknown",
+                desc: "The wizard that started the 'Magic Internet Money' meme, immortalized on Bitcoin.",
+                tech: "Pixel Art Image."
+            },
+            
+            // --- AUDIO & MUSIC ---
+            {
+                category: "Audionals & Music",
+                title: "The First Audional (Base64)",
+                id: "0b8eff3f39f4095d0f129bb8dd75f29159f8725c7e66046bf41f70ebb9f60d93i0",
+                number: "12,435,054",
+                type: "html",
+                collection: "Audionals Protocol",
+                artist: "Jim.btc",
+                desc: "The first Base64 text audio sample. It looks like code but represents sound.",
+                tech: "JSON/Text Data."
+            },
+            {
+                category: "Audionals & Music",
+                title: "Audional Player",
+                id: "7d058415fb8b6d35fddd375208648254bcb0e4e470b4b25da3dac32d8b04b935i0",
+                number: "12,206,104",
+                type: "html",
+                collection: "Audionals Protocol",
+                artist: "Jim.btc",
+                desc: "This code plays the audio. Click 'Play' inside the viewer to hear it.",
+                tech: "Recursive Javascript Player."
+            },
+            {
+                category: "Audionals & Music",
+                title: "Recursive Song: TRUTH",
+                id: "9f2ec8bcab1d134437e5d2f87e435c8141011125e6ea940c292c242fb4660109i0",
+                number: "72,602,366",
+                type: "html",
+                collection: "Audionals",
+                artist: "Jim.btc",
+                desc: "A fully recursive song. It pulls individual instrument samples from other inscriptions and sequences them in real-time.",
+                tech: "Recursive JSON Sequencer."
+            },
+            {
+                category: "Audionals & Music",
+                title: "Mac & Cheese 5 (French Montana)",
+                id: "3eb5b8f249759c7a3fa6683a7f51d288af0aeffa847904a18c0fb382ca46c1b2i0",
+                number: "64,333,690",
+                type: "video",
+                collection: "Music",
+                artist: "French Montana",
+                desc: "A massive 4MB inscription taking up an entire block. It contains a video/audio file.",
+                tech: "MP4 Video/Audio."
+            },
+
+            // --- GAMING & HISTORY ---
+            {
+                category: "Gaming & History",
+                title: "DOOM (Clone)",
+                id: "521f8eccffa4c41a3a7728dd012ea5a4a02feed81f41159231251ecf1e5c79dai0",
+                number: "466",
+                type: "html",
+                collection: "Gaming",
+                artist: "Unknown",
+                desc: "A clone of the classic FPS DOOM. Use your keyboard to move inside the iframe.",
+                tech: "WebAssembly Game."
+            },
+            {
+                category: "Gaming & History",
+                title: "Inscription #0",
+                id: "6fb976ab49dcec017f1e201e84395983204ae1a7c2abf7ced0a85d692e442799i0",
+                number: "0",
+                type: "image",
+                collection: "Genesis",
+                artist: "Casey Rodarmor",
+                desc: "The very first inscription. A historic black and white skull.",
+                tech: "Genesis Artifact."
+            },
+            {
+                category: "Gaming & History",
+                title: "The Bitcoin Shanty",
+                id: "ad99172fce60028406f62725b91b5c508edd95bf21310de5afeb0966ddd89be3i0",
+                number: "73",
+                type: "audio",
+                collection: "History",
+                artist: "Unknown",
+                desc: "The first audio inscription ever put on Bitcoin. A simple sea shanty.",
+                tech: "Audio File (WEBM/MP3)."
+            },
+            {
+                category: "Gaming & History",
+                title: "On The Edge Of Oblivion",
+                id: "f0d35042249166706470873166f2617c639f0e3a06362600a43bf31b4921025ai0",
+                number: "9,978",
+                type: "html",
+                collection: "Bridging Era",
+                artist: "Nullish",
+                desc: "Representing the migration of artists to Bitcoin. This is a 3D WebGL render.",
+                tech: "3D/WebGL."
+            }
+        ];
+
+        let currentIndex = 0;
+        let tourInterval = null;
+        const container = document.getElementById('viewer-container');
+        const loader = document.getElementById('loader');
+        const statusText = document.getElementById('status-text');
+
+        // Initialization
+        function init() {
+            renderSidebar();
+        }
+
+        function startApp() {
+            document.getElementById('modal-overlay').style.display = 'none';
+            loadExhibit(0);
+        }
+
+        // Render Sidebar Navigation
+        function renderSidebar() {
+            const sidebar = document.getElementById('sidebar');
+            let lastCategory = "";
+
+            exhibits.forEach((item, index) => {
+                if (item.category !== lastCategory) {
+                    const header = document.createElement('div');
+                    header.className = 'category-header';
+                    header.innerText = item.category;
+                    sidebar.appendChild(header);
+                    lastCategory = item.category;
+                }
+
+                const navItem = document.createElement('div');
+                navItem.className = 'nav-item';
+                navItem.id = `nav-${index}`;
+                navItem.onclick = () => loadExhibit(index);
+                
+                const numSpan = document.createElement('span');
+                numSpan.className = 'num';
+                numSpan.innerText = `#${item.number}`;
+                
+                const titleSpan = document.createElement('span');
+                titleSpan.innerText = item.title;
+
+                navItem.appendChild(numSpan);
+                navItem.appendChild(titleSpan);
+                sidebar.appendChild(navItem);
+            });
+        }
+
+        // Core Loading Logic
+        function loadExhibit(index) {
+            if (index < 0 || index >= exhibits.length) return;
+
+            currentIndex = index;
+            const data = exhibits[index];
+
+            // Update UI Sidebar
+            document.querySelectorAll('.nav-item').forEach(el => el.classList.remove('active'));
+            const activeNav = document.getElementById(`nav-${index}`);
+            if(activeNav) {
+                activeNav.classList.add('active');
+                activeNav.scrollIntoView({behavior: "smooth", block: "center"});
+            }
+
+            // Update Info Panel
+            const infoPanel = document.getElementById('info-content');
+            infoPanel.innerHTML = `
+                <div class="badge">${data.collection}</div>
+                <h2 class="inscription-title">${data.title}</h2>
+                <div class="inscription-meta">
+                    <div><span class="meta-label">Inscription #</span>${data.number}</div>
+                    <div><span class="meta-label">Artist</span>${data.artist}</div>
+                </div>
+                <p class="description">${data.desc}</p>
+                <div class="tech-note">
+                    <h4>Technical Insight</h4>
+                    ${data.tech}
+                </div>
+                <div style="margin-top:20px; font-size:0.7rem; color:#555;">ID: ${data.id}</div>
+            `;
+
+            // RENDER LOGIC
+            // Clear previous content
+            container.innerHTML = '';
+            container.appendChild(loader);
+            loader.style.opacity = '1';
+
+            const contentUrl = `https://ordinals.com/content/${data.id}`;
+
+            setTimeout(() => {
+                let element;
+
+                if (data.type === 'html') {
+                    // IFRAME for Interactive/Code
+                    element = document.createElement('iframe');
+                    element.src = contentUrl;
+                    element.className = 'asset-view';
+                    // Sandbox to allow scripts but prevent navigation/popups
+                    element.sandbox = "allow-scripts allow-same-origin allow-pointer-lock allow-forms";
+                } 
+                else if (data.type === 'pixel') {
+                    // IMAGE for Pixel Art (Nearest Neighbor Scaling)
+                    element = document.createElement('img');
+                    element.src = contentUrl;
+                    element.className = 'asset-view pixel-art';
+                }
+                else if (data.type === 'image') {
+                    // IMAGE for Standard/Vector (Smooth Scaling)
+                    element = document.createElement('img');
+                    element.src = contentUrl;
+                    element.className = 'asset-view';
+                }
+                else if (data.type === 'video') {
+                    // VIDEO Tag
+                    element = document.createElement('video');
+                    element.src = contentUrl;
+                    element.controls = true;
+                    element.autoplay = false; // Prevent blasting audio on load
+                    element.className = 'asset-view';
+                }
+                else if (data.type === 'audio') {
+                    // AUDIO Tag with visual placeholder
+                    element = document.createElement('div');
+                    element.style.display = 'flex';
+                    element.style.flexDirection = 'column';
+                    element.style.alignItems = 'center';
+                    element.style.justifyContent = 'center';
+                    element.style.height = '100%';
+                    
+                    const icon = document.createElement('div');
+                    icon.innerHTML = '🎵';
+                    icon.style.fontSize = '5rem';
+                    icon.style.marginBottom = '20px';
+                    
+                    const audio = document.createElement('audio');
+                    audio.src = contentUrl;
+                    audio.controls = true;
+
+                    element.appendChild(icon);
+                    element.appendChild(audio);
+                }
+
+                // Handle Loading State
+                if (data.type === 'html' || data.type === 'pixel' || data.type === 'image') {
+                    element.onload = () => { loader.style.opacity = '0'; };
+                } else {
+                    loader.style.opacity = '0'; // Videos/Audio load differently
+                }
+
+                container.appendChild(element);
+
+            }, 100);
+        }
+
+        // Navigation
+        function navigate(direction) {
+            let newIndex = currentIndex + direction;
+            if (newIndex < 0) newIndex = exhibits.length - 1;
+            if (newIndex >= exhibits.length) newIndex = 0;
+            loadExhibit(newIndex);
+        }
+
+        // Auto Tour
+        function toggleTour() {
+            const btn = document.getElementById('auto-tour-btn');
+            if (tourInterval) {
+                clearInterval(tourInterval);
+                tourInterval = null;
+                btn.innerText = "Start Auto-Tour";
+                btn.style.background = "#333";
+                btn.style.color = "#fff";
+                statusText.innerText = "Manual Mode";
+            } else {
+                navigate(1); 
+                tourInterval = setInterval(() => navigate(1), 15000); // 15s per slide
+                btn.innerText = "Stop Tour";
+                btn.style.background = "var(--accent)";
+                btn.style.color = "#000";
+                statusText.innerText = "Tour Active (15s)";
+            }
+        }
+
+        init();
+    </script>
+</body>
+</html>
