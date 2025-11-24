@@ -1,0 +1,851 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>BURGESS Design Studio</title>
+<style>
+/* Core Reset & Theme */
+* { margin:0; padding:0; box-sizing:border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%);
+  min-height: 100vh; color: white;
+}
+
+/* Layout */
+.container { max-width: 1400px; margin: 0 auto; padding: 20px; }
+.header { text-align: center; margin-bottom: 30px; }
+.header h1 { font-size: 2.5rem; font-weight: bold; margin-bottom: 10px; text-shadow: 0 2px 10px rgba(0,0,0,0.3); }
+.header p { color: #a5b4fc; font-size: 1.1rem; }
+
+/* Mode Switcher */
+.mode-switcher {
+  display: flex;
+  justify-content: center;
+  gap: 20px;
+  margin-bottom: 30px;
+  background: rgba(255,255,255,0.05);
+  padding: 10px;
+  border-radius: 50px;
+  width: fit-content;
+  margin-left: auto;
+  margin-right: auto;
+  border: 1px solid rgba(255,255,255,0.1);
+}
+.mode-btn {
+  padding: 10px 30px;
+  border-radius: 40px;
+  border: none;
+  background: transparent;
+  color: #a5b4fc;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+  font-size: 1rem;
+}
+.mode-btn.active {
+  background: #4f46e5;
+  color: white;
+  box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+}
+
+/* Main Grid */
+.main-grid { display: grid; grid-template-columns: 1fr 400px; gap: 30px; align-items: start; }
+
+/* Canvas Section */
+.canvas-section { background: rgba(0,0,0,0.3); border: 1px solid rgba(255,255,255,0.1); border-radius: 16px; padding: 20px; }
+.canvas-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: 15px; font-size: 1.1rem; font-weight: 600; color: #e2e8f0; }
+
+/* Canvas Aspect Ratios */
+.canvas-wrapper { width: 100%; display: flex; justify-content: center; background: rgba(0,0,0,0.2); border-radius: 8px; padding: 20px; }
+.canvas {
+  position: relative;
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  border-radius: 4px;
+  overflow: hidden;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.5);
+  transition: background 0.3s ease; /* Animate background changes only */
+  border: 1px solid rgba(255,255,255,0.1);
+}
+
+/* Aspect Ratio Classes */
+.ratio-poster { width: 100%; aspect-ratio: 3/2; max-height: 600px; }
+.ratio-book { height: 600px; aspect-ratio: 2/3; width: auto; }
+
+/* Canvas Elements */
+.canvas-element {
+  position: absolute;
+  cursor: grab;
+  user-select: none;
+  filter: drop-shadow(0 4px 6px rgba(0,0,0,0.8));
+  /* Removed transition transform to make dragging snappy */
+}
+
+/* Selection Frame (The UI Overlay) */
+#selection-frame {
+    position: absolute;
+    border: 2px dashed #4f46e5;
+    pointer-events: none; /* Let clicks pass through to the image below */
+    z-index: 100;
+    display: none;
+    box-shadow: 0 0 0 1px rgba(255,255,255,0.3);
+}
+#selection-frame.visible { display: block; }
+
+/* Resize Handle */
+.resize-handle {
+    position: absolute;
+    width: 16px;
+    height: 16px;
+    background: #4f46e5;
+    border: 2px solid white;
+    border-radius: 50%;
+    bottom: -8px;
+    right: -8px;
+    cursor: nwse-resize;
+    pointer-events: auto; /* Re-enable events for the handle */
+    box-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    z-index: 101;
+}
+.resize-handle:hover { transform: scale(1.2); }
+
+/* HIDE BROKEN LINKS */
+.canvas-element[src=""], .canvas-element:not([src]) { display: none; }
+
+.canvas-element:active { cursor: grabbing; }
+.hidden { display: none !important; }
+
+/* Instruction Text */
+.instruction-bar {
+    margin-top: 15px;
+    padding: 15px;
+    background: rgba(79, 70, 229, 0.1);
+    border: 1px solid rgba(79, 70, 229, 0.3);
+    border-radius: 8px;
+    text-align: center;
+    color: #c7d2fe;
+    font-size: 0.95rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    animation: fadeIn 0.5s ease;
+}
+.instruction-icon { font-size: 1.2rem; }
+
+@keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+/* Controls */
+.controls-section { display: flex; flex-direction: column; gap: 20px; }
+.tabs { background: rgba(30, 41, 59, 0.7); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; overflow: hidden; backdrop-filter: blur(10px); }
+.tab-buttons { display: flex; overflow-x: auto; background: rgba(0,0,0,0.2); border-bottom: 1px solid rgba(255,255,255,0.05); }
+.tab-button {
+  flex: 1; padding: 15px; background: transparent; border: none; color: #94a3b8;
+  cursor: pointer; font-weight: 600; transition: all 0.2s; white-space: nowrap;
+}
+.tab-button:hover { color: white; background: rgba(255,255,255,0.05); }
+.tab-button.active { color: white; background: rgba(79, 70, 229, 0.2); border-bottom: 2px solid #4f46e5; }
+
+.tab-content { padding: 20px; max-height: 500px; overflow-y: auto; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Option Grid */
+.option-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(100px, 1fr)); gap: 10px; }
+.option-item {
+  position: relative; border-radius: 8px; overflow: hidden; border: 2px solid rgba(255,255,255,0.1);
+  cursor: pointer; transition: all 0.2s; background: rgba(0,0,0,0.2); aspect-ratio: 1;
+}
+.option-item:hover { transform: translateY(-2px); border-color: #818cf8; }
+.option-item.selected { border-color: #4f46e5; box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.3); }
+.option-item img { width: 100%; height: 100%; object-fit: contain; padding: 5px; }
+
+/* Arrows for Variants */
+.variant-btn {
+  position: absolute; top: 50%; transform: translateY(-50%);
+  width: 24px; height: 24px; border-radius: 50%; border: none;
+  background: rgba(0,0,0,0.8); color: white; font-size: 10px;
+  cursor: pointer; display: flex; align-items: center; justify-content: center;
+  transition: 0.2s; opacity: 0;
+}
+.option-item:hover .variant-btn { opacity: 1; }
+.variant-btn.left { left: 5px; }
+.variant-btn.right { right: 5px; }
+
+/* Sliders & Buttons */
+.sliders-panel { background: rgba(30, 41, 59, 0.7); padding: 20px; border-radius: 12px; border: 1px solid rgba(255,255,255,0.1); }
+.control-group { margin-bottom: 15px; }
+.control-group label { display: flex; justify-content: space-between; margin-bottom: 8px; font-size: 0.9rem; color: #e2e8f0; }
+input[type=range] { width: 100%; accent-color: #4f46e5; height: 4px; background: rgba(255,255,255,0.1); border-radius: 2px; }
+
+.action-buttons { display: flex; gap: 10px; margin-top: 10px; }
+.btn {
+  flex: 1; padding: 12px; border: none; border-radius: 8px; font-weight: 600; cursor: pointer;
+  display: flex; align-items: center; justify-content: center; gap: 8px; transition: 0.2s;
+}
+.btn-reset { background: rgba(255,255,255,0.1); color: white; }
+.btn-reset:hover { background: rgba(255,255,255,0.2); }
+.btn-save { background: linear-gradient(135deg, #4f46e5, #ec4899); color: white; }
+.btn-save:hover { filter: brightness(1.1); transform: translateY(-1px); }
+
+@media (max-width: 900px) {
+  .main-grid { grid-template-columns: 1fr; }
+  .ratio-book { height: auto; width: 100%; max-width: 400px; margin: 0 auto; }
+}
+</style>
+</head>
+<body>
+
+<div class="container">
+    <header class="header">
+        <h1>Design Studio</h1>
+        <p>Create Posters & Book Covers in seconds</p>
+    </header>
+
+    <!-- Mode Switcher -->
+    <div class="mode-switcher">
+        <button class="mode-btn active" onclick="setMode('poster')">Poster Mode</button>
+        <button class="mode-btn" onclick="setMode('book')">Book Cover Mode</button>
+    </div>
+
+    <div class="main-grid">
+        <!-- Canvas Area -->
+        <div class="canvas-section">
+            <div class="canvas-header">
+                <span>Live Preview</span>
+                <span style="font-size: 0.8rem; opacity: 0.7; font-weight: 400;">Click elements to edit • Drag corner to resize</span>
+            </div>
+            <div class="canvas-wrapper">
+                <!-- Added onclick="deselectAll" to background to allow clicking off -->
+                <div id="canvas" class="canvas ratio-poster" onmousedown="if(event.target === this) deselectAllElements()">
+                    
+                    <!-- Selection Frame UI -->
+                    <div id="selection-frame">
+                        <div class="resize-handle" onmousedown="startResizing(event)"></div>
+                    </div>
+
+                    <!-- Poster Elements -->
+                    <img id="poster-text" class="canvas-element poster-el" src="" style="width: 60%; top: 20%; left: 50%; transform: translate(-50%, -50%); z-index: 2;">
+                    <img id="poster-char" class="canvas-element poster-el" src="" style="width: 30%; top: 60%; left: 50%; transform: translate(-50%, -50%); z-index: 3;">
+                    
+                    <!-- Book Elements -->
+                    <img id="book-title" class="canvas-element book-el hidden" src="" style="width: 80%; top: 15%; left: 50%; transform: translate(-50%, -50%); z-index: 3;">
+                    <img id="book-author" class="canvas-element book-el hidden" src="" style="width: 60%; top: 85%; left: 50%; transform: translate(-50%, -50%); z-index: 3;">
+                </div>
+            </div>
+            
+            <!-- Instruction Text Area -->
+            <div id="instruction-text" class="instruction-bar">
+                <span class="instruction-icon">💡</span>
+                <span id="instruction-msg">Select a Background to begin.</span>
+            </div>
+        </div>
+
+        <!-- Controls Area -->
+        <div class="controls-section">
+            <!-- Tabs -->
+            <div class="tabs">
+                <div id="tab-buttons" class="tab-buttons">
+                    <!-- Injected by JS -->
+                </div>
+                <div id="tab-content" class="tab-content">
+                    <!-- Injected by JS -->
+                </div>
+            </div>
+
+            <!-- Size Sliders -->
+            <div class="sliders-panel">
+                <div id="sliders-container">
+                    <!-- Injected by JS based on active elements -->
+                </div>
+                
+                <div class="action-buttons">
+                    <button class="btn btn-reset" onclick="resetLayout()">
+                        <span>↺</span> Reset
+                    </button>
+                    <button id="save-btn" class="btn btn-save" onclick="downloadDesign()">
+                        <span>⬇</span> Save Image
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/**
+ * APP CONFIGURATION
+ */
+const CONFIG = {
+    poster: {
+        ratioClass: 'ratio-poster',
+        rootFolder: 'posters/',
+        tabs: [
+            { id: 'bg', label: 'Backgrounds', folder: 'backgrounds', target: 'bg', bases: ['album_collage', 'dressing_room', 'vinyl_wall'] },
+            { id: 'char', label: 'Character', folder: 'characters', target: 'poster-char', bases: ['BURGESS'] },
+            { id: 'txt', label: 'Text', folder: 'text', target: 'poster-text', bases: ['BurgessText', 'burgess_retro', 'burgess_neon'] }
+        ],
+        sliders: [
+            { target: 'poster-text', label: 'Text Size', default: 60 },
+            { target: 'poster-char', label: 'Character Size', default: 30 }
+        ]
+    },
+    book: {
+        ratioClass: 'ratio-book',
+        rootFolder: 'books/',
+        tabs: [
+            { id: 'cover', label: 'Covers', folder: 'covers', target: 'bg', bases: ['cover_base'] },
+            { id: 'title', label: 'Title', folder: 'titles', target: 'book-title', bases: ['book_title'] },
+            { id: 'author', label: 'Author', folder: 'authors', target: 'book-author', bases: ['author_name'] }
+        ],
+        sliders: [
+            { target: 'book-title', label: 'Title Size', default: 80 },
+            { target: 'book-author', label: 'Author Size', default: 60 }
+        ]
+    }
+};
+
+// Global State
+let currentState = {
+    mode: 'poster',
+    selections: {}, 
+    activeTab: null,
+    activeElementId: null
+};
+
+// --- INITIALIZATION ---
+document.addEventListener('DOMContentLoaded', () => {
+    setMode('poster');
+});
+
+// --- CORE FUNCTIONS ---
+
+function setMode(mode) {
+    currentState.mode = mode;
+    currentState.selections = {}; 
+    deselectAllElements(); 
+    
+    // 1. Update Mode Buttons
+    document.querySelectorAll('.mode-btn').forEach(b => {
+        b.classList.toggle('active', b.textContent.toLowerCase().includes(mode));
+    });
+
+    // 2. Update Canvas
+    const canvas = document.getElementById('canvas');
+    canvas.className = `canvas ${CONFIG[mode].ratioClass}`;
+    canvas.style.backgroundImage = 'none'; 
+    
+    // Toggle visibility
+    document.querySelectorAll('.poster-el').forEach(el => {
+        el.classList.toggle('hidden', mode !== 'poster');
+        if(mode !== 'poster') el.src = ""; 
+    });
+    document.querySelectorAll('.book-el').forEach(el => {
+        el.classList.toggle('hidden', mode !== 'book');
+        if(mode !== 'book') el.src = ""; 
+    });
+
+    // 3. Render UI
+    renderTabs(mode);
+    renderSliders(mode);
+
+    // 4. Auto-select Background
+    const bgTab = CONFIG[mode].tabs[0]; 
+    const firstBgBase = bgTab.bases[0];
+    updateElement(bgTab, { base: firstBgBase, variantIdx: 1 });
+    
+    const firstPanel = document.getElementById(`panel-${bgTab.id}`);
+    if(firstPanel) {
+        const firstOption = firstPanel.querySelector('.option-item');
+        if(firstOption) firstOption.classList.add('selected');
+    }
+
+    // Clear other elements
+    CONFIG[mode].tabs.slice(1).forEach(tab => {
+        const el = document.getElementById(tab.target);
+        if(el) el.src = ""; 
+    });
+
+    resetLayout();
+    updateInstructions();
+    bindDragEvents();
+}
+
+function updateInstructions() {
+    const mode = currentState.mode;
+    const tabs = CONFIG[mode].tabs;
+    const msgEl = document.getElementById('instruction-msg');
+    
+    // Check BG
+    const canvas = document.getElementById('canvas');
+    if (!canvas.style.backgroundImage || canvas.style.backgroundImage === 'none' || canvas.style.backgroundImage === '') {
+         msgEl.textContent = `Select a Background to begin.`; 
+         msgEl.parentElement.style.background = "rgba(239, 68, 68, 0.1)"; 
+         return;
+    }
+
+    // Check elements
+    let missingItem = null;
+    for (let i = 1; i < tabs.length; i++) {
+        const tab = tabs[i];
+        const el = document.getElementById(tab.target);
+        if (!el.src || el.src.endsWith(window.location.href)) {
+            missingItem = tab.label;
+            break;
+        }
+    }
+
+    if (missingItem) {
+        msgEl.textContent = `Now select ${missingItem} to place it on the canvas.`;
+        msgEl.parentElement.style.background = "rgba(79, 70, 229, 0.1)"; 
+    } else {
+        msgEl.textContent = "Click an item to edit or drag the corner to resize.";
+        msgEl.parentElement.style.background = "rgba(16, 185, 129, 0.1)"; 
+    }
+}
+
+function renderTabs(mode) {
+    const tabContainer = document.getElementById('tab-buttons');
+    const contentContainer = document.getElementById('tab-content');
+    
+    tabContainer.innerHTML = '';
+    contentContainer.innerHTML = '';
+
+    CONFIG[mode].tabs.forEach((tab, index) => {
+        const btn = document.createElement('button');
+        btn.className = `tab-button ${index === 0 ? 'active' : ''}`;
+        btn.textContent = tab.label;
+        btn.onclick = () => activateTab(tab.id);
+        tabContainer.appendChild(btn);
+
+        const panel = document.createElement('div');
+        panel.id = `panel-${tab.id}`;
+        panel.className = `tab-panel ${index === 0 ? 'active' : ''}`;
+        
+        const grid = document.createElement('div');
+        grid.className = 'option-grid';
+        
+        tab.bases.forEach(baseName => {
+            const card = createOptionCard(mode, tab, baseName);
+            grid.appendChild(card);
+        });
+        
+        panel.appendChild(grid);
+        contentContainer.appendChild(panel);
+    });
+
+    currentState.activeTab = CONFIG[mode].tabs[0].id;
+}
+
+function createOptionCard(mode, tab, baseName) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'option-item';
+    
+    const getPath = (variant) => `${CONFIG[mode].rootFolder}${tab.folder}/${baseName}_${variant}.png`;
+
+    const img = document.createElement('img');
+    img.src = getPath(1);
+    img.onerror = () => { img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSIjNDQ0Ij48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxMiIgZmlsbD0iI2ZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlzc2luZzwvdGV4dD48L3N2Zz4='; }; 
+    img.alt = baseName;
+
+    const leftBtn = document.createElement('button');
+    leftBtn.className = 'variant-btn left';
+    leftBtn.innerHTML = '◀';
+    leftBtn.onclick = (e) => { e.stopPropagation(); changeVariant(tab, baseName, -1, img); };
+
+    const rightBtn = document.createElement('button');
+    rightBtn.className = 'variant-btn right';
+    rightBtn.innerHTML = '▶';
+    rightBtn.onclick = (e) => { e.stopPropagation(); changeVariant(tab, baseName, 1, img); };
+
+    wrapper.onclick = () => {
+        const isAlreadySelected = wrapper.classList.contains('selected');
+        document.querySelectorAll(`#panel-${tab.id} .option-item`).forEach(el => el.classList.remove('selected'));
+
+        if (isAlreadySelected) {
+            updateElement(tab, null);
+        } else {
+            wrapper.classList.add('selected');
+            const currentVar = parseInt(img.dataset.variant || 1);
+            updateElement(tab, { base: baseName, variantIdx: currentVar });
+        }
+        updateInstructions();
+    };
+
+    wrapper.append(leftBtn, img, rightBtn);
+    return wrapper;
+}
+
+function changeVariant(tab, baseName, dir, imgEl) {
+    let current = parseInt(imgEl.dataset.variant || 1);
+    let next = current + dir;
+    if (next < 1) next = 5; 
+    if (next > 5) next = 1;
+    
+    const mode = currentState.mode;
+    const newPath = `${CONFIG[mode].rootFolder}${tab.folder}/${baseName}_${next}.png`;
+    
+    imgEl.src = newPath;
+    imgEl.dataset.variant = next;
+
+    if (imgEl.parentElement.classList.contains('selected')) {
+        updateElement(tab, { base: baseName, variantIdx: next });
+    }
+}
+
+function updateElement(tab, selection) {
+    if (!selection) {
+        if (tab.target === 'bg') {
+            document.getElementById('canvas').style.backgroundImage = 'none';
+        } else {
+            const el = document.getElementById(tab.target);
+            if (el) {
+                el.src = ""; 
+                if(currentState.activeElementId === tab.target) deselectAllElements();
+            }
+        }
+        delete currentState.selections[tab.id];
+        return;
+    }
+
+    const path = `${CONFIG[currentState.mode].rootFolder}${tab.folder}/${selection.base || selection.baseName}_${selection.variantIdx}.png`;
+    
+    if (tab.target === 'bg') {
+        document.getElementById('canvas').style.backgroundImage = `url('${path}')`;
+    } else {
+        const el = document.getElementById(tab.target);
+        if (el) {
+            el.src = path;
+            el.style.display = 'block';
+            bindDragEvents();
+        }
+    }
+    currentState.selections[tab.id] = selection;
+}
+
+function activateTab(tabId) {
+    document.querySelectorAll('.tab-button').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.tab-panel').forEach(p => p.classList.remove('active'));
+    
+    const btn = Array.from(document.querySelectorAll('.tab-button')).find(b => b.textContent === CONFIG[currentState.mode].tabs.find(t => t.id === tabId).label);
+    if(btn) btn.classList.add('active');
+    
+    document.getElementById(`panel-${tabId}`).classList.add('active');
+    currentState.activeTab = tabId;
+}
+
+function renderSliders(mode) {
+    const container = document.getElementById('sliders-container');
+    container.innerHTML = '';
+    
+    CONFIG[mode].sliders.forEach(slider => {
+        const group = document.createElement('div');
+        group.className = 'control-group';
+        
+        const label = document.createElement('label');
+        label.innerHTML = `${slider.label} <span id="val-${slider.target}">${slider.default}%</span>`;
+        
+        const input = document.createElement('input');
+        input.id = `slider-${slider.target}`;
+        input.type = 'range';
+        input.min = '10';
+        input.max = '200';
+        input.value = slider.default;
+        
+        input.oninput = (e) => {
+            const val = e.target.value;
+            document.getElementById(`val-${slider.target}`).textContent = val + '%';
+            const el = document.getElementById(slider.target);
+            if (el) {
+                el.style.width = val + '%';
+                updateSelectionFrame();
+            }
+        };
+
+        group.append(label, input);
+        container.append(group);
+    });
+}
+
+function resetLayout() {
+    const mode = currentState.mode;
+    renderSliders(mode);
+    deselectAllElements();
+    
+    if (mode === 'poster') {
+        const txt = document.getElementById('poster-text');
+        const char = document.getElementById('poster-char');
+        txt.style.top = '20%'; txt.style.left = '50%'; txt.style.width = '60%';
+        char.style.top = '60%'; char.style.left = '50%'; char.style.width = '30%';
+    } else {
+        const title = document.getElementById('book-title');
+        const author = document.getElementById('book-author');
+        title.style.top = '15%'; title.style.left = '50%'; title.style.width = '80%';
+        author.style.top = '85%'; author.style.left = '50%'; author.style.width = '60%';
+    }
+}
+
+// --- SELECTION, DRAG & RESIZE LOGIC ---
+
+function deselectAllElements() {
+    currentState.activeElementId = null;
+    document.getElementById('selection-frame').classList.remove('visible');
+}
+
+function updateSelectionFrame() {
+    if (!currentState.activeElementId) return;
+    
+    const el = document.getElementById(currentState.activeElementId);
+    const frame = document.getElementById('selection-frame');
+    
+    if (!el || el.style.display === 'none') {
+        deselectAllElements();
+        return;
+    }
+
+    const rect = el.getBoundingClientRect();
+    const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+
+    const top = rect.top - canvasRect.top;
+    const left = rect.left - canvasRect.left;
+    
+    frame.style.width = rect.width + 'px';
+    frame.style.height = rect.height + 'px';
+    frame.style.top = top + 'px';
+    frame.style.left = left + 'px';
+    frame.classList.add('visible');
+}
+
+function bindDragEvents() {
+    const mode = currentState.mode;
+    const elements = (mode === 'poster') 
+        ? document.querySelectorAll('.poster-el')
+        : document.querySelectorAll('.book-el');
+
+    elements.forEach(el => {
+        el.onmousedown = null; 
+        el.ontouchstart = null;
+        
+        if(!el.src || el.style.display === 'none') return;
+
+        el.onmousedown = function(e) { handleElementInteraction(e, el); };
+        el.ontouchstart = function(e) { handleElementInteraction(e, el); };
+    });
+}
+
+function handleElementInteraction(e, el) {
+    const tabs = CONFIG[currentState.mode].tabs;
+    const targetTab = tabs.find(t => t.target === el.id);
+    if (targetTab) activateTab(targetTab.id);
+
+    currentState.activeElementId = el.id;
+    updateSelectionFrame();
+
+    e.preventDefault();
+    e.stopPropagation();
+    
+    let startX = e.clientX || e.touches[0].clientX;
+    let startY = e.clientY || e.touches[0].clientY;
+    
+    const elemRect = el.getBoundingClientRect();
+    const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+    
+    const offsetX = startX - (elemRect.left + elemRect.width/2);
+    const offsetY = startY - (elemRect.top + elemRect.height/2);
+
+    el.style.cursor = 'grabbing';
+    el.style.zIndex = 100; 
+
+    const moveHandler = function(moveEvent) {
+        moveEvent.preventDefault();
+        const mouseX = moveEvent.clientX || moveEvent.touches[0].clientX;
+        const mouseY = moveEvent.clientY || moveEvent.touches[0].clientY;
+
+        let newLeft = mouseX - canvasRect.left - offsetX;
+        let newTop = mouseY - canvasRect.top - offsetY;
+
+        let percentLeft = (newLeft / canvasRect.width) * 100;
+        let percentTop = (newTop / canvasRect.height) * 100;
+
+        el.style.left = `${percentLeft}%`;
+        el.style.top = `${percentTop}%`;
+        
+        updateSelectionFrame();
+    };
+
+    const upHandler = function() {
+        el.style.cursor = 'grab';
+        el.style.zIndex = '';
+        document.removeEventListener('mousemove', moveHandler);
+        document.removeEventListener('mouseup', upHandler);
+        document.removeEventListener('touchmove', moveHandler);
+        document.removeEventListener('touchend', upHandler);
+    };
+
+    document.addEventListener('mousemove', moveHandler);
+    document.addEventListener('mouseup', upHandler);
+    document.addEventListener('touchmove', moveHandler, { passive: false });
+    document.addEventListener('touchend', upHandler);
+}
+
+function startResizing(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    
+    const el = document.getElementById(currentState.activeElementId);
+    if(!el) return;
+
+    const canvasRect = document.getElementById('canvas').getBoundingClientRect();
+    const startX = e.clientX || e.touches[0].clientX;
+    const startWidth = el.getBoundingClientRect().width;
+    
+    const resizeMove = function(moveEvent) {
+        moveEvent.preventDefault();
+        const currentX = moveEvent.clientX || moveEvent.touches[0].clientX;
+        const diffX = currentX - startX;
+        const newWidthPx = startWidth + diffX;
+        
+        let newWidthPercent = (newWidthPx / canvasRect.width) * 100;
+        
+        if(newWidthPercent < 5) newWidthPercent = 5;
+        if(newWidthPercent > 200) newWidthPercent = 200;
+
+        el.style.width = `${newWidthPercent}%`;
+        
+        const slider = document.getElementById(`slider-${el.id}`);
+        const valLabel = document.getElementById(`val-${el.id}`);
+        if(slider) slider.value = newWidthPercent;
+        if(valLabel) valLabel.textContent = Math.round(newWidthPercent) + '%';
+
+        updateSelectionFrame();
+    };
+
+    const resizeEnd = function() {
+        document.removeEventListener('mousemove', resizeMove);
+        document.removeEventListener('mouseup', resizeEnd);
+        document.removeEventListener('touchmove', resizeMove);
+        document.removeEventListener('touchend', resizeEnd);
+    };
+
+    document.addEventListener('mousemove', resizeMove);
+    document.addEventListener('mouseup', resizeEnd);
+    document.addEventListener('touchmove', resizeMove, { passive: false });
+    document.addEventListener('touchend', resizeEnd);
+}
+
+// --- EXPORT LOGIC ---
+
+function downloadDesign() {
+    const saveBtn = document.getElementById('save-btn');
+    const originalText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<span>⌛</span> Generating...';
+    saveBtn.disabled = true;
+
+    // Hide UI selection before export
+    deselectAllElements();
+
+    const canvasEl = document.getElementById('canvas');
+    const mode = currentState.mode;
+    
+    // HIGH RES CONFIGURATION (300 DPI approx)
+    const w = mode === 'poster' ? 3000 : 2000;
+    const h = mode === 'poster' ? 2000 : 3000;
+    
+    const exportCanvas = document.createElement('canvas');
+    const ctx = exportCanvas.getContext('2d');
+    exportCanvas.width = w;
+    exportCanvas.height = h;
+
+    // Helper
+    const loadImg = (src) => new Promise((resolve) => {
+        if(!src || src === window.location.href) return resolve(null);
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.onload = () => resolve(img);
+        img.onerror = () => resolve(null);
+        img.src = src;
+    });
+
+    // 1. Draw Background
+    // Robust regex to strip url("...") wrapper
+    const bgStyle = window.getComputedStyle(canvasEl).backgroundImage;
+    const bgMatch = bgStyle.match(/url\((['"]?)(.*?)\1\)/);
+    const bgUrl = bgMatch ? bgMatch[2] : null;
+    
+    loadImg(bgUrl).then(bgImg => {
+        if (bgImg) {
+            // Draw bg to cover full high-res canvas
+            ctx.drawImage(bgImg, 0, 0, w, h);
+        }
+
+        // 2. Get Visible Elements & SORT BY Z-INDEX
+        // Instead of hardcoded array, we grab valid elements and sort them
+        // so the export matches the visual layering exactly.
+        const elements = Array.from(document.querySelectorAll(`.${mode}-el`));
+        
+        // Filter hidden or empty elements
+        const visibleElements = elements.filter(el => 
+            el.style.display !== 'none' && 
+            el.src && 
+            el.src !== window.location.href
+        );
+
+        // Sort by Computed Z-Index
+        visibleElements.sort((a, b) => {
+            const zA = parseInt(window.getComputedStyle(a).zIndex) || 0;
+            const zB = parseInt(window.getComputedStyle(b).zIndex) || 0;
+            return zA - zB;
+        });
+
+        // Load images
+        const promises = visibleElements.map(el => loadImg(el.src).then(img => ({ img, el })));
+        return Promise.all(promises);
+    }).then(results => {
+        results.forEach(({ img, el }) => {
+            if (!img) return;
+            
+            // 3. Calculate High-Res Position
+            // getBoundingClientRect gives us the visual box (after CSS transforms) relative to viewport
+            const rect = el.getBoundingClientRect();
+            const containerRect = canvasEl.getBoundingClientRect();
+            
+            // Calculate position relative to container
+            const relX = rect.left - containerRect.left;
+            const relY = rect.top - containerRect.top;
+            
+            // Calculate scaling factor (HighRes Width / CSS Width)
+            const scaleX = w / containerRect.width;
+            const scaleY = h / containerRect.height;
+
+            // Draw scaled
+            ctx.drawImage(
+                img, 
+                relX * scaleX, 
+                relY * scaleY, 
+                rect.width * scaleX, 
+                rect.height * scaleY
+            );
+        });
+
+        // 4. Trigger Download
+        const link = document.createElement('a');
+        link.download = `burgess-${mode}-hires.png`;
+        link.href = exportCanvas.toDataURL('image/png');
+        link.click();
+        
+        // Reset Button
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    }).catch(err => {
+        console.error("Export failed", err);
+        alert("Failed to generate image. Check console for details.");
+        saveBtn.innerHTML = originalText;
+        saveBtn.disabled = false;
+    });
+}
+</script>
+</body>
+</html>
