@@ -308,58 +308,6 @@ const CONFIG = {
     }
 };
 
-const SUPPORTED_IMAGE_EXTENSIONS = ['png', 'jpg', 'jpeg', 'webp'];
-const MISSING_THUMBNAIL = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBm'+
-'aWxsPSIjNDQ0Ij48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxMiIgZmlsbD0iI2ZmZiIgdGV4'+
-'dC1hbmNob3I9Im1pZGRsZSI+TWlzc2luZzwvdGV4dD48L3N2Zz4=';
-const assetPathCache = new Map();
-
-function buildAssetBasePath(mode, tab, baseName, variantIdx) {
-    return `${CONFIG[mode].rootFolder}${tab.folder}/${baseName}_${variantIdx}`;
-}
-
-function resolveAssetPath(basePath) {
-    if (assetPathCache.has(basePath)) {
-        return Promise.resolve(assetPathCache.get(basePath));
-    }
-
-    return new Promise((resolve, reject) => {
-        let idx = 0;
-        const tryLoad = () => {
-            if (idx >= SUPPORTED_IMAGE_EXTENSIONS.length) {
-                reject(new Error(`No supported asset for ${basePath}`));
-                return;
-            }
-
-            const ext = SUPPORTED_IMAGE_EXTENSIONS[idx++];
-            const candidate = `${basePath}.${ext}`;
-            const probe = new Image();
-            probe.onload = () => {
-                assetPathCache.set(basePath, candidate);
-                resolve(candidate);
-            };
-            probe.onerror = tryLoad;
-            probe.src = candidate;
-        };
-
-        tryLoad();
-    });
-}
-
-function loadOptionPreview(imgEl, basePath) {
-    const pendingToken = `${basePath}-${Date.now()}-${Math.random()}`;
-    imgEl.dataset.pendingToken = pendingToken;
-
-    resolveAssetPath(basePath).then(path => {
-        if (imgEl.dataset.pendingToken !== pendingToken) return;
-        imgEl.src = path;
-        imgEl.dataset.assetPath = path;
-    }).catch(() => {
-        if (imgEl.dataset.pendingToken !== pendingToken) return;
-        imgEl.src = MISSING_THUMBNAIL;
-    });
-}
-
 // Global State
 let currentState = {
     mode: 'poster',
@@ -496,11 +444,11 @@ function createOptionCard(mode, tab, baseName) {
     const wrapper = document.createElement('div');
     wrapper.className = 'option-item';
     
+    const getPath = (variant) => `${CONFIG[mode].rootFolder}${tab.folder}/${baseName}_${variant}.png`;
+
     const img = document.createElement('img');
-    const basePath = buildAssetBasePath(mode, tab, baseName, 1);
-    loadOptionPreview(img, basePath);
-    img.dataset.variant = 1;
-    img.onerror = () => { img.src = MISSING_THUMBNAIL; }; 
+    img.src = getPath(1);
+    img.onerror = () => { img.src = 'data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxMDAgMTAwIiBmaWxsPSIjNDQ0Ij48cmVjdCB3aWR0aD0iMTAwIiBoZWlnaHQ9IjEwMCIvPjx0ZXh0IHg9IjUwIiB5PSI1NSIgZm9udC1zaXplPSIxMiIgZmlsbD0iI2ZmZiIgdGV4dC1hbmNob3I9Im1pZGRsZSI+TWlzc2luZzwvdGV4dD48L3N2Zz4='; }; 
     img.alt = baseName;
 
     const leftBtn = document.createElement('button');
@@ -538,8 +486,9 @@ function changeVariant(tab, baseName, dir, imgEl) {
     if (next > 5) next = 1;
     
     const mode = currentState.mode;
-    const basePath = buildAssetBasePath(mode, tab, baseName, next);
-    loadOptionPreview(imgEl, basePath);
+    const newPath = `${CONFIG[mode].rootFolder}${tab.folder}/${baseName}_${next}.png`;
+    
+    imgEl.src = newPath;
     imgEl.dataset.variant = next;
 
     if (imgEl.parentElement.classList.contains('selected')) {
@@ -562,39 +511,19 @@ function updateElement(tab, selection) {
         return;
     }
 
-    const baseName = selection.base || selection.baseName;
-    const basePath = buildAssetBasePath(currentState.mode, tab, baseName, selection.variantIdx);
-    const token = `${tab.id}-${baseName}-${selection.variantIdx}-${Date.now()}-${Math.random()}`;
-    currentState.selections[tab.id] = { ...selection, token };
-
-    resolveAssetPath(basePath).then(path => {
-        const activeSelection = currentState.selections[tab.id];
-        if (!activeSelection || activeSelection.token !== token) return;
-
-        if (tab.target === 'bg') {
-            document.getElementById('canvas').style.backgroundImage = `url('${path}')`;
-        } else {
-            const el = document.getElementById(tab.target);
-            if (el) {
-                el.src = path;
-                el.style.display = 'block';
-                bindDragEvents();
-            }
+    const path = `${CONFIG[currentState.mode].rootFolder}${tab.folder}/${selection.base || selection.baseName}_${selection.variantIdx}.png`;
+    
+    if (tab.target === 'bg') {
+        document.getElementById('canvas').style.backgroundImage = `url('${path}')`;
+    } else {
+        const el = document.getElementById(tab.target);
+        if (el) {
+            el.src = path;
+            el.style.display = 'block';
+            bindDragEvents();
         }
-        activeSelection.resolvedPath = path;
-    }).catch(() => {
-        console.warn(`Unable to load asset for ${basePath}`);
-        if (tab.target === 'bg') {
-            document.getElementById('canvas').style.backgroundImage = 'none';
-        } else {
-            const el = document.getElementById(tab.target);
-            if (el) {
-                el.src = "";
-                if (currentState.activeElementId === tab.target) deselectAllElements();
-            }
-        }
-        delete currentState.selections[tab.id];
-    });
+    }
+    currentState.selections[tab.id] = selection;
 }
 
 function activateTab(tabId) {
