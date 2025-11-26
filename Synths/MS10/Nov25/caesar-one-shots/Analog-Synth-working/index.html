@@ -158,48 +158,6 @@
             margin-bottom: 5px;
         }
 
-        /* KEYBOARD (The requested Flex design) */
-        #keyboard {
-            display: flex;
-            height: 100px;
-            background: #111;
-            justify-content: center;
-            position: relative;
-            margin-top: 10px;
-            padding: 10px 0;
-            border-top: 4px solid #222;
-        }
-        .key {
-            position: relative;
-            width: 40px; /* Fixed Width */
-            height: 100%;
-            background: var(--key-white);
-            border: 1px solid #999;
-            border-radius: 0 0 4px 4px;
-            margin: 0 1px;
-            cursor: pointer;
-            z-index: 1;
-        }
-        .key.black {
-            width: 24px;
-            height: 60%;
-            background: var(--key-black);
-            /* Negative Margins for Overlay */
-            margin-left: -13px;
-            margin-right: -13px;
-            z-index: 2;
-            border: 1px solid #000;
-            border-radius: 0 0 2px 2px;
-            box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
-        }
-        .key.active {
-            background: var(--accent);
-            box-shadow: 0 0 15px var(--accent);
-        }
-        .key.black.active {
-            background: #cc7a00; /* Darker orange */
-        }
-
         /* VISUALS */
         canvas#scope {
             width: 100%; height: 60px;
@@ -409,12 +367,15 @@
     </div>
 
     <script type="module">
+        import { SynthKeyboard } from '../../shared/keyboard.js';
+
         const state = {
             Tone: null,
             synth: null,
             activeNotes: [], // Note stack for mono priority
             activeKeys: [], // For glissando tracking
-            midiAccess: null
+            midiAccess: null,
+            keyboard: null
         };
 
         // 1. LOADER
@@ -536,7 +497,10 @@
             state.activeNotes.push(midi);
             triggerNote(midi, vel);
             
-            updateKeyVisuals(midi, true);
+            // Update visual if triggered by MIDI (not UI)
+            // The UI class handles its own state, but calling this is safe 
+            // as it just adds the class.
+            if (state.keyboard) state.keyboard.triggerVisual(midi, true);
         }
 
         function noteOff(midi) {
@@ -553,42 +517,18 @@
                 state.synth.filtEnv.triggerRelease(now);
             }
             
-            updateKeyVisuals(midi, false);
-        }
-
-        function updateKeyVisuals(midi, on) {
-            const k = document.querySelector(`.key[data-midi="${midi}"]`);
-            if(k) {
-                if(on) k.classList.add('active'); else k.classList.remove('active');
-            }
+            if (state.keyboard) state.keyboard.triggerVisual(midi, false);
         }
 
         // 4. UI GENERATION
         function initUI() {
-            // Keyboard
-            const kb = document.getElementById('keyboard');
-            const start = 48; // C3
-            const keys = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
-            for(let i=0; i<25; i++) {
-                const midi = start + i;
-                const note = keys[i%12];
-                const isBlack = note.includes('#');
-                const div = document.createElement('div');
-                div.className = `key ${isBlack?'black':'white'}`;
-                div.dataset.midi = midi;
-                
-                // Mouse Events
-                const on = () => noteOn(midi);
-                const off = () => noteOff(midi);
-                div.onmousedown = on;
-                div.onmouseup = off;
-                div.onmouseleave = off;
-                div.onmouseenter = (e) => { if(e.buttons === 1) on(); };
-                div.ontouchstart = (e) => { e.preventDefault(); on(); };
-                div.ontouchend = (e) => { e.preventDefault(); off(); };
-                
-                kb.appendChild(div);
-            }
+            // Initialize Shared Keyboard
+            state.keyboard = new SynthKeyboard('keyboard', {
+                startNote: 48,
+                numKeys: 25,
+                onNoteOn: (midi) => noteOn(midi),
+                onNoteOff: (midi) => noteOff(midi)
+            });
 
             // Knobs
             document.querySelectorAll('.knob').forEach(k => {
