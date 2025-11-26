@@ -1,0 +1,901 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Texture Pads | Web3 Wavetable Synth</title>
+    <style>
+        :root {
+            --bg-color: #0b0c10;
+            --panel-bg: #1f2833;
+            --accent: #66fcf1;
+            --accent-dim: #45a29e;
+            --text-main: #c5c6c7;
+            --knob-size: 50px;
+            /* Keyboard Colors */
+            --key-white: #fffff0;
+            --key-black: #111;
+        }
+
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            user-select: none;
+        }
+
+        /* Loading Screen */
+        #loader-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            z-index: 9999;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            transition: opacity 0.5s;
+        }
+        
+        #start-btn {
+            padding: 15px 30px;
+            font-size: 1.2rem;
+            background: transparent;
+            color: var(--accent);
+            border: 2px solid var(--accent);
+            cursor: pointer;
+            margin-top: 20px;
+            display: none;
+        }
+        #start-btn:hover { background: var(--accent); color: #000; }
+
+        /* Main Layout */
+        #app-container {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+
+        /* Visualizer Area */
+        #viz-container {
+            flex: 1;
+            position: relative;
+            background: radial-gradient(circle at center, #1a1a2e 0%, #000 100%);
+            overflow: hidden;
+        }
+        #viz-canvas {
+            width: 100%;
+            height: 100%;
+            display: block;
+        }
+
+        /* Controls Area */
+        #controls {
+            height: 340px;
+            background: var(--panel-bg);
+            border-top: 2px solid var(--accent-dim);
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(5, 1fr);
+            gap: 10px;
+            overflow-y: auto;
+            box-shadow: 0 -10px 20px rgba(0,0,0,0.5);
+        }
+
+        .module {
+            background: rgba(0,0,0,0.3);
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .module h3 {
+            margin: 0 0 10px 0;
+            font-size: 0.8rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        .control-group {
+            margin-bottom: 8px;
+            display: flex;
+            flex-direction: column;
+        }
+
+        label { font-size: 0.7rem; margin-bottom: 4px; display: flex; justify-content: space-between; }
+        
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%;
+            height: 4px;
+            background: #444;
+            border-radius: 2px;
+            outline: none;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px;
+            height: 12px;
+            background: var(--accent);
+            border-radius: 50%;
+            cursor: pointer;
+        }
+
+        /* Selects */
+        select {
+            background: #222;
+            color: var(--accent);
+            border: 1px solid #444;
+            padding: 4px;
+            font-family: inherit;
+            font-size: 0.8rem;
+        }
+
+        /* UPDATED KEYBOARD CSS */
+        #keyboard {
+            /* Layout handled by shared module */
+            background: #000;
+            padding: 10px 0;
+            position: relative;
+        }
+        
+        .helper-text {
+            position: absolute; bottom: 5px; width: 100%; text-align: center;
+            font-size: 0.7rem; color: #666; pointer-events: none;
+        }
+
+        /* MIDI Light */
+        #midi-indicator {
+            width: 10px; height: 10px; border-radius: 50%; background: #333; display: inline-block; margin-left: 5px;
+        }
+        #midi-indicator.active { background: #0f0; box-shadow: 0 0 5px #0f0; }
+
+        /* Responsive Grid */
+        @media (max-width: 900px) {
+            #controls { grid-template-columns: repeat(3, 1fr); height: 400px; }
+        }
+        @media (max-width: 600px) {
+            #controls { grid-template-columns: repeat(2, 1fr); height: 500px; }
+            #keyboard { height: 60px; }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- LOADING OVERLAY -->
+    <div id="loader-overlay">
+        <h2 id="loader-text" style="color:white; margin-bottom: 10px;">Initializing...</h2>
+        <div style="font-size: 0.8rem; color: #888;">Ordinals Audio Engine</div>
+        <button id="start-btn">ENTER SOUNDSCAPE</button>
+    </div>
+
+    <!-- MAIN APP -->
+    <div id="app-container">
+        <!-- VISUALIZER -->
+        <div id="viz-container">
+            <div class="helper-text">Click & Drag Keys to Glissando</div>
+        </div>
+
+        <!-- KEYBOARD -->
+        <div id="keyboard"></div>
+
+        <!-- CONTROL PANEL -->
+        <div id="controls">
+            
+            <!-- 1. MACROS / PRESETS -->
+            <div class="module">
+                <h3>Global & Presets</h3>
+                <div class="control-group">
+                    <label>Preset</label>
+                    <select id="preset-select"></select>
+                </div>
+                <div class="control-group">
+                    <label>Macro 1: Brightness <span id="val-macro1"></span></label>
+                    <input type="range" id="macro1" min="0" max="1" step="0.01" value="0.5">
+                </div>
+                <div class="control-group">
+                    <label>Macro 2: Motion <span id="val-macro2"></span></label>
+                    <input type="range" id="macro2" min="0" max="1" step="0.01" value="0.2">
+                </div>
+                <div class="control-group">
+                    <label>Macro 3: Space <span id="val-macro3"></span></label>
+                    <input type="range" id="macro3" min="0" max="1" step="0.01" value="0.4">
+                </div>
+            </div>
+
+            <!-- 2. OSC / WAVETABLE -->
+            <div class="module">
+                <h3>Oscillator / Morph</h3>
+                <div class="control-group">
+                    <label>Morph (FM Index)</label>
+                    <input type="range" id="osc-morph" min="0" max="20" step="0.1" value="3">
+                </div>
+                <div class="control-group">
+                    <label>Harmonicity</label>
+                    <input type="range" id="osc-harmonicity" min="0.1" max="5" step="0.1" value="1">
+                </div>
+                <div class="control-group">
+                    <label>Detune</label>
+                    <input type="range" id="osc-detune" min="0" max="50" step="1" value="10">
+                </div>
+            </div>
+
+            <!-- 3. FILTER / ENV -->
+            <div class="module">
+                <h3>Filter & Env</h3>
+                <div class="control-group">
+                    <label>Cutoff</label>
+                    <input type="range" id="filter-cutoff" min="100" max="10000" step="10" value="2000">
+                </div>
+                <div class="control-group">
+                    <label>Resonance</label>
+                    <input type="range" id="filter-res" min="0" max="10" step="0.1" value="1">
+                </div>
+                <div class="control-group">
+                    <label>Attack (Pad)</label>
+                    <input type="range" id="env-attack" min="0.1" max="5" step="0.1" value="1">
+                </div>
+                <div class="control-group">
+                    <label>Release</label>
+                    <input type="range" id="env-release" min="0.5" max="10" step="0.1" value="3">
+                </div>
+            </div>
+
+            <!-- 4. LFO / MOD -->
+            <div class="module">
+                <h3>LFO / Transport</h3>
+                <div class="control-group">
+                    <label>BPM</label>
+                    <input type="range" id="bpm" min="60" max="140" value="90">
+                </div>
+                <div class="control-group">
+                    <label>LFO Rate (Sync)</label>
+                    <select id="lfo-rate">
+                        <option value="1n">1n</option>
+                        <option value="2n">2n</option>
+                        <option value="4n" selected>4n</option>
+                        <option value="8n">8n</option>
+                    </select>
+                </div>
+                <div class="control-group">
+                    <label>Filter Mod Depth</label>
+                    <input type="range" id="lfo-depth" min="0" max="2000" step="10" value="500">
+                </div>
+            </div>
+
+            <!-- 5. FX / SPACE -->
+            <div class="module">
+                <h3>FX / Output</h3>
+                <div class="control-group">
+                    <label>Chorus Mix</label>
+                    <input type="range" id="fx-chorus" min="0" max="1" step="0.01" value="0.5">
+                </div>
+                <div class="control-group">
+                    <label>Delay (PingPong)</label>
+                    <input type="range" id="fx-delay" min="0" max="1" step="0.01" value="0.3">
+                </div>
+                <div class="control-group">
+                    <label>Reverb Size</label>
+                    <input type="range" id="fx-reverb" min="0" max="1" step="0.01" value="0.7">
+                </div>
+                <div class="control-group">
+                    <label>Master Vol</label>
+                    <input type="range" id="master-vol" min="-40" max="0" value="-10">
+                </div>
+            </div>
+
+            <!-- 6. MIDI -->
+            <div class="module">
+                <h3>MIDI Config <span id="midi-indicator"></span></h3>
+                <div class="control-group">
+                    <label>Input Device</label>
+                    <select id="midi-select"><option>None</option></select>
+                </div>
+                <div style="font-size: 0.6rem; color: #888; margin-top: 5px;">
+                    CC1: Macro 1<br>CC2: Macro 2<br>CC3: Macro 3
+                </div>
+            </div>
+
+        </div>
+    </div>
+
+    <script type="module">
+        import { SynthKeyboard } from '../../shared/keyboard.js';
+        /**
+         * GLOBAL RUNTIME STATE
+         */
+        const runtimeState = {
+            Tone: null,
+            Three: null,
+            synth: null,
+            filter: null,
+            fx: {
+                chorus: null,
+                delay: null,
+                reverb: null,
+                limiter: null
+            },
+            lfo: {
+                filterLfo: null,
+                ampLfo: null
+            },
+            analysis: {
+                waveform: null,
+                fft: null
+            },
+            midi: null,
+            visuals: {
+                scene: null,
+                camera: null,
+                renderer: null,
+                mesh: null,
+                active: false
+            },
+            // Glissando Logic
+            activeNotes: []
+        };
+
+        // --- PRESETS DATA ---
+        const PRESETS = [
+            {
+                name: "Slow Horizon",
+                macro1: 0.3, macro2: 0.1, macro3: 0.6,
+                morph: 2, harm: 1, detune: 5,
+                cutoff: 800, res: 2, att: 2.0, rel: 4.0,
+                lfoRate: "2n", lfoDepth: 300,
+                chorus: 0.6, delay: 0.4, reverb: 0.8
+            },
+            {
+                name: "Glass Fields",
+                macro1: 0.8, macro2: 0.2, macro3: 0.4,
+                morph: 10, harm: 3.0, detune: 15,
+                cutoff: 4000, res: 0.5, att: 0.1, rel: 2.5,
+                lfoRate: "4n", lfoDepth: 100,
+                chorus: 0.3, delay: 0.5, reverb: 0.6
+            },
+            {
+                name: "Deep Drone",
+                macro1: 0.1, macro2: 0.5, macro3: 0.5,
+                morph: 1, harm: 0.5, detune: 20,
+                cutoff: 200, res: 4, att: 4.0, rel: 6.0,
+                lfoRate: "1n", lfoDepth: 100,
+                chorus: 0.8, delay: 0.2, reverb: 0.9
+            },
+            {
+                name: "Shimmer Cloud",
+                macro1: 0.6, macro2: 0.6, macro3: 0.8,
+                morph: 5, harm: 2, detune: 8,
+                cutoff: 2500, res: 1, att: 1.5, rel: 5.0,
+                lfoRate: "8n", lfoDepth: 500,
+                chorus: 0.7, delay: 0.6, reverb: 0.9
+            },
+            {
+                name: "Pulse Texture",
+                macro1: 0.5, macro2: 0.9, macro3: 0.3,
+                morph: 8, harm: 1.5, detune: 10,
+                cutoff: 1500, res: 3, att: 0.1, rel: 1.0,
+                lfoRate: "8n", lfoDepth: 1500,
+                chorus: 0.2, delay: 0.5, reverb: 0.3
+            },
+            {
+                name: "Frozen Choir",
+                macro1: 0.4, macro2: 0.1, macro3: 0.9,
+                morph: 3, harm: 1, detune: 12,
+                cutoff: 600, res: 6, att: 3.0, rel: 8.0,
+                lfoRate: "4n", lfoDepth: 200,
+                chorus: 1.0, delay: 0.3, reverb: 0.95
+            },
+            {
+                name: "Alien Talk",
+                macro1: 0.7, macro2: 0.8, macro3: 0.2,
+                morph: 20, harm: 4.5, detune: 25,
+                cutoff: 3000, res: 8, att: 0.05, rel: 0.5,
+                lfoRate: "16n", lfoDepth: 2000,
+                chorus: 0.5, delay: 0.5, reverb: 0.2
+            },
+            {
+                name: "Init Pad",
+                macro1: 0.5, macro2: 0.2, macro3: 0.3,
+                morph: 3, harm: 1, detune: 0,
+                cutoff: 2000, res: 1, att: 0.5, rel: 1.0,
+                lfoRate: "4n", lfoDepth: 0,
+                chorus: 0, delay: 0, reverb: 0.3
+            }
+        ];
+
+        /**
+         * 1. BLOCKCHAIN LOADERS
+         */
+        const setLoaderStatus = (msg, error = false) => {
+            const el = document.getElementById('loader-text');
+            el.innerText = msg;
+            if (error) el.style.color = '#ff4444';
+        };
+
+        function loadToneJSAndBoot({ toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0', setLoaderStatus, runtimeState, boot }) {
+            setLoaderStatus('Loading Tone.js...');
+            import(toneUrl)
+                .then(() => {
+                    runtimeState.Tone = window.Tone;
+                    console.log('[Texture Pads] Tone.js loaded:', runtimeState.Tone?.version);
+                    
+                    // Attempt to load Three.js in parallel, but don't block boot if it fails
+                    setLoaderStatus('Loading Visual Engine...');
+                    loadThreeJS().then((THREE) => {
+                        runtimeState.Three = THREE;
+                        console.log('[Texture Pads] Three.js loaded');
+                    }).catch(e => {
+                        console.warn('Visuals disabled (load failed)', e);
+                    }).finally(() => {
+                        setLoaderStatus('Ready');
+                        document.getElementById('start-btn').style.display = 'block';
+                        document.getElementById('start-btn').onclick = () => {
+                            boot();
+                            document.getElementById('loader-overlay').style.opacity = 0;
+                            setTimeout(() => document.getElementById('loader-overlay').remove(), 500);
+                            document.getElementById('app-container').style.opacity = 1;
+                        };
+                    });
+                })
+                .catch(err => {
+                    setLoaderStatus('Failed to load Tone.js', true);
+                    console.error(err);
+                });
+        }
+
+        function loadThreeJS(threeUrl = 'https://ordinals.com/content/0d013bb60fc5bf5a6c77da7371b07dc162ebc7d7f3af0ff3bd00ae5f0c546445i0') {
+            return import(threeUrl).then(mod => window.THREE);
+        }
+
+        /**
+         * 2. AUDIO ENGINE BOOT
+         */
+        async function bootEngine() {
+            const Tone = runtimeState.Tone;
+            await Tone.start();
+            Tone.context.lookAhead = 0.1;
+
+            // --- SYNTH ENGINE (Textural/Wavetable emulation via FM) ---
+            // FMSynth allows morphing timbre via modulation index and harmonicity
+            runtimeState.synth = new Tone.PolySynth(Tone.FMSynth, {
+                maxPolyphony: 8,
+                voice: Tone.FMSynth,
+                volume: -10,
+                oscillator: { type: "sine" },
+                modulation: { type: "triangle" },
+                envelope: { attack: 1, decay: 1, sustain: 0.8, release: 3 },
+                modulationEnvelope: { attack: 1, decay: 0, sustain: 1, release: 3 }
+            });
+
+            // --- FILTER ---
+            runtimeState.filter = new Tone.Filter({
+                type: "lowpass",
+                frequency: 2000,
+                rolloff: -12,
+                Q: 1
+            });
+
+            // --- FX CHAIN ---
+            runtimeState.fx.chorus = new Tone.Chorus(4, 2.5, 0.5).start();
+            runtimeState.fx.delay = new Tone.PingPongDelay({ delayTime: "8n.", feedback: 0.4, wet: 0.3 });
+            runtimeState.fx.reverb = new Tone.Reverb({ decay: 5, preDelay: 0.1, wet: 0.5 });
+            runtimeState.fx.limiter = new Tone.Limiter(-1);
+
+            // --- MODULATION ---
+            // LFO for filter cutoff modulation
+            runtimeState.lfo.filterLfo = new Tone.LFO({
+                frequency: "4n",
+                min: 200, // Dynamic
+                max: 1000, // Dynamic
+                type: "sine"
+            }).start();
+            
+            // Connect LFO to Filter Frequency
+            runtimeState.lfo.filterLfo.connect(runtimeState.filter.frequency);
+
+            // --- ANALYZERS ---
+            runtimeState.analysis.waveform = new Tone.Waveform(512);
+            runtimeState.analysis.fft = new Tone.FFT(64);
+
+            // --- WIRING ---
+            runtimeState.synth.connect(runtimeState.filter);
+            runtimeState.filter.connect(runtimeState.fx.chorus);
+            runtimeState.fx.chorus.connect(runtimeState.fx.delay);
+            runtimeState.fx.delay.connect(runtimeState.fx.reverb);
+            runtimeState.fx.reverb.connect(runtimeState.fx.limiter);
+            runtimeState.fx.limiter.connect(Tone.Destination);
+            
+            // Connect analysis to master output
+            Tone.Destination.connect(runtimeState.analysis.waveform);
+            Tone.Destination.connect(runtimeState.analysis.fft);
+
+            // --- TRANSPORT ---
+            Tone.Transport.bpm.value = 90;
+            Tone.Transport.start();
+
+            // --- INITIALIZE UI LISTENERS ---
+            setupUI();
+            
+            // --- SETUP MIDI ---
+            setupMIDI();
+
+            // --- INIT VISUALS ---
+            if(runtimeState.Three) initVisuals();
+
+            // Load first preset
+            loadPreset(0);
+        }
+
+        /**
+         * 3. UI & MACROS
+         */
+        function setupUI() {
+            // Helper to bind slider to function
+            const bind = (id, callback) => {
+                const el = document.getElementById(id);
+                el.addEventListener('input', (e) => {
+                    const val = parseFloat(e.target.value);
+                    // Update label readout if exists
+                    const span = document.getElementById(`val-${id}`);
+                    if(span) span.innerText = val.toFixed(2);
+                    callback(val);
+                });
+            };
+
+            // Preset Selector
+            const presetSel = document.getElementById('preset-select');
+            PRESETS.forEach((p, i) => {
+                const opt = document.createElement('option');
+                opt.value = i;
+                opt.innerText = p.name;
+                presetSel.appendChild(opt);
+            });
+            presetSel.addEventListener('change', (e) => loadPreset(e.target.value));
+
+            // --- MACROS ---
+            bind('macro1', updateMacros); // Brightness
+            bind('macro2', updateMacros); // Motion
+            bind('macro3', updateMacros); // Space
+
+            // --- OSC ---
+            bind('osc-morph', v => setAllVoices({ modulationIndex: v }));
+            bind('osc-harmonicity', v => setAllVoices({ harmonicity: v }));
+            bind('osc-detune', v => runtimeState.synth.set({ detune: v })); // PolySynth handles detune globally better
+
+            // --- FILTER / ENV ---
+            bind('filter-cutoff', v => {
+                // Update Base LFO range based on cutoff
+                const depth = parseFloat(document.getElementById('lfo-depth').value);
+                updateLFO(v, depth);
+            });
+            bind('filter-res', v => runtimeState.filter.Q.value = v);
+            bind('env-attack', v => runtimeState.synth.set({ envelope: { attack: v } }));
+            bind('env-release', v => runtimeState.synth.set({ envelope: { release: v } }));
+
+            // --- LFO / MOD ---
+            bind('bpm', v => runtimeState.Tone.Transport.bpm.rampTo(v, 0.1));
+            document.getElementById('lfo-rate').addEventListener('change', (e) => {
+                runtimeState.lfo.filterLfo.frequency.value = e.target.value;
+            });
+            bind('lfo-depth', v => {
+                const cutoff = parseFloat(document.getElementById('filter-cutoff').value);
+                updateLFO(cutoff, v);
+            });
+
+            // --- FX ---
+            bind('fx-chorus', v => runtimeState.fx.chorus.wet.value = v);
+            bind('fx-delay', v => runtimeState.fx.delay.wet.value = v);
+            bind('fx-reverb', v => runtimeState.fx.reverb.wet.value = v);
+            bind('master-vol', v => runtimeState.Tone.Destination.volume.rampTo(v, 0.1));
+
+            // --- KEYBOARD GENERATION ---
+            generateKeyboard();
+        }
+
+        // Helper to update PolySynth parameters deeply
+        function setAllVoices(params) {
+            // For FMSynth specifically, we map top level keys to the options
+            runtimeState.synth.set(params);
+        }
+
+        function updateLFO(cutoff, depth) {
+            // Center the LFO around the cutoff
+            const min = Math.max(20, cutoff - depth);
+            const max = Math.min(20000, cutoff + depth);
+            runtimeState.lfo.filterLfo.min = min;
+            runtimeState.lfo.filterLfo.max = max;
+        }
+
+        // Central Macro Logic
+        function updateMacros() {
+            const m1 = parseFloat(document.getElementById('macro1').value); // Brightness
+            const m2 = parseFloat(document.getElementById('macro2').value); // Motion
+            const m3 = parseFloat(document.getElementById('macro3').value); // Space
+
+            // Macro 1: Brightness (Affects Filter Cutoff, Harmonicity slightly, Modulation Index)
+            // We scale relative to current UI settings to allow manual override
+            const baseCutoff = parseFloat(document.getElementById('filter-cutoff').value);
+            const modCutoff = Math.min(20000, baseCutoff + (m1 * 5000));
+            
+            // Apply Macro 1 to Filter Frequency ramp
+            runtimeState.filter.frequency.rampTo(modCutoff, 0.1);
+            
+            // Macro 1 affects FM Index (brighter timbre)
+            const baseMorph = parseFloat(document.getElementById('osc-morph').value);
+            runtimeState.synth.set({ modulationIndex: baseMorph + (m1 * 5) });
+
+            // Macro 2: Motion (Affects LFO rate/depth bias, Chorus depth)
+            const baseChorus = parseFloat(document.getElementById('fx-chorus').value);
+            // Cap wet at 1
+            runtimeState.fx.chorus.wet.rampTo(Math.min(1, baseChorus + (m2 * 0.3)), 0.1);
+            runtimeState.fx.chorus.depth = 0.5 + (m2 * 0.5); // More wobble
+
+            // Macro 3: Space (Reverb Decay + Mix, Delay Feedback)
+            const baseReverb = parseFloat(document.getElementById('fx-reverb').value);
+            runtimeState.fx.reverb.wet.rampTo(Math.min(1, baseReverb + (m3 * 0.3)), 0.1);
+            runtimeState.fx.reverb.decay = 2 + (m3 * 8); // 2s to 10s decay
+            
+            const baseDelay = parseFloat(document.getElementById('fx-delay').value);
+            runtimeState.fx.delay.wet.rampTo(Math.min(1, baseDelay + (m3 * 0.2)), 0.1);
+            runtimeState.fx.delay.feedback.value = 0.3 + (m3 * 0.4);
+        }
+
+        function loadPreset(index) {
+            const p = PRESETS[index];
+            if(!p) return;
+
+            // Set UI elements
+            const setUI = (id, val) => {
+                const el = document.getElementById(id);
+                if(el) { el.value = val; el.dispatchEvent(new Event('input')); }
+            };
+
+            setUI('macro1', p.macro1);
+            setUI('macro2', p.macro2);
+            setUI('macro3', p.macro3);
+            setUI('osc-morph', p.morph);
+            setUI('osc-harmonicity', p.harm);
+            setUI('osc-detune', p.detune);
+            setUI('filter-cutoff', p.cutoff);
+            setUI('filter-res', p.res);
+            setUI('env-attack', p.att);
+            setUI('env-release', p.rel);
+            setUI('lfo-depth', p.lfoDepth);
+            
+            const lfoRateSel = document.getElementById('lfo-rate');
+            lfoRateSel.value = p.lfoRate;
+            lfoRateSel.dispatchEvent(new Event('change'));
+
+            setUI('fx-chorus', p.chorus);
+            setUI('fx-delay', p.delay);
+            setUI('fx-reverb', p.reverb);
+
+            // Trigger updates
+            updateMacros();
+        }
+
+        function generateKeyboard() {
+            runtimeState.keyboard = new SynthKeyboard('keyboard', {
+                startNote: 48, // C3
+                responsive: true,
+                onNoteOn: (midi) => playNote(midi, 1),
+                onNoteOff: (midi) => stopNote(midi)
+            });
+        }
+
+        function playNote(midi, velocity = 0.7) {
+            // Safety check for glissando dragging
+            if(runtimeState.activeNotes.includes(midi)) return;
+            runtimeState.activeNotes.push(midi);
+            
+            if(runtimeState.synth) {
+                const note = runtimeState.Tone.Frequency(midi, "midi").toNote();
+                runtimeState.synth.triggerAttack(note, runtimeState.Tone.now(), velocity);
+            }
+            if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, true);
+        }
+
+        function stopNote(midi) {
+            runtimeState.activeNotes = runtimeState.activeNotes.filter(n => n !== midi);
+            
+            if(runtimeState.synth) {
+                const note = runtimeState.Tone.Frequency(midi, "midi").toNote();
+                runtimeState.synth.triggerRelease(note);
+            }
+            if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, false);
+        }
+
+        // highlightKey removed, handled by SynthKeyboard
+
+        /**
+         * 4. VISUALS (THREE.JS)
+         */
+        function initVisuals() {
+            const THREE = runtimeState.Three;
+            const container = document.getElementById('viz-container');
+            const scene = new THREE.Scene();
+            // Dark fog for ambient feel
+            scene.fog = new THREE.FogExp2(0x000000, 0.02);
+
+            const camera = new THREE.PerspectiveCamera(75, container.clientWidth / container.clientHeight, 0.1, 1000);
+            camera.position.z = 5;
+            camera.position.y = 1;
+            camera.lookAt(0,0,0);
+
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(container.clientWidth, container.clientHeight);
+            renderer.setPixelRatio(window.devicePixelRatio);
+            container.appendChild(renderer.domElement);
+
+            // Create Geometry (Wireframe Sphere)
+            const geometry = new THREE.IcosahedronGeometry(2, 4);
+            const material = new THREE.MeshBasicMaterial({ 
+                color: 0x66fcf1, 
+                wireframe: true,
+                transparent: true,
+                opacity: 0.5
+            });
+            const mesh = new THREE.Mesh(geometry, material);
+            scene.add(mesh);
+
+            // Light
+            const light = new THREE.PointLight(0xffffff, 1, 100);
+            light.position.set(5, 5, 5);
+            scene.add(light);
+
+            runtimeState.visuals = { scene, camera, renderer, mesh, active: true };
+            
+            // Store original positions for vertex manipulation
+            mesh.geometry.userData = { originalPositions: mesh.geometry.attributes.position.array.slice() };
+
+            animateVisuals();
+
+            // Handle Resize
+            window.addEventListener('resize', () => {
+                camera.aspect = container.clientWidth / container.clientHeight;
+                camera.updateProjectionMatrix();
+                renderer.setSize(container.clientWidth, container.clientHeight);
+            });
+        }
+
+        function animateVisuals() {
+            if(!runtimeState.visuals.active) return;
+            requestAnimationFrame(animateVisuals);
+
+            const { mesh, renderer, scene, camera } = runtimeState.visuals;
+            const waveform = runtimeState.analysis.waveform.getValue(); // Float32Array
+            
+            // Slowly rotate
+            mesh.rotation.x += 0.001;
+            mesh.rotation.y += 0.002;
+
+            // Distort vertices based on audio
+            const positions = mesh.geometry.attributes.position;
+            const originalPositions = mesh.geometry.userData.originalPositions;
+            
+            for (let i = 0; i < positions.count; i++) {
+                // Map vertex index to waveform array index roughly
+                const waveIndex = Math.floor((i / positions.count) * waveform.length);
+                const audioVal = waveform[waveIndex] || 0;
+                
+                const ix = i * 3;
+                const iy = i * 3 + 1;
+                const iz = i * 3 + 2;
+
+                // Expand vertex outwards based on audio volume at that frequency/time
+                const amp = 1 + (audioVal * 0.5); 
+
+                positions.array[ix] = originalPositions[ix] * amp;
+                positions.array[iy] = originalPositions[iy] * amp;
+                positions.array[iz] = originalPositions[iz] * amp;
+            }
+            
+            positions.needsUpdate = true;
+
+            // Macro interaction with color
+            const m1 = parseFloat(document.getElementById('macro1').value);
+            mesh.material.opacity = 0.3 + (m1 * 0.5);
+
+            renderer.render(scene, camera);
+        }
+
+        /**
+         * 5. MIDI
+         */
+        function setupMIDI() {
+            if (navigator.requestMIDIAccess) {
+                navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+            }
+        }
+
+        function onMIDISuccess(midiAccess) {
+            runtimeState.midi = midiAccess;
+            const inputs = midiAccess.inputs.values();
+            const select = document.getElementById('midi-select');
+            
+            for (let input of inputs) {
+                const opt = document.createElement('option');
+                opt.value = input.id;
+                opt.text = input.name;
+                select.appendChild(opt);
+                // Hook up the first one by default
+                input.onmidimessage = getMIDIMessage;
+            }
+
+            select.addEventListener('change', (e) => {
+                // Remove listeners from old, add to new
+                for (let input of midiAccess.inputs.values()) {
+                    input.onmidimessage = null;
+                    if(input.id === e.target.value) input.onmidimessage = getMIDIMessage;
+                }
+            });
+        }
+
+        function onMIDIFailure() {
+            console.warn('Could not access your MIDI devices.');
+        }
+
+        function getMIDIMessage(message) {
+            const [command, note, velocity] = message.data;
+            const cmd = command >> 4;
+            const channel = command & 0xf;
+            
+            // Note On (144)
+            if (cmd === 9 && velocity > 0) {
+                playNote(note, velocity / 127);
+                flashMidi();
+            }
+            // Note Off (128) or Note On with 0 velocity
+            else if (cmd === 8 || (cmd === 9 && velocity === 0)) {
+                stopNote(note);
+            }
+            // CC (176)
+            else if (cmd === 11) {
+                flashMidi();
+                // Map CCs to UI Macros
+                if(note === 1) { // CC1 -> Macro 1
+                    document.getElementById('macro1').value = velocity / 127;
+                    updateMacros();
+                }
+                if(note === 2) { // CC2 -> Macro 2
+                    document.getElementById('macro2').value = velocity / 127;
+                    updateMacros();
+                }
+                if(note === 3) { // CC3 -> Macro 3
+                    document.getElementById('macro3').value = velocity / 127;
+                    updateMacros();
+                }
+            }
+        }
+
+        function flashMidi() {
+            const ind = document.getElementById('midi-indicator');
+            ind.classList.add('active');
+            setTimeout(() => ind.classList.remove('active'), 100);
+        }
+
+        /**
+         * BOOTSTRAP
+         */
+        loadToneJSAndBoot({
+            setLoaderStatus,
+            runtimeState,
+            boot: bootEngine
+        });
+
+    </script>
+</body>
+</html>
