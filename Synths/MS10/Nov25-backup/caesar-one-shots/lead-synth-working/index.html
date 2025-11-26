@@ -217,45 +217,46 @@
         }
         .pb-label { font-size: 0.7rem; color: #666; text-align: center; margin-top: 2px; }
 
-        /* KEYBOARD */
+        /* KEYBOARD - UPDATED TO 303 STYLE */
         #keyboard {
-            height: 140px;
             display: flex;
+            justify-content: center; /* Center keys like 303 */
+            height: 120px; /* Reduced height closer to 303 style */
             background: #000;
             border-radius: 0 0 8px 8px;
             overflow: hidden;
             position: relative;
+            padding: 10px; /* Padding around keys */
         }
         .key {
-            flex: 1;
-            border: 1px solid #333;
+            border: 1px solid #000;
             background: var(--keys-white);
             border-radius: 0 0 4px 4px;
+            width: 40px; /* Fixed width */
+            height: 100%;
             cursor: pointer;
             position: relative;
             z-index: 1;
-            transition: background 0.1s;
+            transition: background 0.05s;
         }
         .key.black {
             background: var(--keys-black);
             height: 60%;
-            width: 8%; /* Visual adjustment */
-            margin: 0 -4%; /* Overlap */
+            width: 26px; /* Narrower */
+            margin-left: -13px; /* Negative margin for overlay */
+            margin-right: -13px;
             z-index: 2;
-            border: 1px solid #555;
+            border: 1px solid #333;
         }
+        /* Active State */
         .key:active, .key.pressed {
             background: var(--accent) !important;
             box-shadow: 0 0 15px var(--accent);
         }
-        .key::after {
-            content: '';
-            position: absolute;
-            bottom: 0; left: 0; right: 0; height: 100%;
-            background: linear-gradient(to top, rgba(0,0,0,0.5), transparent);
-            pointer-events: none;
+        .key.black:active, .key.black.pressed {
+            background: var(--accent-dim) !important;
         }
-
+        
     </style>
 </head>
 <body>
@@ -392,7 +393,8 @@
                 filter: null
             },
             waveform: null, // Analyser
-            currentPresetIdx: 0
+            currentPresetIdx: 0,
+            isMouseDown: false // For glissando
         };
 
         const PRESETS = [
@@ -445,13 +447,11 @@
             const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
             
             const scene = new THREE.Scene();
-            // Transparent background to show CSS background
             scene.background = null; 
 
             const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
             camera.position.z = 2.5;
 
-            // Create a sphere made of wireframe
             const geometry = new THREE.IcosahedronGeometry(1, 2);
             const material = new THREE.MeshBasicMaterial({ 
                 color: 0x00f0ff, 
@@ -473,22 +473,16 @@
             function render(t) {
                 resize();
                 
-                // Base rotation
                 visMesh.rotation.x = t * 0.0007;
                 visMesh.rotation.y = t * 0.0011;
 
-                // Audio Reactivity
                 if (runtimeState.waveform && runtimeState.Tone) {
-                    // Get waveform data (-1 to 1)
                     const buffer = runtimeState.waveform.getValue();
-                    // Calculate simple RMS amplitude roughly
                     let sum = 0;
                     for(let i=0; i<buffer.length; i+=10) {
                         sum += Math.abs(buffer[i]);
                     }
                     const avg = sum / (buffer.length / 10);
-                    
-                    // Scale mesh based on loudness
                     const scale = 1 + (avg * 1.5);
                     visMesh.scale.set(scale, scale, scale);
                 }
@@ -508,14 +502,16 @@
         }) {
             setLoaderStatus('Loading Audio Engine...');
             import(toneUrl)
-                .then(() => {
-                    runtimeState.Tone = window.Tone;
-                    console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
-                    boot();
+                .then((module) => {
+                    runtimeState.Tone = window.Tone || module.default || module;
+                    if (runtimeState.Tone) {
+                        boot();
+                    } else {
+                        throw new Error("Tone object not found");
+                    }
                 })
                 .catch(err => {
                     setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
-                    console.error('[BOP Matrix] Critical Tone.js load error:', err);
                 });
         }
 
@@ -535,13 +531,11 @@
                 const T = runtimeState.Tone;
                 await T.start();
                 
-                // Initialize modules
                 initAudio();
                 initUI();
                 initMIDI();
-                initThreeJS(); // Start the 3D loop
+                initThreeJS();
 
-                // Reveal UI
                 document.getElementById('loader-overlay').style.opacity = 0;
                 document.getElementById('synth-container').style.opacity = 1;
                 setTimeout(() => document.getElementById('loader-overlay').remove(), 1000);
@@ -551,30 +545,27 @@
 
         function initAudio() {
             const T = runtimeState.Tone;
-
-            // FX Chain
-            const widener = new T.Chorus(4, 2.5, 0.5).toDestination();
+            const widener = new T.Chorus(4, 2.5, 0.5).toDestination().start();
             const delay = new T.PingPongDelay("8n", 0.2).connect(widener);
-            const reverb = new T.Reverb({ decay: 3, preDelay: 0.01 }).connect(delay);
+            const reverb = new T.Freeverb({ roomSize: 0.7, dampening: 3000 }).connect(delay);
             const limiter = new T.Limiter(-1).connect(reverb);
             const filter = new T.Filter(20000, "lowpass", -12).connect(limiter);
             const distortion = new T.Distortion(0).connect(filter);
 
-            // Synth
             const synth = new T.MonoSynth({
                 oscillator: { type: "sawtooth" },
                 envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 1 },
-                filterEnvelope: { attack: 0.01, decay: 0.5, sustain: 1, release: 2, baseFrequency: 0, octaves: 0 }
+                filterEnvelope: { attack: 0.01, decay: 0.5, sustain: 1, release: 2, baseFrequency: 20000, octaves: 0 },
+                volume: -6
             });
+            
             synth.disconnect();
             synth.connect(distortion);
 
-            // Vibrato
             const vibrato = new T.LFO(5, -50, 50).start();
             vibrato.connect(synth.detune);
             vibrato.amplitude.value = 0;
 
-            // Analyzer for Three.js
             const waveform = new T.Waveform(256);
             limiter.connect(waveform);
 
@@ -594,17 +585,14 @@
             const p = PRESETS[idx];
             const s = runtimeState.synth;
             const fx = runtimeState.fx;
-            
             runtimeState.currentPresetIdx = idx;
             updateKnobVisuals(p);
 
-            // Synth Params
             s.oscillator.type = p.oscType;
             s.envelope.attack = p.attack;
             s.envelope.release = p.release;
             s.portamento = p.glide;
             
-            // FX Params
             fx.filter.frequency.value = p.cutoff; 
             fx.filter.Q.value = p.res;
             fx.delay.wet.value = p.delay;
@@ -614,7 +602,6 @@
             fx.vibrato.frequency.value = p.vibRate;
             fx.vibrato.amplitude.value = p.vibDepth;
 
-            // Highlight Preset Button
             document.querySelectorAll('.preset-btn').forEach((b, i) => {
                 b.classList.toggle('active', i === idx);
             });
@@ -622,10 +609,8 @@
 
         // --- UI UTILS ---
         function formatValue(param, val) {
-            // FIX: Check if val is a string (e.g. oscType 'sawtooth')
             if (typeof val === 'string') return val.toUpperCase();
             if (val === undefined || val === null) return "---";
-
             if(param === 'cutoff') return Math.round(val) + ' Hz';
             if(param === 'attack' || param === 'release' || param === 'portamento') return val.toFixed(2) + ' s';
             return val.toFixed(2);
@@ -636,24 +621,17 @@
                 const param = k.dataset.param;
                 if(!p.hasOwnProperty(param)) return;
                 const val = p[param];
-                
-                // Selects don't rotate
                 if(k.dataset.type === 'select') {
                      k.querySelector('.knob-label').innerText = formatValue(param, val);
                      return;
                 }
-
                 const min = parseFloat(k.dataset.min);
                 const max = parseFloat(k.dataset.max);
-                
-                // Rotate
                 if(!isNaN(val)) {
                     const percent = (val - min) / (max - min);
                     const angle = -135 + (percent * 270);
                     k.querySelector('.knob-dial').style.setProperty('--angle', `${angle}deg`);
                 }
-                
-                // Text
                 k.querySelector('.knob-val').innerText = formatValue(param, val);
             });
         }
@@ -672,13 +650,11 @@
             // Knobs
             document.querySelectorAll('.knob-container').forEach(k => {
                 const dial = k.querySelector('.knob-dial');
-                if(!dial) return; // Skip select types if they don't have dials
-                
+                if(!dial) return; 
                 const valDisplay = k.querySelector('.knob-val');
                 const param = k.dataset.param;
                 const min = parseFloat(k.dataset.min);
                 const max = parseFloat(k.dataset.max);
-
                 let isDragging = false;
                 let startY, startVal;
 
@@ -696,10 +672,7 @@
                     const sensitivity = 200; 
                     let newVal = startVal + (delta / sensitivity) * range;
                     newVal = Math.max(min, Math.min(max, newVal));
-                    
                     setParam(param, newVal);
-                    
-                    // Update visual immediately
                     const percent = (newVal - min) / (max - min);
                     const angle = -135 + (percent * 270);
                     dial.style.setProperty('--angle', `${angle}deg`);
@@ -712,7 +685,6 @@
                 });
             });
 
-            // Wave Select
             const waveKnob = document.querySelector('.knob-container[data-param="oscType"]');
             if(waveKnob) {
                 waveKnob.onclick = () => {
@@ -725,10 +697,16 @@
                 };
             }
 
-            // Keyboard Generation
+            // --- KEYBOARD GENERATION WITH GLISSANDO (303 Style) ---
             const kb = document.getElementById('keyboard');
             const notes = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
             const startOctave = 3;
+            
+            // Global mouse state for glissando
+            window.addEventListener('mouseup', () => { 
+                runtimeState.isMouseDown = false; 
+            });
+
             for(let i=0; i<25; i++) {
                 const noteIdx = i % 12;
                 const octave = startOctave + Math.floor(i/12);
@@ -739,16 +717,39 @@
                 key.className = `key ${isBlack ? 'black' : 'white'}`;
                 key.dataset.note = note;
                 
-                key.onmousedown = (e) => {
-                    const rect = key.getBoundingClientRect();
-                    const vel = Math.min(1, Math.max(0.2, (e.clientY - rect.top) / rect.height));
-                    triggerNoteOn(note, vel);
+                // MOUSE DOWN: Start Note + Flag
+                key.addEventListener('mousedown', (e) => {
+                    runtimeState.isMouseDown = true;
+                    triggerNoteOn(note, 1);
                     key.classList.add('pressed');
-                };
-                key.onmouseup = key.onmouseleave = () => {
+                });
+
+                // MOUSE ENTER: If flag is true (dragging), Play Note
+                key.addEventListener('mouseenter', (e) => {
+                    if(runtimeState.isMouseDown) {
+                        triggerNoteOn(note, 1);
+                        key.classList.add('pressed');
+                    }
+                });
+
+                // MOUSE LEAVE: Release visual (MonoSynth handles note release naturally on next note trigger or explicit release)
+                key.addEventListener('mouseleave', (e) => {
+                    if(key.classList.contains('pressed')) {
+                        // For monophonic glissando, we generally don't triggerRelease on leave 
+                        // if we are sliding to another key, but since we can't predict the future, 
+                        // we let the next NoteOn take over (MonoSynth behavior). 
+                        // If we leave the keyboard entirely, mouseup handles it.
+                        key.classList.remove('pressed');
+                    }
+                });
+                
+                // MOUSE UP: Stop
+                key.addEventListener('mouseup', (e) => {
                     triggerNoteOff(note);
                     key.classList.remove('pressed');
-                };
+                    runtimeState.isMouseDown = false;
+                });
+
                 kb.appendChild(key);
             }
         }
@@ -818,7 +819,6 @@
             const velocity = (message.data.length > 2) ? message.data[2] : 0;
             const T = runtimeState.Tone;
 
-            // Note On
             if (command >= 144 && command <= 159) {
                 if (velocity > 0) {
                     const freq = T.Frequency(note, "midi");
@@ -827,23 +827,19 @@
                     if(key) key.classList.add('pressed');
                 } else {
                     triggerNoteOff();
-                    // Basic visual cleanup
                     document.querySelectorAll('.key').forEach(k => k.classList.remove('pressed'));
                 }
             }
-            // Note Off
             if (command >= 128 && command <= 143) {
                 triggerNoteOff();
                 document.querySelectorAll('.key').forEach(k => k.classList.remove('pressed'));
             }
-            // Pitch Bend
             if (command >= 224 && command <= 239) {
                 const lsb = message.data[1];
                 const msb = message.data[2];
                 const val = (msb << 7) + lsb; 
                 const normalized = (val - 8192) / 8192; 
                 
-                // Visual
                 const bar = document.getElementById('pb-bar');
                 if(normalized < 0) {
                     bar.style.left = ((1 + normalized) * 50) + '%';
@@ -853,13 +849,11 @@
                     bar.style.width = (normalized * 50) + '%';
                 }
 
-                // Audio
                 const cents = normalized * 200; 
                 if(runtimeState.synth) runtimeState.synth.detune.setValueAtTime(cents, T.now());
             }
         }
 
-        // --- BOOT SEQUENCE START ---
         loadToneJSAndBoot({ setLoaderStatus, runtimeState, boot });
 
     </script>
