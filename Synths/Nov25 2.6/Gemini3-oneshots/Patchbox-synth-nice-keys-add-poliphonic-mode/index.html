@@ -1,0 +1,945 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ordinal Patchbox Modular</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --panel-color: #2b2b2b;
+            --panel-border: #3d3d3d;
+            --accent: #ff9900;
+            --text-color: #e0e0e0;
+            --knob-color: #444;
+            --active-led: #00ff41;
+            --font-main: 'Courier New', Courier, monospace;
+            /* Keyboard Colors */
+            --key-white: #fffff0;
+            --key-black: #111;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: var(--font-main);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow-x: hidden;
+            user-select: none;
+        }
+
+        /* LOAD OVERLAY */
+        #loader {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s;
+        }
+        .loader-text { font-size: 1.5rem; color: var(--accent); margin-bottom: 10px; }
+        .start-btn {
+            padding: 15px 30px;
+            background: var(--accent);
+            border: none;
+            color: #000;
+            font-weight: bold;
+            font-size: 1.2rem;
+            cursor: pointer;
+            display: none;
+        }
+
+        /* MAIN RACK */
+        #synth-rack {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            width: 1000px;
+            max-width: 100%;
+            background: #111;
+            padding: 10px;
+            border: 2px solid #555;
+            box-shadow: 0 0 30px rgba(0,0,0,0.8);
+        }
+
+        .module {
+            background: var(--panel-color);
+            border: 1px solid var(--panel-border);
+            padding: 10px;
+            border-radius: 4px;
+            position: relative;
+        }
+
+        .module-title {
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: #888;
+            border-bottom: 1px solid #444;
+            margin-bottom: 10px;
+            padding-bottom: 2px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .module.wide { grid-column: span 2; }
+        .module.full { grid-column: span 4; }
+
+        /* CONTROLS */
+        .control-row { display: flex; flex-wrap: wrap; gap: 10px; justify-content: space-around; margin-bottom: 8px; }
+        .control-group { display: flex; flex-direction: column; align-items: center; }
+        
+        label { font-size: 0.6rem; margin-top: 4px; color: #aaa; }
+        
+        input[type="range"] {
+            -webkit-appearance: none;
+            width: 100%; /* Default width */
+            height: 4px;
+            background: #000;
+            outline: none;
+            margin: 10px 0;
+        }
+        input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            width: 12px; height: 12px;
+            background: var(--accent);
+            cursor: pointer;
+            border-radius: 50%;
+        }
+
+        /* KNOBS (Stylized Range Inputs) */
+        .knob-wrap { width: 40px; text-align: center; }
+        .knob-input { width: 100%; }
+
+        select {
+            background: #000; color: var(--accent);
+            border: 1px solid #444; font-family: inherit; font-size: 0.7rem;
+        }
+
+        button {
+            background: #333; color: #eee;
+            border: 1px solid #555; cursor: pointer;
+            font-family: inherit; font-size: 0.7rem; padding: 4px 8px;
+        }
+        button.active { background: var(--accent); color: #000; }
+
+        /* PATCH MATRIX */
+        #matrix-grid {
+            display: grid;
+            grid-template-columns: 60px repeat(5, 1fr);
+            gap: 2px;
+            font-size: 0.7rem;
+        }
+        .matrix-header { text-align: center; color: #888; padding: 2px; }
+        .matrix-row-label { text-align: right; padding-right: 5px; color: #aaa; align-self: center;}
+        .matrix-cell {
+            background: #111;
+            height: 25px;
+            border: 1px solid #333;
+            cursor: pointer;
+            position: relative;
+        }
+        .matrix-cell.connected { background: rgba(255, 153, 0, 0.3); border-color: var(--accent); }
+        .matrix-cell:hover { border-color: #fff; }
+        
+        /* Matrix Overlay for Depth */
+        #matrix-overlay {
+            display: none;
+            position: absolute;
+            background: rgba(0,0,0,0.9);
+            border: 1px solid var(--accent);
+            padding: 10px;
+            z-index: 100;
+            width: 150px;
+            text-align: center;
+        }
+
+        /* UPDATED KEYBOARD */
+        #keyboard {
+            /* Layout handled by shared module */
+            background: #000;
+            margin-top: 10px;
+        }
+
+        #oscilloscope {
+            width: 100%; height: 60px; background: #000; border: 1px solid #333;
+        }
+
+        .midi-led {
+            width: 8px; height: 8px; border-radius: 50%; background: #333; display: inline-block;
+        }
+        .midi-led.on { background: var(--active-led); box-shadow: 0 0 5px var(--active-led); }
+
+        /* PRESET BROWSER */
+        #preset-list { display: flex; gap: 5px; overflow-x: auto; padding-bottom: 5px;}
+        .preset-btn { min-width: 80px; }
+        .helper-text { text-align: center; color: #666; font-size: 0.7rem; margin-top: 5px; }
+
+    </style>
+</head>
+<body>
+
+    <!-- LOADER -->
+    <div id="loader">
+        <div id="loader-status" class="loader-text">Initializing...</div>
+        <button id="btn-start" class="start-btn">POWER ON</button>
+    </div>
+
+    <!-- MAIN UI -->
+    <div id="synth-rack">
+        
+        <!-- HEADER / GLOBAL -->
+        <div class="module full" style="display: flex; justify-content: space-between; align-items: center;">
+            <div style="font-weight: bold; color: var(--accent); font-size: 1.2rem;">ORDINAL PATCHBOX</div>
+            <div style="display: flex; gap: 10px; align-items: center;">
+                <div class="midi-led" id="midi-activity"></div>
+                <select id="midi-select"><option>No MIDI Device</option></select>
+                <div>BPM <input type="number" id="bpm-input" value="120" style="width: 40px; background:#000; color:#fff; border:1px solid #444;"></div>
+                <button id="play-btn">STOP</button>
+            </div>
+        </div>
+
+        <!-- OSCILLATORS -->
+        <div class="module wide">
+            <div class="module-title">Oscillators</div>
+            <div class="control-row">
+                <div class="control-group">
+                    <label>Osc1 Wave</label>
+                    <select id="osc1-type"><option value="sawtooth">Saw</option><option value="square">Sqr</option><option value="triangle">Tri</option></select>
+                </div>
+                <div class="knob-wrap"><input type="range" id="osc1-tune" min="-24" max="24" step="1" value="0"><label>Tune</label></div>
+                <div class="knob-wrap"><input type="range" id="osc-mix" min="0" max="1" step="0.01" value="0.5"><label>Mix 1/2</label></div>
+                <div class="knob-wrap"><input type="range" id="noise-lvl" min="0" max="0.5" step="0.01" value="0"><label>Noise</label></div>
+            </div>
+            <div class="control-row">
+                <div class="control-group">
+                    <label>Osc2 Wave</label>
+                    <select id="osc2-type"><option value="square">Sqr</option><option value="sawtooth">Saw</option><option value="triangle">Tri</option></select>
+                </div>
+                <div class="knob-wrap"><input type="range" id="osc2-tune" min="-24" max="24" step="1" value="7"><label>Tune</label></div>
+                <div class="knob-wrap"><input type="range" id="osc2-detune" min="-50" max="50" step="1" value="0"><label>Fine</label></div>
+            </div>
+        </div>
+
+        <!-- FILTER -->
+        <div class="module">
+            <div class="module-title">Filter</div>
+            <div class="control-group">
+                <select id="filter-type" style="width: 100%; margin-bottom: 5px;"><option value="lowpass">Lowpass</option><option value="highpass">Highpass</option><option value="bandpass">Bandpass</option></select>
+                <div class="knob-wrap" style="width: 100%"><input type="range" id="cutoff" min="10" max="10000" step="1" value="2000"><label>Cutoff</label></div>
+                <div class="knob-wrap" style="width: 100%"><input type="range" id="resonance" min="0" max="20" step="0.1" value="1"><label>Res</label></div>
+            </div>
+        </div>
+
+        <!-- LFOs -->
+        <div class="module">
+            <div class="module-title">LFOs (Sync)</div>
+            <div class="control-row">
+                <div class="control-group" style="width: 45%">
+                    <label>LFO 1</label>
+                    <select id="lfo1-type" style="width:100%"><option>sine</option><option>square</option><option>sawtooth</option></select>
+                    <input type="range" id="lfo1-rate" min="0.1" max="20" step="0.1" value="1">
+                    <label>Rate</label>
+                </div>
+                <div class="control-group" style="width: 45%">
+                    <label>LFO 2</label>
+                    <select id="lfo2-type" style="width:100%"><option>triangle</option><option>random</option></select>
+                    <input type="range" id="lfo2-rate" min="0.1" max="20" step="0.1" value="5">
+                    <label>Rate</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- ENVELOPES -->
+        <div class="module wide">
+            <div class="module-title">Envelopes</div>
+            <div class="control-row">
+                <div style="font-size:0.6rem; width:100%; color:#888;">AMP ENV</div>
+                <div class="knob-wrap"><input type="range" id="amp-a" min="0" max="2" step="0.01" value="0.01"><label>A</label></div>
+                <div class="knob-wrap"><input type="range" id="amp-d" min="0" max="2" step="0.01" value="0.1"><label>D</label></div>
+                <div class="knob-wrap"><input type="range" id="amp-s" min="0" max="1" step="0.01" value="0.5"><label>S</label></div>
+                <div class="knob-wrap"><input type="range" id="amp-r" min="0" max="5" step="0.01" value="0.5"><label>R</label></div>
+            </div>
+            <div class="control-row" style="border-top: 1px dashed #333; padding-top:5px;">
+                <div style="font-size:0.6rem; width:100%; color:#888;">MOD ENV</div>
+                <div class="knob-wrap"><input type="range" id="mod-a" min="0" max="2" step="0.01" value="0.1"><label>A</label></div>
+                <div class="knob-wrap"><input type="range" id="mod-d" min="0" max="2" step="0.01" value="0.5"><label>D</label></div>
+                <div class="knob-wrap"><input type="range" id="mod-s" min="0" max="1" step="0.01" value="0"><label>S</label></div>
+                <div class="knob-wrap"><input type="range" id="mod-r" min="0" max="5" step="0.01" value="0.5"><label>R</label></div>
+            </div>
+        </div>
+
+        <!-- PATCH MATRIX -->
+        <div class="module wide">
+            <div class="module-title">Modulation Matrix</div>
+            <div id="matrix-grid">
+                <!-- Headers -->
+                <div></div>
+                <div class="matrix-header">Pitch</div>
+                <div class="matrix-header">Cutoff</div>
+                <div class="matrix-header">PWM/Shape</div>
+                <div class="matrix-header">Dly Time</div>
+                <div class="matrix-header">LFO1 Rt</div>
+
+                <!-- Rows -->
+                <div class="matrix-row-label">LFO 1</div>
+                <div class="matrix-cell" data-src="lfo1" data-dst="pitch"></div>
+                <div class="matrix-cell" data-src="lfo1" data-dst="cutoff"></div>
+                <div class="matrix-cell" data-src="lfo1" data-dst="shape"></div>
+                <div class="matrix-cell" data-src="lfo1" data-dst="delay"></div>
+                <div class="matrix-cell" data-src="lfo1" data-dst="lfoRate"></div>
+
+                <div class="matrix-row-label">LFO 2</div>
+                <div class="matrix-cell" data-src="lfo2" data-dst="pitch"></div>
+                <div class="matrix-cell" data-src="lfo2" data-dst="cutoff"></div>
+                <div class="matrix-cell" data-src="lfo2" data-dst="shape"></div>
+                <div class="matrix-cell" data-src="lfo2" data-dst="delay"></div>
+                <div class="matrix-cell" data-src="lfo2" data-dst="lfoRate"></div>
+
+                <div class="matrix-row-label">ModEnv</div>
+                <div class="matrix-cell" data-src="env" data-dst="pitch"></div>
+                <div class="matrix-cell" data-src="env" data-dst="cutoff"></div>
+                <div class="matrix-cell" data-src="env" data-dst="shape"></div>
+                <div class="matrix-cell" data-src="env" data-dst="delay"></div>
+                <div class="matrix-cell" data-src="env" data-dst="lfoRate"></div>
+
+                <div class="matrix-row-label">Vel</div>
+                <div class="matrix-cell" data-src="vel" data-dst="pitch"></div>
+                <div class="matrix-cell" data-src="vel" data-dst="cutoff"></div>
+                <div class="matrix-cell" data-src="vel" data-dst="shape"></div>
+                <div class="matrix-cell" data-src="vel" data-dst="delay"></div>
+                <div class="matrix-cell" data-src="vel" data-dst="lfoRate"></div>
+            </div>
+
+            <!-- Popup for depth editing -->
+            <div id="matrix-overlay">
+                <div style="font-size: 0.7rem; color: #fff; margin-bottom: 5px;">Mod Depth</div>
+                <input type="range" id="matrix-depth" min="-1000" max="1000" value="0">
+                <div style="font-size: 0.6rem; color: var(--accent); cursor: pointer;" id="matrix-close">Done</div>
+            </div>
+        </div>
+
+        <!-- FX -->
+        <div class="module">
+            <div class="module-title">FX</div>
+            <div class="control-row">
+                <div class="knob-wrap"><input type="range" id="dly-mix" min="0" max="0.5" step="0.01" value="0"><label>Delay</label></div>
+                <div class="knob-wrap"><input type="range" id="dly-time" min="0.1" max="1" step="0.05" value="0.3"><label>Time</label></div>
+            </div>
+            <div class="control-row">
+                <div class="knob-wrap"><input type="range" id="rev-mix" min="0" max="0.5" step="0.01" value="0"><label>Reverb</label></div>
+                <div class="knob-wrap"><input type="range" id="vol-master" min="0" max="1" step="0.01" value="0.8"><label>Vol</label></div>
+            </div>
+        </div>
+
+        <!-- ARPEGGIATOR & PRESETS -->
+        <div class="module full">
+            <div class="module-title">
+                <span>Sequencer & Presets</span>
+                <label><input type="checkbox" id="arp-enabled"> Arpeggiator (Up)</label>
+            </div>
+            <div id="preset-list">
+                <!-- Presets injected via JS -->
+            </div>
+        </div>
+
+        <!-- VISUALIZER & KEYBOARD -->
+        <div class="module full">
+            <canvas id="oscilloscope"></canvas>
+            <div id="keyboard">
+                <!-- Keys generated via JS -->
+            </div>
+            <div class="helper-text">Click & Drag keys to sweep</div>
+        </div>
+    </div>
+
+    <script type="module">
+    import { SynthKeyboard } from '../../shared/keyboard.js';
+    /**
+     * ========================================================
+     * 1. BLOCKCHAIN TONE.JS LOADER
+     * ========================================================
+     */
+    const runtimeState = {
+        Tone: null,
+        synth: null,
+        midiAccess: null,
+        activeNotes: new Set(),
+        patchMatrix: {}, // Store connections: { "src-dst": { gainNode, value } }
+        modSources: {},  // Tone signals
+        modDests: {},    // AudioParams
+        presets: [],
+        arp: { enabled: false, pattern: null },
+        ui: {}
+    };
+
+    const loaderStatus = document.getElementById('loader-status');
+    const startBtn = document.getElementById('btn-start');
+
+    function setLoaderStatus(msg, isError = false) {
+        loaderStatus.innerText = msg;
+        if(isError) loaderStatus.style.color = 'red';
+    }
+
+    function loadToneJSAndBoot({ 
+        toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+        setLoaderStatus,
+        runtimeState,
+        boot
+    }) {
+        setLoaderStatus('Loading Audio Engine...');
+        import(toneUrl)
+            .then(() => {
+                runtimeState.Tone = window.Tone;
+                console.log('[Patchbox] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                setLoaderStatus('Engine Ready.');
+                startBtn.style.display = 'block';
+                startBtn.onclick = async () => {
+                    await runtimeState.Tone.start();
+                    document.getElementById('loader').style.opacity = 0;
+                    setTimeout(() => document.getElementById('loader').style.display = 'none', 500);
+                    boot();
+                };
+            })
+            .catch(err => {
+                setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                console.error('[Patchbox] Critical Tone.js load error:', err);
+            });
+    }
+
+    /**
+     * ========================================================
+     * 2. SYNTH ENGINE & PATCHING LOGIC
+     * ========================================================
+     */
+    function boot() {
+        const Tone = runtimeState.Tone;
+
+        // --- AUDIO GRAPH ---
+        
+        // 1. Oscillators
+        const osc1 = new Tone.Oscillator(440, "sawtooth").start();
+        const osc2 = new Tone.Oscillator(440, "square").start();
+        const noise = new Tone.Noise("white").start();
+
+        // 2. Mixer
+        const osc1Gain = new Tone.Gain(0.5);
+        const osc2Gain = new Tone.Gain(0.5);
+        const noiseGain = new Tone.Gain(0);
+
+        osc1.connect(osc1Gain);
+        osc2.connect(osc2Gain);
+        noise.connect(noiseGain);
+
+        // 3. Filter
+        const filter = new Tone.Filter({
+            type: "lowpass",
+            frequency: 2000,
+            Q: 1,
+            rolloff: -12
+        });
+
+        // 4. Amp (VCA)
+        const ampEnv = new Tone.AmplitudeEnvelope({
+            attack: 0.01, decay: 0.1, sustain: 0.5, release: 0.5
+        });
+
+        // 5. FX Chain
+        const feedbackDelay = new Tone.FeedbackDelay("8n", 0.5);
+        feedbackDelay.wet.value = 0;
+        
+        const reverb = new Tone.Reverb({ decay: 2, wet: 0 });
+        reverb.generate(); // Generate impulse
+
+        const limiter = new Tone.Limiter(-1);
+        const masterVol = new Tone.Gain(0.8);
+        const waveform = new Tone.Waveform(256);
+
+        // Chain Wiring
+        osc1Gain.connect(filter);
+        osc2Gain.connect(filter);
+        noiseGain.connect(filter);
+
+        filter.connect(ampEnv);
+        ampEnv.connect(feedbackDelay);
+        feedbackDelay.connect(reverb);
+        reverb.connect(limiter);
+        limiter.connect(masterVol);
+        masterVol.connect(waveform);
+        masterVol.toDestination();
+
+        // --- MODULATORS ---
+
+        // LFOs
+        const lfo1 = new Tone.LFO(1, 0, 1).start(); // 0-1 for normalized mod logic
+        // Center LFO1 around 0 for bipolar mod:
+        lfo1.min = -1; lfo1.max = 1;
+        
+        const lfo2 = new Tone.LFO(5, -1, 1).start();
+
+        // Mod Envelope (Signal generator)
+        const modEnv = new Tone.Envelope({
+            attack: 0.1, decay: 0.2, sustain: 0, release: 0.5
+        });
+        const modEnvSig = new Tone.Signal(0); // Holds the env value
+        modEnv.connect(modEnvSig);
+
+        // Velocity & KeyTrack (Signals)
+        const velSig = new Tone.Signal(0);
+        
+        // --- ROUTING RESOURCES ---
+
+        // Sources (Signals)
+        runtimeState.modSources = {
+            lfo1: lfo1,
+            lfo2: lfo2,
+            env: modEnv,
+            vel: velSig
+        };
+
+        // Destinations (AudioParams)
+        const osc1FreqSig = new Tone.Signal(440);
+        const osc2FreqSig = new Tone.Signal(440);
+        osc1FreqSig.connect(osc1.frequency);
+        osc2FreqSig.connect(osc2.frequency);
+
+        runtimeState.modDests = {
+            pitch: [osc1.detune, osc2.detune], // Modulate detune for pitch FX (100 cents = 1 semitone)
+            cutoff: filter.frequency,
+            shape: filter.Q, // Use shape as Resonance for simplicity
+            delay: feedbackDelay.feedback,
+            lfoRate: lfo1.frequency
+        };
+
+        // Store references
+        runtimeState.synth = {
+            osc1, osc2, noise,
+            osc1Gain, osc2Gain, noiseGain,
+            filter, ampEnv, modEnv,
+            lfo1, lfo2,
+            dly: feedbackDelay, rev: reverb, master: masterVol,
+            baseFreq1: osc1FreqSig, baseFreq2: osc2FreqSig,
+            velSig, waveform
+        };
+
+        // --- TRANSPORT & ARP ---
+        Tone.Transport.bpm.value = 120;
+        
+        // Arpeggiator Logic
+        const arpPattern = new Tone.Pattern((time, note) => {
+            triggerNoteOn(note, 0.8, time);
+            triggerNoteOff(note, time + 0.1); // Short duration
+        }, [], "up");
+        arpPattern.interval = "8n";
+        arpPattern.start(0);
+        
+        runtimeState.arp.pattern = arpPattern;
+
+        // Initialize UI & MIDI
+        initUI();
+        initPresets();
+        initMIDI();
+        startVisualizer();
+        
+        console.log("[Patchbox] Boot complete.");
+    }
+
+    /**
+     * ========================================================
+     * 3. UI HANDLING & MATRIX LOGIC
+     * ========================================================
+     */
+    function initUI() {
+        const s = runtimeState.synth;
+        const Tone = runtimeState.Tone;
+
+        // Helpers
+        const bind = (id, param, transformer = v=>v) => {
+            const el = document.getElementById(id);
+            if(!el) return;
+            el.addEventListener('input', (e) => {
+                const val = parseFloat(e.target.value);
+                if(param instanceof Tone.Signal || param instanceof Tone.Param || param instanceof AudioParam) {
+                    param.value = transformer(val);
+                } else {
+                    param.value = transformer(val); // Tone object property
+                }
+            });
+        };
+
+        // Oscillators
+        document.getElementById('osc1-type').onchange = e => s.osc1.type = e.target.value;
+        document.getElementById('osc2-type').onchange = e => s.osc2.type = e.target.value;
+        bind('osc-mix', s.osc1Gain.gain); // Logic: Mix between 1 and 2
+        document.getElementById('osc-mix').addEventListener('input', e => {
+            const v = parseFloat(e.target.value);
+            s.osc1Gain.gain.value = 1 - v;
+            s.osc2Gain.gain.value = v;
+        });
+        bind('noise-lvl', s.noiseGain.gain);
+        
+        // Filter
+        document.getElementById('filter-type').onchange = e => s.filter.type = e.target.value;
+        bind('cutoff', s.filter.frequency);
+        bind('resonance', s.filter.Q);
+
+        // LFOs
+        document.getElementById('lfo1-type').onchange = e => s.lfo1.type = e.target.value;
+        document.getElementById('lfo2-type').onchange = e => s.lfo2.type = e.target.value;
+        bind('lfo1-rate', s.lfo1.frequency);
+        bind('lfo2-rate', s.lfo2.frequency);
+
+        // Envs
+        bind('amp-a', s.ampEnv.attack);
+        bind('amp-d', s.ampEnv.decay);
+        bind('amp-s', s.ampEnv.sustain);
+        bind('amp-r', s.ampEnv.release);
+        bind('mod-a', s.modEnv.attack);
+        bind('mod-d', s.modEnv.decay);
+        bind('mod-s', s.modEnv.sustain);
+        bind('mod-r', s.modEnv.release);
+
+        // FX
+        bind('dly-mix', s.dly.wet);
+        bind('dly-time', s.dly.delayTime);
+        bind('rev-mix', s.rev.wet);
+        bind('vol-master', s.master.gain);
+
+        // Transport
+        const bpmInput = document.getElementById('bpm-input');
+        bpmInput.onchange = e => Tone.Transport.bpm.value = parseFloat(e.target.value);
+        
+        const playBtn = document.getElementById('play-btn');
+        playBtn.onclick = () => {
+            if(Tone.Transport.state === 'started') {
+                Tone.Transport.stop();
+                playBtn.innerText = "PLAY";
+            } else {
+                Tone.Transport.start();
+                playBtn.innerText = "STOP";
+            }
+        };
+        Tone.Transport.start(); // Auto start transport for LFOs
+
+        document.getElementById('arp-enabled').onchange = (e) => {
+            runtimeState.arp.enabled = e.target.checked;
+            // Clear playing notes if turning off
+            if(!e.target.checked) releaseAll();
+        };
+
+        // --- MATRIX UI ---
+        const cells = document.querySelectorAll('.matrix-cell');
+        const overlay = document.getElementById('matrix-overlay');
+        const depthSlider = document.getElementById('matrix-depth');
+        const overlayClose = document.getElementById('matrix-close');
+        let currentCell = null;
+
+        cells.forEach(cell => {
+            cell.addEventListener('click', (e) => {
+                const src = cell.dataset.src;
+                const dst = cell.dataset.dst;
+                const key = `${src}-${dst}`;
+
+                // Open Editor
+                currentCell = cell;
+                const existing = runtimeState.patchMatrix[key];
+                
+                // Position overlay
+                const rect = cell.getBoundingClientRect();
+                overlay.style.top = (rect.top + window.scrollY - 60) + 'px';
+                overlay.style.left = (rect.left + window.scrollX - 40) + 'px';
+                overlay.style.display = 'block';
+
+                depthSlider.value = existing ? existing.gain.value : 0;
+            });
+        });
+
+        depthSlider.addEventListener('input', (e) => {
+            if(!currentCell) return;
+            const val = parseFloat(e.target.value);
+            updatePatch(currentCell.dataset.src, currentCell.dataset.dst, val);
+            
+            if(Math.abs(val) > 0.01) currentCell.classList.add('connected');
+            else currentCell.classList.remove('connected');
+        });
+
+        overlayClose.addEventListener('click', () => {
+            overlay.style.display = 'none';
+            currentCell = null;
+        });
+
+        // --- NEW KEYBOARD GENERATION ---
+        runtimeState.keyboard = new SynthKeyboard('keyboard', {
+            startNote: 48, // C3
+            responsive: true,
+            onNoteOn: (midi) => noteOn(midi, 1),
+            onNoteOff: (midi) => noteOff(midi)
+        });
+    }
+
+    function updatePatch(srcId, dstId, amount) {
+        const Tone = runtimeState.Tone;
+        const key = `${srcId}-${dstId}`;
+        const source = runtimeState.modSources[srcId];
+        let dests = runtimeState.modDests[dstId];
+        if(!Array.isArray(dests)) dests = [dests]; // Handle single or multiple dests (like pitch)
+
+        // Clean up 0 amounts to save CPU
+        if(Math.abs(amount) < 1) {
+            if(runtimeState.patchMatrix[key]) {
+                runtimeState.patchMatrix[key].gain.dispose();
+                delete runtimeState.patchMatrix[key];
+            }
+            return;
+        }
+
+        // Create connection if not exists
+        if(!runtimeState.patchMatrix[key]) {
+            const g = new Tone.Gain(0);
+            source.connect(g);
+            dests.forEach(d => g.connect(d));
+            runtimeState.patchMatrix[key] = { gain: g };
+        }
+
+        // Scale Logic
+        let val = amount;
+        // Pitch needs high values (detune cents), Filter needs high (Hz), Shape is small (0-20)
+        if(dstId === 'pitch') val = amount * 2; // +/- 2000 cents
+        if(dstId === 'cutoff') val = amount * 5; // +/- 5000 hz
+        if(dstId === 'shape') val = amount * 0.01;
+        if(dstId === 'delay') val = amount * 0.0005;
+        if(dstId === 'lfoRate') val = amount * 0.01;
+
+        runtimeState.patchMatrix[key].gain.value = val;
+    }
+
+    /**
+     * ========================================================
+     * 4. NOTE LOGIC
+     * ========================================================
+     */
+    function noteOn(midi, velocity = 1, time = runtimeState.Tone.now()) {
+        const Tone = runtimeState.Tone;
+        
+        // Safety check for manual glissando
+        if(runtimeState.activeNotes.has(midi)) return;
+        runtimeState.activeNotes.add(midi);
+
+        if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, true);
+
+        if(runtimeState.arp.enabled) {
+            // Update Arp Pattern
+            const sortedNotes = Array.from(runtimeState.activeNotes).sort((a,b) => a - b);
+            runtimeState.arp.pattern.values = sortedNotes;
+            return; // Arp handles the triggering
+        }
+
+        triggerNoteOn(midi, velocity, time);
+    }
+
+    function triggerNoteOn(midi, velocity, time) {
+        const s = runtimeState.synth;
+        const Tone = runtimeState.Tone;
+        
+        // Pitch
+        const freq = Tone.Frequency(midi, "midi").toFrequency();
+        const t1 = parseFloat(document.getElementById('osc1-tune').value);
+        const t2 = parseFloat(document.getElementById('osc2-tune').value);
+        const ft2 = parseFloat(document.getElementById('osc2-detune').value);
+
+        // Set Base frequencies
+        s.baseFreq1.setValueAtTime(Tone.Frequency(freq).transpose(t1), time);
+        s.baseFreq2.setValueAtTime(Tone.Frequency(freq).transpose(t2), time);
+        s.osc2.detune.setValueAtTime(ft2, time);
+
+        // Trigger Envelopes
+        s.ampEnv.triggerAttack(time, velocity);
+        s.modEnv.triggerAttack(time);
+        
+        // Vel param
+        s.velSig.setValueAtTime(velocity, time);
+    }
+
+    function noteOff(midi, time = runtimeState.Tone.now()) {
+        const s = runtimeState.synth;
+        
+        runtimeState.activeNotes.delete(midi);
+        if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, false);
+
+        if(runtimeState.arp.enabled) {
+            const sortedNotes = Array.from(runtimeState.activeNotes).sort((a,b) => a - b);
+            runtimeState.arp.pattern.values = sortedNotes;
+            return;
+        }
+
+        // Monophonic basic logic: Release if no other keys held? 
+        // For simplicity in this patchbox, we just release. 
+        s.ampEnv.triggerRelease(time);
+        s.modEnv.triggerRelease(time);
+    }
+
+    function releaseAll() {
+        const s = runtimeState.synth;
+        const now = runtimeState.Tone.now();
+        s.ampEnv.triggerRelease(now);
+        s.modEnv.triggerRelease(now);
+        runtimeState.activeNotes.clear();
+        // Visuals cleared by SynthKeyboard state implicitly or we can leave it
+        if(runtimeState.arp.pattern) runtimeState.arp.pattern.values = [];
+    }
+
+    /**
+     * ========================================================
+     * 5. MIDI
+     * ========================================================
+     */
+    function initMIDI() {
+        if(!navigator.requestMIDIAccess) return;
+
+        navigator.requestMIDIAccess().then(midi => {
+            const inputs = midi.inputs.values();
+            const select = document.getElementById('midi-select');
+            
+            for (let input of inputs) {
+                const opt = document.createElement('option');
+                opt.value = input.id;
+                opt.text = input.name;
+                select.appendChild(opt);
+                
+                input.onmidimessage = handleMIDIMessage;
+            }
+
+            select.onchange = () => {
+                // In a robust app, we'd unbind old inputs, but here we bind all found inputs initially.
+            };
+        });
+    }
+
+    function handleMIDIMessage(msg) {
+        const [status, data1, data2] = msg.data;
+        const cmd = status >> 4;
+        
+        // Visual indicator
+        const led = document.getElementById('midi-activity');
+        led.classList.add('on');
+        setTimeout(() => led.classList.remove('on'), 100);
+
+        // Note On
+        if(cmd === 9 && data2 > 0) {
+            noteOn(data1, data2/127);
+        }
+        // Note Off
+        else if(cmd === 8 || (cmd === 9 && data2 === 0)) {
+            noteOff(data1);
+        }
+    }
+
+    /**
+     * ========================================================
+     * 6. PRESETS
+     * ========================================================
+     */
+    const factoryPresets = [
+        { name: "Init", settings: { oscMix: 0, cutoff: 2000, res: 1, modD: 0, ampR: 0.1, dly: 0 }, patches: [] },
+        { name: "Bass", settings: { oscMix: 0.5, cutoff: 400, res: 5, modD: 0.2, ampR: 0.2, dly: 0 }, patches: [ ['env','cutoff', 200] ] },
+        { name: "Wobble", settings: { oscMix: 0.5, cutoff: 1000, res: 8, lfo1R: 4, lfo1Type: "sine" }, patches: [ ['lfo1','cutoff', 300] ] },
+        { name: "Space", settings: { oscMix: 0.2, cutoff: 3000, ampR: 2, dly: 0.4, dlyT: 0.5, rev: 0.3 }, patches: [ ['lfo2','pitch', 10] ] },
+        { name: "Laser", settings: { oscMix: 0, cutoff: 8000, res: 2, modD: 0.1 }, patches: [ ['env','pitch', -500] ] },
+        { name: "Noise", settings: { oscMix: 1, noise: 0.5, cutoff: 5000, res: 10 }, patches: [ ['lfo1','cutoff', 800], ['lfo2','shape', 500] ] },
+        { name: "ArpLead", settings: { oscMix: 0.5, cutoff: 1500, res: 2, ampR: 0.1, dly: 0.2 }, patches: [] },
+        { name: "Broken", settings: { oscMix: 0.5, cutoff: 500, res: 15, lfo1R: 15 }, patches: [ ['lfo1','pitch', 300], ['lfo1','cutoff', 200] ] }
+    ];
+
+    function initPresets() {
+        const list = document.getElementById('preset-list');
+        factoryPresets.forEach((p, idx) => {
+            const btn = document.createElement('button');
+            btn.className = 'preset-btn';
+            btn.innerText = p.name;
+            btn.onclick = () => loadPreset(p);
+            list.appendChild(btn);
+        });
+    }
+
+    function loadPreset(p) {
+        const s = runtimeState.synth;
+        
+        // Reset Matrix
+        Object.keys(runtimeState.patchMatrix).forEach(k => {
+            runtimeState.patchMatrix[k].gain.dispose();
+            delete runtimeState.patchMatrix[k];
+        });
+        document.querySelectorAll('.matrix-cell').forEach(c => c.classList.remove('connected'));
+
+        // Defaults
+        s.osc1Gain.gain.value = 1; s.osc2Gain.gain.value = 0; s.noiseGain.gain.value = 0;
+        s.filter.frequency.value = 2000; s.filter.Q.value = 1;
+        s.dly.wet.value = 0; s.rev.wet.value = 0;
+
+        // Apply Settings (Partial implementation for brevity)
+        if(p.settings.cutoff) { s.filter.frequency.value = p.settings.cutoff; document.getElementById('cutoff').value = p.settings.cutoff; }
+        if(p.settings.res) { s.filter.Q.value = p.settings.res; document.getElementById('resonance').value = p.settings.res; }
+        if(p.settings.dly) { s.dly.wet.value = p.settings.dly; document.getElementById('dly-mix').value = p.settings.dly; }
+        
+        // Apply Patches
+        p.patches.forEach(patch => {
+            const [src, dst, amt] = patch;
+            updatePatch(src, dst, amt);
+            // Update UI
+            const cell = document.querySelector(`.matrix-cell[data-src="${src}"][data-dst="${dst}"]`);
+            if(cell) cell.classList.add('connected');
+        });
+    }
+
+    /**
+     * ========================================================
+     * 7. VISUALIZER
+     * ========================================================
+     */
+    function startVisualizer() {
+        const canvas = document.getElementById('oscilloscope');
+        const ctx = canvas.getContext('2d');
+        const waveform = runtimeState.synth.waveform;
+
+        function draw() {
+            requestAnimationFrame(draw);
+            const width = canvas.width;
+            const height = canvas.height;
+            const buffer = waveform.getValue();
+
+            ctx.fillStyle = "#000";
+            ctx.fillRect(0, 0, width, height);
+            ctx.lineWidth = 2;
+            ctx.strokeStyle = "#ff9900";
+            ctx.beginPath();
+
+            const sliceWidth = width * 1.0 / buffer.length;
+            let x = 0;
+
+            for (let i = 0; i < buffer.length; i++) {
+                const v = buffer[i] * 0.8 + 0.5; // Scale
+                const y = v * height;
+
+                if (i === 0) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+                x += sliceWidth;
+            }
+            ctx.lineTo(canvas.width, canvas.height / 2);
+            ctx.stroke();
+        }
+        draw();
+    }
+
+    // MAIN BOOT SEQUENCE
+    loadToneJSAndBoot({ setLoaderStatus, runtimeState, boot });
+
+    </script>
+</body>
+</html>

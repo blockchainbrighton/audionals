@@ -1,0 +1,865 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>JMS-TEN</title>
+  <style>
+    :root {
+      --main-bg-color: #1a1a1a;
+      --panel-bg-color: #2a2a2a;
+      --knob-color: #333;
+      --knob-indicator: #ccc;
+      --knob-active: #ff7700;
+      --text-color: #eee;
+      --label-color: #aaa;
+      --slider-bg: #111;
+      --slider-fill: #ff7700;
+      --key-white: #f0f0f0;
+      --key-black: #111;
+      --key-active: #ff9900;
+      --module-border: #444;
+      --glow-color: rgba(255, 119, 0, 0.4);
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; user-select: none; }
+    body {
+      font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+      background: linear-gradient(135deg, #0d0d0d 0%, #1a1a1a 100%);
+      color: var(--text-color);
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+      padding: 20px;
+    }
+
+    /* CHASSIS */
+    .synth-container {
+      width: 100%;
+      max-width: 980px;
+      background-color: var(--panel-bg-color);
+      border-radius: 8px;
+      box-shadow: 0 10px 30px rgba(0, 0, 0, 0.8), 
+                  inset 0 1px 1px rgba(255,255,255,0.1);
+      border: 1px solid #333;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }
+
+    /* HEADER */
+    .synth-header {
+      background: #111;
+      padding: 15px;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      border-bottom: 2px solid #000;
+    }
+    .synth-header h1 {
+      font-family: 'Courier New', monospace;
+      font-size: 24px;
+      font-weight: bold;
+      letter-spacing: 3px;
+      color: #fff;
+      text-shadow: 0 0 8px var(--glow-color);
+    }
+    .logo-badge {
+      font-size: 12px;
+      background: var(--knob-active);
+      color: #000;
+      padding: 2px 6px;
+      font-weight: bold;
+      border-radius: 2px;
+    }
+
+    /* PRESETS */
+    .preset-bar {
+      background: #222;
+      padding: 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: center;
+      border-bottom: 1px solid var(--module-border);
+    }
+    .preset-button {
+      background: #333;
+      border: 1px solid #555;
+      color: #ccc;
+      padding: 6px 12px;
+      font-size: 11px;
+      text-transform: uppercase;
+      cursor: pointer;
+      border-radius: 3px;
+      transition: all 0.2s;
+    }
+    .preset-button:hover { background: #444; color: #fff; border-color: #777; }
+    .preset-button:active { transform: translateY(1px); }
+    .preset-button.loading { background: var(--knob-active); color: #000; border-color: var(--knob-active); }
+
+    /* MAIN PANEL GRID */
+    .synth-panel {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 15px;
+      padding: 20px;
+      background: url('data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAQAAAAECAYAAACp8Z5+AAAAIklEQVQIW2NkQAKrVq36zwjjgzjwqonyABJwnQABKA8ZAwA7HhIaa7guOgAAAABJRU5ErkJggg=='); /* Carbon pattern */
+    }
+
+    /* MODULES */
+    .module {
+      background: rgba(0, 0, 0, 0.2);
+      border: 1px solid #3a3a3a;
+      border-radius: 6px;
+      padding: 10px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: inset 0 0 10px rgba(0,0,0,0.3);
+    }
+    .module-title {
+      font-size: 11px;
+      font-weight: bold;
+      color: #888;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 12px;
+      text-align: center;
+      border-bottom: 1px solid #444;
+      padding-bottom: 5px;
+    }
+
+    .controls-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 15px 5px;
+      align-items: start;
+    }
+    .control-wrapper {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+    }
+
+    /* KNOBS */
+    .knob-container {
+      position: relative;
+      width: 50px;
+      height: 50px;
+      margin-bottom: 5px;
+    }
+    .knob {
+      width: 100%;
+      height: 100%;
+      border-radius: 50%;
+      /* The gradient creates the "value" indicator ring */
+      background: conic-gradient(
+        var(--knob-active) 0deg, 
+        var(--knob-active) 0deg, 
+        var(--knob-color) 0deg, 
+        var(--knob-color) 360deg
+      );
+      position: relative;
+      cursor: ns-resize;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.5);
+      transform: rotate(-135deg); /* Start rotation offset */
+      transition: transform 0.05s linear; /* Smooth drag */
+    }
+    /* Inner Cap of the knob */
+    .knob::after {
+      content: '';
+      position: absolute;
+      top: 10%; left: 10%;
+      width: 80%; height: 80%;
+      background: linear-gradient(to bottom, #444, #1a1a1a);
+      border-radius: 50%;
+      box-shadow: inset 0 1px 2px rgba(255,255,255,0.1);
+    }
+    /* The white line indicator on the cap */
+    .knob::before {
+      content: '';
+      position: absolute;
+      top: 5px; left: 50%;
+      width: 2px; height: 12px;
+      background: var(--knob-indicator);
+      transform: translateX(-50%);
+      z-index: 2;
+    }
+    
+    .knob-label {
+      font-size: 10px;
+      color: var(--label-color);
+      text-align: center;
+      margin-top: 2px;
+    }
+
+    /* DROPDOWNS */
+    .dropdown {
+      background: #111;
+      color: #ccc;
+      border: 1px solid #444;
+      font-size: 10px;
+      padding: 3px;
+      width: 90%;
+      border-radius: 3px;
+      outline: none;
+    }
+
+    /* TOGGLES */
+    .switch-wrap {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      height: 100%;
+    }
+    .toggle-switch {
+      appearance: none;
+      width: 30px;
+      height: 16px;
+      background: #444;
+      border-radius: 10px;
+      position: relative;
+      outline: none;
+      cursor: pointer;
+    }
+    .toggle-switch::after {
+      content: '';
+      position: absolute;
+      top: 2px; left: 2px;
+      width: 12px; height: 12px;
+      background: #ccc;
+      border-radius: 50%;
+      transition: 0.2s;
+    }
+    .toggle-switch:checked { background: var(--knob-active); }
+    .toggle-switch:checked::after { transform: translateX(14px); background: #fff; }
+
+    /* KEYBOARD */
+    .keyboard-container {
+      /* Handled by shared/keyboard.js */
+      margin-top: 10px;
+    }
+    /* Deprecated manual keyboard styles removed */
+    
+    /* FOOTER / STATUS */
+    .status-bar {
+      padding: 8px;
+      text-align: center;
+      font-size: 11px;
+      color: #666;
+      background: #000;
+    }
+    .volume-panel {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    @media (max-width: 768px) {
+      .synth-panel { grid-template-columns: 1fr 1fr; }
+      .knob-container { width: 40px; height: 40px; }
+    }
+  </style>
+</head>
+<body>
+
+  <div class="synth-container">
+    <div class="synth-header">
+      <h1>JMS-TEN<span style="color:var(--knob-active)">+</span></h1>
+      <span class="logo-badge">EMULATOR</span>
+    </div>
+
+    <!-- PRESETS -->
+    <div class="preset-bar">
+      <button class="preset-button" data-name="bass">Bass Lead</button>
+      <button class="preset-button" data-name="pluck">Plucked</button>
+      <button class="preset-button" data-name="sweep">Filter Sweep</button>
+      <button class="preset-button" data-name="organ">Cheesy Organ</button>
+      <button class="preset-button" data-name="laser">Laser FX</button>
+      <button class="preset-button" data-name="bit8">8-Bit</button>
+      <button class="preset-button" data-name="wobble">Wobble Bass</button>
+      <button class="preset-button" data-name="storm">Noise Storm</button>
+    </div>
+
+    <div class="synth-panel">
+      <!-- MODULE: VCO -->
+      <div class="module">
+        <div class="module-title">VCO (Oscillator)</div>
+        <div class="controls-grid">
+          <div class="control-wrapper">
+            <!-- Discrete Knob -->
+            <div class="knob-container">
+              <div class="knob" id="ctrl-footage" data-param="footage" data-type="knob" data-min="0" data-max="3" data-step="1" data-value="1"></div>
+            </div>
+            <div class="knob-label">Footage</div>
+          </div>
+          
+          <div class="control-wrapper">
+            <select class="dropdown" id="ctrl-waveform" data-param="waveform" data-type="select">
+              <option value="triangle">Tri</option>
+              <option value="sawtooth" selected>Saw</option>
+              <option value="square">Pulse</option>
+            </select>
+            <div class="knob-label">Waveform</div>
+          </div>
+
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-pulsewidth" data-param="pulseWidth" data-type="knob" data-min="0.05" data-max="0.95" data-value="0.5"></div>
+            </div>
+            <div class="knob-label">Pulse Width</div>
+          </div>
+
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-noise" data-param="noiseLevel" data-type="knob" data-min="0" data-max="0.5" data-value="0"></div>
+            </div>
+            <div class="knob-label">Noise</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODULE: VCF -->
+      <div class="module">
+        <div class="module-title">VCF (Filter)</div>
+        <div class="controls-grid">
+          <div class="control-wrapper">
+            <!-- Logarithmic scale handled in JS -->
+            <div class="knob-container">
+              <div class="knob" id="ctrl-cutoff" data-param="filterCutoff" data-type="knob" data-min="20" data-max="20000" data-log="true" data-value="2000"></div>
+            </div>
+            <div class="knob-label">Cutoff</div>
+          </div>
+
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-resonance" data-param="filterResonance" data-type="knob" data-min="0" data-max="25" data-value="1"></div>
+            </div>
+            <div class="knob-label">Peak</div>
+          </div>
+
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-filtermod" data-param="filterModAmount" data-type="knob" data-min="0" data-max="1" data-value="0.5"></div>
+            </div>
+            <div class="knob-label">EG / Mod</div>
+          </div>
+          
+          <div class="switch-wrap">
+             <input type="checkbox" class="toggle-switch" id="ctrl-hp" data-param="hpFilter" data-type="check">
+             <div class="knob-label">Highpass</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODULE: MODULATION -->
+      <div class="module">
+        <div class="module-title">Modulation (MG)</div>
+        <div class="controls-grid">
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-lforate" data-param="lfoRate" data-type="knob" data-min="0.1" data-max="20" data-log="true" data-value="5"></div>
+            </div>
+            <div class="knob-label">Frequency</div>
+          </div>
+
+          <div class="control-wrapper">
+            <select class="dropdown" id="ctrl-lfotype" data-param="lfoType" data-type="select">
+              <option value="triangle" selected>Tri</option>
+              <option value="square">Sqr</option>
+              <option value="sawtooth">Saw</option>
+            </select>
+            <div class="knob-label">Wave</div>
+          </div>
+
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-pitchmod" data-param="pitchModAmount" data-type="knob" data-min="0" data-max="1" data-value="0"></div>
+            </div>
+            <div class="knob-label">Freq Mod</div>
+          </div>
+          
+           <div class="control-wrapper">
+            <!-- New Param: Filter LFO Mod -->
+            <div class="knob-container">
+              <div class="knob" id="ctrl-lfo-filter" data-param="lfoFilterAmount" data-type="knob" data-min="0" data-max="1" data-value="0"></div>
+            </div>
+            <div class="knob-label">Cutoff Mod</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- MODULE: ENVELOPE -->
+      <div class="module">
+        <div class="module-title">Envelope Generator</div>
+        <div class="controls-grid">
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-attack" data-param="attack" data-type="knob" data-min="0.005" data-max="3" data-log="true" data-value="0.01"></div>
+            </div>
+            <div class="knob-label">Attack</div>
+          </div>
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-decay" data-param="decay" data-type="knob" data-min="0.005" data-max="3" data-log="true" data-value="0.2"></div>
+            </div>
+            <div class="knob-label">Decay</div>
+          </div>
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-sustain" data-param="sustain" data-type="knob" data-min="0" data-max="1" data-value="0.6"></div>
+            </div>
+            <div class="knob-label">Sustain</div>
+          </div>
+          <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-release" data-param="release" data-type="knob" data-min="0.005" data-max="5" data-log="true" data-value="0.3"></div>
+            </div>
+            <div class="knob-label">Release</div>
+          </div>
+        </div>
+      </div>
+      
+       <!-- MODULE: MASTER -->
+      <div class="module volume-panel">
+        <div class="module-title">Output</div>
+        <div class="control-wrapper">
+            <div class="knob-container">
+              <div class="knob" id="ctrl-volume" data-param="masterVolume" data-type="knob" data-min="0" data-max="1" data-value="0.5"></div>
+            </div>
+            <div class="knob-label">Volume</div>
+        </div>
+        <div style="margin-top:15px; display:flex; gap:5px;">
+           <button class="preset-button" id="btn-panic">Panic</button>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- KEYBOARD -->
+    <div class="keyboard-container">
+      <div id="keyboard-bed"></div>
+    </div>
+    <div class="status-bar" id="status-display">Click keys or use MIDI keyboard.</div>
+  </div>
+
+  <script type="module">
+    import { SynthKeyboard } from '../../shared/keyboard.js';
+
+    /**
+     * Enhanced Synth Engine + UI Controller
+     */
+
+    // --- AUDIO ENGINE ---
+    class SynthEngine {
+        constructor() {
+            this.ctx = new (window.AudioContext || window.webkitAudioContext)();
+            this.masterGain = this.ctx.createGain();
+            this.masterGain.gain.value = 0.5;
+            
+            // Limiter to prevent harsh clipping
+            this.limiter = this.ctx.createDynamicsCompressor();
+            this.limiter.threshold.value = -3;
+            this.limiter.ratio.value = 12;
+            this.masterGain.connect(this.limiter);
+            this.limiter.connect(this.ctx.destination);
+
+            this.activeNotes = new Map();
+            
+            // Global State
+            this.params = {
+                waveform: 'sawtooth',
+                footage: 1, // 0=32', 1=16', 2=8', 3=4'
+                pulseWidth: 0.5,
+                noiseLevel: 0,
+                filterCutoff: 2000,
+                filterResonance: 1,
+                filterModAmount: 0.5, // Envelope to Filter
+                hpFilter: false,
+                lfoRate: 5,
+                lfoType: 'triangle',
+                pitchModAmount: 0,
+                lfoFilterAmount: 0, // LFO to Filter
+                attack: 0.01,
+                decay: 0.2,
+                sustain: 0.6,
+                release: 0.3,
+                masterVolume: 0.5
+            };
+
+            // Global LFO (always running)
+            this.lfo = this.ctx.createOscillator();
+            this.lfo.start();
+            
+            this.noiseBuffer = this._createNoiseBuffer();
+        }
+
+        _createNoiseBuffer() {
+            const size = this.ctx.sampleRate * 2;
+            const buffer = this.ctx.createBuffer(1, size, this.ctx.sampleRate);
+            const data = buffer.getChannelData(0);
+            for (let i = 0; i < size; i++) data[i] = Math.random() * 2 - 1;
+            return buffer;
+        }
+
+        updateParam(key, value) {
+            this.params[key] = value;
+            
+            // Real-time updates for global modules
+            if (key === 'lfoRate') this.lfo.frequency.setValueAtTime(value, this.ctx.currentTime);
+            if (key === 'lfoType') this.lfo.type = value;
+            if (key === 'masterVolume') this.masterGain.gain.setTargetAtTime(value, this.ctx.currentTime, 0.02);
+
+            // For live updates to held notes (filter, etc), iterate active notes
+            this.activeNotes.forEach(note => {
+                if(key === 'filterCutoff') note.filter.frequency.setTargetAtTime(value, this.ctx.currentTime, 0.1);
+                if(key === 'filterResonance') note.filter.Q.setTargetAtTime(value, this.ctx.currentTime, 0.1);
+                if(key === 'pulseWidth' && note.osc.type === 'square') {
+                    // Requires PulseOsc polyfill or Custom Node for true PWM, skipped for basic emulation
+                }
+            });
+        }
+
+        getFrequency(note) {
+            // Footage Logic: 0 -> 0.25x, 1 -> 0.5x, 2 -> 1x, 3 -> 2x (approx shifting octaves)
+            // JMS-TEN Footage: 32, 16, 8, 4. 
+            // Let's map 0->32'(low), 1->16', 2->8', 3->4'
+            // Base A4=440. 
+            const shifts = [-2, -1, 0, 1]; 
+            const shift = shifts[Math.floor(this.params.footage)] || 0;
+            return 440 * Math.pow(2, (note - 69 + (shift * 12)) / 12);
+        }
+
+        triggerNote(noteId, velocity = 1) {
+            if (this.ctx.state === 'suspended') this.ctx.resume();
+
+            // Osc
+            const osc = this.ctx.createOscillator();
+            osc.type = this.params.waveform;
+            osc.frequency.value = this.getFrequency(noteId);
+
+            // Noise
+            const noiseSrc = this.ctx.createBufferSource();
+            noiseSrc.buffer = this.noiseBuffer;
+            noiseSrc.loop = true;
+            const noiseGain = this.ctx.createGain();
+            noiseGain.gain.value = this.params.noiseLevel;
+            noiseSrc.connect(noiseGain);
+
+            // Filter (VCF)
+            const filter = this.ctx.createBiquadFilter();
+            filter.type = this.params.hpFilter ? 'highpass' : 'lowpass';
+            filter.frequency.value = this.params.filterCutoff;
+            filter.Q.value = this.params.filterResonance;
+
+            // VCA (Amp)
+            const vca = this.ctx.createGain();
+            vca.gain.value = 0;
+
+            // Connections
+            osc.connect(filter);
+            noiseSrc.start();
+            noiseGain.connect(filter);
+            filter.connect(vca);
+            vca.connect(this.masterGain);
+
+            // --- Modulation ---
+            // 1. LFO -> Pitch
+            const pitchModGain = this.ctx.createGain();
+            pitchModGain.gain.value = this.params.pitchModAmount * 100; // Depth
+            this.lfo.connect(pitchModGain);
+            pitchModGain.connect(osc.detune);
+
+            // 2. LFO -> Filter
+            const filterLfoGain = this.ctx.createGain();
+            filterLfoGain.gain.value = this.params.lfoFilterAmount * 1000;
+            this.lfo.connect(filterLfoGain);
+            filterLfoGain.connect(filter.frequency);
+
+            // 3. EG -> Filter
+            const filterEgGain = this.ctx.createGain();
+            filterEgGain.gain.value = this.params.filterModAmount * 6000; // Max sweep range
+            // Connect dummy constant source to drive EG for filter? 
+            // Easier way: Schedule filter param directly
+            
+            // --- Envelopes ---
+            const now = this.ctx.currentTime;
+            const { attack, decay, sustain, release } = this.params;
+
+            // Amp Envelope
+            vca.gain.cancelScheduledValues(now);
+            vca.gain.setValueAtTime(0, now);
+            vca.gain.linearRampToValueAtTime(velocity, now + attack);
+            vca.gain.exponentialRampToValueAtTime(Math.max(0.01, velocity * sustain), now + attack + decay);
+
+            // Filter Envelope (Visualizing modulation)
+            // Base cutoff
+            filter.frequency.cancelScheduledValues(now);
+            filter.frequency.setValueAtTime(this.params.filterCutoff, now);
+            
+            if (this.params.filterModAmount > 0) {
+                const peakFreq = Math.min(22000, this.params.filterCutoff + (this.params.filterModAmount * 4000));
+                const susFreq = Math.min(22000, this.params.filterCutoff + (this.params.filterModAmount * 4000 * sustain));
+                
+                filter.frequency.linearRampToValueAtTime(peakFreq, now + attack);
+                filter.frequency.exponentialRampToValueAtTime(Math.max(20, susFreq), now + attack + decay);
+            }
+
+            osc.start(now);
+            
+            const noteObj = { osc, noiseSrc, noiseGain, filter, vca, pitchModGain, filterLfoGain };
+            this.activeNotes.set(noteId, noteObj);
+        }
+
+        releaseNote(noteId) {
+            const note = this.activeNotes.get(noteId);
+            if (!note) return;
+
+            const now = this.ctx.currentTime;
+            const { release } = this.params;
+
+            // Amp Release
+            note.vca.gain.cancelScheduledValues(now);
+            note.vca.gain.setValueAtTime(note.vca.gain.value, now);
+            note.vca.gain.exponentialRampToValueAtTime(0.001, now + release);
+
+            // Filter Release
+            note.filter.frequency.cancelScheduledValues(now);
+            note.filter.frequency.setValueAtTime(note.filter.frequency.value, now);
+            note.filter.frequency.exponentialRampToValueAtTime(this.params.filterCutoff, now + release);
+
+            note.osc.stop(now + release + 0.1);
+            note.noiseSrc.stop(now + release + 0.1);
+
+            // Cleanup
+            setTimeout(() => {
+                note.pitchModGain.disconnect();
+                note.filterLfoGain.disconnect();
+                // note.osc.disconnect(); // GC handles usually
+            }, (release + 0.2) * 1000);
+
+            this.activeNotes.delete(noteId);
+        }
+        
+        panic() {
+            this.activeNotes.forEach((n) => {
+                try { n.osc.stop(); n.noiseSrc.stop(); } catch(e){}
+            });
+            this.activeNotes.clear();
+        }
+    }
+
+    // --- UI CONTROLLER ---
+    class UIController {
+        constructor(synth) {
+            this.synth = synth;
+            this.controls = new Map();
+            this.presets = this._definePresets();
+            
+            this._initControls();
+            this._initKeyboard();
+            this._initPresets();
+            this._initMIDI();
+        }
+
+        _definePresets() {
+            return {
+                bass: { footage: 0, waveform: 'sawtooth', filterCutoff: 180, filterResonance: 4, filterModAmount: 0.6, attack: 0.01, decay: 0.2, sustain: 0.4, release: 0.2, pitchModAmount:0, lfoFilterAmount:0, hpFilter:false },
+                pluck: { footage: 1, waveform: 'square', filterCutoff: 1500, filterResonance: 2, filterModAmount: 0.8, attack: 0.005, decay: 0.15, sustain: 0, release: 0.1, pitchModAmount:0, lfoFilterAmount:0, hpFilter:false },
+                sweep: { footage: 2, waveform: 'sawtooth', filterCutoff: 100, filterResonance: 15, filterModAmount: 0.9, attack: 1.5, decay: 0.5, sustain: 0.8, release: 1.5, pitchModAmount:0, lfoFilterAmount:0.2, lfoRate:4, hpFilter:false },
+                organ: { footage: 1, waveform: 'triangle', filterCutoff: 8000, filterResonance: 0, filterModAmount: 0, attack: 0.05, decay: 0.1, sustain: 1.0, release: 0.05, pitchModAmount:0.02, lfoRate:6, lfoFilterAmount:0, hpFilter:false },
+                laser: { footage: 1, waveform: 'sawtooth', filterCutoff: 500, filterResonance: 20, filterModAmount: 1, attack: 0.005, decay: 0.2, sustain: 0, release: 0.1, pitchModAmount:0.8, lfoRate:15, lfoType:'sawtooth', hpFilter:true },
+                bit8:  { footage: 2, waveform: 'square', pulseWidth:0.1, filterCutoff: 12000, filterResonance: 0, filterModAmount: 0, attack: 0, decay: 0.1, sustain: 1, release: 0, pitchModAmount:0, lfoFilterAmount:0, hpFilter:false },
+                wobble:{ footage: 0, waveform: 'sawtooth', filterCutoff: 200, filterResonance: 8, filterModAmount: 0.2, attack: 0.05, decay: 0.1, sustain: 1, release: 0.3, pitchModAmount:0, lfoFilterAmount:0.8, lfoRate: 4, lfoType:'triangle', hpFilter:false },
+                storm: { footage: 1, waveform: 'triangle', noiseLevel: 0.4, filterCutoff: 500, filterResonance: 18, filterModAmount: 0.5, attack: 2, decay: 2, sustain: 0.5, release: 3, pitchModAmount:0.5, lfoRate:0.5, lfoType:'square', hpFilter:true }
+            };
+        }
+
+        _initControls() {
+            // KNOBS
+            document.querySelectorAll('.knob').forEach(el => {
+                const param = el.dataset.param;
+                const min = parseFloat(el.dataset.min);
+                const max = parseFloat(el.dataset.max);
+                const isLog = el.dataset.log === 'true';
+                let val = parseFloat(el.dataset.value);
+
+                this.controls.set(param, { element: el, type: 'knob', min, max, isLog });
+
+                // Visual update function
+                const updateVisual = (v) => {
+                    let pct;
+                    if (isLog) {
+                        const minLog = Math.log(min);
+                        const maxLog = Math.log(max);
+                        const valLog = Math.log(v);
+                        pct = (valLog - minLog) / (maxLog - minLog);
+                    } else {
+                        pct = (v - min) / (max - min);
+                    }
+                    pct = Math.max(0, Math.min(1, pct));
+                    const deg = -135 + (pct * 270);
+                    el.style.transform = `rotate(${deg}deg)`;
+                    
+                    // Update gradient arc
+                    // We need to counter-rotate the gradient so it looks static relative to chassis, 
+                    // or rotate the div. Here we rotated the div.
+                    // The CSS gradient handles the "fill".
+                    const fillDeg = pct * 360; // Just visual filler
+                    // Update background conic gradient to match percentage?
+                    // Simplified: The CSS rotation handles the pointer. The background is a static styling choice in this specific CSS.
+                    // Let's make the background dynamic to show "fill".
+                    el.style.background = `conic-gradient(var(--knob-active) ${pct*270}deg, var(--knob-color) 0deg)`;
+                };
+
+                // Mouse Drag Logic
+                el.addEventListener('mousedown', (e) => {
+                    const startY = e.clientY;
+                    const startVal = val;
+                    const range = max - min;
+                    
+                    const onMove = (mv) => {
+                        const delta = startY - mv.clientY;
+                        const sens = 200; // pixels for full range
+                        let newVal;
+
+                        if (isLog) {
+                            // Logarithmic drag math
+                            const sign = delta > 0 ? 1 : -1;
+                            const factor = Math.pow(1.02, Math.abs(delta)); // Speed
+                            newVal = delta > 0 ? startVal * factor : startVal / factor;
+                        } else {
+                            newVal = startVal + (delta / sens) * range;
+                        }
+
+                        newVal = Math.max(min, Math.min(max, newVal));
+                        val = newVal;
+                        
+                        updateVisual(newVal);
+                        this.synth.updateParam(param, newVal);
+                    };
+
+                    const onUp = () => {
+                        window.removeEventListener('mousemove', onMove);
+                        window.removeEventListener('mouseup', onUp);
+                    };
+
+                    window.addEventListener('mousemove', onMove);
+                    window.addEventListener('mouseup', onUp);
+                });
+
+                // Initial Set
+                updateVisual(val);
+                this.controls.get(param).updateVisual = updateVisual;
+            });
+
+            // SELECTS
+            document.querySelectorAll('select[data-param]').forEach(el => {
+                const param = el.dataset.param;
+                this.controls.set(param, { element: el, type: 'select' });
+                el.addEventListener('change', (e) => {
+                    this.synth.updateParam(param, e.target.value);
+                });
+            });
+
+            // CHECKBOXES
+            document.querySelectorAll('input[type="checkbox"][data-param]').forEach(el => {
+                const param = el.dataset.param;
+                this.controls.set(param, { element: el, type: 'check' });
+                el.addEventListener('change', (e) => {
+                    this.synth.updateParam(param, e.target.checked);
+                });
+            });
+            
+            // Panic Button
+            document.getElementById('btn-panic').onclick = () => this.synth.panic();
+        }
+
+        _initPresets() {
+            const buttons = document.querySelectorAll('.preset-button[data-name]');
+            buttons.forEach(btn => {
+                btn.addEventListener('click', () => {
+                    const presetName = btn.dataset.name;
+                    const preset = this.presets[presetName];
+                    if(preset) this.loadPreset(preset);
+                    
+                    // Visual feedback
+                    buttons.forEach(b => b.classList.remove('loading'));
+                    btn.classList.add('loading');
+                });
+            });
+        }
+
+        loadPreset(preset) {
+            // Apply all keys in preset to synth and UI
+            Object.keys(preset).forEach(key => {
+                const value = preset[key];
+                
+                // 1. Update Synth
+                this.synth.updateParam(key, value);
+                
+                // 2. Update UI
+                const ctrl = this.controls.get(key);
+                if (ctrl) {
+                    if (ctrl.type === 'knob') {
+                        // Update DOM dataset for state persistence
+                        ctrl.element.dataset.value = value; 
+                        ctrl.updateVisual(value);
+                    } else if (ctrl.type === 'select') {
+                        ctrl.element.value = value;
+                    } else if (ctrl.type === 'check') {
+                        ctrl.element.checked = value;
+                    }
+                }
+            });
+        }
+
+        _initKeyboard() {
+            this.keyboard = new SynthKeyboard('keyboard-bed', {
+                startNote: 53, // F3, matching original
+                responsive: true,
+                onNoteOn: (midi) => this.synth.triggerNote(midi),
+                onNoteOff: (midi) => this.synth.releaseNote(midi)
+            });
+        }
+        
+        _initMIDI() {
+            if (navigator.requestMIDIAccess) {
+                navigator.requestMIDIAccess().then(access => {
+                    const inputs = access.inputs.values();
+                    for (let input of inputs) {
+                        input.onmidimessage = (msg) => {
+                            const [cmd, note, vel] = msg.data;
+                            if (cmd === 144 && vel > 0) { // Note On
+                                this.synth.triggerNote(note, vel/127);
+                                if(this.keyboard) this.keyboard.triggerVisual(note, true);
+                            } else if (cmd === 128 || (cmd === 144 && vel === 0)) { // Note Off
+                                this.synth.releaseNote(note);
+                                if(this.keyboard) this.keyboard.triggerVisual(note, false);
+                            } else if (cmd === 176) { // CC
+                                // Map Mod Wheel (1) to Filter Mod?
+                                if (note === 1) {
+                                    // simple mapping example
+                                }
+                            }
+                        };
+                    }
+                });
+            }
+        }
+        
+        // _highlightKey removed (handled by shared keyboard)
+    }
+
+    // Initialize
+    window.addEventListener('DOMContentLoaded', () => {
+        const engine = new SynthEngine();
+        const ui = new UIController(engine);
+    });
+
+  </script>
+</body>
+</html>
