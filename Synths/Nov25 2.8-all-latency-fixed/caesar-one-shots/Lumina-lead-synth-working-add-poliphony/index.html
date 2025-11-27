@@ -174,10 +174,11 @@
         .knob-dial::after {
             content: '';
             position: absolute;
-            top: 0; left: 50%;
+            top: 50%; left: 50%;
             width: 2px; height: 50%;
             background: var(--accent);
-            transform: translateX(-50%);
+            transform-origin: top center;
+            transform: translate(-50%, 0) rotate(var(--angle, 0deg));
             pointer-events: none;
         }
         .knob-label { font-size: 0.7rem; margin-top: 8px; color: var(--text-dim); }
@@ -229,9 +230,9 @@
     <!-- SYNTH UI -->
     <div id="synth-container">
         <div class="header-bar">
-            <div class="brand">L<span>UMINA</span></div>
+            <div class="brand">LUMINA <span>LEAD</span></div>
             <div class="status-panel">
-                <div class="status-item"><div class="led" id="led-midi"></div> MIDI <select id="midi-select" style="background:#222; color:#888; border:none; margin-left:10px; font-size:0.7rem; max-width: 100px;"><option>No MIDI</option></select></div>
+                <div class="status-item"><div class="led" id="led-midi"></div> MIDI</div>
                 <div class="status-item"><div class="led" id="led-audio"></div> AUDIO</div>
             </div>
         </div>
@@ -336,12 +337,9 @@
 
     <!-- MODULE SCRIPT -->
     <script type="module">
-        // --- 1. IMPORT SHARED MODULES ---
+        // --- 1. IMPORT THREE.JS FROM ORDINAL ---
         import * as THREE from 'https://ordinals.com/content/0d013bb60fc5bf5a6c77da7371b07dc162ebc7d7f3af0ff3bd00ae5f0c546445i0';
         import { SynthKeyboard } from '../../shared/keyboard.js';
-        import { SynthLoader } from '../../shared/synth-loader.js';
-        import { MidiManager } from '../../shared/midi-manager.js';
-        import { KnobControl } from '../../shared/knob-control.js';
 
         // --- GLOBAL STATE ---
         const runtimeState = {
@@ -457,56 +455,56 @@
             requestAnimationFrame(render);
         };
 
-        // --- 3. APP LOGIC ---
+        // --- 3. TONE.JS LOADER (ORDINAL METHOD) ---
+        function loadToneJSAndBoot({ 
+            toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+            setLoaderStatus,
+            runtimeState,
+            boot
+        }) {
+            setLoaderStatus('Loading Audio Engine...');
+            import(toneUrl)
+                .then((module) => {
+                    runtimeState.Tone = window.Tone || module.default || module;
+                    if (runtimeState.Tone) {
+                        boot();
+                    } else {
+                        throw new Error("Tone object not found");
+                    }
+                })
+                .catch(err => {
+                    setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                });
+        }
 
-        // Initialize Loader
-        const loader = new SynthLoader({
-            loaderId: 'loader-overlay',
-            statusId: 'loader-status',
-            startBtnId: 'boot-btn'
-        });
+        // --- 4. APP LOGIC ---
+        const statusEl = document.getElementById('loader-status');
+        const setLoaderStatus = (msg, isError = false) => {
+            statusEl.innerText = msg;
+            if(isError) statusEl.style.color = '#ff3333';
+        };
 
-        // Start Load Process
-        loader.load(async ({ Tone }) => {
-            runtimeState.Tone = Tone;
+        const boot = () => {
+            setLoaderStatus('Engine Ready.');
+            const btn = document.getElementById('boot-btn');
+            btn.style.display = 'block';
             
-            // Initialize Audio Engine
-            initAudio();
-            
-            // Initialize UI Components
-            initUI();
-            
-            // Initialize MIDI
-            const midiManager = new MidiManager({
-                onNoteOn: (note, vel) => playNote(note, vel),
-                onNoteOff: (note) => stopNote(note),
-                deviceSelectorId: 'midi-select', // We will need to add this to HTML
-                statusElementId: 'led-midi'
-            });
-            
-            // Wait for MIDI to initialize
-            await midiManager.init();
+            btn.onclick = async () => {
+                const T = runtimeState.Tone;
+                await T.start();
+                T.context.lookAhead = 0;
+                
+                initAudio();
+                initUI();
+                initMIDI();
+                initThreeJS();
 
-            // Initialize Visuals
-            initThreeJS();
-            
-            // --- UI TRANSITION ---
-            // 1. Show the main synth container
-            document.getElementById('synth-container').style.opacity = 1;
-
-            // 2. Hide and remove the loader overlay
-            const loaderOverlay = document.getElementById('loader-overlay');
-            if (loaderOverlay) {
-                loaderOverlay.style.opacity = 0;
-                setTimeout(() => loaderOverlay.remove(), 1000);
-            }
-
-            // 3. Set Audio LED to active
-            const audioLed = document.getElementById('led-audio');
-            if (audioLed) {
-                audioLed.classList.add('active');
-            }
-        });
+                document.getElementById('loader-overlay').style.opacity = 0;
+                document.getElementById('synth-container').style.opacity = 1;
+                setTimeout(() => document.getElementById('loader-overlay').remove(), 1000);
+                document.getElementById('led-audio').classList.add('active');
+            };
+        };
 
         function initAudio() {
             const T = runtimeState.Tone;
@@ -551,41 +549,7 @@
             const s = runtimeState.synth;
             const fx = runtimeState.fx;
             runtimeState.currentPresetIdx = idx;
-            
-            // Update Visuals manually since we removed updateKnobVisuals
-            document.querySelectorAll('.knob-container').forEach(k => {
-                const param = k.dataset.param;
-                if(!p.hasOwnProperty(param)) return;
-                const val = p[param];
-                
-                // Update UI text
-                const valDisplay = k.querySelector('.knob-val');
-                const label = k.querySelector('.knob-label');
-                
-                if(k.dataset.type === 'select') {
-                     if(label) label.innerText = typeof val === 'string' ? val.toUpperCase() : val;
-                     return;
-                }
-                
-                // Update Knob Rotation
-                const min = parseFloat(k.dataset.min);
-                const max = parseFloat(k.dataset.max);
-                if(!isNaN(val)) {
-                    const percent = (val - min) / (max - min);
-                    const angle = -135 + (percent * 270);
-                    const dial = k.querySelector('.knob-dial');
-                    if(dial) {
-                        dial.style.transform = `rotate(${angle}deg)`;
-                        dial.dataset.val = val; // Sync state for KnobControl
-                    }
-                }
-                
-                if(valDisplay) {
-                    if(param === 'cutoff') valDisplay.innerText = Math.round(val) + ' Hz';
-                    else if(['attack','release','portamento'].includes(param)) valDisplay.innerText = val.toFixed(2) + ' s';
-                    else valDisplay.innerText = typeof val === 'number' ? val.toFixed(2) : val;
-                }
-            });
+            updateKnobVisuals(p);
 
             s.oscillator.type = p.oscType;
             s.envelope.attack = p.attack;
@@ -607,56 +571,83 @@
         }
 
         // --- UI UTILS ---
-        // formatValue and updateKnobVisuals are replaced by KnobControl logic
+        function formatValue(param, val) {
+            if (typeof val === 'string') return val.toUpperCase();
+            if (val === undefined || val === null) return "---";
+            if(param === 'cutoff') return Math.round(val) + ' Hz';
+            if(param === 'attack' || param === 'release' || param === 'portamento') return val.toFixed(2) + ' s';
+            return val.toFixed(2);
+        }
+
+        function updateKnobVisuals(p) {
+            document.querySelectorAll('.knob-container').forEach(k => {
+                const param = k.dataset.param;
+                if(!p.hasOwnProperty(param)) return;
+                const val = p[param];
+                if(k.dataset.type === 'select') {
+                     k.querySelector('.knob-label').innerText = formatValue(param, val);
+                     return;
+                }
+                const min = parseFloat(k.dataset.min);
+                const max = parseFloat(k.dataset.max);
+                if(!isNaN(val)) {
+                    const percent = (val - min) / (max - min);
+                    const angle = -135 + (percent * 270);
+                    k.querySelector('.knob-dial').style.setProperty('--angle', `${angle}deg`);
+                }
+                k.querySelector('.knob-val').innerText = formatValue(param, val);
+            });
+        }
 
         function initUI() {
-            // 1. Presets
+            // Presets
             const pContainer = document.getElementById('preset-container');
-            pContainer.innerHTML = '';
             PRESETS.forEach((p, i) => {
                 const btn = document.createElement('div');
                 btn.className = 'preset-btn';
-                if(i===0) btn.classList.add('active');
                 btn.innerText = p.name;
                 btn.onclick = () => loadPreset(i);
                 pContainer.appendChild(btn);
             });
 
-            // 2. Knobs (Using Shared Module)
-            // Since KnobControl expects an ID or specific selector, and our HTML uses class+data-param,
-            // we need to instantiate it carefully.
-            
-            // We'll add IDs to the dials to make them unique for the KnobControl callback
-            // AND copy data attributes (min, max, step) from container to dial because KnobControl reads from the drag target
-            document.querySelectorAll('.knob-container').forEach((k, idx) => {
+            // Knobs
+            document.querySelectorAll('.knob-container').forEach(k => {
                 const dial = k.querySelector('.knob-dial');
-                if(dial) {
-                    dial.id = `knob-dial-${idx}`;
-                    if(k.dataset.min) dial.dataset.min = k.dataset.min;
-                    if(k.dataset.max) dial.dataset.max = k.dataset.max;
-                    if(k.dataset.step) dial.dataset.step = k.dataset.step;
-                    if(k.dataset.log) dial.dataset.log = k.dataset.log;
-                }
+                if(!dial) return; 
+                const valDisplay = k.querySelector('.knob-val');
+                const param = k.dataset.param;
+                const min = parseFloat(k.dataset.min);
+                const max = parseFloat(k.dataset.max);
+                let isDragging = false;
+                let startY, startVal;
+
+                dial.onmousedown = (e) => {
+                    isDragging = true;
+                    startY = e.clientY;
+                    startVal = getCurrentParamValue(param);
+                    document.body.style.cursor = 'ns-resize';
+                };
+
+                window.addEventListener('mousemove', (e) => {
+                    if(!isDragging) return;
+                    const delta = startY - e.clientY;
+                    const range = max - min;
+                    const sensitivity = 200; 
+                    let newVal = startVal + (delta / sensitivity) * range;
+                    newVal = Math.max(min, Math.min(max, newVal));
+                    setParam(param, newVal);
+                    const percent = (newVal - min) / (max - min);
+                    const angle = -135 + (percent * 270);
+                    dial.style.setProperty('--angle', `${angle}deg`);
+                    valDisplay.innerText = formatValue(param, newVal);
+                });
+
+                window.addEventListener('mouseup', () => {
+                    isDragging = false;
+                    document.body.style.cursor = 'default';
+                });
             });
 
-            new KnobControl('.knob-dial', {
-                onChange: (id, val) => {
-                    const dial = document.getElementById(id);
-                    const container = dial.closest('.knob-container');
-                    const param = container.dataset.param;
-                    const valDisplay = container.querySelector('.knob-val');
-                    
-                    setParam(param, val);
-                    
-                    if(valDisplay) {
-                        if(param === 'cutoff') valDisplay.innerText = Math.round(val) + ' Hz';
-                        else if(['attack','release','portamento'].includes(param)) valDisplay.innerText = val.toFixed(2) + ' s';
-                        else valDisplay.innerText = val.toFixed(2);
-                    }
-                }
-            });
-
-            // 3. Select (Waveform)
             const waveKnob = document.querySelector('.knob-container[data-param="oscType"]');
             if(waveKnob) {
                 waveKnob.onclick = () => {
@@ -669,30 +660,18 @@
                 };
             }
 
-            // 4. Keyboard
+            // --- KEYBOARD GENERATION (Shared Module) ---
             runtimeState.keyboard = new SynthKeyboard('keyboard', {
                 startNote: 48, // C3
                 responsive: true,
-                onNoteOn: (midi) => playNote(midi, 1),
-                onNoteOff: (midi) => stopNote(midi)
+                onNoteOn: (midi) => {
+                    const freq = runtimeState.Tone.Frequency(midi, "midi");
+                    triggerNoteOn(freq, 1);
+                },
+                onNoteOff: (midi) => {
+                    triggerNoteOff();
+                }
             });
-            
-            // Init State
-            loadPreset(0);
-        }
-
-        function playNote(midi, velocity=1) {
-            if(!runtimeState.synth) return;
-            const freq = runtimeState.Tone.Frequency(midi, "midi");
-            runtimeState.synth.triggerAttack(freq, runtimeState.Tone.now(), velocity);
-            if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, true);
-        }
-
-        function stopNote(midi) {
-            if(!runtimeState.synth) return;
-            // Monophonic synth usually releases all, but let's be safe
-            runtimeState.synth.triggerRelease(runtimeState.Tone.now());
-            if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, false);
         }
 
         function getCurrentParamValue(param) {
@@ -717,8 +696,6 @@
         function setParam(param, val) {
             const s = runtimeState.synth;
             const fx = runtimeState.fx;
-            if(!s) return;
-            
             switch(param) {
                 case 'portamento': s.portamento = val; break;
                 case 'attack': s.envelope.attack = val; break;
@@ -734,8 +711,69 @@
             }
         }
 
-        // MIDI logic handled by MidiManager in Loader callback
+        function triggerNoteOn(note, velocity) {
+            if(runtimeState.synth) runtimeState.synth.triggerAttack(note, runtimeState.Tone.now(), velocity);
+        }
 
+        function triggerNoteOff(note) {
+            if(runtimeState.synth) runtimeState.synth.triggerRelease(runtimeState.Tone.now());
+        }
+
+        // --- MIDI ---
+        function initMIDI() {
+            if (navigator.requestMIDIAccess) {
+                navigator.requestMIDIAccess().then(onMIDISuccess, () => console.warn('MIDI Fail'));
+            }
+        }
+
+        function onMIDISuccess(midiAccess) {
+            document.getElementById('led-midi').classList.add('active');
+            for (let input of midiAccess.inputs.values()) {
+                input.onmidimessage = getMIDIMessage;
+            }
+        }
+
+        function getMIDIMessage(message) {
+            const command = message.data[0];
+            const note = message.data[1];
+            const velocity = (message.data.length > 2) ? message.data[2] : 0;
+            const T = runtimeState.Tone;
+
+            if (command >= 144 && command <= 159) {
+                if (velocity > 0) {
+                    const freq = T.Frequency(note, "midi");
+                    triggerNoteOn(freq, velocity / 127);
+                    if (runtimeState.keyboard) runtimeState.keyboard.triggerVisual(note, true);
+                } else {
+                    triggerNoteOff();
+                    if (runtimeState.keyboard) runtimeState.keyboard.triggerVisual(note, false);
+                }
+            }
+            if (command >= 128 && command <= 143) {
+                triggerNoteOff();
+                if (runtimeState.keyboard) runtimeState.keyboard.triggerVisual(note, false);
+            }
+            if (command >= 224 && command <= 239) {
+                const lsb = message.data[1];
+                const msb = message.data[2];
+                const val = (msb << 7) + lsb; 
+                const normalized = (val - 8192) / 8192; 
+                
+                const bar = document.getElementById('pb-bar');
+                if(normalized < 0) {
+                    bar.style.left = ((1 + normalized) * 50) + '%';
+                    bar.style.width = (Math.abs(normalized) * 50) + '%';
+                } else {
+                    bar.style.left = '50%';
+                    bar.style.width = (normalized * 50) + '%';
+                }
+
+                const cents = normalized * 200; 
+                if(runtimeState.synth) runtimeState.synth.detune.setValueAtTime(cents, T.now());
+            }
+        }
+
+        loadToneJSAndBoot({ setLoaderStatus, runtimeState, boot });
 
     </script>
 </body>

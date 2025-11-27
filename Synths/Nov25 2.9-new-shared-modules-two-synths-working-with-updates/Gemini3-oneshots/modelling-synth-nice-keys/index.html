@@ -1,0 +1,791 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Resonator: Physical Modeling Synth</title>
+    <style>
+        :root {
+            --bg-color: #121214;
+            --panel-bg: #1e1e24;
+            --accent: #ff9800; /* Orange */
+            --accent-dim: #8f5d16;
+            --text-main: #e0e0e0;
+            --text-dim: #888;
+            --knob-size: 50px;
+            /* Keyboard Colors */
+            --key-white: #fffff0;
+            --key-black: #111;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            height: 100vh;
+            user-select: none;
+        }
+
+        /* LOAD SCREEN */
+        #loader {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-color);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 1000;
+            transition: opacity 0.5s;
+        }
+        #loader.hidden { opacity: 0; pointer-events: none; }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid var(--panel-bg);
+            border-top: 4px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        #start-btn {
+            padding: 15px 30px;
+            background: var(--accent);
+            color: #000;
+            border: none;
+            font-weight: bold;
+            cursor: pointer;
+            font-size: 1.2rem;
+            display: none;
+            border-radius: 4px;
+        }
+
+        /* MAIN LAYOUT */
+        #app {
+            display: flex;
+            flex-direction: column;
+            height: 100%;
+            opacity: 0;
+            transition: opacity 1s;
+        }
+        #app.visible { opacity: 1; }
+
+        /* HEADER & VISUALIZER */
+        header {
+            height: 150px;
+            position: relative;
+            background: #000;
+            border-bottom: 1px solid var(--panel-bg);
+        }
+        #canvas-container {
+            width: 100%; height: 100%;
+            position: absolute; top: 0; left: 0;
+        }
+        .title-overlay {
+            position: absolute; top: 10px; left: 20px;
+            pointer-events: none;
+            text-shadow: 0 0 10px #000;
+        }
+        .midi-status {
+            position: absolute; top: 10px; right: 20px;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+            display: flex;
+            gap: 10px;
+            align-items: center;
+            z-index: 10;
+        }
+        .midi-led {
+            width: 10px; height: 10px;
+            border-radius: 50%;
+            background: #333;
+            transition: background 0.1s;
+        }
+        .midi-led.active { background: var(--accent); box-shadow: 0 0 8px var(--accent); }
+
+        /* CONTROLS GRID */
+        #controls {
+            flex: 1;
+            padding: 10px;
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 10px;
+            overflow-y: auto;
+        }
+
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+        }
+        .panel h3 {
+            margin: 0 0 10px 0;
+            font-size: 0.9rem;
+            color: var(--accent);
+            text-transform: uppercase;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+
+        .control-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 15px;
+            justify-content: center;
+        }
+
+        .param {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 60px;
+        }
+        .param label {
+            font-size: 0.7rem;
+            margin-top: 5px;
+            color: var(--text-dim);
+            text-align: center;
+        }
+        
+        /* Custom Range Slider */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]:focus { outline: none; }
+        /* Thumb */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px; width: 14px;
+            border-radius: 50%;
+            background: var(--accent);
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 0 5px rgba(0,0,0,0.5);
+        }
+        /* Track */
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%; height: 2px;
+            cursor: pointer;
+            background: #555;
+        }
+        
+        /* Select Dropdowns */
+        select {
+            background: #000;
+            color: var(--text-main);
+            border: 1px solid #444;
+            padding: 5px;
+            width: 100%;
+            font-family: inherit;
+        }
+
+        /* --- UPDATED KEYBOARD CSS --- */
+        #keyboard {
+            /* Layout handled by shared module */
+            background: #111;
+            border-top: 2px solid var(--panel-bg);
+            margin-top: 10px;
+        }
+        
+        .helper-text {
+            text-align: center; font-size: 0.7rem; color: #555; margin-bottom: 5px;
+        }
+
+    </style>
+</head>
+<body>
+
+    <!-- LOADER -->
+    <div id="loader">
+        <div class="spinner" id="spinner"></div>
+        <div id="status-text">Initializing Blockchain Assets...</div>
+        <button id="start-btn">ENTER STUDIO</button>
+    </div>
+
+    <!-- APP UI -->
+    <div id="app">
+        <header>
+            <div id="canvas-container"></div>
+            <div class="title-overlay">
+                <h1>RESONATOR</h1>
+                <small>Manual Polyphony Engine</small>
+            </div>
+            <div class="midi-status">
+                <select id="midi-input-select"><option>No MIDI</option></select>
+                <span>MIDI</span>
+                <div class="midi-led" id="midi-led"></div>
+            </div>
+        </header>
+
+        <div id="controls">
+            <!-- PRESETS -->
+            <div class="panel" style="flex-grow: 0;">
+                <h3>Library</h3>
+                <select id="preset-selector">
+                    <option value="init">Init Pluck</option>
+                    <option value="nylon">Nylon Guitar</option>
+                    <option value="steel">Steel String</option>
+                    <option value="kalimba">Kalimba</option>
+                    <option value="marimba">Wooden Mallet</option>
+                    <option value="glass">Glass Bells</option>
+                    <option value="muted">Muted Tele</option>
+                    <option value="ethereal">Ethereal Pad</option>
+                </select>
+                <div class="param" style="width: 100%; margin-top: 10px;">
+                    <label>Tempo (BPM)</label>
+                    <input type="range" id="bpm" min="60" max="200" value="120">
+                    <span id="bpm-val">120</span>
+                </div>
+            </div>
+
+            <!-- MODEL -->
+            <div class="panel">
+                <h3>Physics Model</h3>
+                <div class="control-group">
+                    <div class="param">
+                        <input type="range" id="dampening" min="100" max="8000" value="4000">
+                        <label>Damping</label>
+                    </div>
+                    <div class="param">
+                        <input type="range" id="resonance" min="0.8" max="0.99" step="0.001" value="0.9">
+                        <label>Resonance</label>
+                    </div>
+                    <div class="param">
+                        <input type="range" id="attack" min="0.1" max="2.0" step="0.1" value="1.0">
+                        <label>Pluck Force</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- TONE -->
+            <div class="panel">
+                <h3>Body Tone</h3>
+                <div class="control-group">
+                    <div class="param">
+                        <input type="range" id="body-cutoff" min="200" max="10000" value="2000">
+                        <label>Brightness</label>
+                    </div>
+                    <div class="param">
+                        <input type="range" id="body-res" min="0" max="20" value="1">
+                        <label>Body Q</label>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FX -->
+            <div class="panel">
+                <h3>Space & Time</h3>
+                <div class="control-group">
+                    <div class="param">
+                        <input type="range" id="delay-wet" min="0" max="1" step="0.01" value="0.2">
+                        <label>Delay Mix</label>
+                    </div>
+                    <div class="param">
+                        <input type="range" id="delay-fb" min="0" max="0.9" step="0.01" value="0.4">
+                        <label>Feedback</label>
+                    </div>
+                    <div class="param">
+                        <input type="range" id="reverb-wet" min="0" max="1" step="0.01" value="0.3">
+                        <label>Verb Mix</label>
+                    </div>
+                    <div class="param">
+                        <input type="range" id="reverb-size" min="0.1" max="0.9" step="0.01" value="0.7">
+                        <label>Room Size</label>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="helper-text">Click & Drag to Strum</div>
+        <div id="keyboard">
+            <!-- Keys generated by JS -->
+        </div>
+    </div>
+
+    <script type="module">
+        import { SynthKeyboard } from '../../shared/keyboard.js';
+        /**
+         * GLOBAL STATE
+         */
+        const runtimeState = {
+            Tone: null,
+            THREE: null,
+            audio: {
+                voices: [], // Array of PluckSynths
+                voiceIndex: 0, // Round-Robin pointer
+                filter: null,
+                delay: null,
+                reverb: null,
+                compressor: null,
+                vol: null
+            },
+            midiAccess: null,
+            visuals: {
+                scene: null,
+                camera: null,
+                renderer: null,
+                strings: []
+            },
+            activeNotes: [] // Tracking for glissando/legato
+        };
+
+        const LOADER = {
+            status: document.getElementById('status-text'),
+            spinner: document.getElementById('spinner'),
+            btn: document.getElementById('start-btn'),
+            overlay: document.getElementById('loader'),
+            
+            setStatus: (msg, error = false) => {
+                LOADER.status.textContent = msg;
+                if(error) {
+                    LOADER.status.style.color = '#ff5555';
+                    LOADER.spinner.style.display = 'none';
+                }
+            },
+            
+            ready: () => {
+                LOADER.status.textContent = "Physical Model Ready.";
+                LOADER.spinner.style.display = 'none';
+                LOADER.btn.style.display = 'block';
+            }
+        };
+
+        // ========================================================
+        // 1. BLOCKCHAIN LOADER
+        // ========================================================
+
+        function loadToneJSAndBoot({ toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0', setLoaderStatus, runtimeState, boot }) {
+            setLoaderStatus('Loading Audio Engine...');
+            
+            const threePromise = loadThreeJS()
+                .then(THREE => { runtimeState.THREE = THREE; })
+                .catch(e => console.warn('ThreeJS failed, running audio only', e));
+
+            import(toneUrl)
+                .then(async () => {
+                    runtimeState.Tone = window.Tone;
+                    console.log('[Pluck Model] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                    await threePromise;
+                    boot();
+                })
+                .catch(err => {
+                    setLoaderStatus('Failed to load Tone.js.', true);
+                    console.error('[Pluck Model] Critical Load Error:', err);
+                });
+        }
+
+        function loadThreeJS(threeUrl = 'https://ordinals.com/content/0d013bb60fc5bf5a6c77da7371b07dc162ebc7d7f3af0ff3bd00ae5f0c546445i0') {
+            return import(threeUrl).then(mod => window.THREE);
+        }
+
+        // ========================================================
+        // 2. SYNTH ENGINE (MANUAL POLYPHONY)
+        // ========================================================
+
+        function initAudio() {
+            const Tone = runtimeState.Tone;
+
+            // FX Chain
+            const filter = new Tone.Filter({
+                frequency: 2000,
+                type: "lowpass",
+                Q: 1,
+                rolloff: -12
+            });
+
+            const delay = new Tone.FeedbackDelay({
+                delayTime: "8n.",
+                feedback: 0.3,
+                wet: 0.2
+            });
+
+            const reverb = new Tone.Reverb({
+                decay: 3,
+                preDelay: 0.01,
+                wet: 0.3
+            });
+
+            const compressor = new Tone.Compressor({
+                threshold: -20,
+                ratio: 3,
+                attack: 0.05,
+                release: 0.1
+            });
+
+            const vol = new Tone.Volume(0);
+
+            // Chain FX
+            filter.chain(delay, reverb, compressor, vol, Tone.Destination);
+
+            // Create Voice Pool (Manual Polyphony)
+            // PluckSynth cannot be used in PolySynth in v15 because it doesn't extend Monophonic.
+            const voices = [];
+            const voiceCount = 12; // 12 voices of polyphony
+
+            for(let i=0; i<voiceCount; i++) {
+                const v = new Tone.PluckSynth({
+                    attackNoise: 1,
+                    dampening: 4000,
+                    resonance: 0.92,
+                    release: 2
+                });
+                v.connect(filter);
+                voices.push(v);
+            }
+
+            // Store refs
+            runtimeState.audio = { 
+                voices, 
+                voiceIndex: 0,
+                filter, delay, reverb, compressor, vol 
+            };
+
+            Tone.Transport.bpm.value = 120;
+            Tone.Transport.start();
+        }
+
+        // Round-Robin Voice Allocation
+        function playNote(midi, velocity = 0.7) {
+            const audio = runtimeState.audio;
+            if(!audio.voices.length) return;
+            
+            // Get current voice
+            const voice = audio.voices[audio.voiceIndex];
+            
+            // Update cycle index
+            audio.voiceIndex = (audio.voiceIndex + 1) % audio.voices.length;
+
+            // PluckSynth Logic
+            voice.volume.value = (velocity * 20) - 20; 
+
+            const now = runtimeState.Tone.now();
+            // Use frequency for PluckSynth
+            const freq = runtimeState.Tone.Frequency(midi, "midi");
+            voice.triggerAttack(freq, now);
+
+            // Trigger Visuals
+            triggerVisualString(midi, velocity);
+        }
+
+        function setPreset(name) {
+            const voices = runtimeState.audio.voices;
+            const f = runtimeState.audio.filter;
+            const d = runtimeState.audio.delay;
+            const r = runtimeState.audio.reverb;
+            
+            const presets = {
+                'init': { damp: 4000, res: 0.9, noise: 1.0, cut: 3000, dWet: 0.2, rWet: 0.2 },
+                'nylon': { damp: 2000, res: 0.96, noise: 0.8, cut: 1500, dWet: 0.1, rWet: 0.3 },
+                'steel': { damp: 7000, res: 0.98, noise: 1.5, cut: 6000, dWet: 0.3, rWet: 0.2 },
+                'kalimba': { damp: 3000, res: 0.85, noise: 0.5, cut: 1200, dWet: 0.4, rWet: 0.1 },
+                'marimba': { damp: 1000, res: 0.92, noise: 0.3, cut: 800, dWet: 0.1, rWet: 0.3 },
+                'glass': { damp: 8000, res: 0.99, noise: 0.2, cut: 9000, dWet: 0.5, rWet: 0.8 },
+                'muted': { damp: 800, res: 0.5, noise: 1.2, cut: 1000, dWet: 0.3, rWet: 0.05 },
+                'ethereal': { damp: 5000, res: 0.98, noise: 0.1, cut: 4000, dWet: 0.6, rWet: 0.7 }
+            };
+
+            const p = presets[name] || presets['init'];
+
+            // Apply to ALL voices
+            voices.forEach(v => {
+                v.set({ 
+                    dampening: p.damp, 
+                    resonance: p.res, 
+                    attackNoise: p.noise 
+                });
+            });
+
+            f.frequency.rampTo(p.cut, 0.1);
+            d.wet.rampTo(p.dWet, 0.1);
+            r.wet.rampTo(p.rWet, 0.1);
+
+            // Update UI
+            updateKnob('dampening', p.damp);
+            updateKnob('resonance', p.res);
+            updateKnob('attack', p.noise);
+            updateKnob('body-cutoff', p.cut);
+            updateKnob('delay-wet', p.dWet);
+            updateKnob('reverb-wet', p.rWet);
+        }
+
+        function updateKnob(id, val) {
+            const el = document.getElementById(id);
+            if(el) el.value = val;
+        }
+
+        // ========================================================
+        // 3. UI & EVENT HANDLERS
+        // ========================================================
+
+        function noteOn(midi, velocity = 0.8) {
+            if(!runtimeState.activeNotes.includes(midi)) {
+                runtimeState.activeNotes.push(midi);
+                playNote(midi, velocity);
+                if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, true);
+            }
+        }
+
+        function noteOff(midi) {
+            runtimeState.activeNotes = runtimeState.activeNotes.filter(n => n !== midi);
+            if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, false);
+        }
+
+        // highlightKey removed, handled by SynthKeyboard
+
+        function initUI() {
+            // Build Keyboard
+            runtimeState.keyboard = new SynthKeyboard('keyboard', {
+                startNote: 48, // C3
+                responsive: true,
+                onNoteOn: (midi) => noteOn(midi, 1.0),
+                onNoteOff: (midi) => noteOff(midi)
+            });
+
+            // Bind Controls
+            // Helper to update all voices
+            const updateAllVoices = (param, val) => {
+                runtimeState.audio.voices.forEach(v => v.set({ [param]: val }));
+            };
+
+            // Model
+            document.getElementById('dampening').addEventListener('input', e => {
+                updateAllVoices('dampening', parseFloat(e.target.value));
+            });
+            document.getElementById('resonance').addEventListener('input', e => {
+                updateAllVoices('resonance', parseFloat(e.target.value));
+            });
+            document.getElementById('attack').addEventListener('input', e => {
+                updateAllVoices('attackNoise', parseFloat(e.target.value));
+            });
+
+            // Tone
+            document.getElementById('body-cutoff').addEventListener('input', e => {
+                runtimeState.audio.filter.frequency.rampTo(parseFloat(e.target.value), 0.1);
+            });
+            document.getElementById('body-res').addEventListener('input', e => {
+                runtimeState.audio.filter.Q.value = parseFloat(e.target.value);
+            });
+
+            // FX
+            document.getElementById('delay-wet').addEventListener('input', e => {
+                runtimeState.audio.delay.wet.value = parseFloat(e.target.value);
+            });
+            document.getElementById('delay-fb').addEventListener('input', e => {
+                runtimeState.audio.delay.feedback.value = parseFloat(e.target.value);
+            });
+            document.getElementById('reverb-wet').addEventListener('input', e => {
+                runtimeState.audio.reverb.wet.value = parseFloat(e.target.value);
+            });
+            
+            // Global
+            document.getElementById('bpm').addEventListener('input', e => {
+                const bpm = parseFloat(e.target.value);
+                runtimeState.Tone.Transport.bpm.value = bpm;
+                document.getElementById('bpm-val').textContent = bpm;
+            });
+
+            document.getElementById('preset-selector').addEventListener('change', e => {
+                setPreset(e.target.value);
+            });
+        }
+
+        // ========================================================
+        // 4. MIDI INTEGRATION
+        // ========================================================
+
+        function initMIDI() {
+            if (navigator.requestMIDIAccess) {
+                navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+            } else {
+                console.warn("Web MIDI not supported.");
+            }
+        }
+
+        function onMIDISuccess(midiAccess) {
+            runtimeState.midiAccess = midiAccess;
+            const select = document.getElementById('midi-input-select');
+            
+            function updateInputs() {
+                select.innerHTML = '<option value="">No MIDI Device</option>';
+                for (let input of midiAccess.inputs.values()) {
+                    const opt = document.createElement('option');
+                    opt.value = input.id;
+                    opt.text = input.name;
+                    select.appendChild(opt);
+                    input.onmidimessage = handleMIDIMessage;
+                }
+            }
+
+            midiAccess.onstatechange = updateInputs;
+            updateInputs();
+            if(midiAccess.inputs.size > 0) select.selectedIndex = 1;
+        }
+
+        function onMIDIFailure() { console.warn("MIDI Access Failed"); }
+
+        function handleMIDIMessage(message) {
+            const [command, note, velocity] = message.data;
+            const led = document.getElementById('midi-led');
+            
+            // Note On
+            if (command === 144 && velocity > 0) {
+                noteOn(note, velocity / 127);
+                
+                led.classList.add('active');
+                setTimeout(() => led.classList.remove('active'), 100);
+            }
+            // Note Off
+            if (command === 128 || (command === 144 && velocity === 0)) {
+                noteOff(note);
+            }
+
+            // CC
+            if (command === 176) {
+                const val = velocity / 127;
+                // CC1 Mod Wheel -> Damping
+                if(note === 1) { 
+                    const dampVal = 6000 - (val * 5000); 
+                    runtimeState.audio.voices.forEach(v => v.set({ dampening: dampVal }));
+                    updateKnob('dampening', dampVal);
+                }
+                // CC2/74 -> Brightness
+                if(note === 2 || note === 74) {
+                    const freqVal = 200 + (val * 8000);
+                    runtimeState.audio.filter.frequency.rampTo(freqVal, 0.05);
+                    updateKnob('body-cutoff', freqVal);
+                }
+            }
+        }
+
+        // ========================================================
+        // 5. VISUALS (THREE.JS)
+        // ========================================================
+
+        function initVisuals() {
+            if(!runtimeState.THREE) return;
+
+            const THREE = runtimeState.THREE;
+            const container = document.getElementById('canvas-container');
+            const w = container.clientWidth;
+            const h = container.clientHeight;
+
+            const scene = new THREE.Scene();
+            scene.fog = new THREE.FogExp2(0x000000, 0.02);
+
+            const camera = new THREE.PerspectiveCamera(50, w/h, 0.1, 100);
+            camera.position.z = 20;
+
+            const renderer = new THREE.WebGLRenderer({ alpha: true, antialias: true });
+            renderer.setSize(w, h);
+            container.appendChild(renderer.domElement);
+
+            const numStrings = 24;
+            const spacing = 1.5;
+            const startX = -(numStrings * spacing) / 2;
+
+            const strings = [];
+            const material = new THREE.LineBasicMaterial({ color: 0xff9800, transparent: true, opacity: 0.6 });
+
+            for(let i=0; i<numStrings; i++) {
+                const points = [];
+                for(let j=0; j<=20; j++) {
+                    points.push(new THREE.Vector3(startX + i*spacing, (j-10), 0));
+                }
+                const geometry = new THREE.BufferGeometry().setFromPoints(points);
+                const line = new THREE.Line(geometry, material);
+                
+                line.userData = { baseX: startX + i*spacing, amp: 0 };
+                scene.add(line);
+                strings.push(line);
+            }
+
+            runtimeState.visuals = { scene, camera, renderer, strings };
+
+            function animate() {
+                requestAnimationFrame(animate);
+                const time = Date.now() * 0.01;
+
+                strings.forEach((line) => {
+                    if(line.userData.amp > 0.01) {
+                        const positions = line.geometry.attributes.position.array;
+                        const bx = line.userData.baseX;
+                        
+                        line.userData.amp *= 0.95; // Decay
+
+                        for(let j=0; j<=20; j++) {
+                            const y = (j-10);
+                            const env = Math.sin((j/20) * Math.PI);
+                            const vib = Math.sin(y * 0.5 + time * 2) * line.userData.amp * env;
+                            positions[j*3] = bx + vib;
+                        }
+                        line.geometry.attributes.position.needsUpdate = true;
+                        line.material.opacity = 0.4 + line.userData.amp * 2;
+                    } else {
+                        if(line.userData.amp !== 0) {
+                           line.userData.amp = 0;
+                           line.material.opacity = 0.3;
+                        }
+                    }
+                });
+                renderer.render(scene, camera);
+            }
+            animate();
+        }
+
+        function triggerVisualString(midi, velocity) {
+            if(!runtimeState.THREE || !runtimeState.visuals.strings.length) return;
+            const index = Math.max(0, Math.min(23, (midi - 48)));
+            const str = runtimeState.visuals.strings[index];
+            if(str) str.userData.amp = velocity * 1.5;
+        }
+
+        // ========================================================
+        // 6. BOOTSTRAP
+        // ========================================================
+
+        function boot() {
+            LOADER.ready();
+            
+            const startHandler = async () => {
+                await runtimeState.Tone.start();
+                runtimeState.Tone.context.lookAhead = 0;
+                initAudio();
+                initVisuals(); 
+                initUI();
+                initMIDI();
+
+                LOADER.overlay.classList.add('hidden');
+                document.getElementById('app').classList.add('visible');
+                setPreset('init');
+            };
+
+            LOADER.btn.addEventListener('click', startHandler);
+        }
+
+        loadToneJSAndBoot({
+            setLoaderStatus: LOADER.setStatus,
+            runtimeState,
+            boot
+        });
+
+        window.addEventListener('resize', () => {
+            if(runtimeState.visuals.renderer) {
+                const c = document.getElementById('canvas-container');
+                runtimeState.visuals.camera.aspect = c.clientWidth / c.clientHeight;
+                runtimeState.visuals.camera.updateProjectionMatrix();
+                runtimeState.visuals.renderer.setSize(c.clientWidth, c.clientHeight);
+            }
+        });
+
+    </script>
+</body>
+</html>

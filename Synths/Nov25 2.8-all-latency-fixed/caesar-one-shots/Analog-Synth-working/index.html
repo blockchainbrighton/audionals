@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>BAM Mono | Rebuilt</title>
+    <title>BOP Matrix Mono | Rebuilt</title>
     <style>
         :root {
             --bg: #1a1a1a;
@@ -194,7 +194,7 @@
     <div id="rack">
         <!-- HEADER -->
         <div class="module full" style="display:flex; flex-direction:row; align-items:center; justify-content:space-between;">
-            <div style="font-weight:bold; font-size:1.2rem; color:var(--accent);">BAM MONO</div>
+            <div style="font-weight:bold; font-size:1.2rem; color:var(--accent);">BOP MATRIX MONO</div>
             <div style="display:flex; align-items:center; gap:10px; font-size:0.7rem;">
                 MIDI <div id="midi-led" class="midi-led"></div>
                 <select id="midi-in" style="width:100px; margin:0;"><option>None</option></select>
@@ -366,12 +366,8 @@
 
     </div>
 
-    <!-- MODULE SCRIPT -->
     <script type="module">
         import { SynthKeyboard } from '../../shared/keyboard.js';
-        import { SynthLoader } from '../../shared/synth-loader.js';
-        import { MidiManager } from '../../shared/midi-manager.js';
-        import { KnobControl } from '../../shared/knob-control.js';
 
         const state = {
             Tone: null,
@@ -383,40 +379,32 @@
         };
 
         // 1. LOADER
-        const loader = new SynthLoader({
-            loaderId: 'loader-overlay',
-            statusId: 'loader-msg',
-            startBtnId: 'start-btn'
-        });
+        const loaderMsg = document.getElementById('loader-msg');
+        const startBtn = document.getElementById('start-btn');
         
-        loader.load(async ({ Tone }) => {
-            state.Tone = Tone;
-            
-            initSynth();
-            initUI();
-            
-            // MIDI
-            const midiMgr = new MidiManager({
-                deviceSelectorId: 'midi-in',
-                statusElementId: 'midi-led',
-                onNoteOn: (n, v) => noteOn(n, v),
-                onNoteOff: (n) => noteOff(n),
-                onCC: (cc, val) => {
-                     if(cc === 74) { // Cutoff
-                        const v = 50 + (val * 10000);
-                        updateParam('filt-cut', v);
-                        // Update visual knob if possible (MidiManager/KnobControl integration future todo)
-                    }
+        import('https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0')
+            .then(module => {
+                state.Tone = window.Tone;
+                loaderMsg.innerText = "Ready.";
+                startBtn.style.display = 'block';
+                
+                startBtn.onclick = async () => {
+                    await state.Tone.start();
+                    state.Tone.context.lookAhead = 0;
+                    initSynth();
+                    initUI();
+                    initMIDI();
+                    drawScope();
+                    document.getElementById('loader-overlay').style.opacity = 0;
+                    setTimeout(() => document.getElementById('loader-overlay').remove(), 500);
+                    document.getElementById('rack').classList.add('active');
                 }
+            })
+            .catch(e => {
+                loaderMsg.innerText = "Error Loading Tone.js";
+                loaderMsg.style.color = 'red';
+                console.error(e);
             });
-            await midiMgr.init();
-
-            drawScope();
-            
-            document.getElementById('rack').classList.add('active');
-        });
-
-
 
         // 2. SYNTH ENGINE (Robust Mono Architecture)
         function initSynth() {
@@ -543,11 +531,51 @@
                 onNoteOff: (midi) => noteOff(midi)
             });
 
-            // Knobs (Shared Module)
-            const knobs = new KnobControl('.knob', {
-                onChange: (id, val) => {
-                     updateParam(id, val);
-                }
+            // Knobs
+            document.querySelectorAll('.knob').forEach(k => {
+                const id = k.id;
+                let val = parseFloat(k.dataset.val);
+                const min = parseFloat(k.dataset.min);
+                const max = parseFloat(k.dataset.max);
+                const step = parseFloat(k.dataset.step) || 0;
+                const exp = k.dataset.exp ? true : false;
+
+                const updateVisual = (v) => {
+                    let pct = 0;
+                    if(exp) {
+                        pct = (Math.log(v) - Math.log(min)) / (Math.log(max) - Math.log(min));
+                    } else {
+                        pct = (v - min) / (max - min);
+                    }
+                    if(pct < 0) pct=0; if(pct>1) pct=1;
+                    k.style.transform = `rotate(${-135 + (pct * 270)}deg)`;
+                };
+                updateVisual(val);
+
+                let startY, startVal;
+                k.onmousedown = (e) => {
+                    startY = e.clientY;
+                    startVal = val;
+                    const move = (ev) => {
+                        const d = (startY - ev.clientY);
+                        // Linear scale for drag, mapped to exp if needed
+                        let norm = (startVal - min) / (max - min); 
+                        // Simple increment logic
+                        let inc = d * ((max-min)/200);
+                        let newVal = startVal + inc;
+                        if(newVal < min) newVal = min; if(newVal > max) newVal = max;
+                        if(step) newVal = Math.round(newVal/step)*step;
+                        val = newVal;
+                        updateVisual(val);
+                        updateParam(id, val);
+                    };
+                    const up = () => {
+                        window.removeEventListener('mousemove', move);
+                        window.removeEventListener('mouseup', up);
+                    };
+                    window.addEventListener('mousemove', move);
+                    window.addEventListener('mouseup', up);
+                };
             });
 
             // Sliders
@@ -572,7 +600,6 @@
                 pList.appendChild(btn);
             });
         }
-
 
         // 5. PARAMETER HANDLING
         function updateParam(id, val) {
@@ -681,8 +708,36 @@
             loop();
         }
 
-        // 8. MIDI (Handled by MidiManager)
+        // 8. MIDI
+        function initMIDI() {
+            if(navigator.requestMIDIAccess) {
+                navigator.requestMIDIAccess().then(access => {
+                    const sel = document.getElementById('midi-in');
+                    for(let input of access.inputs.values()) {
+                        const opt = document.createElement('option');
+                        opt.text = input.name;
+                        sel.add(opt);
+                        input.onmidimessage = handleMIDI;
+                    }
+                });
+            }
+        }
 
+        function handleMIDI(msg) {
+            const [cmd, note, vel] = msg.data;
+            const led = document.getElementById('midi-led');
+            led.classList.add('on'); setTimeout(()=>led.classList.remove('on'), 100);
+
+            if(cmd === 144 && vel > 0) noteOn(note);
+            if(cmd === 128 || (cmd === 144 && vel === 0)) noteOff(note);
+            if(cmd === 176) { // CC
+                if(note === 74) { // Cutoff
+                    const val = 50 + (vel/127)*10000;
+                    document.getElementById('filt-cut').style.transform = `rotate(${ -135 + (vel/127)*270 }deg)`; // Visual hack
+                    updateParam('filt-cut', val);
+                }
+            }
+        }
 
     </script>
 </body>
