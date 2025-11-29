@@ -1,0 +1,1000 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON HORIZON | Web3 Synthwave Poly</title>
+    <style>
+        :root {
+            --neon-pink: #ff00ff;
+            --neon-cyan: #00ffff;
+            --bg-dark: #050510;
+            --panel-bg: rgba(20, 20, 30, 0.85);
+            --knob-size: 50px;
+            /* Keyboard Colors */
+            --key-white: #e0e0e0;
+            --key-black: #111;
+        }
+
+        body {
+            margin: 0;
+            background-color: var(--bg-dark);
+            color: var(--neon-cyan);
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        #loader {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            z-index: 9999;
+            transition: opacity 0.5s;
+        }
+
+        .loader-text {
+            font-size: 24px;
+            color: var(--neon-pink);
+            text-shadow: 0 0 10px var(--neon-pink);
+            margin-bottom: 20px;
+            animation: pulse 1s infinite;
+        }
+
+        .progress-bar {
+            width: 300px;
+            height: 4px;
+            background: #222;
+            border: 1px solid #333;
+            position: relative;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: var(--neon-cyan);
+            width: 0%;
+            transition: width 0.2s;
+            box-shadow: 0 0 10px var(--neon-cyan);
+        }
+
+        #app-container {
+            display: none;
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* 3D Visualizer Background */
+        #visualizer {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 0;
+        }
+
+        /* Synth Interface */
+        #synth-ui {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            width: 960px;
+            background: var(--panel-bg);
+            border: 2px solid var(--neon-pink);
+            box-shadow: 0 0 30px rgba(255, 0, 255, 0.2), inset 0 0 50px rgba(0,0,0,0.8);
+            border-radius: 12px;
+            padding: 20px;
+            z-index: 10;
+            display: grid;
+            grid-template-rows: 60px 1fr 120px;
+            gap: 15px;
+            backdrop-filter: blur(5px);
+        }
+
+        /* Header */
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--neon-cyan);
+            padding-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 28px;
+            margin: 0;
+            text-shadow: 2px 2px 0px var(--neon-pink);
+            letter-spacing: 4px;
+            font-style: italic;
+        }
+
+        .patch-display {
+            background: #000;
+            border: 1px solid var(--neon-cyan);
+            color: var(--neon-pink);
+            padding: 10px 20px;
+            font-size: 18px;
+            font-weight: bold;
+            text-shadow: 0 0 5px var(--neon-pink);
+            min-width: 200px;
+            text-align: center;
+        }
+
+        /* Main Controls Grid */
+        .controls-grid {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 15px;
+        }
+
+        .module {
+            border: 1px solid rgba(0, 255, 255, 0.3);
+            border-radius: 6px;
+            padding: 10px;
+            background: rgba(0, 0, 0, 0.3);
+            position: relative;
+        }
+
+        .module-title {
+            position: absolute;
+            top: -10px;
+            left: 10px;
+            background: var(--bg-dark);
+            padding: 0 5px;
+            font-size: 12px;
+            color: #888;
+            text-transform: uppercase;
+        }
+
+        .knob-row {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: space-around;
+            margin-top: 10px;
+        }
+
+        /* Custom Knob Element */
+        .knob-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            margin: 5px;
+        }
+
+        .knob {
+            width: var(--knob-size);
+            height: var(--knob-size);
+            border-radius: 50%;
+            /* Radial gradient allows rotation without breaking lighting perspective */
+            background: radial-gradient(circle at 30% 30%, #333, #000);
+            border: 2px solid #444;
+            position: relative;
+            cursor: ns-resize;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.5);
+        }
+
+        .knob::after {
+            content: '';
+            position: absolute;
+            top: 10%;
+            left: 50%;
+            width: 2px;
+            height: 40%;
+            background: var(--neon-cyan);
+            transform: translateX(-50%);
+            pointer-events: none;
+            box-shadow: 0 0 5px var(--neon-cyan);
+        }
+
+        .knob.pink::after {
+            background: var(--neon-pink);
+            box-shadow: 0 0 5px var(--neon-pink);
+        }
+
+        .label {
+            font-size: 10px;
+            margin-top: 5px;
+            color: #aaa;
+        }
+
+        /* Waveform Selectors */
+        .wave-select {
+            width: 100%;
+            background: #000;
+            color: var(--neon-cyan);
+            border: 1px solid #444;
+            margin-bottom: 10px;
+            font-family: inherit;
+            font-size: 11px;
+        }
+
+        /* Toggle Buttons */
+        .btn-toggle {
+            background: #222;
+            border: 1px solid #444;
+            color: #666;
+            padding: 4px 8px;
+            cursor: pointer;
+            font-size: 10px;
+            width: 100%;
+            margin-top: 5px;
+            transition: all 0.2s;
+        }
+
+        .btn-toggle.active {
+            background: var(--neon-pink);
+            color: #fff;
+            border-color: var(--neon-pink);
+            box-shadow: 0 0 10px var(--neon-pink);
+        }
+
+        /* Presets Strip */
+        .preset-strip {
+            grid-column: span 4;
+            display: flex;
+            gap: 5px;
+            background: rgba(0,0,0,0.5);
+            padding: 5px;
+            overflow-x: auto;
+        }
+
+        .preset-btn {
+            background: #111;
+            border: 1px solid var(--neon-cyan);
+            color: var(--neon-cyan);
+            padding: 5px 10px;
+            cursor: pointer;
+            font-family: inherit;
+            font-size: 11px;
+            white-space: nowrap;
+        }
+
+        .preset-btn:hover {
+            background: var(--neon-cyan);
+            color: #000;
+        }
+
+        /* MIDI Status */
+        .midi-bar {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            font-size: 11px;
+            display: flex;
+            gap: 10px;
+            align-items: center;
+        }
+
+        .midi-led {
+            width: 8px;
+            height: 8px;
+            background: #333;
+            border-radius: 50%;
+        }
+        .midi-led.active { background: #0f0; box-shadow: 0 0 5px #0f0; }
+        
+        .helper-text {
+            position: absolute; bottom: 5px; width:100%; text-align:center;
+            color: #555; font-size: 0.7rem; pointer-events: none;
+        }
+
+        @keyframes pulse { 0% { opacity: 0.5; } 50% { opacity: 1; } 100% { opacity: 0.5; } }
+    </style>
+</head>
+<body>
+
+    <!-- Loader -->
+    <div id="loader">
+        <div class="loader-text" id="loader-text">INITIALIZING SYSTEM...</div>
+        <div class="progress-bar"><div class="progress-fill" id="progress-fill"></div></div>
+    </div>
+
+    <!-- Visuals -->
+    <div id="canvas-container">
+        <canvas id="visualizer"></canvas>
+    </div>
+
+    <!-- App -->
+    <div id="app-container">
+        <div id="synth-ui">
+            <header>
+                <h1>NEON HORIZON</h1>
+                <div class="patch-display" id="patch-name">INIT PAD</div>
+                <div style="display:flex; gap:10px; align-items:center;">
+                    <select id="midi-select" class="wave-select" style="width: 150px; margin:0;">
+                        <option value="-1">MIDI Input...</option>
+                    </select>
+                    <div class="midi-led" id="midi-led"></div>
+                </div>
+            </header>
+
+            <div class="controls-grid">
+                <!-- OSC SECTION -->
+                <div class="module">
+                    <div class="module-title">OSCILLATORS</div>
+                    <select id="osc1-type" class="wave-select">
+                        <option value="sawtooth">Sawtooth</option>
+                        <option value="square">Square</option>
+                        <option value="triangle">Triangle</option>
+                        <option value="sine">Sine</option>
+                    </select>
+                    <select id="osc2-type" class="wave-select">
+                        <option value="sawtooth">Sawtooth</option>
+                        <option value="square">Square</option>
+                        <option value="triangle">Triangle</option>
+                        <option value="fatsawtooth">Super Saw</option>
+                    </select>
+                    <div class="knob-row">
+                        <div class="knob-container">
+                            <div class="knob" id="k-mix" data-param="mix" data-min="0" data-max="1" data-value="0.5"></div>
+                            <div class="label">Mix</div>
+                        </div>
+                        <div class="knob-container">
+                            <div class="knob pink" id="k-detune" data-param="detune" data-min="0" data-max="50" data-value="10"></div>
+                            <div class="label">Detune</div>
+                        </div>
+                        <div class="knob-container">
+                            <div class="knob" id="k-sub" data-param="sub" data-min="0" data-max="1" data-value="0"></div>
+                            <div class="label">Sub Vol</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- FILTER SECTION -->
+                <div class="module">
+                    <div class="module-title">VCF & ENV</div>
+                    <div class="knob-row">
+                        <div class="knob-container">
+                            <div class="knob pink" id="k-cutoff" data-param="cutoff" data-min="20" data-max="10000" data-exp="true" data-value="2000"></div>
+                            <div class="label">Cutoff</div>
+                        </div>
+                        <div class="knob-container">
+                            <div class="knob" id="k-res" data-param="res" data-min="0" data-max="10" data-value="0"></div>
+                            <div class="label">Res</div>
+                        </div>
+                        <div class="knob-container">
+                            <div class="knob" id="k-fenv" data-param="filterEnv" data-min="0" data-max="5000" data-value="1000"></div>
+                            <div class="label">Env Amt</div>
+                        </div>
+                    </div>
+                    <div class="knob-row" style="margin-top:15px; border-top:1px solid #333; paddingTop:10px;">
+                        <div class="knob-container"><div class="knob" id="k-att" data-param="attack" data-min="0.01" data-max="2" data-value="0.1"></div><div class="label">A</div></div>
+                        <div class="knob-container"><div class="knob" id="k-dec" data-param="decay" data-min="0.1" data-max="2" data-value="0.2"></div><div class="label">D</div></div>
+                        <div class="knob-container"><div class="knob" id="k-sus" data-param="sustain" data-min="0" data-max="1" data-value="0.5"></div><div class="label">S</div></div>
+                        <div class="knob-container"><div class="knob" id="k-rel" data-param="release" data-min="0.1" data-max="5" data-value="1"></div><div class="label">R</div></div>
+                    </div>
+                </div>
+
+                <!-- FX SECTION -->
+                <div class="module">
+                    <div class="module-title">EFFECTS</div>
+                    <div class="knob-row">
+                        <div class="knob-container">
+                            <div class="knob pink" id="k-chorus" data-param="chorus" data-min="0" data-max="1" data-value="0"></div>
+                            <div class="label">Chorus</div>
+                        </div>
+                        <div class="knob-container">
+                            <div class="knob" id="k-delay" data-param="delay" data-min="0" data-max="0.8" data-value="0"></div>
+                            <div class="label">Delay</div>
+                        </div>
+                        <div class="knob-container">
+                            <div class="knob pink" id="k-reverb" data-param="reverb" data-min="0" data-max="1" data-value="0"></div>
+                            <div class="label">Reverb</div>
+                        </div>
+                    </div>
+                    <div class="knob-row">
+                         <div class="knob-container">
+                            <div class="knob" id="k-lfo-rate" data-param="lfoRate" data-min="0.1" data-max="20" data-value="1"></div>
+                            <div class="label">LFO Rate</div>
+                        </div>
+                        <div class="knob-container">
+                            <div class="knob" id="k-lfo-depth" data-param="lfoDepth" data-min="0" data-max="1000" data-value="0"></div>
+                            <div class="label">LFO > VCF</div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- GLOBAL / ARP -->
+                <div class="module">
+                    <div class="module-title">GLOBAL / ARP</div>
+                    <div class="knob-row">
+                        <div class="knob-container">
+                            <div class="knob" id="k-vol" data-param="vol" data-min="-60" data-max="0" data-value="-10"></div>
+                            <div class="label">Master</div>
+                        </div>
+                         <div class="knob-container">
+                            <div class="knob" id="k-tempo" data-param="tempo" data-min="60" data-max="180" data-value="120"></div>
+                            <div class="label">BPM</div>
+                        </div>
+                    </div>
+                    <button class="btn-toggle" id="btn-arp">ARP: OFF</button>
+                    <button class="btn-toggle" id="btn-latch">LATCH: OFF</button>
+                    <select id="arp-rate" class="wave-select" style="margin-top:5px;">
+                        <option value="4n">1/4</option>
+                        <option value="8n" selected>1/8</option>
+                        <option value="16n">1/16</option>
+                    </select>
+                </div>
+
+                <!-- PRESETS -->
+                <div class="preset-strip" id="preset-container"></div>
+            </div>
+            
+            <div id="keyboard">
+                <!-- Keys generated by JS -->
+            </div>
+            <div class="helper-text">Click & Drag to Play</div>
+        </div>
+    </div>
+
+<script type="module">
+/** 
+ * SYSTEM BOOTSTRAP
+ */
+import { SynthKeyboard } from '../../shared/keyboard.js';
+
+const runtimeState = {
+    Tone: null,
+    THREE: null,
+    audio: {
+        layer1: null, // Osc 1 Poly
+        layer2: null, // Osc 2 Poly
+        sub: null,    // Sub Poly
+        filter: null,
+        chorus: null,
+        delay: null,
+        reverb: null,
+        limiter: null,
+        lfo: null,
+        master: null
+    },
+    midi: { access: null, inputs: [], activeInput: null },
+    arp: { active: false, latch: false, notes: [], step: 0, rate: "8n", timer: null },
+    presets: [],
+    // Glissando Logic
+    activeNotes: [],
+    keyboard: null
+};
+
+const PRESETS = [
+    { name: "INIT PAD", o1:"sawtooth", o2:"sawtooth", mix:0.5, det:5, sub:0, cut:2000, res:0, env:1000, att:0.5, dec:1, sus:0.8, rel:1.5, ch:0, del:0, rev:0.1 },
+    { name: "NEON NIGHTS", o1:"square", o2:"sawtooth", mix:0.6, det:10, sub:0.3, cut:800, res:2, env:1500, att:0.05, dec:0.2, sus:0.4, rel:0.8, ch:0.6, del:0.3, rev:0.4 },
+    { name: "BLADE KEYS", o1:"sawtooth", o2:"fatsawtooth", mix:0.4, det:15, sub:0.1, cut:400, res:0, env:300, att:0.02, dec:0.5, sus:0.2, rel:0.5, ch:0.4, del:0.4, rev:0.8 },
+    { name: "CHROME HORIZON", o1:"triangle", o2:"square", mix:0.5, det:5, sub:0.5, cut:1200, res:1, env:500, att:1.0, dec:2.0, sus:0.7, rel:3.0, ch:0.8, del:0.5, rev:0.6 },
+    { name: "DREAMWAVE", o1:"sawtooth", o2:"triangle", mix:0.3, det:20, sub:0.0, cut:600, res:0, env:200, att:2.0, dec:3.0, sus:0.8, rel:4.0, ch:0.7, del:0.6, rev:0.9 },
+    { name: "RETRO PLUCK", o1:"square", o2:"square", mix:0.8, det:0, sub:0.2, cut:2000, res:4, env:3000, att:0.001, dec:0.2, sus:0, rel:0.2, ch:0.2, del:0.4, rev:0.2 },
+    { name: "SLOW TAPE", o1:"sawtooth", o2:"sawtooth", mix:0.5, det:30, sub:0, cut:500, res:0, env:0, att:0.8, dec:0.1, sus:1, rel:1.2, ch:1.0, del:0.1, rev:0.5 },
+    { name: "LASER KEYS", o1:"fatsawtooth", o2:"fatsawtooth", mix:0.5, det:50, sub:0.2, cut:5000, res:1, env:2000, att:0.01, dec:0.1, sus:0.8, rel:0.2, ch:0.1, del:0.2, rev:0.3 }
+];
+
+function setLoaderStatus(msg, isError=false) {
+    const el = document.getElementById('loader-text');
+    el.innerText = msg;
+    if(isError) el.style.color = 'red';
+    document.getElementById('progress-fill').style.width = isError ? '100%' : '50%';
+}
+
+// 1. LOADER LOGIC
+function loadToneJSAndBoot({ 
+    toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+    setLoaderStatus,
+    runtimeState,
+    boot
+}) {
+    setLoaderStatus('Loading Audio Engine...');
+    import(toneUrl)
+        .then(() => {
+            runtimeState.Tone = window.Tone;
+            console.log('[Neon Horizon] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+            // Load Three.js concurrently
+            loadThreeJS().then(THREE => {
+                runtimeState.THREE = THREE;
+                boot();
+            }).catch(e => {
+                console.warn("Three.js failed, running audio only", e);
+                boot();
+            });
+        })
+        .catch(err => {
+            setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+            console.error('[Neon Horizon] Critical Tone.js load error:', err);
+        });
+}
+
+function loadThreeJS(threeUrl = 'https://ordinals.com/content/0d013bb60fc5bf5a6c77da7371b07dc162ebc7d7f3af0ff3bd00ae5f0c546445i0') {
+    return import(threeUrl).then(mod => window.THREE);
+}
+
+// 2. AUDIO ENGINE
+function initAudio() {
+    const Tone = runtimeState.Tone;
+    
+    // Master Chain
+    const limiter = new Tone.Limiter(-1).toDestination();
+    const reverb = new Tone.Reverb({ decay: 3, wet: 0.3 }).connect(limiter);
+    const delay = new Tone.PingPongDelay({ delayTime: "8n", feedback: 0.2, wet: 0.2 }).connect(reverb);
+    const chorus = new Tone.Chorus({ frequency: 1.5, delayTime: 3.5, depth: 0.7, type: "sine", spread: 180, wet: 0.3 }).connect(delay);
+    const filter = new Tone.Filter({ frequency: 2000, type: "lowpass", rolloff: -24 }).connect(chorus);
+    
+    // LFO for Modulation
+    const lfo = new Tone.LFO(1, 0, 1000).start();
+    lfo.connect(filter.frequency); 
+
+    // Voices (2 Layers + Sub)
+    const layer1 = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "sawtooth" },
+        envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 1 }
+    }).connect(filter);
+
+    const layer2 = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "square" },
+        envelope: { attack: 0.1, decay: 0.2, sustain: 0.5, release: 1 }
+    }).connect(filter);
+
+    const sub = new Tone.PolySynth(Tone.Synth, {
+        oscillator: { type: "sine" },
+        envelope: { attack: 0.1, decay: 0.2, sustain: 0.8, release: 1 },
+        volume: -10
+    }).connect(filter);
+
+    runtimeState.audio = { layer1, layer2, sub, filter, chorus, delay, reverb, limiter, lfo };
+}
+
+// 3. MIDI SYSTEM
+function initMIDI() {
+    if (!navigator.requestMIDIAccess) return;
+    
+    navigator.requestMIDIAccess().then(access => {
+        runtimeState.midi.access = access;
+        updateMidiInputs();
+        access.onstatechange = (e) => {
+            updateMidiInputs();
+            console.log("MIDI State Change", e.port.name, e.port.state);
+        };
+    });
+}
+
+function updateMidiInputs() {
+    const select = document.getElementById('midi-select');
+    select.innerHTML = '<option value="-1">MIDI Input...</option>';
+    const inputs = runtimeState.midi.access.inputs.values();
+    runtimeState.midi.inputs = [];
+    
+    for (let input of inputs) {
+        runtimeState.midi.inputs.push(input);
+        const opt = document.createElement('option');
+        opt.value = input.id;
+        opt.innerText = input.name;
+        select.appendChild(opt);
+    }
+
+    // Auto-select first
+    if(runtimeState.midi.inputs.length > 0 && select.value === "-1") {
+        select.value = runtimeState.midi.inputs[0].id;
+        selectDevice(runtimeState.midi.inputs[0].id);
+    }
+}
+
+function selectDevice(id) {
+    if(runtimeState.midi.activeInput) {
+        runtimeState.midi.activeInput.onmidimessage = null;
+    }
+    const input = runtimeState.midi.inputs.find(i => i.id === id);
+    if(input) {
+        runtimeState.midi.activeInput = input;
+        input.onmidimessage = onMidiMessage;
+    }
+}
+
+function onMidiMessage(msg) {
+    const [status, data1, data2] = msg.data;
+    const cmd = status >> 4;
+    const note = data1;
+    const velocity = data2 / 127;
+
+    const led = document.getElementById('midi-led');
+    led.classList.add('active');
+    setTimeout(() => led.classList.remove('active'), 50);
+
+    if (cmd === 9 && velocity > 0) { // Note On
+        noteOn(note, velocity);
+    } else if (cmd === 8 || (cmd === 9 && velocity === 0)) { // Note Off
+        noteOff(note);
+    } else if (cmd === 11) { // CC
+        handleCC(note, data2);
+    }
+}
+
+function handleCC(cc, val) {
+    const norm = val / 127;
+    const a = runtimeState.audio;
+    if(cc === 1) { // Mod Wheel
+         a.lfo.amplitude.value = norm;
+    } else if(cc === 74) { // Cutoff
+        updateParam('cutoff', 20 + norm * 10000);
+        updateKnobUI('k-cutoff', 20 + norm * 10000);
+    }
+}
+
+// 4. SYNTH LOGIC (Note On/Off wrappers)
+function noteOn(note, velocity = 0.7) {
+    // Prevent stuck notes or re-triggers during drag
+    if(runtimeState.activeNotes.includes(note)) return;
+    runtimeState.activeNotes.push(note);
+
+    if(runtimeState.arp.active) {
+        if(!runtimeState.arp.notes.includes(note)) {
+            runtimeState.arp.notes.push(note);
+            runtimeState.arp.notes.sort((a,b) => a-b);
+        }
+    } else {
+        triggerNoteOn(note, velocity);
+    }
+    highlightKey(note, true);
+}
+
+function noteOff(note) {
+    runtimeState.activeNotes = runtimeState.activeNotes.filter(n => n !== note);
+
+    if(runtimeState.arp.active) {
+        if(!runtimeState.arp.latch) {
+            runtimeState.arp.notes = runtimeState.arp.notes.filter(n => n !== note);
+        }
+    } else {
+        triggerNoteOff(note);
+    }
+    highlightKey(note, false);
+}
+
+function triggerNoteOn(note, velocity) {
+    const Tone = runtimeState.Tone;
+    const a = runtimeState.audio;
+    const freq = Tone.Frequency(note, "midi");
+    a.layer1.triggerAttack(freq, Tone.now(), velocity);
+    a.layer2.triggerAttack(freq, Tone.now(), velocity);
+    a.sub.triggerAttack(Tone.Frequency(note - 12, "midi"), Tone.now(), velocity);
+}
+
+function triggerNoteOff(note) {
+    const Tone = runtimeState.Tone;
+    const a = runtimeState.audio;
+    const freq = Tone.Frequency(note, "midi");
+    a.layer1.triggerRelease(freq, Tone.now());
+    a.layer2.triggerRelease(freq, Tone.now());
+    a.sub.triggerRelease(Tone.Frequency(note - 12, "midi"), Tone.now());
+}
+
+// 5. ARPEGGIATOR
+function initArp() {
+    const Tone = runtimeState.Tone;
+    Tone.Transport.scheduleRepeat((time) => {
+        const arp = runtimeState.arp;
+        if(!arp.active || arp.notes.length === 0) return;
+
+        const note = arp.notes[arp.step % arp.notes.length];
+        const freq = Tone.Frequency(note, "midi");
+        
+        const len = "16n";
+        runtimeState.audio.layer1.triggerAttackRelease(freq, len, time);
+        runtimeState.audio.layer2.triggerAttackRelease(freq, len, time);
+        runtimeState.audio.sub.triggerAttackRelease(Tone.Frequency(note-12, "midi"), len, time);
+        
+        highlightKey(note, true);
+        Tone.Draw.schedule(() => highlightKey(note, false), time + Tone.Time(len).toSeconds());
+
+        arp.step++;
+    }, "8n");
+}
+
+// 6. PRESETS & PARAMS
+function loadPreset(idx) {
+    const p = PRESETS[idx];
+    const a = runtimeState.audio;
+    document.getElementById('patch-name').innerText = p.name;
+
+    document.getElementById('osc1-type').value = p.o1;
+    document.getElementById('osc2-type').value = p.o2;
+    updateKnobUI('k-mix', p.mix);
+    updateKnobUI('k-detune', p.det);
+    updateKnobUI('k-sub', p.sub);
+    updateKnobUI('k-cutoff', p.cut);
+    updateKnobUI('k-res', p.res);
+    updateKnobUI('k-fenv', p.env);
+    updateKnobUI('k-att', p.att);
+    updateKnobUI('k-dec', p.dec);
+    updateKnobUI('k-sus', p.sus);
+    updateKnobUI('k-rel', p.rel);
+    updateKnobUI('k-chorus', p.ch);
+    updateKnobUI('k-delay', p.del);
+    updateKnobUI('k-reverb', p.rev);
+
+    updateParam('mix', p.mix);
+    updateParam('detune', p.det);
+    updateParam('sub', p.sub);
+    updateParam('cutoff', p.cut);
+    updateParam('res', p.res);
+    updateParam('filterEnv', p.env);
+    updateParam('attack', p.att);
+    updateParam('decay', p.dec);
+    updateParam('sustain', p.sus);
+    updateParam('release', p.rel);
+    updateParam('chorus', p.ch);
+    updateParam('delay', p.del);
+    updateParam('reverb', p.rev);
+    a.layer1.set({ oscillator: { type: p.o1 } });
+    a.layer2.set({ oscillator: { type: p.o2 } });
+}
+
+function updateParam(param, val) {
+    const a = runtimeState.audio;
+    switch(param) {
+        case 'mix': 
+            a.layer1.volume.value = -10 + (val > 0.5 ? (0.5 - val) * 20 : 0);
+            a.layer2.volume.value = -10 + (val < 0.5 ? (val - 0.5) * 20 : 0);
+            break;
+        case 'detune':
+            a.layer2.set({ detune: val });
+            break;
+        case 'sub': a.sub.volume.value = -20 + (val * 20); break;
+        case 'cutoff': a.filter.frequency.rampTo(val, 0.1); break;
+        case 'res': a.filter.Q.value = val; break;
+        case 'filterEnv': a.lfo.amplitude.value = val / 5000; break;
+        case 'attack': [a.layer1, a.layer2, a.sub].forEach(s => s.set({ envelope: { attack: val } })); break;
+        case 'decay': [a.layer1, a.layer2, a.sub].forEach(s => s.set({ envelope: { decay: val } })); break;
+        case 'sustain': [a.layer1, a.layer2, a.sub].forEach(s => s.set({ envelope: { sustain: val } })); break;
+        case 'release': [a.layer1, a.layer2, a.sub].forEach(s => s.set({ envelope: { release: val } })); break;
+        case 'chorus': a.chorus.wet.value = val; break;
+        case 'delay': a.delay.wet.value = val; break;
+        case 'reverb': a.reverb.wet.value = val; break;
+        case 'lfoRate': a.lfo.frequency.value = val; break;
+        case 'lfoDepth': a.lfo.min = -val; a.lfo.max = val; break;
+        case 'vol': a.limiter.set({ gain: val > -60 ? val : -Infinity }); break;
+        case 'tempo': runtimeState.Tone.Transport.bpm.value = val; break;
+    }
+}
+
+// 7. VISUALIZER
+function initVisuals() {
+    if(!runtimeState.THREE) return;
+    const THREE = runtimeState.THREE;
+    const canvas = document.getElementById('visualizer');
+    const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x050510, 0.0025);
+
+    const camera = new THREE.PerspectiveCamera(75, window.innerWidth/window.innerHeight, 0.1, 1000);
+    camera.position.set(0, 5, 20);
+    camera.lookAt(0, 0, 0);
+
+    const gridGeo = new THREE.PlaneGeometry(200, 200, 40, 40);
+    const gridMat = new THREE.MeshBasicMaterial({ 
+        color: 0xff00ff, wireframe: true, transparent: true, opacity: 0.3 
+    });
+    const grid = new THREE.Mesh(gridGeo, gridMat);
+    grid.rotation.x = -Math.PI / 2;
+    scene.add(grid);
+
+    const sunGeo = new THREE.CircleGeometry(15, 32);
+    const sunMat = new THREE.MeshBasicMaterial({ color: 0xffaa00 });
+    const sun = new THREE.Mesh(sunGeo, sunMat);
+    sun.position.set(0, 10, -80);
+    scene.add(sun);
+
+    function animate() {
+        requestAnimationFrame(animate);
+        grid.position.z = (Date.now() * 0.01) % 5;
+        if(runtimeState.audio && runtimeState.audio.lfo) {
+             camera.position.y = 5 + Math.sin(Date.now() * 0.001) * 0.5;
+        }
+        renderer.render(scene, camera);
+    }
+    animate();
+
+    window.addEventListener('resize', () => {
+        camera.aspect = window.innerWidth / window.innerHeight;
+        camera.updateProjectionMatrix();
+        renderer.setSize(window.innerWidth, window.innerHeight);
+    });
+}
+
+// 8. UI HANDLING
+function initUI() {
+    // Knobs
+    document.querySelectorAll('.knob').forEach(el => {
+        const min = parseFloat(el.dataset.min);
+        const max = parseFloat(el.dataset.max);
+        let val = parseFloat(el.dataset.value);
+        updateKnobUI(el.id, val);
+
+        let startY, startVal;
+        el.addEventListener('mousedown', e => {
+            startY = e.clientY;
+            startVal = val;
+            const move = (e) => {
+                const delta = (startY - e.clientY) * ((max - min) / 200);
+                val = Math.min(max, Math.max(min, startVal + delta));
+                updateKnobUI(el.id, val);
+                updateParam(el.dataset.param, val);
+            };
+            const up = () => {
+                window.removeEventListener('mousemove', move);
+                window.removeEventListener('mouseup', up);
+            };
+            window.addEventListener('mousemove', move);
+            window.addEventListener('mouseup', up);
+        });
+    });
+
+    document.getElementById('osc1-type').addEventListener('change', (e) => {
+        if(runtimeState.audio.layer1) runtimeState.audio.layer1.set({ oscillator: { type: e.target.value } });
+    });
+    document.getElementById('osc2-type').addEventListener('change', (e) => {
+        if(runtimeState.audio.layer2) runtimeState.audio.layer2.set({ oscillator: { type: e.target.value } });
+    });
+    document.getElementById('midi-select').addEventListener('change', (e) => selectDevice(e.target.value));
+
+    // ARP
+    const btnArp = document.getElementById('btn-arp');
+    btnArp.addEventListener('click', () => {
+        runtimeState.arp.active = !runtimeState.arp.active;
+        btnArp.classList.toggle('active');
+        btnArp.innerText = `ARP: ${runtimeState.arp.active ? 'ON' : 'OFF'}`;
+    });
+
+    const btnLatch = document.getElementById('btn-latch');
+    btnLatch.addEventListener('click', () => {
+        runtimeState.arp.latch = !runtimeState.arp.latch;
+        btnLatch.classList.toggle('active');
+        btnLatch.innerText = `LATCH: ${runtimeState.arp.latch ? 'ON' : 'OFF'}`;
+        if(!runtimeState.arp.latch) runtimeState.arp.notes = [];
+    });
+
+        document.getElementById('arp-rate').addEventListener('change', (e) => {
+
+            if(runtimeState.Tone) {
+
+                runtimeState.Tone.Transport.cancel();
+
+                runtimeState.arp.rate = e.target.value;
+
+                initArp();
+
+                runtimeState.Tone.Transport.start();
+
+            }
+
+        });
+
+    
+
+            // KEYBOARD GENERATION (Shared Module)
+
+    
+
+            runtimeState.keyboard = new SynthKeyboard('keyboard', {
+
+    
+
+                startNote: 36, // C2
+
+    
+
+                responsive: true,
+
+    
+
+                onNoteOn: (midi) => noteOn(midi),
+
+    
+
+                onNoteOff: (midi) => noteOff(midi)
+
+    
+
+            });
+
+    
+
+        // Presets
+
+        const pContainer = document.getElementById('preset-container');
+
+        PRESETS.forEach((p, idx) => {
+
+            const btn = document.createElement('button');
+
+            btn.className = 'preset-btn';
+
+            btn.innerText = p.name;
+
+            btn.onclick = () => loadPreset(idx);
+
+            pContainer.appendChild(btn);
+
+        });
+
+    }
+
+    
+
+    function updateKnobUI(id, val) {
+
+        const el = document.getElementById(id);
+
+        const min = parseFloat(el.dataset.min);
+
+        const max = parseFloat(el.dataset.max);
+
+        el.dataset.value = val;
+
+        
+
+        const pct = (val - min) / (max - min);
+
+        const deg = -135 + (pct * 270);
+
+        el.style.transform = `rotate(${deg}deg)`;
+
+    }
+
+    
+
+    function highlightKey(note, on) {
+
+        if (runtimeState.keyboard) {
+
+            runtimeState.keyboard.triggerVisual(note, on);
+
+        }
+
+    }
+
+    
+
+    // 9. BOOT SEQUENCE
+
+    function boot() {
+
+    
+    document.getElementById('progress-fill').style.width = '100%';
+    setTimeout(() => {
+        document.getElementById('loader').style.opacity = 0;
+        setTimeout(() => document.getElementById('loader').remove(), 500);
+        document.getElementById('app-container').style.display = 'block';
+        
+        initAudio();
+        initMIDI();
+        initArp();
+        initUI();
+        initVisuals();
+
+        runtimeState.Tone.Transport.start();
+        runtimeState.Tone.context.lookAhead = 0;
+        loadPreset(0);
+        
+        // Resume AudioContext on first interaction if needed
+        document.body.addEventListener('click', async () => {
+            await runtimeState.Tone.start();
+        }, { once: true });
+        
+    }, 500);
+}
+
+// Entry Point
+loadToneJSAndBoot({
+    setLoaderStatus: (msg, err) => setLoaderStatus(msg, err),
+    runtimeState,
+    boot
+});
+
+</script>
+</body>
+</html>

@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ord One | Rebuilt</title>
+    <style>
+        :root {
+            --bg-color: #1a1a1a;
+            --panel-bg: #2b2b2b;
+            --text-color: #e0e0e0;
+            --accent-color: #ff9800;
+            --knob-color: #111;
+            --led-on: #ff3333;
+            --led-off: #441111;
+            --border-style: 1px solid #444;
+            --key-white: #fffff0;
+            --key-black: #111;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        /* LOAD SCREEN */
+        #loader-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+        }
+        .loader-text { margin-bottom: 20px; font-size: 1.2rem; color: var(--accent-color); }
+        .start-btn {
+            padding: 15px 30px; background: var(--accent-color); border: none; 
+            color: #000; font-weight: bold; cursor: pointer; display: none;
+            font-family: inherit; text-transform: uppercase;
+        }
+        .start-btn:hover { background: #ffb74d; }
+
+        /* MAIN SYNTH RACK */
+        #synth-rack {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            grid-template-rows: auto auto auto 140px;
+            gap: 10px;
+            background: #000;
+            padding: 15px;
+            border: 4px solid #333;
+            border-radius: 8px;
+            box-shadow: 0 0 40px rgba(0,0,0,0.8);
+            max-width: 1000px;
+            width: 100%;
+            opacity: 0;
+            transition: opacity 0.5s;
+        }
+        #synth-rack.active { opacity: 1; }
+
+        /* MODULES */
+        .module {
+            background: var(--panel-bg);
+            border: var(--border-style);
+            padding: 10px;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+        }
+        .module h3 {
+            margin: 0 0 10px 0;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            border-bottom: 2px solid #555;
+            padding-bottom: 4px;
+            color: #aaa;
+            text-align: center;
+        }
+        .controls-row {
+            display: flex;
+            justify-content: space-around;
+            flex-wrap: wrap;
+            gap: 8px;
+            flex: 1;
+        }
+
+        /* CONTROLS */
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 50px;
+        }
+        .label { font-size: 0.6rem; margin-top: 4px; text-align: center; color: #888; }
+        
+        /* KNOBS */
+        .knob-container {
+            width: 40px; height: 40px;
+            position: relative;
+        }
+        .knob {
+            width: 100%; height: 100%;
+            background: radial-gradient(circle, #333 30%, #111 100%);
+            border-radius: 50%;
+            border: 2px solid #555;
+            position: relative;
+            transform: rotate(-135deg); /* Start pos */
+            box-shadow: 0 2px 5px rgba(0,0,0,0.5);
+            cursor: ns-resize;
+        }
+        .knob::after {
+            content: ''; position: absolute;
+            top: 10%; left: 50%;
+            width: 2px; height: 40%;
+            background: var(--accent-color);
+            transform: translateX(-50%);
+        }
+
+        /* DISPLAY */
+        #display-module {
+            grid-column: span 1;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+        }
+        canvas#oscilloscope {
+            width: 100%; height: 80px;
+            background: #000;
+            border: 1px solid #444;
+        }
+        .midi-led {
+            width: 10px; height: 10px; border-radius: 50%;
+            background: var(--led-off);
+            margin: 5px auto;
+            border: 1px solid #000;
+            transition: background-color 0.1s;
+        }
+        .midi-led.active { background: var(--led-on); box-shadow: 0 0 5px red; }
+
+        /* Specific Grid Layout */
+        #osc1 { grid-column: span 1; }
+        #osc2 { grid-column: span 1; }
+        #mixer { grid-column: span 1; }
+        #filter { grid-column: span 1; }
+        #env-amp { grid-column: span 1; }
+        #env-filter { grid-column: span 1; }
+        #lfo { grid-column: span 1; }
+        #fx-master { grid-column: span 1; }
+
+        /* Select */
+        select { background: #000; color: #fff; border: 1px solid #555; width: 100%; font-family: inherit; font-size: 0.7rem; }
+
+        /* Keyboard Container */
+        #keyboard {
+            grid-column: span 4;
+            background: #111;
+            border-top: 2px solid #333;
+            padding-top: 5px;
+        }
+
+    </style>
+</head>
+<body>
+
+<!-- LOADER -->
+<div id="loader-overlay">
+    <div class="loader-text" id="loader-status">Initializing System...</div>
+    <button class="start-btn" id="start-btn">Power On</button>
+</div>
+
+<!-- SYNTH UI -->
+<div id="synth-rack">
+    
+    <!-- DISPLAY & GLOBAL -->
+    <div class="module" id="display-module">
+        <h3>System</h3>
+        <canvas id="oscilloscope"></canvas>
+        <div style="margin-top: 10px; display:flex; align-items:center; justify-content:space-between;">
+            <div style="text-align:center;">
+                <div class="label">MIDI</div>
+                <div id="midi-led" class="midi-led"></div>
+            </div>
+            <div style="flex:1; margin-left:5px;">
+                <select id="midi-select"><option>No MIDI</option></select>
+            </div>
+        </div>
+        <div style="margin-top: 5px;">
+            <div class="label">PRESET</div>
+            <select id="preset-selector"></select>
+        </div>
+        <div class="controls-row">
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="glide" data-min="0" data-max="0.5" data-value="0"></div>
+                </div>
+                <div class="label">GLIDE</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OSC 1 -->
+    <div class="module" id="osc1">
+        <h3>Oscillator 1</h3>
+        <div class="controls-row">
+            <div class="control-group">
+                <select id="osc1-type" style="width: 40px; font-size: 10px; margin-bottom: 5px;">
+                    <option value="sawtooth">SAW</option>
+                    <option value="square">SQR</option>
+                    <option value="pulse">PLS</option>
+                </select>
+                <div class="label">WAVE</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="osc1Width" data-min="0" data-max="0.9" data-value="0"></div>
+                </div>
+                <div class="label">PWM</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="osc1Oct" data-min="-2" data-max="2" data-step="1" data-value="0"></div>
+                </div>
+                <div class="label">OCT</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- OSC 2 -->
+    <div class="module" id="osc2">
+        <h3>Oscillator 2</h3>
+        <div class="controls-row">
+            <div class="control-group">
+                <select id="osc2-type" style="width: 40px; font-size: 10px; margin-bottom: 5px;">
+                    <option value="sawtooth">SAW</option>
+                    <option value="square">SQR</option>
+                    <option value="pulse">PLS</option>
+                    <option value="triangle">TRI</option>
+                </select>
+                <div class="label">WAVE</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="osc2Detune" data-min="-50" data-max="50" data-value="0"></div>
+                </div>
+                <div class="label">DETUNE</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="osc2Oct" data-min="-2" data-max="2" data-step="1" data-value="0"></div>
+                </div>
+                <div class="label">OCT</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- MIXER -->
+    <div class="module" id="mixer">
+        <h3>Mixer</h3>
+        <div class="controls-row">
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="volOsc1" data-min="0" data-max="1" data-value="1"></div>
+                </div>
+                <div class="label">OSC 1</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="volOsc2" data-min="0" data-max="1" data-value="0"></div>
+                </div>
+                <div class="label">OSC 2</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="volNoise" data-min="0" data-max="0.6" data-value="0"></div>
+                </div>
+                <div class="label">NOISE</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FILTER -->
+    <div class="module" id="filter">
+        <h3>VCF (24dB)</h3>
+        <div class="controls-row">
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="cutoff" data-min="20" data-max="20000" data-exp="true" data-value="20000"></div>
+                </div>
+                <div class="label">FREQ</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="resonance" data-min="0" data-max="20" data-value="0"></div>
+                </div>
+                <div class="label">RES</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="filterEnvAmt" data-min="0" data-max="5000" data-value="0"></div>
+                </div>
+                <div class="label">ENV</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FILTER ENV -->
+    <div class="module" id="env-filter">
+        <h3>Filter Env</h3>
+        <div class="controls-row">
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="fAttack" data-min="0.005" data-max="2" data-value="0.01"></div>
+                </div>
+                <div class="label">A</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="fDecay" data-min="0.01" data-max="2" data-value="0.1"></div>
+                </div>
+                <div class="label">D</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="fSustain" data-min="0" data-max="1" data-value="1"></div>
+                </div>
+                <div class="label">S</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="fRelease" data-min="0.01" data-max="5" data-value="0.1"></div>
+                </div>
+                <div class="label">R</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- AMP ENV -->
+    <div class="module" id="env-amp">
+        <h3>Amp Env</h3>
+        <div class="controls-row">
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="aAttack" data-min="0.005" data-max="2" data-value="0.01"></div>
+                </div>
+                <div class="label">A</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="aDecay" data-min="0.01" data-max="2" data-value="0.1"></div>
+                </div>
+                <div class="label">D</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="aSustain" data-min="0" data-max="1" data-value="1"></div>
+                </div>
+                <div class="label">S</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="aRelease" data-min="0.01" data-max="5" data-value="0.1"></div>
+                </div>
+                <div class="label">R</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- LFO -->
+    <div class="module" id="lfo">
+        <h3>LFO</h3>
+        <div class="controls-row">
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="lfoRate" data-min="0.1" data-max="20" data-value="1"></div>
+                </div>
+                <div class="label">RATE</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="lfoDepth" data-min="0" data-max="1000" data-value="0"></div>
+                </div>
+                <div class="label">DEPTH</div>
+            </div>
+            <div class="control-group">
+                <select id="lfo-target" style="width: 45px; font-size: 9px; margin-bottom: 5px;">
+                    <option value="cutoff">VCF</option>
+                    <option value="pitch" selected>OSC</option>
+                    <option value="pwm">PWM</option>
+                </select>
+                <div class="label">DEST</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- FX & MASTER -->
+    <div class="module" id="fx-master">
+        <h3>FX / Master</h3>
+        <div class="controls-row">
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="drive" data-min="0" data-max="0.8" data-value="0"></div>
+                </div>
+                <div class="label">DRIVE</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="delayAmt" data-min="0" data-max="0.6" data-value="0"></div>
+                </div>
+                <div class="label">DLY</div>
+            </div>
+            <div class="control-group">
+                <div class="knob-container">
+                    <div class="knob" id="masterVol" data-min="-30" data-max="0" data-value="-6"></div>
+                </div>
+                <div class="label">VOL</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- KEYBOARD -->
+    <div id="keyboard"></div>
+
+</div>
+
+<script type="module">
+    import { SynthKeyboard } from '../../shared/keyboard.js';
+    import { SynthLoader } from '../../shared/synth-loader.js';
+    import { MidiManager } from '../../shared/midi-manager.js';
+    import { KnobControl } from '../../shared/knob-control.js';
+
+    const runtimeState = {
+        Tone: null,
+        engine: {
+            osc1: null, osc2: null, noise: null,
+            osc1Gain: null, osc2Gain: null, noiseGain: null,
+            filter: null, ampEnv: null, filterEnv: null,
+            lfo: null, distortion: null, delay: null, reverb: null,
+            master: null, analyser: null, limiter: null,
+            lfoGain: null, filterEnvGain: null, ampADSR: null
+        },
+        activeNotes: [], // { note: number, freq: number, vel: number }
+        keyboard: null
+    };
+
+    // 1. LOADER
+    const loader = new SynthLoader({
+        loaderId: 'loader-overlay',
+        statusId: 'loader-status',
+        startBtnId: 'start-btn'
+    });
+
+    loader.load(async ({ Tone }) => {
+        runtimeState.Tone = Tone;
+        
+        initSynth();
+        initUI();
+        
+        // MIDI
+        const midiMgr = new MidiManager({
+            deviceSelectorId: 'midi-select',
+            statusElementId: 'midi-led',
+            onNoteOn: (n, v) => noteOn(n, v),
+            onNoteOff: (n) => noteOff(n),
+            onCC: (cc, val) => {
+                // Basic CC mapping
+                if(cc === 74) updateParam('cutoff', val * 150 + 20);
+                if(cc === 1) updateParam('lfoDepth', val * 8);
+                // Trigger visual knob update if needed
+            }
+        });
+        await midiMgr.init();
+
+        startVisuals();
+        document.getElementById('synth-rack').classList.add('active');
+    });
+
+    function initSynth() {
+        const T = runtimeState.Tone;
+        const e = runtimeState.engine;
+
+        // Use OmniOscillator to support multiple waveform types (Saw, Square, Pulse, Triangle)
+        e.osc1 = new T.OmniOscillator(440, "sawtooth").start();
+        e.osc2 = new T.OmniOscillator(440, "sawtooth").start();
+        e.noise = new T.Noise("white").start();
+
+        e.osc1Gain = new T.Gain(0.5);
+        e.osc2Gain = new T.Gain(0.5);
+        e.noiseGain = new T.Gain(0.0);
+
+        e.osc1.connect(e.osc1Gain);
+        e.osc2.connect(e.osc2Gain);
+        e.noise.connect(e.noiseGain);
+
+        e.filter = new T.Filter({ type: "lowpass", frequency: 2000, rolloff: -24, Q: 1 });
+        e.ampEnv = new T.Gain(0);
+        e.distortion = new T.Distortion(0);
+        e.delay = new T.FeedbackDelay("8n", 0.5); e.delay.wet.value = 0;
+        e.reverb = new T.Reverb({ decay: 2, wet: 0.1 });
+        e.limiter = new T.Limiter(-1);
+        e.master = new T.Gain(0.8);
+        e.analyser = new T.Analyser("waveform", 256);
+
+        // Routing
+        e.osc1Gain.connect(e.filter);
+        e.osc2Gain.connect(e.filter);
+        e.noiseGain.connect(e.filter);
+        e.filter.connect(e.distortion);
+        e.distortion.connect(e.ampEnv);
+        e.ampEnv.connect(e.delay);
+        e.delay.connect(e.reverb);
+        e.reverb.connect(e.limiter);
+        e.limiter.connect(e.master);
+        e.master.connect(T.Destination);
+        e.master.connect(e.analyser);
+
+        // Modulation
+        e.filterEnv = new T.Envelope({ attack: 0.01, decay: 0.2, sustain: 0.5, release: 0.5 });
+        e.filterEnvGain = new T.Gain(2000);
+        e.filterEnv.connect(e.filterEnvGain);
+        e.filterEnvGain.connect(e.filter.frequency);
+
+        e.ampADSR = new T.Envelope({ attack: 0.01, decay: 0.1, sustain: 1, release: 0.5 });
+        e.ampADSR.connect(e.ampEnv.gain);
+
+        e.lfo = new T.LFO(5, 0, 1).start();
+        e.lfoGain = new T.Gain(0);
+        e.lfo.connect(e.lfoGain);
+
+        // Default mapping (lfo -> pitch)
+        updateEngineType('lfo-target', 'pitch');
+
+        loadPreset(presets[0]);
+    }
+
+    // NOTE LOGIC
+    function triggerNoteOn(freq, velocity = 1) {
+        const T = runtimeState.Tone;
+        const now = T.now();
+        const glide = parseFloat(params['glide'] || 0);
+        
+        const e = runtimeState.engine;
+        const osc1Oct = Math.pow(2, params['osc1Oct'] || 0);
+        const osc2Oct = Math.pow(2, params['osc2Oct'] || 0);
+        const osc2Det = 1 + (params['osc2Detune'] || 0) / 1000;
+
+        e.osc1.frequency.rampTo(freq * osc1Oct, glide, now);
+        e.osc2.frequency.rampTo(freq * osc2Oct * osc2Det, glide, now);
+        
+        e.ampADSR.triggerAttack(now, velocity);
+        e.filterEnv.triggerAttack(now);
+    }
+
+    function triggerNoteOff() {
+        const T = runtimeState.Tone;
+        const now = T.now();
+        const e = runtimeState.engine;
+        e.ampADSR.triggerRelease(now);
+        e.filterEnv.triggerRelease(now);
+    }
+
+    function noteOn(noteNumber, velocity=1) {
+        const freq = 440 * Math.pow(2, (noteNumber - 69) / 12);
+        // Add to stack
+        runtimeState.activeNotes.push({ note: noteNumber, freq: freq, vel: velocity });
+        
+        triggerNoteOn(freq, velocity);
+        
+        if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(noteNumber, true);
+    }
+
+    function noteOff(noteNumber) {
+        runtimeState.activeNotes = runtimeState.activeNotes.filter(n => n.note !== noteNumber);
+        
+        if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(noteNumber, false);
+
+        if (runtimeState.activeNotes.length > 0) {
+            // Retrigger last note (Mono/Legato behavior)
+            const last = runtimeState.activeNotes[runtimeState.activeNotes.length - 1];
+            triggerNoteOn(last.freq, last.vel);
+        } else {
+            triggerNoteOff();
+        }
+    }
+
+    // PARAMS & UI
+    const params = {};
+    
+    function updateParam(id, val) {
+        console.log(`updateParam: id=${id} val=${val}`);
+        params[id] = val;
+        const e = runtimeState.engine;
+        if(!e.osc1) {
+            console.warn("Engine not ready in updateParam");
+            return; 
+        }
+
+        try {
+            switch(id) {
+                case 'osc1Width': 
+                    // OmniOscillator width property safety check
+                    if(e.osc1.width) {
+                        e.osc1.width.value = val; 
+                    } else {
+                        console.warn("osc1.width is undefined (current type might not support it)");
+                    }
+                    break;
+                case 'osc1Oct': 
+                    if(runtimeState.activeNotes.length) {
+                         const last = runtimeState.activeNotes[runtimeState.activeNotes.length-1];
+                         e.osc1.frequency.rampTo(last.freq * Math.pow(2, val), 0.1);
+                    }
+                    break;
+                case 'osc2Detune':
+                case 'osc2Oct':
+                    if(runtimeState.activeNotes.length) {
+                        const last = runtimeState.activeNotes[runtimeState.activeNotes.length-1];
+                        const oct = Math.pow(2, params['osc2Oct']||0);
+                        const det = 1 + (params['osc2Detune']||0)/1000;
+                        e.osc2.frequency.rampTo(last.freq * oct * det, 0.1);
+                    }
+                    break;
+                case 'volOsc1': e.osc1Gain.gain.rampTo(val, 0.05); break;
+                case 'volOsc2': e.osc2Gain.gain.rampTo(val, 0.05); break;
+                case 'volNoise': e.noiseGain.gain.rampTo(val, 0.05); break;
+                case 'cutoff': e.filter.frequency.rampTo(val, 0.05); break;
+                case 'resonance': e.filter.Q.value = val; break;
+                case 'filterEnvAmt': 
+                    if (e.filterEnvGain && e.filterEnvGain.gain) e.filterEnvGain.gain.value = val; 
+                    else console.error("filterEnvGain undefined");
+                    break;
+                
+                case 'fAttack': e.filterEnv.attack = val; break;
+                case 'fDecay': e.filterEnv.decay = val; break;
+                case 'fSustain': e.filterEnv.sustain = val; break;
+                case 'fRelease': e.filterEnv.release = val; break;
+                
+                case 'aAttack': e.ampADSR.attack = val; break;
+                case 'aDecay': e.ampADSR.decay = val; break;
+                case 'aSustain': e.ampADSR.sustain = val; break;
+                case 'aRelease': e.ampADSR.release = val; break;
+                
+                case 'lfoRate': e.lfo.frequency.value = val; break;
+                case 'lfoDepth': 
+                    if (e.lfoGain && e.lfoGain.gain) e.lfoGain.gain.value = val; 
+                    else console.error("lfoGain undefined");
+                    break;
+                
+                case 'drive': e.distortion.distortion = val; break;
+                case 'delayAmt': e.delay.wet.value = val; break;
+                case 'masterVol': e.master.gain.value = Math.pow(10, val/20); break;
+                // Glide is stored in params[]
+            }
+        } catch(err) {
+            console.error(`Error updating param ${id}:`, err);
+        }
+    }
+
+    function updateEngineType(id, val) {
+        const e = runtimeState.engine;
+        if(id === 'osc1-type') e.osc1.type = val;
+        if(id === 'osc2-type') e.osc2.type = val;
+        if(id === 'lfo-target') {
+            e.lfoGain.disconnect();
+            if(val === 'cutoff') e.lfoGain.connect(e.filter.frequency);
+            if(val === 'pitch') { e.lfoGain.connect(e.osc1.detune); e.lfoGain.connect(e.osc2.detune); }
+            if(val === 'pwm') { 
+                if(e.osc1.type === 'pulse') e.lfoGain.connect(e.osc1.width); 
+                if(e.osc2.type === 'pulse') e.lfoGain.connect(e.osc2.width); 
+            }
+        }
+    }
+
+    function initUI() {
+        // 1. Keyboard
+        runtimeState.keyboard = new SynthKeyboard('keyboard', {
+            startNote: 36, // C2
+            responsive: true,
+            onNoteOn: (m) => noteOn(m, 1),
+            onNoteOff: (m) => noteOff(m)
+        });
+
+        // 2. Knobs
+        new KnobControl('.knob', {
+            onChange: (id, val) => updateParam(id, val)
+        });
+
+        // 3. Selects
+        ['osc1-type', 'osc2-type', 'lfo-target'].forEach(id => {
+            document.getElementById(id).addEventListener('change', (e) => updateEngineType(id, e.target.value));
+        });
+
+        // 4. Presets
+        const sel = document.getElementById('preset-selector');
+        presets.forEach((p, i) => {
+            const opt = document.createElement('option'); 
+            opt.value = i; opt.innerText = p.name; 
+            sel.appendChild(opt);
+        });
+        sel.addEventListener('change', (e) => loadPreset(presets[e.target.value]));
+    }
+
+    // PRESETS
+    const presets = [
+        { name: "Init Mono", params: { osc1Width: 0, osc1Oct: 0, osc2Detune: 0, osc2Oct: 0, volOsc1: 1, volOsc2: 0, volNoise: 0, cutoff: 20000, resonance: 0, filterEnvAmt: 0, fAttack: 0.01, fDecay: 0.1, fSustain: 1, fRelease: 0.1, aAttack: 0.01, aDecay: 0.1, aSustain: 1, aRelease: 0.1, lfoRate: 1, lfoDepth: 0, drive: 0, delayAmt: 0, masterVol: -6, glide: 0 }, types: { 'osc1-type': 'sawtooth', 'osc2-type': 'sawtooth', 'lfo-target': 'pitch' } },
+        { name: "Warm Lead", params: { osc1Width: 0, osc1Oct: 0, osc2Detune: 15, osc2Oct: 0, volOsc1: 0.8, volOsc2: 0.8, volNoise: 0, cutoff: 2000, resonance: 2, filterEnvAmt: 1000, fAttack: 0.05, fDecay: 0.5, fSustain: 0.2, fRelease: 0.5, aAttack: 0.05, aDecay: 0.2, aSustain: 0.8, aRelease: 0.5, lfoRate: 5, lfoDepth: 10, drive: 0.2, delayAmt: 0.3, masterVol: -6, glide: 0.1 }, types: { 'osc1-type': 'sawtooth', 'osc2-type': 'sawtooth', 'lfo-target': 'pitch' } },
+        { name: "Rubbery Bass", params: { osc1Width: 0.5, osc1Oct: -1, osc2Detune: -5, osc2Oct: -1, volOsc1: 1, volOsc2: 0.6, volNoise: 0, cutoff: 400, resonance: 8, filterEnvAmt: 2000, fAttack: 0.01, fDecay: 0.4, fSustain: 0, fRelease: 0.1, aAttack: 0.01, aDecay: 0.2, aSustain: 1, aRelease: 0.1, lfoRate: 1, lfoDepth: 0, drive: 0.4, delayAmt: 0, masterVol: -3, glide: 0 }, types: { 'osc1-type': 'square', 'osc2-type': 'pulse', 'lfo-target': 'cutoff' } },
+        { name: "PWM Sweep", params: { osc1Width: 0.5, osc1Oct: 0, osc2Detune: 5, osc2Oct: 0, volOsc1: 1, volOsc2: 0, volNoise: 0, cutoff: 8000, resonance: 1, filterEnvAmt: 0, fAttack: 0.1, fDecay: 0.1, fSustain: 1, fRelease: 1, aAttack: 0.5, aDecay: 0.5, aSustain: 1, aRelease: 1, lfoRate: 0.5, lfoDepth: 200, drive: 0, delayAmt: 0.4, masterVol: -6, glide: 0 }, types: { 'osc1-type': 'pulse', 'osc2-type': 'pulse', 'lfo-target': 'pwm' } },
+        { name: "Acidic Bite", params: { osc1Width: 0, osc1Oct: -1, osc2Detune: 0, osc2Oct: -1, volOsc1: 1, volOsc2: 0, volNoise: 0, cutoff: 300, resonance: 15, filterEnvAmt: 3000, fAttack: 0.01, fDecay: 0.2, fSustain: 0, fRelease: 0.1, aAttack: 0.01, aDecay: 0.2, aSustain: 1, aRelease: 0.1, lfoRate: 0.1, lfoDepth: 0, drive: 0.6, delayAmt: 0.2, masterVol: -3, glide: 0.2 }, types: { 'osc1-type': 'sawtooth', 'osc2-type': 'sawtooth', 'lfo-target': 'cutoff' } }
+    ];
+
+    function loadPreset(p) {
+        // Set Selects
+        for(let k in p.types) { 
+            document.getElementById(k).value = p.types[k]; 
+            updateEngineType(k, p.types[k]); 
+        }
+        // Set Params and Knobs
+        for(let k in p.params) { 
+            updateParam(k, p.params[k]);
+            
+            // Update Knob Visual (Shared KnobControl expects us to set .knob data attr or it just handles drag)
+            // To make the UI match the internal state, we update the DOM data attributes and rotation
+            const el = document.getElementById(k);
+            if(el) {
+                el.dataset.value = p.params[k];
+                const min = parseFloat(el.dataset.min);
+                const max = parseFloat(el.dataset.max);
+                const pct = (p.params[k] - min) / (max - min);
+                el.style.transform = `rotate(${-135 + (pct * 270)}deg)`;
+            }
+        }
+    }
+
+    function startVisuals() {
+        const canvas = document.getElementById('oscilloscope');
+        const ctx = canvas.getContext('2d');
+        canvas.width = canvas.clientWidth; canvas.height = canvas.clientHeight;
+        
+        function draw() {
+            requestAnimationFrame(draw);
+            const a = runtimeState.engine.analyser;
+            if(!a) return;
+            
+            const values = a.getValue();
+            ctx.fillStyle = '#000'; ctx.fillRect(0, 0, canvas.width, canvas.height);
+            ctx.lineWidth = 2; ctx.strokeStyle = '#ff9800'; ctx.beginPath();
+            
+            const sliceWidth = canvas.width * 1.0 / values.length; 
+            let x = 0;
+            
+            for (let i = 0; i < values.length; i++) {
+                const v = (values[i] + 1) / 2; 
+                const y = v * canvas.height;
+                if (i === 0) ctx.moveTo(x, y); else ctx.lineTo(x, y);
+                x += sliceWidth;
+            }
+            ctx.lineTo(canvas.width, canvas.height / 2); 
+            ctx.stroke();
+        }
+        draw();
+    }
+</script>
+</body>
+</html>

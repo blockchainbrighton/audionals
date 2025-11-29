@@ -1,0 +1,742 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LUMINA | Web3 Ordinal Synth</title>
+    <style>
+        :root {
+            --bg: #111216;
+            --panel: #1a1c23;
+            --accent: #00f0ff;
+            --accent-dim: #007a82;
+            --text: #e0e6ed;
+            --text-dim: #8b9bb4;
+            --knob-bg: #2a2d35;
+            --keys-white: #e0e0e0;
+            --keys-black: #111;
+            --led-off: #333;
+            --led-on: #0f0;
+        }
+
+        * { box-sizing: border-box; user-select: none; }
+        
+        body {
+            margin: 0;
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        /* LOADER */
+        #loader-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: var(--bg);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+            transition: opacity 0.5s;
+        }
+        .loader-text { margin-bottom: 20px; font-size: 1.2rem; color: var(--accent); letter-spacing: 2px; }
+        .start-btn {
+            padding: 15px 40px;
+            background: transparent;
+            border: 2px solid var(--accent);
+            color: var(--accent);
+            font-size: 1.5rem;
+            cursor: pointer;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+            transition: all 0.2s;
+            display: none;
+        }
+        .start-btn:hover { background: var(--accent); color: var(--bg); box-shadow: 0 0 20px var(--accent); }
+
+        /* MAIN LAYOUT */
+        #synth-container {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            padding: 20px;
+            max-width: 1200px;
+            margin: 0 auto;
+            width: 100%;
+            gap: 15px;
+            opacity: 0; /* Hidden until loaded */
+            transition: opacity 1s;
+        }
+
+        /* HEADER & STATUS */
+        .header-bar {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            background: var(--panel);
+            padding: 15px;
+            border-radius: 8px;
+            border-bottom: 2px solid var(--accent);
+        }
+        .brand { font-size: 1.8rem; font-weight: bold; color: var(--text); letter-spacing: 4px; }
+        .brand span { color: var(--accent); }
+        
+        .status-panel {
+            display: flex;
+            gap: 20px;
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+        .status-item { display: flex; align-items: center; gap: 6px; }
+        .led { width: 8px; height: 8px; border-radius: 50%; background: var(--led-off); box-shadow: inset 0 0 2px #000; transition: background 0.1s; }
+        .led.active { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+
+        /* PRESETS */
+        .preset-bar {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+            gap: 8px;
+            background: var(--panel);
+            padding: 10px;
+            border-radius: 8px;
+        }
+        .preset-btn {
+            background: var(--knob-bg);
+            border: 1px solid #444;
+            color: var(--text-dim);
+            padding: 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8rem;
+            transition: all 0.2s;
+            text-align: center;
+        }
+        .preset-btn:hover { border-color: var(--accent); color: var(--text); }
+        .preset-btn.active { background: var(--accent-dim); border-color: var(--accent); color: #fff; }
+
+        /* CONTROLS GRID */
+        .controls-area {
+            display: grid;
+            grid-template-columns: 1fr 1fr 1fr 240px;
+            gap: 15px;
+            flex: 1;
+            min-height: 250px;
+        }
+        
+        .module {
+            background: var(--panel);
+            border-radius: 8px;
+            padding: 15px;
+            display: flex;
+            flex-direction: column;
+            border: 1px solid #333;
+        }
+        .module-title {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            color: var(--text-dim);
+            border-bottom: 1px solid #333;
+            padding-bottom: 8px;
+            margin-bottom: 15px;
+            letter-spacing: 1px;
+        }
+
+        .knob-group {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 20px;
+            justify-content: center;
+            align-items: center;
+            flex: 1;
+        }
+
+        /* KNOB COMPONENT */
+        .knob-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 60px;
+        }
+        .knob-dial {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            background: var(--knob-bg);
+            position: relative;
+            border: 2px solid #444;
+            cursor: ns-resize;
+        }
+        .knob-dial::after {
+            content: '';
+            position: absolute;
+            top: 0; left: 50%;
+            width: 2px; height: 50%;
+            background: var(--accent);
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+        .knob-label { font-size: 0.7rem; margin-top: 8px; color: var(--text-dim); }
+        .knob-val { font-size: 0.7rem; color: var(--accent); margin-top: 2px; opacity: 0; transition: opacity 0.2s; }
+        .knob-container:hover .knob-val { opacity: 1; }
+
+        /* VISUALIZER & PB */
+        .vis-module {
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            background: #000;
+            border: 1px solid #333;
+            border-radius: 8px;
+            overflow: hidden;
+        }
+        /* Canvas for Three.js */
+        #c { width: 100%; height: 100%; display: block; }
+        
+        #pb-container {
+            height: 20px;
+            background: #222;
+            position: relative;
+            margin-top: 5px;
+            border-radius: 4px;
+            overflow: hidden;
+        }
+        #pb-bar {
+            position: absolute;
+            top: 0; bottom: 0;
+            left: 50%;
+            width: 0%;
+            background: var(--accent);
+            opacity: 0.7;
+            transition: width 0.05s, left 0.05s;
+        }
+        .pb-label { font-size: 0.7rem; color: #666; text-align: center; margin-top: 2px; }
+
+    </style>
+</head>
+<body>
+
+    <!-- LOADING SCREEN -->
+    <div id="loader-overlay">
+        <div class="loader-text" id="loader-status">INITIALIZING...</div>
+        <button class="start-btn" id="boot-btn">INITIALIZE SYSTEM</button>
+    </div>
+
+    <!-- SYNTH UI -->
+    <div id="synth-container">
+        <div class="header-bar">
+            <div class="brand">LUMINA <span>LEAD</span></div>
+            <div class="status-panel">
+                <div class="status-item"><div class="led" id="led-midi"></div> MIDI <select id="midi-select" style="background:#222; color:#888; border:none; margin-left:10px; font-size:0.7rem; max-width: 100px;"><option>No MIDI</option></select></div>
+                <div class="status-item"><div class="led" id="led-audio"></div> AUDIO</div>
+            </div>
+        </div>
+
+        <div class="preset-bar" id="preset-container"></div>
+
+        <div class="controls-area">
+            
+            <!-- OSC & ENV -->
+            <div class="module">
+                <div class="module-title">Source & Env</div>
+                <div class="knob-group">
+                    <div class="knob-container" data-param="oscType" data-type="select">
+                        <div class="knob-label">WAVE</div>
+                    </div>
+                    <div class="knob-container" data-param="portamento" data-min="0" data-max="1">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">GLIDE</div>
+                        <div class="knob-val"></div>
+                    </div>
+                    <div class="knob-container" data-param="attack" data-min="0.001" data-max="2">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">ATTACK</div>
+                        <div class="knob-val"></div>
+                    </div>
+                    <div class="knob-container" data-param="release" data-min="0.01" data-max="5">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">RELEASE</div>
+                        <div class="knob-val"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILTER -->
+            <div class="module">
+                <div class="module-title">Filter & Mod</div>
+                <div class="knob-group">
+                    <div class="knob-container" data-param="cutoff" data-min="100" data-max="10000">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">CUTOFF</div>
+                        <div class="knob-val"></div>
+                    </div>
+                    <div class="knob-container" data-param="resonance" data-min="0" data-max="10">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">RES</div>
+                        <div class="knob-val"></div>
+                    </div>
+                    <div class="knob-container" data-param="vibDepth" data-min="0" data-max="0.5">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">VIB DEPTH</div>
+                        <div class="knob-val"></div>
+                    </div>
+                    <div class="knob-container" data-param="vibRate" data-min="1" data-max="20">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">VIB RATE</div>
+                        <div class="knob-val"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FX -->
+            <div class="module">
+                <div class="module-title">Effects</div>
+                <div class="knob-group">
+                    <div class="knob-container" data-param="delayAmt" data-min="0" data-max="1">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">DELAY</div>
+                        <div class="knob-val"></div>
+                    </div>
+                    <div class="knob-container" data-param="reverbAmt" data-min="0" data-max="1">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">REVERB</div>
+                        <div class="knob-val"></div>
+                    </div>
+                    <div class="knob-container" data-param="width" data-min="0" data-max="1">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">WIDTH</div>
+                        <div class="knob-val"></div>
+                    </div>
+                    <div class="knob-container" data-param="drive" data-min="0" data-max="1">
+                        <div class="knob-dial"></div>
+                        <div class="knob-label">DRIVE</div>
+                        <div class="knob-val"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VISUALIZER -->
+            <div class="vis-module">
+                <canvas id="c"></canvas>
+                <div style="padding: 5px; background: #111;">
+                    <div id="pb-container">
+                        <div id="pb-bar"></div>
+                    </div>
+                    <div class="pb-label">PITCH BEND</div>
+                </div>
+            </div>
+        </div>
+
+        <div id="keyboard"></div>
+    </div>
+
+    <!-- MODULE SCRIPT -->
+    <script type="module">
+        // --- 1. IMPORT SHARED MODULES ---
+        import * as THREE from 'https://ordinals.com/content/0d013bb60fc5bf5a6c77da7371b07dc162ebc7d7f3af0ff3bd00ae5f0c546445i0';
+        import { SynthKeyboard } from '../../shared/keyboard.js';
+        import { SynthLoader } from '../../shared/synth-loader.js';
+        import { MidiManager } from '../../shared/midi-manager.js';
+        import { KnobControl } from '../../shared/knob-control.js';
+
+        // --- GLOBAL STATE ---
+        const runtimeState = {
+            Tone: null,
+            synth: null,
+            fx: {
+                distortion: null,
+                delay: null,
+                reverb: null,
+                widener: null,
+                vibrato: null,
+                filter: null
+            },
+            waveform: null, // Analyser
+            currentPresetIdx: 0,
+            isMouseDown: false, // For glissando
+            keyboard: null
+        };
+
+        const PRESETS = [
+            {
+                name: "Init Lead",
+                oscType: "sawtooth",
+                attack: 0.01, release: 0.1,
+                cutoff: 20000, res: 0,
+                delay: 0, reverb: 0, width: 0, drive: 0,
+                glide: 0, vibDepth: 0, vibRate: 5
+            },
+            {
+                name: "Saw Lead",
+                oscType: "fatsawtooth",
+                attack: 0.01, release: 0.4,
+                cutoff: 4000, res: 2,
+                delay: 0.3, reverb: 0.2, width: 0.5, drive: 0.2,
+                glide: 0.05, vibDepth: 0.1, vibRate: 6
+            },
+            {
+                name: "Sync Hook",
+                oscType: "pulse",
+                attack: 0.001, release: 0.2,
+                cutoff: 3000, res: 5,
+                delay: 0.2, reverb: 0.1, width: 0.2, drive: 0.8,
+                glide: 0, vibDepth: 0.05, vibRate: 8
+            },
+            {
+                name: "Shimmer",
+                oscType: "square",
+                attack: 0.01, release: 2,
+                cutoff: 1200, res: 4,
+                delay: 0.5, reverb: 0.6, width: 0.8, drive: 0,
+                glide: 0, vibDepth: 0.2, vibRate: 4
+            },
+            {
+                name: "EDM Stack",
+                oscType: "fatsawtooth",
+                attack: 0.01, release: 0.3,
+                cutoff: 8000, res: 0,
+                delay: 0.4, reverb: 0.4, width: 1, drive: 0.4,
+                glide: 0, vibDepth: 0, vibRate: 0
+            }
+        ];
+
+        // --- 2. THREE.JS VISUALIZER SETUP ---
+        let visMesh;
+        const initThreeJS = () => {
+            const canvas = document.getElementById('c');
+            const renderer = new THREE.WebGLRenderer({ canvas, alpha: true, antialias: true });
+            
+            const scene = new THREE.Scene();
+            scene.background = null; 
+
+            const camera = new THREE.PerspectiveCamera(75, 1, 0.1, 100);
+            camera.position.z = 2.5;
+
+            const geometry = new THREE.IcosahedronGeometry(1, 2);
+            const material = new THREE.MeshBasicMaterial({ 
+                color: 0x00f0ff, 
+                wireframe: true 
+            });
+            visMesh = new THREE.Mesh(geometry, material);
+            scene.add(visMesh);
+
+            function resize() {
+                const width = canvas.clientWidth;
+                const height = canvas.clientHeight;
+                if (canvas.width !== width || canvas.height !== height) {
+                    renderer.setSize(width, height, false);
+                    camera.aspect = width / height;
+                    camera.updateProjectionMatrix();
+                }
+            }
+
+            function render(t) {
+                resize();
+                
+                visMesh.rotation.x = t * 0.0007;
+                visMesh.rotation.y = t * 0.0011;
+
+                if (runtimeState.waveform && runtimeState.Tone) {
+                    const buffer = runtimeState.waveform.getValue();
+                    let sum = 0;
+                    for(let i=0; i<buffer.length; i+=10) {
+                        sum += Math.abs(buffer[i]);
+                    }
+                    const avg = sum / (buffer.length / 10);
+                    const scale = 1 + (avg * 1.5);
+                    visMesh.scale.set(scale, scale, scale);
+                }
+
+                renderer.render(scene, camera);
+                requestAnimationFrame(render);
+            }
+            requestAnimationFrame(render);
+        };
+
+        // --- 3. APP LOGIC ---
+
+        // Initialize Loader
+        const loader = new SynthLoader({
+            loaderId: 'loader-overlay',
+            statusId: 'loader-status',
+            startBtnId: 'boot-btn'
+        });
+
+        // Start Load Process
+        loader.load(async ({ Tone }) => {
+            runtimeState.Tone = Tone;
+            
+            // Initialize Audio Engine
+            initAudio();
+            
+            // Initialize UI Components
+            initUI();
+            
+            // Initialize MIDI
+            const midiManager = new MidiManager({
+                onNoteOn: (note, vel) => playNote(note, vel),
+                onNoteOff: (note) => stopNote(note),
+                deviceSelectorId: 'midi-select', // We will need to add this to HTML
+                statusElementId: 'led-midi'
+            });
+            
+            // Wait for MIDI to initialize
+            await midiManager.init();
+
+            // Initialize Visuals
+            initThreeJS();
+            
+            // --- UI TRANSITION ---
+            // 1. Show the main synth container
+            document.getElementById('synth-container').style.opacity = 1;
+
+            // 2. Hide and remove the loader overlay
+            const loaderOverlay = document.getElementById('loader-overlay');
+            if (loaderOverlay) {
+                loaderOverlay.style.opacity = 0;
+                setTimeout(() => loaderOverlay.remove(), 1000);
+            }
+
+            // 3. Set Audio LED to active
+            const audioLed = document.getElementById('led-audio');
+            if (audioLed) {
+                audioLed.classList.add('active');
+            }
+        });
+
+        function initAudio() {
+            const T = runtimeState.Tone;
+            const widener = new T.Chorus(4, 2.5, 0.5).toDestination().start();
+            const delay = new T.PingPongDelay("8n", 0.2).connect(widener);
+            const reverb = new T.Freeverb({ roomSize: 0.7, dampening: 3000 }).connect(delay);
+            const limiter = new T.Limiter(-1).connect(reverb);
+            const filter = new T.Filter(20000, "lowpass", -12).connect(limiter);
+            const distortion = new T.Distortion(0).connect(filter);
+
+            const synth = new T.MonoSynth({
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.01, decay: 0.1, sustain: 0.5, release: 1 },
+                filterEnvelope: { attack: 0.01, decay: 0.5, sustain: 1, release: 2, baseFrequency: 20000, octaves: 0 },
+                volume: -6
+            });
+            
+            synth.disconnect();
+            synth.connect(distortion);
+
+            const vibrato = new T.LFO(5, -50, 50).start();
+            vibrato.connect(synth.detune);
+            vibrato.amplitude.value = 0;
+
+            const waveform = new T.Waveform(256);
+            limiter.connect(waveform);
+
+            runtimeState.synth = synth;
+            runtimeState.fx.delay = delay;
+            runtimeState.fx.reverb = reverb;
+            runtimeState.fx.widener = widener;
+            runtimeState.fx.filter = filter;
+            runtimeState.fx.distortion = distortion;
+            runtimeState.fx.vibrato = vibrato;
+            runtimeState.waveform = waveform;
+
+            loadPreset(0);
+        }
+
+        function loadPreset(idx) {
+            const p = PRESETS[idx];
+            const s = runtimeState.synth;
+            const fx = runtimeState.fx;
+            runtimeState.currentPresetIdx = idx;
+            
+            // Update Visuals manually since we removed updateKnobVisuals
+            document.querySelectorAll('.knob-container').forEach(k => {
+                const param = k.dataset.param;
+                if(!p.hasOwnProperty(param)) return;
+                const val = p[param];
+                
+                // Update UI text
+                const valDisplay = k.querySelector('.knob-val');
+                const label = k.querySelector('.knob-label');
+                
+                if(k.dataset.type === 'select') {
+                     if(label) label.innerText = typeof val === 'string' ? val.toUpperCase() : val;
+                     return;
+                }
+                
+                // Update Knob Rotation
+                const min = parseFloat(k.dataset.min);
+                const max = parseFloat(k.dataset.max);
+                if(!isNaN(val)) {
+                    const percent = (val - min) / (max - min);
+                    const angle = -135 + (percent * 270);
+                    const dial = k.querySelector('.knob-dial');
+                    if(dial) {
+                        dial.style.transform = `rotate(${angle}deg)`;
+                        dial.dataset.val = val; // Sync state for KnobControl
+                    }
+                }
+                
+                if(valDisplay) {
+                    if(param === 'cutoff') valDisplay.innerText = Math.round(val) + ' Hz';
+                    else if(['attack','release','portamento'].includes(param)) valDisplay.innerText = val.toFixed(2) + ' s';
+                    else valDisplay.innerText = typeof val === 'number' ? val.toFixed(2) : val;
+                }
+            });
+
+            s.oscillator.type = p.oscType;
+            s.envelope.attack = p.attack;
+            s.envelope.release = p.release;
+            s.portamento = p.glide;
+            
+            fx.filter.frequency.value = p.cutoff; 
+            fx.filter.Q.value = p.res;
+            fx.delay.wet.value = p.delay;
+            fx.reverb.wet.value = p.reverb;
+            fx.widener.wet.value = p.width;
+            fx.distortion.distortion = p.drive;
+            fx.vibrato.frequency.value = p.vibRate;
+            fx.vibrato.amplitude.value = p.vibDepth;
+
+            document.querySelectorAll('.preset-btn').forEach((b, i) => {
+                b.classList.toggle('active', i === idx);
+            });
+        }
+
+        // --- UI UTILS ---
+        // formatValue and updateKnobVisuals are replaced by KnobControl logic
+
+        function initUI() {
+            // 1. Presets
+            const pContainer = document.getElementById('preset-container');
+            pContainer.innerHTML = '';
+            PRESETS.forEach((p, i) => {
+                const btn = document.createElement('div');
+                btn.className = 'preset-btn';
+                if(i===0) btn.classList.add('active');
+                btn.innerText = p.name;
+                btn.onclick = () => loadPreset(i);
+                pContainer.appendChild(btn);
+            });
+
+            // 2. Knobs (Using Shared Module)
+            // Since KnobControl expects an ID or specific selector, and our HTML uses class+data-param,
+            // we need to instantiate it carefully.
+            
+            // We'll add IDs to the dials to make them unique for the KnobControl callback
+            // AND copy data attributes (min, max, step) from container to dial because KnobControl reads from the drag target
+            document.querySelectorAll('.knob-container').forEach((k, idx) => {
+                const dial = k.querySelector('.knob-dial');
+                if(dial) {
+                    dial.id = `knob-dial-${idx}`;
+                    if(k.dataset.min) dial.dataset.min = k.dataset.min;
+                    if(k.dataset.max) dial.dataset.max = k.dataset.max;
+                    if(k.dataset.step) dial.dataset.step = k.dataset.step;
+                    if(k.dataset.log) dial.dataset.log = k.dataset.log;
+                }
+            });
+
+            new KnobControl('.knob-dial', {
+                onChange: (id, val) => {
+                    const dial = document.getElementById(id);
+                    const container = dial.closest('.knob-container');
+                    const param = container.dataset.param;
+                    const valDisplay = container.querySelector('.knob-val');
+                    
+                    setParam(param, val);
+                    
+                    if(valDisplay) {
+                        if(param === 'cutoff') valDisplay.innerText = Math.round(val) + ' Hz';
+                        else if(['attack','release','portamento'].includes(param)) valDisplay.innerText = val.toFixed(2) + ' s';
+                        else valDisplay.innerText = val.toFixed(2);
+                    }
+                }
+            });
+
+            // 3. Select (Waveform)
+            const waveKnob = document.querySelector('.knob-container[data-param="oscType"]');
+            if(waveKnob) {
+                waveKnob.onclick = () => {
+                    const types = ['sawtooth', 'square', 'triangle', 'sine', 'pulse', 'fatsawtooth'];
+                    let current = runtimeState.synth.oscillator.type;
+                    let idx = types.indexOf(current);
+                    let next = types[(idx + 1) % types.length];
+                    runtimeState.synth.oscillator.type = next;
+                    waveKnob.querySelector('.knob-label').innerText = next.toUpperCase();
+                };
+            }
+
+            // 4. Keyboard
+            runtimeState.keyboard = new SynthKeyboard('keyboard', {
+                startNote: 48, // C3
+                responsive: true,
+                onNoteOn: (midi) => playNote(midi, 1),
+                onNoteOff: (midi) => stopNote(midi)
+            });
+            
+            // Init State
+            loadPreset(0);
+        }
+
+        function playNote(midi, velocity=1) {
+            if(!runtimeState.synth) return;
+            const freq = runtimeState.Tone.Frequency(midi, "midi");
+            runtimeState.synth.triggerAttack(freq, runtimeState.Tone.now(), velocity);
+            if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, true);
+        }
+
+        function stopNote(midi) {
+            if(!runtimeState.synth) return;
+            // Monophonic synth usually releases all, but let's be safe
+            runtimeState.synth.triggerRelease(runtimeState.Tone.now());
+            if(runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, false);
+        }
+
+        function getCurrentParamValue(param) {
+            const s = runtimeState.synth;
+            const fx = runtimeState.fx;
+            switch(param) {
+                case 'portamento': return s.portamento;
+                case 'attack': return s.envelope.attack;
+                case 'release': return s.envelope.release;
+                case 'cutoff': return fx.filter.frequency.value;
+                case 'resonance': return fx.filter.Q.value;
+                case 'vibDepth': return fx.vibrato.amplitude.value;
+                case 'vibRate': return fx.vibrato.frequency.value;
+                case 'delayAmt': return fx.delay.wet.value;
+                case 'reverbAmt': return fx.reverb.wet.value;
+                case 'width': return fx.widener.wet.value;
+                case 'drive': return fx.distortion.distortion;
+            }
+            return 0;
+        }
+
+        function setParam(param, val) {
+            const s = runtimeState.synth;
+            const fx = runtimeState.fx;
+            if(!s) return;
+            
+            switch(param) {
+                case 'portamento': s.portamento = val; break;
+                case 'attack': s.envelope.attack = val; break;
+                case 'release': s.envelope.release = val; break;
+                case 'cutoff': fx.filter.frequency.rampTo(val, 0.1); break;
+                case 'resonance': fx.filter.Q.value = val; break;
+                case 'vibDepth': fx.vibrato.amplitude.rampTo(val, 0.1); break;
+                case 'vibRate': fx.vibrato.frequency.rampTo(val, 0.1); break;
+                case 'delayAmt': fx.delay.wet.value = val; break;
+                case 'reverbAmt': fx.reverb.wet.value = val; break;
+                case 'width': fx.widener.wet.value = val; break;
+                case 'drive': fx.distortion.distortion = val; break;
+            }
+        }
+
+        // MIDI logic handled by MidiManager in Loader callback
+
+
+    </script>
+</body>
+</html>

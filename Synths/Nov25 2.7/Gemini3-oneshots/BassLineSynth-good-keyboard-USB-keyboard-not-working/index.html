@@ -1,0 +1,1071 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORD-303 BASSLINE MATRIX</title>
+    <style>
+        :root {
+            --bg-dark: #1a1a1a;
+            --bg-panel: #2b2b2b;
+            --text-main: #e0e0e0;
+            --accent: #ffcc00; /* Acid Yellow */
+            --accent-dim: #997a00;
+            --led-off: #440000;
+            --led-on: #ff0000;
+            --knob-size: 50px;
+            --border: 1px solid #444;
+        }
+
+        body {
+            background-color: #121212;
+            color: var(--text-main);
+            font-family: 'Courier New', Courier, monospace;
+            margin: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none;
+        }
+
+        /* LOADING SCREEN */
+        #loader {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: #000;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 9999;
+        }
+        .spinner {
+            width: 40px; height: 40px;
+            border: 4px solid #333;
+            border-top: 4px solid var(--accent);
+            border-radius: 50%;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+
+        /* MAIN APP UI */
+        #app {
+            display: none; /* Hidden until loaded */
+            width: 900px;
+            background: var(--bg-dark);
+            border: 2px solid #555;
+            box-shadow: 0 0 20px rgba(0,0,0,0.8);
+            padding: 10px;
+            border-radius: 4px;
+        }
+
+        /* HEADER */
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px;
+            background: #000;
+            border-bottom: 2px solid var(--accent);
+            margin-bottom: 15px;
+        }
+        h1 { margin: 0; font-size: 24px; color: var(--accent); letter-spacing: 2px; }
+        
+        /* CONTROLS GRID */
+        .panel-row {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 15px;
+        }
+        
+        .module {
+            background: var(--bg-panel);
+            border: var(--border);
+            padding: 10px;
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .module-title {
+            font-size: 12px;
+            font-weight: bold;
+            color: #888;
+            margin-bottom: 10px;
+            width: 100%;
+            text-align: center;
+            border-bottom: 1px solid #444;
+            padding-bottom: 5px;
+        }
+
+        /* KNOBS & SLIDERS */
+        .controls-flex {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 50px;
+        }
+        .control-label { font-size: 10px; margin-top: 5px; text-align: center; }
+        
+        /* Custom Range Inputs as Vertical Sliders/Knobs */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 10px;
+            height: 100px;
+            background: #000;
+            outline: none;
+            border-radius: 5px;
+            writing-mode: bt-lr; /* IE/Edge */
+            -webkit-appearance: slider-vertical; /* Webkit */
+        }
+        /* Toggle Switch */
+        .switch {
+            position: relative;
+            display: inline-block;
+            width: 40px;
+            height: 20px;
+            margin: 10px 0;
+        }
+        .switch input { opacity: 0; width: 0; height: 0; }
+        .slider {
+            position: absolute; cursor: pointer;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background-color: #ccc;
+            transition: .4s;
+        }
+        .slider:before {
+            position: absolute; content: "";
+            height: 14px; width: 14px;
+            left: 3px; bottom: 3px;
+            background-color: white;
+            transition: .4s;
+        }
+        input:checked + .slider { background-color: var(--accent); }
+        input:focus + .slider { box-shadow: 0 0 1px var(--accent); }
+        input:checked + .slider:before { transform: translateX(20px); }
+
+        /* PRESET & DISPLAY */
+        .display-screen {
+            background: #220;
+            color: var(--accent);
+            padding: 10px;
+            font-family: 'Courier New', monospace;
+            border: 2px inset #444;
+            width: 150px;
+            text-align: center;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
+        .btn {
+            background: #444; color: white; border: 1px solid #666;
+            padding: 5px 10px; cursor: pointer; font-size: 10px;
+        }
+        .btn:hover { background: #666; }
+        .btn.active { background: var(--accent); color: black; }
+
+        /* SEQUENCER */
+        .sequencer-container {
+            background: #222;
+            padding: 10px;
+            border: var(--border);
+            overflow-x: auto;
+        }
+        .seq-grid {
+            display: grid;
+            grid-template-columns: 80px repeat(16, 1fr);
+            gap: 2px;
+        }
+        .seq-row-label {
+            font-size: 10px;
+            display: flex;
+            align-items: center;
+            color: #888;
+        }
+        .step-col {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 2px;
+            min-width: 25px;
+        }
+        .seq-btn {
+            width: 20px; height: 20px;
+            background: #333;
+            border: 1px solid #555;
+            cursor: pointer;
+        }
+        .seq-btn.active { background: var(--accent); box-shadow: 0 0 5px var(--accent); }
+        .seq-btn.current { border-color: #fff; }
+        
+        .seq-note-select {
+            width: 24px; font-size: 9px; background: #111; color: #fff; border: none;
+            -webkit-appearance: none; text-align: center;
+        }
+
+        /* KEYBOARD */
+        /* Handled by shared/keyboard.js */
+
+        /* VISUALIZER */
+        canvas {
+            width: 100%; height: 60px; background: #000; border: 1px solid #333;
+        }
+
+        /* MIDI STATUS */
+        .midi-status {
+            font-size: 10px; color: #555; margin-top: 5px; display: flex; justify-content: space-between;
+        }
+        .midi-indicator { width: 8px; height: 8px; border-radius: 50%; background: #333; display: inline-block; }
+        .midi-indicator.active { background: var(--accent); }
+
+        /* OVERLAY for Audio Start */
+        #start-overlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0,0,0,0.8);
+            display: none;
+            justify-content: center; align-items: center; z-index: 5000;
+        }
+        .big-btn {
+            font-size: 24px; padding: 20px 40px; background: var(--accent); border: none; cursor: pointer; font-weight: bold;
+            box-shadow: 0 0 20px var(--accent);
+        }
+                        /* MIDI LEARN OVERLAY */
+                    .cc-overlay {
+                        position: absolute; top: -10px; right: -10px;
+                        background: #f00; color: white; font-size: 10px;
+                        padding: 2px 4px; border-radius: 4px;
+                        z-index: 10; pointer-events: auto; /* Allow clicks */
+                        display: flex; gap: 4px; /* For multiple CCs */
+                    }
+                    .cc-overlay span {
+                        cursor: pointer;
+                        padding: 0 2px;
+                        border-radius: 2px;
+                        background: rgba(0,0,0,0.3);
+                    }
+                    .cc-overlay span:hover { background: rgba(0,0,0,0.6); }
+                    .cc-overlay span.disabled-cc {
+                        text-decoration: line-through;
+                        color: #888;
+                        cursor: not-allowed;
+                        background: rgba(0,0,0,0.1);
+                    }
+            
+                    .mapping-mode .module { border-color: #00f; }
+                    .mapping-mode .control-group { cursor: crosshair; position: relative; }
+                    .mapping-mode .control-group:hover { background: #222; }
+                    .mapping-mode .control-group.learning { background: #440044; border: 1px dashed #f0f; }
+                </style>
+            </head>
+            <body>
+                <!-- LOADER -->
+    <div id="loader">
+        <div class="spinner"></div>
+        <div id="loader-status" style="color: #fff; font-family: monospace;">Initialize...</div>
+    </div>
+
+    <!-- CLICK TO START AUDIO -->
+    <div id="start-overlay">
+        <button class="big-btn" id="btn-start-audio">ACTIVATE SYSTEM</button>
+    </div>
+
+    <!-- MAIN INTERFACE -->
+    <div id="app">
+        <!-- Header -->
+        <div class="header">
+            <h1>ORD-303 BASSLINE</h1>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <div class="midi-indicator" id="midi-dot"></div>
+                <select id="midi-select" class="btn"><option>No MIDI</option></select>
+                <button class="btn" id="btn-midi-map">MIDI MAP</button>
+                <div class="display-screen" id="preset-display">INIT</div>
+            </div>
+        </div>
+
+        <!-- Synth Controls -->
+        <div class="panel-row">
+            <!-- OSCILLATOR -->
+            <div class="module">
+                <div class="module-title">OSCILLATOR</div>
+                <div class="controls-flex">
+                    <div class="control-group" id="cg-osc-type">
+                        <label class="switch">
+                            <input type="checkbox" id="osc-type">
+                            <span class="slider"></span>
+                        </label>
+                        <div class="control-label">SAW/SQR</div>
+                        <div class="cc-overlay"></div>
+                    </div>
+                    <div class="control-group" id="cg-osc-tune">
+                        <input type="range" id="osc-tune" min="-1200" max="1200" value="0">
+                        <div class="control-label">TUNE</div>
+                        <div class="cc-overlay"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- FILTER -->
+            <div class="module">
+                <div class="module-title">FILTER</div>
+                <div class="controls-flex">
+                    <div class="control-group" id="cg-flt-cut">
+                        <input type="range" id="flt-cut" min="100" max="10000" step="10" value="1000">
+                        <div class="control-label">CUTOFF</div>
+                        <div class="cc-overlay"></div>
+                    </div>
+                    <div class="control-group" id="cg-flt-res">
+                        <input type="range" id="flt-res" min="0" max="20" step="0.1" value="1">
+                        <div class="control-label">RES</div>
+                        <div class="cc-overlay"></div>
+                    </div>
+                    <div class="control-group" id="cg-flt-env">
+                        <input type="range" id="flt-env" min="0" max="5000" step="10" value="2000">
+                        <div class="control-label">ENV MOD</div>
+                        <div class="cc-overlay"></div>
+                    </div>
+                    <div class="control-group" id="cg-flt-dec">
+                        <input type="range" id="flt-dec" min="0.1" max="2" step="0.05" value="0.3">
+                        <div class="control-label">DECAY</div>
+                        <div class="cc-overlay"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ENVELOPE / FX -->
+            <div class="module">
+                <div class="module-title">AMP & FX</div>
+                <div class="controls-flex">
+                    <div class="control-group" id="cg-amp-dec">
+                        <input type="range" id="amp-dec" min="0.1" max="2" step="0.05" value="0.5">
+                        <div class="control-label">DECAY</div>
+                        <div class="cc-overlay"></div>
+                    </div>
+                    <div class="control-group" id="cg-fx-dist">
+                        <input type="range" id="fx-dist" min="0" max="1" step="0.01" value="0">
+                        <div class="control-label">DRIVE</div>
+                        <div class="cc-overlay"></div>
+                    </div>
+                    <div class="control-group" id="cg-main-vol">
+                        <input type="range" id="main-vol" min="-30" max="0" value="-10">
+                        <div class="control-label">VOL</div>
+                        <div class="cc-overlay"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- TRANSPORT & PRESETS -->
+        <div class="panel-row" style="background: #222; padding: 5px; justify-content: space-between;">
+            <div style="display:flex; gap: 10px;">
+                <button class="btn" id="btn-play">PLAY</button>
+                <button class="btn" id="btn-stop">STOP</button>
+                <div class="control-group" style="width: auto; flex-direction: row; gap: 5px;">
+                    <span style="font-size:10px;">BPM</span>
+                    <input type="number" id="bpm-val" value="120" style="width: 40px; background:#000; color:var(--accent); border:1px solid #444;">
+                </div>
+                <button class="btn" id="btn-clear">CLEAR SEQ</button>
+                <button class="btn" id="btn-rec" style="color: #f00;">STEP REC</button>
+            </div>
+            <div>
+                <button class="btn" id="btn-prev-pre">&lt;</button>
+                <button class="btn" id="btn-next-pre">&gt;</button>
+            </div>
+        </div>
+
+        <!-- SEQUENCER -->
+        <div class="sequencer-container">
+            <div class="seq-grid" id="sequencer-grid">
+                <!-- JS Populated -->
+            </div>
+        </div>
+
+        <!-- KEYBOARD & VISUALS -->
+        <div class="panel-row" style="margin-top:10px;">
+            <div style="flex: 2;">
+                <div id="keyboard-container" class="keyboard"></div>
+            </div>
+            <div style="flex: 1; display: flex; flex-direction: column;">
+                <canvas id="scope"></canvas>
+            </div>
+        </div>
+        
+        <div class="midi-status">
+            <span>WEB MIDI API</span>
+            <span id="tone-version">Tone.js: Loading...</span>
+        </div>
+    </div>
+
+        <!-- APPLICATION SCRIPT -->
+        <script type="module">
+            import { SynthKeyboard } from '../../shared/keyboard.js';
+
+            // 1. STATE & GLOBALS
+            const runtimeState = {
+                Tone: null,
+                synth: null,
+                dist: null,
+                vol: null,
+                analyser: null,
+                midiAccess: null,
+                seqLoop: null,
+                isPlaying: false,
+                isRecording: false, // New: Step Record Mode
+                recordStepIdx: 0,   // New: Current Rec Step
+                focusedStepIdx: null, // New: Specific Step Edit
+                currentStep: 0,
+                presets: [],
+                currentPresetIdx: 0,
+                gridData: Array(16).fill(0).map(() => ({ note: 'C2', active: false, accent: false, slide: false })),
+                activeNotes: new Set(),
+                // MIDI Mapping
+                isMidiMapping: false,
+                mappingTarget: null, // ID of element being mapped
+                midiMap: {
+                    1: 'flt-cut',
+                    74: 'flt-cut',
+                    71: 'flt-res',
+                    5: 'flt-res',
+                    73: 'flt-env',
+                    75: 'flt-dec',
+                    76: 'amp-dec',
+                    77: 'fx-dist',
+                    70: 'osc-tune',
+                    7: 'main-vol'
+                },
+                disabledCCs: new Set() // New: Track disabled CCs
+            };
+
+
+        const NOTE_NAMES = ['C', 'C#', 'D', 'D#', 'E', 'F', 'F#', 'G', 'G#', 'A', 'A#', 'B'];
+
+        // Helper: MIDI to Note Name
+        function midiToNoteName(midi) {
+            const note = NOTE_NAMES[midi % 12];
+            const octave = Math.floor(midi / 12) - 1;
+            return `${note}${octave}`;
+        }
+
+        // 2. BOOTLOADER (REQUIRED BLOCKCHAIN LOADER)
+        function loadToneJSAndBoot({ 
+            toneUrl = 'https://ordinals.com/content/04813d7748d918bd8a3069cb1823ebc9586f0ce16cd6a97a784581ec38d13062i0',
+            setLoaderStatus,
+            runtimeState,
+            boot
+        }) {
+            setLoaderStatus('Loading Audio Engine...');
+            import(toneUrl)
+                .then(() => {
+                    runtimeState.Tone = window.Tone;
+                    console.log('[BOP Matrix] Tone.js loaded:', runtimeState.Tone?.version ?? 'Unknown');
+                    boot();
+                })
+                .catch(err => {
+                    setLoaderStatus('Failed to load Tone.js. App cannot start.', true);
+                    console.error('[BOP Matrix] Critical Tone.js load error:', err);
+                });
+        }
+
+        // 3. MAIN INIT
+        window.onload = () => {
+            const statusEl = document.getElementById('loader-status');
+            loadToneJSAndBoot({
+                setLoaderStatus: (msg, isErr) => {
+                    statusEl.innerText = msg;
+                    if(isErr) statusEl.style.color = 'red';
+                },
+                runtimeState,
+                boot: initApp
+            });
+        };
+
+        function initApp() {
+            document.getElementById('loader').style.display = 'none';
+            document.getElementById('start-overlay').style.display = 'flex';
+            document.getElementById('tone-version').innerText = `Tone.js v${runtimeState.Tone.version}`;
+            
+            setupPresets();
+            setupUI(); // Render Sequencer & Keys but don't bind audio yet
+        }
+
+        // 4. AUDIO ENGINE SETUP
+        async function startAudioEngine() {
+            const Tone = runtimeState.Tone;
+            await Tone.start();
+            Tone.context.lookAhead = 0.05;
+
+            // --- SYNTH CHAIN ---
+            // Monosynth is perfect for 303. We use the filter envelope heavily.
+            runtimeState.synth = new Tone.MonoSynth({
+                oscillator: { type: "sawtooth" },
+                envelope: { attack: 0.005, decay: 0.1, sustain: 0.1, release: 0.1 },
+                filter: { Q: 1, type: "lowpass", rollover: -24 },
+                filterEnvelope: { attack: 0.005, decay: 0.2, sustain: 0, baseFrequency: 200, octaves: 4 }
+            });
+
+            runtimeState.dist = new Tone.Distortion(0.0).toDestination();
+            runtimeState.vol = new Tone.Volume(-10).toDestination();
+            runtimeState.compressor = new Tone.Compressor(-20, 3);
+            runtimeState.analyser = new Tone.Waveform(256);
+
+            // Connect Chain: Synth -> Dist -> Compressor -> Volume -> Analyser -> Out
+            runtimeState.synth.chain(runtimeState.dist, runtimeState.compressor, runtimeState.vol, runtimeState.analyser, Tone.Destination);
+
+            // --- TRANSPORT & SEQUENCER ---
+            Tone.Transport.bpm.value = 120;
+            
+            // Scheduling loop
+            runtimeState.seqLoop = new Tone.Loop((time) => {
+                const stepIdx = runtimeState.currentStep % 16;
+                const stepData = runtimeState.gridData[stepIdx];
+
+                // GUI Update
+                Tone.Draw.schedule(() => {
+                    updateSequencerHighlight(stepIdx);
+                }, time);
+
+                if (stepData.active) {
+                    const note = stepData.note;
+                    const isAccent = stepData.accent;
+                    const isSlide = stepData.slide;
+
+                    // Accent Logic: Velocity and Filter opening
+                    const vel = isAccent ? 0.9 : 0.5;
+                    
+                    // Apply Accent Mod to Filter temporarily
+                    const currentEnvAmt = parseFloat(document.getElementById('flt-env').value);
+                    runtimeState.synth.filterEnvelope.octaves = isAccent ? 5 : (currentEnvAmt / 1000); 
+
+                    if (isSlide) {
+                        // Slide: Trigger without re-triggering envelope if overlapping, or portamento
+                        runtimeState.synth.portamento = 0.2;
+                        runtimeState.synth.triggerAttack(note, time, vel);
+                    } else {
+                        runtimeState.synth.portamento = 0;
+                        runtimeState.synth.triggerAttackRelease(note, "16n", time, vel);
+                    }
+                } else {
+                    // Note off if not sliding
+                    runtimeState.synth.triggerRelease(time);
+                }
+
+                runtimeState.currentStep++;
+            }, "16n").start(0);
+
+            // Start Visualizer
+            drawVisualizer();
+
+            // Load default preset
+            loadPreset(0);
+
+            // Hide overlay, show app
+            document.getElementById('start-overlay').style.display = 'none';
+            document.getElementById('app').style.display = 'block';
+
+            setupMIDI();
+        }
+
+        // 5. PRESETS
+        function setupPresets() {
+            // Helper to build presets easily
+            const createPreset = (name, type, tune, cut, res, env, fDec, aDec, dist) => 
+                ({ name, params: { type, tune, cut, res, env, fDec, aDec, dist } });
+
+            runtimeState.presets = [
+                createPreset("INIT BASS", false, 0, 1000, 1, 2000, 0.3, 0.5, 0),
+                createPreset("ACID SAW", false, 0, 400, 12, 3000, 0.2, 0.2, 0.4),
+                createPreset("SQUARE SUB", true, -1200, 600, 2, 1000, 0.5, 0.8, 0.1),
+                createPreset("PUNCHY", false, 0, 800, 4, 4000, 0.1, 0.3, 0.2),
+                createPreset("DEEP ROLLER", true, -1200, 300, 0, 500, 1.0, 1.5, 0.8),
+                createPreset("DIRTY DRIVE", false, 0, 1500, 8, 2500, 0.3, 0.4, 0.9),
+                createPreset("MINIMAL", true, 0, 400, 1, 800, 0.1, 0.1, 0.0),
+                createPreset("ELECTRO ZAP", false, 1200, 200, 15, 5000, 0.2, 0.2, 0.3)
+            ];
+        }
+
+        function loadPreset(idx) {
+            const p = runtimeState.presets[idx];
+            if(!p) return;
+            runtimeState.currentPresetIdx = idx;
+            document.getElementById('preset-display').innerText = p.name;
+            
+            // Set UI Values
+            document.getElementById('osc-type').checked = p.params.type;
+            document.getElementById('osc-tune').value = p.params.tune;
+            document.getElementById('flt-cut').value = p.params.cut;
+            document.getElementById('flt-res').value = p.params.res;
+            document.getElementById('flt-env').value = p.params.env;
+            document.getElementById('flt-dec').value = p.params.fDec;
+            document.getElementById('amp-dec').value = p.params.aDec;
+            document.getElementById('fx-dist').value = p.params.dist;
+
+            // Trigger updates to audio engine
+            updateAudioParams();
+        }
+
+        // 6. UI CONSTRUCTION & EVENTS
+        function setupUI() {
+            // Start Button
+            document.getElementById('btn-start-audio').addEventListener('click', startAudioEngine);
+
+            // Sequencer Grid Generation
+            const grid = document.getElementById('sequencer-grid');
+            
+            // Labels
+            ['NOTE', 'GATE', 'ACC', 'SLIDE'].forEach(lbl => {
+                const d = document.createElement('div');
+                d.className = 'seq-row-label';
+                d.innerText = lbl;
+                grid.appendChild(d);
+                
+                // Rows
+                for(let i=0; i<16; i++) {
+                    const cell = document.createElement('div');
+                    cell.className = 'step-col';
+                    cell.dataset.step = i;
+
+                    if(lbl === 'NOTE') {
+                        const sel = document.createElement('input');
+                        sel.type = "text";
+                        sel.className = 'seq-note-select';
+                        sel.value = "C2";
+                        sel.onchange = (e) => {
+                             // Validate note
+                             runtimeState.gridData[i].note = e.target.value.toUpperCase();
+                        };
+                        sel.onfocus = () => { runtimeState.focusedStepIdx = i; };
+                        sel.onblur = () => { runtimeState.focusedStepIdx = null; };
+                        cell.appendChild(sel);
+                    } else {
+                        const btn = document.createElement('div');
+                        btn.className = 'seq-btn';
+                        const prop = lbl === 'GATE' ? 'active' : (lbl === 'ACC' ? 'accent' : 'slide');
+                        btn.onclick = () => {
+                            runtimeState.gridData[i][prop] = !runtimeState.gridData[i][prop];
+                            btn.classList.toggle('active', runtimeState.gridData[i][prop]);
+                        };
+                        cell.appendChild(btn);
+                        // Store ref for highlight
+                        if(lbl === 'GATE') cell.id = `seq-led-${i}`;
+                    }
+                    grid.appendChild(cell);
+                }
+            });
+
+            // Keyboard Generation
+            runtimeState.keyboard = new SynthKeyboard('keyboard-container', {
+                startNote: 48,
+                responsive: true,
+                onNoteOn: (midi) => playNote(midi),
+                onNoteOff: (midi) => stopNote(midi)
+            });
+
+            // Transport Controls
+            document.getElementById('btn-play').onclick = () => {
+                if(!runtimeState.Tone) return;
+                runtimeState.Tone.Transport.start();
+                runtimeState.isPlaying = true;
+                document.getElementById('btn-play').classList.add('active');
+            };
+            document.getElementById('btn-stop').onclick = () => {
+                if(!runtimeState.Tone) return;
+                runtimeState.Tone.Transport.stop();
+                runtimeState.currentStep = 0;
+                runtimeState.isPlaying = false;
+                document.getElementById('btn-play').classList.remove('active');
+                // Reset UI LEDs
+                document.querySelectorAll('.seq-btn.current').forEach(e => e.classList.remove('current'));
+            };
+            document.getElementById('btn-clear').onclick = () => {
+                runtimeState.gridData.forEach(s => { s.active=false; s.accent=false; s.slide=false; });
+                document.querySelectorAll('.seq-btn').forEach(b => b.classList.remove('active'));
+            };
+
+            // Step Record Toggle
+            const recBtn = document.getElementById('btn-rec');
+            recBtn.onclick = () => {
+                runtimeState.isRecording = !runtimeState.isRecording;
+                recBtn.classList.toggle('active', runtimeState.isRecording);
+                recBtn.style.background = runtimeState.isRecording ? '#500' : '#444';
+                
+                if (runtimeState.isRecording) {
+                    // Stop playback if recording
+                    if (runtimeState.isPlaying) document.getElementById('btn-stop').click();
+                    runtimeState.recordStepIdx = 0;
+                    updateRecCursor();
+                } else {
+                    updateRecCursor(); // Clears it
+                }
+            };
+
+            // MIDI Map Button Logic
+            const mapBtn = document.getElementById('btn-midi-map');
+            mapBtn.onclick = () => {
+                runtimeState.isMidiMapping = !runtimeState.isMidiMapping;
+                mapBtn.classList.toggle('active', runtimeState.isMidiMapping);
+                document.body.classList.toggle('mapping-mode', runtimeState.isMidiMapping);
+                
+                if(runtimeState.isMidiMapping) {
+                    updateMidiOverlays();
+                    // Show overlays
+                    document.querySelectorAll('.cc-overlay').forEach(el => el.style.display = 'block');
+                } else {
+                    runtimeState.mappingTarget = null;
+                    document.querySelectorAll('.control-group').forEach(el => el.classList.remove('learning'));
+                    document.querySelectorAll('.cc-overlay').forEach(el => el.style.display = 'none');
+                }
+            };
+
+            // Add click listeners to control groups for mapping
+            document.querySelectorAll('.control-group').forEach(group => {
+                group.addEventListener('click', (e) => {
+                    if(!runtimeState.isMidiMapping) return;
+                    
+                    // Clear old selection
+                    document.querySelectorAll('.control-group').forEach(el => el.classList.remove('learning'));
+                    
+                    // Set new
+                    group.classList.add('learning');
+                    // Find the input inside
+                    const input = group.querySelector('input');
+                    if(input) {
+                        runtimeState.mappingTarget = input.id;
+                        console.log("Ready to map:", input.id);
+                    }
+                });
+            });
+
+            // Param Listeners
+            const inputs = ['osc-type', 'osc-tune', 'flt-cut', 'flt-res', 'flt-env', 'flt-dec', 'amp-dec', 'fx-dist', 'main-vol'];
+            inputs.forEach(id => {
+                document.getElementById(id).addEventListener('input', updateAudioParams);
+            });
+            // ... (rest of setupUI)
+        }
+
+        function updateRecCursor() {
+            // Clear previous cursor
+            document.querySelectorAll('.step-col').forEach(c => c.style.borderTop = "none");
+            
+            if (runtimeState.isRecording) {
+                const step = runtimeState.recordStepIdx;
+                const col = document.querySelector(`.step-col[data-step="${step}"]`);
+                if(col) col.style.borderTop = "3px solid red";
+            }
+        }
+
+        function updateStepUI(stepIdx) {
+            const data = runtimeState.gridData[stepIdx];
+            
+            // 1. Update Note Input (First row)
+            // We can rely on the fact that the first .step-col for this step is the NOTE cell
+            const noteCell = document.querySelector(`.step-col[data-step="${stepIdx}"]`);
+            if(noteCell) {
+                const input = noteCell.querySelector('.seq-note-select');
+                if(input) input.value = data.note;
+            }
+            
+            // 2. Update Gate LED (Second row, specific ID)
+            const gateCell = document.getElementById(`seq-led-${stepIdx}`);
+            if(gateCell) {
+                const gateBtn = gateCell.querySelector('.seq-btn');
+                if(gateBtn) {
+                    gateBtn.classList.toggle('active', data.active);
+                }
+            }
+        }
+
+        function toggleCCEnabled(ccNumber) {
+            if (runtimeState.disabledCCs.has(ccNumber)) {
+                runtimeState.disabledCCs.delete(ccNumber);
+            } else {
+                runtimeState.disabledCCs.add(ccNumber);
+            }
+            updateMidiOverlays(); // Refresh visuals
+        }
+
+        function updateMidiOverlays() {
+            // Reset all overlays
+            document.querySelectorAll('.cc-overlay').forEach(el => el.innerHTML = '');
+            
+            // Group CCs by their targetId
+            const targetIdToCCs = {};
+            for (const ccNumStr in runtimeState.midiMap) {
+                const ccNum = parseInt(ccNumStr);
+                const targetId = runtimeState.midiMap[ccNum];
+                if (!targetIdToCCs[targetId]) {
+                    targetIdToCCs[targetId] = new Set();
+                }
+                targetIdToCCs[targetId].add(ccNum);
+            }
+
+            for (const targetId in targetIdToCCs) {
+                const group = document.getElementById('cg-' + targetId);
+                if(group) {
+                    const overlay = group.querySelector('.cc-overlay');
+                    if(overlay) {
+                        Array.from(targetIdToCCs[targetId]).sort((a,b) => a - b).forEach(cc => {
+                            const span = document.createElement('span');
+                            span.innerText = `CC ${cc}`;
+                            span.dataset.cc = cc;
+                            span.onclick = (e) => {
+                                e.stopPropagation(); // Prevent control-group click for mapping
+                                toggleCCEnabled(cc);
+                            };
+                            if (runtimeState.disabledCCs.has(cc)) {
+                                span.classList.add('disabled-cc');
+                            }
+                            overlay.appendChild(span);
+                        });
+                    }
+                }
+            }
+        }
+
+        function updateAudioParams() {
+            if(!runtimeState.synth) return;
+            const s = runtimeState.synth;
+            
+            // Oscillator
+            const isSquare = document.getElementById('osc-type').checked;
+            s.oscillator.type = isSquare ? "square" : "sawtooth";
+            s.detune.value = parseFloat(document.getElementById('osc-tune').value);
+
+            // Filter
+            const cut = parseFloat(document.getElementById('flt-cut').value);
+            const res = parseFloat(document.getElementById('flt-res').value);
+            const envAmt = parseFloat(document.getElementById('flt-env').value);
+            const fDec = parseFloat(document.getElementById('flt-dec').value);
+
+            s.filter.Q.value = res;
+            // Base frequency is cutoff
+            s.filterEnvelope.baseFrequency = cut;
+            // Octaves determined by Env Amount (scaled)
+            s.filterEnvelope.octaves = envAmt / 1000;
+            s.filterEnvelope.decay = fDec;
+
+            // Amp
+            const aDec = parseFloat(document.getElementById('amp-dec').value);
+            s.envelope.decay = aDec;
+
+            // FX
+            const dist = parseFloat(document.getElementById('fx-dist').value);
+            runtimeState.dist.distortion = dist;
+
+            const vol = parseFloat(document.getElementById('main-vol').value);
+            runtimeState.vol.volume.value = vol;
+        }
+
+        function updateSequencerHighlight(step) {
+            // Remove old
+            const old = document.querySelectorAll('.seq-btn.current');
+            old.forEach(el => el.classList.remove('current'));
+            
+            // Add new
+            // Note: We need to find the specific column elements. 
+            // Simplified: Just highlight the Gate buttons border
+            const cols = document.querySelectorAll('.step-col');
+            cols.forEach(c => {
+                if(parseInt(c.dataset.step) === step) {
+                    const children = c.querySelectorAll('.seq-btn');
+                    children.forEach(b => b.classList.add('current'));
+                }
+            });
+        }
+
+        // 7. MANUAL PLAY / KEYBOARD LOGIC
+        function playNote(midi, velocity = 1) {
+            if(!runtimeState.synth) return;
+            const freq = runtimeState.Tone.Frequency(midi, "midi");
+            runtimeState.synth.triggerAttack(freq, runtimeState.Tone.now(), velocity);
+            
+            // Visual feedback
+            if (runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, true);
+        }
+
+        function stopNote(midi) {
+            if(!runtimeState.synth) return;
+            runtimeState.synth.triggerRelease(runtimeState.Tone.now());
+            
+            if (runtimeState.keyboard) runtimeState.keyboard.triggerVisual(midi, false);
+        }
+
+        // 8. MIDI IMPLEMENTATION
+        function setupMIDI() {
+            if (navigator.requestMIDIAccess) {
+                navigator.requestMIDIAccess().then(onMIDISuccess, onMIDIFailure);
+            }
+        }
+
+        function onMIDISuccess(midiAccess) {
+            runtimeState.midiAccess = midiAccess;
+            const inputs = midiAccess.inputs.values();
+            const select = document.getElementById('midi-select');
+            select.innerHTML = '<option>Select MIDI Input</option>';
+            
+            let firstInput = null;
+
+            for (let input of inputs) {
+                if (!firstInput) firstInput = input;
+                const opt = document.createElement('option');
+                opt.value = input.id;
+                opt.text = input.name;
+                select.appendChild(opt);
+            }
+
+            select.onchange = (e) => {
+                // Clear all listeners
+                midiAccess.inputs.forEach(i => i.onmidimessage = null);
+                // Bind selected
+                const input = Array.from(midiAccess.inputs.values()).find(i => i.id === e.target.value);
+                if(input) input.onmidimessage = getMIDIMessage;
+            };
+
+            // Auto-select first input if available
+            if (firstInput) {
+                select.value = firstInput.id;
+                firstInput.onmidimessage = getMIDIMessage;
+                console.log(`[MIDI] Auto-connected to ${firstInput.name}`);
+            }
+        }
+
+        function onMIDIFailure() {
+            console.warn("Could not access your MIDI devices.");
+        }
+
+        function getMIDIMessage(message) {
+            const command = message.data[0] & 0xF0; // Mask channel
+            const note = message.data[1];
+            const velocity = (message.data.length > 2) ? message.data[2] : 0;
+            const dot = document.getElementById('midi-dot');
+
+            // Visual flash
+            dot.classList.add('active');
+            setTimeout(() => dot.classList.remove('active'), 100);
+
+            // Note On (144)
+            if (command === 144 && velocity > 0) {
+                // RECORDING LOGIC
+                if (runtimeState.isRecording) {
+                    const step = runtimeState.recordStepIdx;
+                    runtimeState.gridData[step].note = midiToNoteName(note);
+                    runtimeState.gridData[step].active = true;
+                    updateStepUI(step);
+                    
+                    // Advance
+                    runtimeState.recordStepIdx = (runtimeState.recordStepIdx + 1) % 16;
+                    updateRecCursor();
+                } 
+                // FOCUSED EDIT LOGIC
+                else if (runtimeState.focusedStepIdx !== null) {
+                    const step = runtimeState.focusedStepIdx;
+                    runtimeState.gridData[step].note = midiToNoteName(note);
+                    runtimeState.gridData[step].active = true;
+                    updateStepUI(step);
+                }
+
+                playNote(note, velocity/127);
+            }
+            // Note Off (128) or Note On with 0 vel
+            if (command === 128 || (command === 144 && velocity === 0)) {
+                stopNote(note);
+            }
+
+            // CC Mapping (176)
+            if (command === 176) {
+                // Check if this CC is disabled
+                if (runtimeState.disabledCCs.has(note)) {
+                    return; 
+                }
+
+                // MAPPING MODE
+                if (runtimeState.isMidiMapping && runtimeState.mappingTarget) {
+                    // Assign CC to Target
+                    runtimeState.midiMap[note] = runtimeState.mappingTarget;
+                    updateMidiOverlays();
+                    
+                    // Visual flash of success
+                    const group = document.getElementById('cg-' + runtimeState.mappingTarget);
+                    if(group) {
+                        group.classList.remove('learning');
+                        group.style.backgroundColor = '#004400';
+                        setTimeout(() => group.style.backgroundColor = '', 200);
+                    }
+                    runtimeState.mappingTarget = null; // Auto-deselect
+                    return;
+                }
+
+                // NORMAL CONTROL MODE
+                const targetId = runtimeState.midiMap[note];
+                if (targetId) {
+                    const el = document.getElementById(targetId);
+                    if (el) {
+                        if (el.type === 'checkbox') {
+                            el.checked = velocity > 64;
+                        } else {
+                            // Range Scaling
+                            const min = parseFloat(el.min);
+                            const max = parseFloat(el.max);
+                            const step = parseFloat(el.step) || 0.01;
+                            // Simple linear interpolation
+                            let val = min + (velocity / 127) * (max - min);
+                            
+                            // Snap to step if needed
+                            if(step) val = Math.round(val / step) * step;
+                            
+                            el.value = val;
+                        }
+                        // Trigger update
+                        updateAudioParams();
+                    }
+                }
+            }
+        }
+
+        // 9. VISUALIZER
+        function drawVisualizer() {
+            const canvas = document.getElementById('scope');
+            const ctx = canvas.getContext('2d');
+            const width = canvas.width;
+            const height = canvas.height;
+
+            function draw() {
+                requestAnimationFrame(draw);
+                if(!runtimeState.analyser) return;
+
+                const values = runtimeState.analyser.getValue();
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0, 0, width, height);
+
+                ctx.lineWidth = 2;
+                ctx.strokeStyle = '#ffcc00'; // Acid accent
+                ctx.beginPath();
+
+                const sliceWidth = width / values.length;
+                let x = 0;
+
+                for(let i = 0; i < values.length; i++) {
+                    const v = values[i] * 0.9; // Scale amplitude
+                    const y = (height / 2) + (v * height / 2);
+
+                    if(i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+
+                    x += sliceWidth;
+                }
+
+                ctx.lineTo(canvas.width, canvas.height/2);
+                ctx.stroke();
+            }
+            draw();
+        }
+
+    </script>
+</body>
+</html>
