@@ -1,166 +1,145 @@
-Here is the comprehensive definition of the BVST (Blockchain Virtual Studio Technology) Standard v1.0.
+# The BVST Ordinals Standard (RFC-002)
+**"The Infinite Studio on the Finite Ledger"**
+
+## 1. Core Philosophy: Recursion, Synthesis, & Efficiency
+Because Bitcoin block space is scarce, BVST plugins must be hyper-efficient. We achieve this through:
+1.  **Modular Recursion:** Code is inscribed once and referenced by thousands of plugins.
+2.  **Procedural Synthesis:** Using math to generate sound where possible.
+3.  **Audionals Optimization:** Using advanced psychoacoustic compression for necessary audio assets.
 
 ---
 
-**The BVST Standard Specification (Draft v1.0)**
+## 2. The Architecture: The "Tri-Part Inscription"
+A BVST plugin is not a single file. It is a logical link between three distinct Inscriptions. The developer inscribes them in this order:
 
-**Core Philosophy:** A BVST is a modular, sandboxed, and immutable audio component designed to be fetched by Hash, executed via WebAssembly, and controlled via stateless JSON events.
+### Part A: The DSP Kernel (The Brain) -> `kernel.wasm`
+*   **Format:** WebAssembly Binary (`.wasm`)
+*   **Constraint:** Must run in an `AudioWorklet`. No DOM access. No Network access.
+*   **Role:** Handles all real-time signal processing (EQ, Compression, Mixing).
+*   **Optimization:** Developers should use the "Genesis Library" (a standard recursive inscription of common DSP functions) to keep custom kernel sizes under 20KB.
+
+### Part B: The Interface (The Face) -> `gui.html`
+*   **Format:** HTML/JS (Text)
+*   **Role:** Visuals only. No audio processing.
+*   **Recursion:** References a standard "Global CSS" inscription so all plugins share a unified look without storing redundant UI code.
+
+### Part C: The Manifest (The Map) -> `manifest.json`
+*   **Format:** JSON
+*   **Role:** The entry point. It tells the DAW which Inscription ID is the Brain, which is the Face, and which Samples to load.
 
 ---
 
-### 1. The Container Structure (The "Package")
-
-Unlike a VST which is a single .dll or .vst3 file, a BVST is a directory of three artifacts. When a developer "mints" or uploads a plugin to Arweave/IPFS/Ordinals, they are uploading these three specific components linked together.
-
----
-
-#### A. The Manifest (manifest.json)
-
-The entry point. The DAW reads this first to understand what the plugin is.
+## 3. The Data Structure (The Manifest)
+When a user loads a plugin, the DAW reads this JSON. Note the `assets` section, which now points to Opus-encoded inscriptions.
 
 ```json
 {
-  "protocol": "BVST_v1",
-  "name": "Nebula Reverb",
-  "version": "1.0.0",
-  "developer": "0xWalletAddress...",
-  "license": "CC-BY-SA",
-  "category": "Effect/Reverb",
-  "audio": {
-    "inputs": 2,
-    "outputs": 2
+  "protocol": "BVST_ORD_v1",
+  "name": "Satoshi 909 Drum Machine",
+  "developer": "NakamotoSound",
+  "components": {
+    "audio_engine": "/content/8f9e...WASM_ID", 
+    "user_interface": "/content/a1b2...HTML_ID" 
   },
   "assets": {
-    "dsp_binary": "ar://HashOfWasmFile",
-    "ui_bundle": "ar://HashOfHTMLFile",
-    "default_presets": "ar://HashOfPresets"
+    // Recursively pointing to optimized Audionals inscriptions
+    "kick": "/content/c7d2...OPUS_KICK_ID",
+    "snare": "/content/d3f4...OPUS_SNARE_ID"
   },
-  "parameters": [
-    { "id": "mix", "name": "Dry/Wet", "min": 0.0, "max": 1.0, "type": "float" },
-    { "id": "decay", "name": "Decay Time", "min": 0.1, "max": 10.0, "type": "float" }
+  "io": {
+    "inputs": 0, 
+    "outputs": 2 
+  }
+}
+```
+
+---
+
+## 4. The Runtime: "The Silent Host"
+The DAW (The Host) is a shell. It does not contain the synths. It contains the **Wiring**.
+
+To ensure 64-channel performance:
+1.  **The Fetch:** The DAW reads the Manifest. It fetches the Wasm binary and the Opus audio assets from the chain.
+2.  **The Compilation:** `WebAssembly.instantiate()` compiles the code into raw machine instructions.
+3.  **The Wiring:** The DAW creates a **SharedArrayBuffer**. This is a literal block of RAM shared between the main thread and the audio thread.
+    *   *Zero-Copy:* The audio data is never "moved." The Wasm plugin writes directly to the memory that the speakers read from.
+
+---
+
+## 5. The "Sequencer" Standard (Saving the Song)
+We do not save audio to the user's computer or the chain when saving a song. We save **Instructions**.
+
+**The JSON Structure for a Song (Ordinals Transaction):**
+```json
+{
+  "type": "BVST_PROJECT",
+  "bpm": 128,
+  "tracks": [
+    {
+      "id": 1,
+      "device": "/content/8f9e...21i0", // The 909 Drum Machine Manifest
+      "sequence": [
+        { "t": 0, "note": 36, "vel": 100 }, // Play Kick
+        { "t": 480, "note": 38, "vel": 90 } // Play Snare
+      ]
+    }
   ]
 }
 ```
 
 ---
 
-#### B. The DSP Kernel (kernel.wasm)
+## 6. Guide for 3rd Party Developers
+If a developer wants to build a plugin for your DAW, here are the rules:
 
-This is the audio engine. It must be written in a language that compiles to WebAssembly (Rust, C++, Zig).
+### Step 1: Write the DSP in Rust
+Use the `bvst_sdk` to ensure your audio engine talks to the host correctly.
 
-**Constraint 1:** It must be "Pure". It cannot access the DOM, the Internet, or LocalStorage. It only accepts math inputs and outputs.
+### Step 2: Compile to Wasm
+Compile with `wasm-pack`. Ensure the file size is small.
 
-**Constraint 2:** It must be Memory Safe. It allocates a specific block of RAM (Linear Memory) that the Host (DAW) can read/write to.
-
----
-
-#### C. The Visual Interface (gui.html / gui.js)
-
-A lightweight web component. This runs in the Main Thread of the browser. It does no audio processing. It simply visualizes the state and sends user gestures (clicks/drags) to the Host.
+### Step 3: Inscribe & Distribute
+Inscribe the Kernel, the UI, and the Manifest. The Manifest ID is the "Product" you share with the world.
 
 ---
 
-### 2. The Memory Architecture (Zero-Copy)
+## 7. The Audionals Opus Standard (Mandatory for Samples)
 
-To achieve Logic/Ableton efficiency, we cannot copy data back and forth between the Browser JS and the Wasm Plugin. We must use Shared Memory.
+Storing uncompressed audio (WAV/AIFF) on Bitcoin is financially irresponsible and technically inefficient. To enable rich samplers (Drum machines, Pianos, Choirs) on-chain, we utilize the **Audionals Opus Standard**.
 
-**The Shared Heap:** The Host (DAW) creates a SharedArrayBuffer.
+### The Requirement
+All sampled audio assets used in a BVST **MUST** be encoded as **Opus audio inside a WebM container**.
 
-**The Handshake:** When the BVST loads, the Host sends a pointer (memory address) to the Wasm Kernel.
+### The Workflow: "Squeeze to the Edge of Perception"
+Developers must use the **Audionals Opus File Generator** (https://audionals.com/opus-file-generator/) to prepare their assets.
 
-**Pointer A:** Input Audio (Float32 Array)
+1.  **Input:** Developer uploads a high-resolution Master WAV (e.g., a Kick Drum).
+2.  **Compare:** The tool provides an A/B slider.
+    *   *Left:* Original WAV.
+    *   *Right:* Opus Encoded version.
+3.  **Optimize:** The developer lowers the bitrate until they *just barely* hear a difference, then nudges it back up one step.
+    *   *Result:* A Kick drum that was 200KB is now 8KB, with no perceptible loss in a mix.
+4.  **Inscribe:** The developer inscribes this 8KB WebM file to Bitcoin.
 
-**Pointer B:** Output Audio (Float32 Array)
+### Why this is the Standard:
+1.  **Browser Native:** All modern browsers decode WebM/Opus natively. The Wasm engine does not need to include a heavy decoder library; it simply asks the browser to "Decode this buffer."
+2.  **Eternal Reuse:** Once a perfect "909 Kick" is inscribed using this method, **it never needs to be inscribed again.** Every DAW user and every future plugin developer can reference that single Inscription ID in their manifest.
+3.  **Efficiency:** A full 16-piece Drum Kit can be inscribed for roughly the cost of a single JPEG, while sounding indistinguishable from CD quality.
 
-**Pointer C:** Parameter State (The values of the knobs)
-
-**The Cycle:** Every audio frame (e.g., 128 samples), the Wasm kernel reads from Pointer A, processes the math, and writes to Pointer B. The Host plays Pointer B. This happens instantly without the overhead of JavaScript garbage collection.
-
----
-
-### 3. The Communication Protocol (The "Event Log")
-
-This is the specific requirement for your "Save as Transaction" model.
-
-In standard VSTs, automation is often handled by internal black-box data. In BVST, Automation is externalized.
-
----
-
-#### The Event Format
-
-The BVST standard dictates that the plugin must respond to Time-Stamped Atomic Events.
-
-The Host sends instructions to the Wasm Kernel via a Ring Buffer (a high-speed message queue):
-
-```rust
-// Structure of a BVST Event
-struct BvstEvent {
-    sample_offset: u32,  // Exactly when in the buffer this happens
-    param_id: u32,       // Which knob? (Mapped to manifest)
-    value: f32,          // The new value
-}
-```
-
-**Why this matters for your project:**
-When the user moves a knob, the DAW records: `{ "time": 1000, "param": "decay", "val": 0.5 }`.
-When you save the song, you are just saving a list of these text-based events. When the song is reloaded, the DAW fires these events at the Wasm kernel in rapid succession, restoring the state exactly.
+### Codec Specification for BVST:
+*   **Container:** WebM
+*   **Codec:** Opus
+*   **Sample Rate:** 48kHz (Native Web Audio Standard)
+*   **Channels:** Mono (for individual drum hits) or Stereo (for pads/ambience).
+*   **Bitrate:** Variable (determined by the Audionals A/B process).
 
 ---
 
-### 4. The SDK / Interface Definition (For Developers)
+## Summary
+By enforcing **Wasm** for logic and **Audionals/Opus** for assets, this standard allows for a Logic-Pro tier DAW to exist entirely on Bitcoin L1.
 
-If a developer wants to build a BVST, they implement this standard Interface (written here in Rust pseudo-code):
+*   **Logic:** ~15KB per synth.
+*   **Samples:** ~5-10KB per drum hit.
+*   **UI:** ~4KB (recursive).
 
-```rust
-trait BvstPlugin {
-    // Initialize memory and buffers
-    fn initialize(sample_rate: f64);
-
-    // The main audio loop - must run in < 1ms
-    fn process(
-        inputs: &[*const f32], 
-        outputs: &[*mut f32], 
-        samples: usize
-    );
-
-    // Receive a parameter change (from the JSON log or UI)
-    fn set_parameter(id: u32, value: f32);
-
-    // Return current state for saving
-    fn get_parameter(id: u32) -> f32;
-}
-```
-
----
-
-### 5. Security & Sandboxing (The "Trustless" Layer)
-
-Since you are loading code from the blockchain (which anyone can upload to), the BVST standard enforces strict sandboxing to prevent malicious code.
-
-**No Network Access:** The kernel.wasm is instantiated in a AudioWorkletScope with network APIs disabled. A plugin cannot steal a user's private keys or upload their stem files to a rogue server.
-
-**Resource Caps:** The Manifest declares memory requirements (e.g., "I need 20MB RAM"). The Host enforces this. If a plugin tries to allocate 2GB and crash the browser, the Host kills that specific plugin instance instantly without crashing the DAW.
-
----
-
-### 6. Comparison: VST3 vs. BVST
-
-| Feature      | Standard VST3              | BVST (Your Standard)                     |
-| ------------ | -------------------------- | ---------------------------------------- |
-| Distribution | Installer (.exe/.pkg)      | Blockchain Hash (Arweave/IPFS)           |
-| OS           | Windows/Mac/Linux specific | Universal (Wasm runs everywhere)         |
-| State Save   | Opaque Binary Blob         | Human-readable JSON Events               |
-| Safety       | Can crash the OS           | Sandboxed (Crash affects one track only) |
-| Update       | Manual Install             | Immutable (Old versions live forever)    |
-
----
-
-### Summary for Implementation
-
-To build this, you are not starting from zero. You should fork/utilize WAM (Web Audio Modules) v2.0 as your baseline, as it already solves the Wasm/AudioWorklet threading.
-
-Your specific innovation to add on top of WAM:
-
-**The Locator:** Change the loading mechanism from `fetch('https://server...')` to `fetch('https://arweave.net/HASH')`.
-
-**The Protocol:** Enforce the "Atomic Event" parameter control to ensure your JSON save files are 100% accurate to the history of the song.
+We are building a professional studio where the entire asset library measures in Kilobytes, not Gigabytes, ensuring it survives on the blockchain forever.
