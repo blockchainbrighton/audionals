@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BVST Local Host</title>
+  <style>
+    body { background: #111; color: white; font-family: sans-serif; padding: 20px; }
+    iframe { border: none; width: 250px; height: 300px; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #0f0; border: none; }
+  </style>
+</head>
+<body>
+  <h1>BVST DAW Host (MVP)</h1>
+  <p>Status: <span id="status">Waiting for user...</span></p>
+  <button id="startBtn">START AUDIO ENGINE</button>
+  <hr>
+  <div id="rack"></div>
+
+  <script type="module">
+    let audioCtx;
+    let workletNode;
+
+    document.getElementById('startBtn').addEventListener('click', async () => {
+      document.getElementById('status').innerText = "Loading...";
+      audioCtx = new AudioContext();
+
+      // 1. Fetch Manifest
+      const manifestReq = await fetch('./manifest.json');
+      const manifest = await manifestReq.json();
+
+      // 2. Load Glue (with cache bust)
+      try {
+        // Use path from manifest
+        // Append cache bust only if it looks like a local file (optional, but good for dev)
+        let glueUrl = manifest.components.glue_script;
+        if (!glueUrl.startsWith('/content/')) {
+           glueUrl += "?t=" + Date.now();
+        }
+        console.warn("Main: Loading AudioWorklet module from:", glueUrl);
+        await audioCtx.audioWorklet.addModule(glueUrl);
+        console.warn("Main: addModule resolved successfully.");
+      } catch (e) {
+        console.error("Main: Failed to add module:", e);
+        document.getElementById('status').innerText = "Error loading processor.js: " + e.message;
+        return;
+      }
+
+      // 3. Create Node
+      try {
+        console.warn("Main: Attempting to create AudioWorkletNode 'bvst-processor'...");
+        workletNode = new AudioWorkletNode(audioCtx, 'bvst-processor');
+        console.warn("Main: AudioWorkletNode created successfully.");
+      } catch (e) {
+         console.error("Failed to create node:", e);
+         document.getElementById('status').innerText = "Error creating node: " + e.message;
+         return;
+      }
+
+      // 4. Fetch WASM
+      const wasmReq = await fetch(manifest.components.audio_engine);
+      const wasmBytes = await wasmReq.arrayBuffer();
+
+      // 5. Init Wasm
+      workletNode.port.postMessage({ type: 'INIT_WASM', wasmBytes: wasmBytes });
+
+      // 6. Connect
+      workletNode.connect(audioCtx.destination);
+
+      // 7. Load UI
+      const iframe = document.createElement('iframe');
+      iframe.src = manifest.components.ui_html;
+      document.getElementById('rack').innerHTML = ''; // Clear previous
+      document.getElementById('rack').appendChild(iframe);
+
+      // 8. Listen for UI
+      window.addEventListener('message', (event) => {
+        if (event.data.type === 'BVST_PARAM') {
+          workletNode.port.postMessage({ type: 'PARAM', id: event.data.id, value: event.data.value });
+        } else if (event.data.type === 'BVST_SWITCH_SYNTH') {
+          workletNode.port.postMessage({ type: 'SWITCH_SYNTH', id: event.data.id });
+        }
+      });
+
+      workletNode.port.onmessage = (e) => {
+        if (e.data.type === 'READY') {
+          document.getElementById('status').innerText = "Audio Engine Running (Rust/Wasm)";
+        } else if (e.data.type === 'ERROR') {
+            document.getElementById('status').innerText = "Worklet Error: " + e.data.error;
+        }
+      };
+    });
+  </script>
+</body>
+</html>
