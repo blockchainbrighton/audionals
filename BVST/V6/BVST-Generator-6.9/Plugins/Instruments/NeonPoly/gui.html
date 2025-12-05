@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NeonPoly</title>
+</head>
+<body style="margin:0; padding:20px; background:#0c0f1a; color:#e0f2ff; font-family:monospace;">
+    <div id="app-container"></div>
+    <script type="module">
+        import { Controls } from '../../../../System/shared/controls.js';
+        import { Keyboard } from '../../../../System/shared/keyboard.js';
+        import { MidiManager } from '../../../../System/shared/midi.js';
+
+        const CONFIG = {
+            name: 'NEON POLY',
+            modules: [
+                {
+                    name: 'Oscillators',
+                    controls: [
+                        { type: 'knob', id: 'mix', label: 'Mix', param: 1, min: 0, max: 1, step: 0.01, val: 0.4 },
+                        { type: 'knob', id: 'detune', label: 'Detune (c)', param: 2, min: 0, max: 20, step: 0.5, val: 6 },
+                        { type: 'knob', id: 'noise', label: 'Noise', param: 3, min: 0, max: 0.3, step: 0.01, val: 0.05 }
+                    ]
+                },
+                {
+                    name: 'Filter',
+                    controls: [
+                        { type: 'knob', id: 'cutoff', label: 'Cutoff', param: 4, min: 80, max: 12000, curve: 'log', val: 1800 },
+                        { type: 'knob', id: 'res', label: 'Res', param: 5, min: 0.2, max: 1.5, step: 0.01, val: 0.4 },
+                        { type: 'knob', id: 'env_amt', label: 'Env Amt', param: 6, min: 0, max: 4000, step: 10, val: 1500 }
+                    ]
+                },
+                {
+                    name: 'Envelopes',
+                    controls: [
+                        { type: 'knob', id: 'amp_a', label: 'Amp A', param: 7, min: 0.002, max: 0.2, step: 0.001, val: 0.01 },
+                        { type: 'knob', id: 'amp_r', label: 'Amp R', param: 8, min: 0.02, max: 1, step: 0.01, val: 0.2 },
+                        { type: 'knob', id: 'filt_a', label: 'Filt A', param: 9, min: 0.005, max: 0.3, step: 0.001, val: 0.02 },
+                        { type: 'knob', id: 'filt_r', label: 'Filt R', param: 10, min: 0.02, max: 1, step: 0.01, val: 0.3 }
+                    ]
+                },
+                {
+                    name: 'Modulation',
+                    controls: [
+                        { type: 'knob', id: 'lfo_rate', label: 'LFO Rate', param: 11, min: 0.1, max: 8, step: 0.05, val: 1 },
+                        { type: 'knob', id: 'lfo_depth', label: 'LFO Depth', param: 12, min: 0, max: 2000, step: 10, val: 500 },
+                        { type: 'knob', id: 'glide', label: 'Glide', param: 13, min: 0, max: 0.3, step: 0.005, val: 0.02 }
+                    ]
+                }
+            ]
+        };
+
+        const controls = new Controls({
+            onChange: (id, val) => {
+                const el = document.getElementById(id);
+                if (el && el.dataset.param) {
+                    window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(el.dataset.param), value: val }, '*');
+                }
+            }
+        });
+
+        controls.buildUI('app-container', CONFIG);
+
+        const kb = new Keyboard('piano', {
+            startNote: 48,
+            numKeys: 25,
+            responsive: true,
+            onNoteOn: (m) => window.parent.postMessage({ type: 'BVST_PARAM', id: 128, value: m }, '*'),
+            onNoteOff: (m) => window.parent.postMessage({ type: 'BVST_PARAM', id: 129, value: m }, '*')
+        });
+
+        // Hook MIDI in to the keyboard callbacks
+        const midi = new MidiManager({
+            onNoteOn: (m) => kb.noteOn(m),
+            onNoteOff: (m) => kb.noteOff(m)
+        });
+
+        midi.init();
+    </script>
+</body>
+</html>
