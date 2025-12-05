@@ -421,7 +421,7 @@ pub mod dsp {
 
         pub fn trigger(&mut self) {
             if !self.buffer.is_empty() {
-                self.phase = 0.0;
+                self.phase = self.loop_start as f32;
                 self.is_playing = true;
             }
         }
@@ -429,6 +429,11 @@ pub mod dsp {
         pub fn process(&mut self, freq: f32) -> f32 {
             if !self.is_playing || self.buffer.is_empty() {
                 return 0.0;
+            }
+
+            // Enforce Start Point (Trimming)
+            if self.phase < self.loop_start as f32 {
+                self.phase = self.loop_start as f32;
             }
 
             // Rate = Target / Base
@@ -477,7 +482,7 @@ pub mod dsp {
                     self.phase = self.loop_start as f32 + rem;
                 } else {
                     self.is_playing = false;
-                    self.phase = 0.0;
+                    self.phase = self.loop_start as f32; // Reset to start
                 }
             }
 
