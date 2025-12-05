@@ -1,0 +1,208 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>GrooveBox | BVST</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #111; color: #ccc; display: flex; justify-content: center; min-height: 100vh; }
+        #seq-container { margin-top: 20px; padding: 10px; background: #222; border: 1px solid #444; }
+        /* Custom overrides for GrooveBox */
+        .seq-btn.active { background: #f90; color: #000; }
+    </style>
+</head>
+<body>
+    <div id="app-container"></div>
+
+    <script type="module">
+        import { Controls } from '../../System/shared/controls.js';
+        import { StepSequencer } from '../../System/shared/sequencer.js';
+        import { MidiManager } from '../../System/shared/midi.js';
+
+        const CONFIG = {
+            name: "GROOVE BOX",
+            modules: [
+                {
+                    name: "Master",
+                    controls: [
+                        { type: 'knob', id: 'vol', label: 'Volume', param: 15, min: 0, max: 1, val: 0.7 },
+                        { type: 'knob', id: 'drive', label: 'Crunch', param: 8, min: 0, max: 1, val: 0.2 }
+                    ]
+                },
+                {
+                    name: "Transport",
+                    controls: [
+                        { type: 'button', id: 'btn-play', text: 'RUN' },
+                        { type: 'button', id: 'btn-stop', text: 'STOP' },
+                        { type: 'knob', id: 'bpm', label: 'BPM', param: 999, min: 60, max: 200, val: 120, step: 1 }
+                    ]
+                }
+            ]
+        };
+
+        // --- SEQ LOGIC ---
+        let isPlaying = false;
+        let currentStep = 0;
+        let nextNoteTime = 0;
+        let timerId = null;
+        let bpm = 120;
+
+        const controls = new Controls({
+            onChange: (id, val) => {
+                if (id === 'btn-play' && val === 1) startSeq();
+                if (id === 'btn-stop' && val === 1) stopSeq();
+                if (id === 'bpm') bpm = val;
+                
+                const el = document.getElementById(id);
+                if(el && el.dataset.param !== "999") window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(el.dataset.param), value: val }, '*');
+            }
+        });
+
+        controls.buildUI('app-container', CONFIG);
+
+        const appRoot = document.getElementById('bvst-app-root');
+        const seqDiv = document.createElement('div');
+        seqDiv.id = 'seq-container';
+        appRoot.appendChild(seqDiv);
+
+        // LEGEND for Notes
+        const legend = document.createElement('div');
+        legend.style.fontSize = '0.7rem'; legend.style.textAlign = 'center'; legend.style.marginTop = '5px'; legend.style.color = '#888';
+        legend.innerText = "MAP: C2=KICK | D2=SNARE | F#2=CL.HAT | A#2=OP.HAT";
+        appRoot.appendChild(legend);
+
+        const seq = new StepSequencer('seq-container', {
+            numSteps: 16,
+            // Preset Rhythm
+            initialSteps: Array(16).fill().map((_, i) => ({
+                active: (i%4===0), note: (i%8===4) ? 'D2' : 'C2', accent: false, slide: false
+            }))
+        });
+
+        function startSeq() {
+            if(isPlaying) return;
+            isPlaying = true;
+            currentStep = 0;
+            nextNoteTime = performance.now() / 1000;
+            schedule();
+        }
+
+        function stopSeq() {
+            isPlaying = false;
+            cancelAnimationFrame(timerId);
+        }
+
+        function schedule() {
+            const secPerBeat = 60.0 / bpm;
+            const stepTime = secPerBeat / 4;
+            const now = performance.now() / 1000;
+            while (nextNoteTime < now + 0.1) {
+                runStep(currentStep);
+                currentStep = (currentStep + 1) % 16;
+                nextNoteTime += stepTime;
+            }
+            if(isPlaying) timerId = requestAnimationFrame(schedule);
+        }
+
+        function mtof(n) {
+            const notes = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+            const note = n.slice(0, -1);
+            const oct = parseInt(n.slice(-1));
+            const semi = notes.indexOf(note);
+            const m = 12 + (oct * 12) + semi;
+            return 440 * Math.pow(2, (m-69)/12);
+        }
+
+        function runStep(idx) {
+            seq.highlightStep(idx);
+            const s = seq.getStep(idx);
+            if(s.active) {
+                // Just send Freq. The engine triggers on Freq change.
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 20, value: mtof(s.note) }, '*');
+            }
+        }
+
+        // --- PRESETS ---
+        const PRESETS = {
+            "Init": { "vol":0.7, "drive":0.2, 
+                "sequence": Array(16).fill().map((_, i) => ({ active: (i % 4 === 0), note: (i % 8 === 4) ? 'D2' : 'C2', accent: false, slide: false }))
+            },
+            "Techno Beat": { "vol":0.8, "drive":0.4,
+                "sequence": [
+                    { active: true, note: 'C2' }, { active: false }, { active: false }, { active: false },
+                    { active: true, note: 'D2' }, { active: false }, { active: false }, { active: false },
+                    { active: true, note: 'C2' }, { active: false }, { active: false }, { active: false },
+                    { active: true, note: 'D2' }, { active: false }, { active: false }, { active: false }
+                ]
+            },
+            "House Groove": { "vol":0.7, "drive":0.3,
+                "sequence": [
+                    { active: true, note: 'C2' }, { active: false }, { active: true, note: 'F#2' }, { active: false },
+                    { active: true, note: 'D2' }, { active: false }, { active: true, note: 'A#2' }, { active: false },
+                    { active: true, note: 'C2' }, { active: false }, { active: true, note: 'F#2' }, { active: false },
+                    { active: true, note: 'D2' }, { active: false }, { active: true, note: 'A#2' }, { active: false }
+                ]
+            },
+            "Minimal": { "vol":0.6, "drive":0.1,
+                "sequence": [
+                    { active: true, note: 'C2' }, { active: false }, { active: false }, { active: false },
+                    { active: false }, { active: false }, { active: false }, { active: false },
+                    { active: false }, { active: false }, { active: false }, { active: false },
+                    { active: false }, { active: false }, { active: false }, { active: false }
+                ]
+            },
+            "Industrial Crunch": { "vol":0.9, "drive":0.8,
+                "sequence": [
+                    { active: true, note: 'C2' }, { active: true, note: 'D2' }, { active: false }, { active: true, note: 'C2' },
+                    { active: true, note: 'F#2' }, { active: false }, { active: true, note: 'D2' }, { active: true, note: 'F#2' },
+                    { active: true, note: 'C2' }, { active: false }, { active: true, note: 'D2' }, { active: false },
+                    { active: true, note: 'F#2' }, { active: false }, { active: false }, { active: true, note: 'A#2' }
+                ]
+            },
+            "Broken Beat": { "vol":0.7, "drive":0.3,
+                "sequence": [
+                    { active: true, note: 'C2' }, { active: false }, { active: true, note: 'F#2' }, { active: false },
+                    { active: false }, { active: true, note: 'D2' }, { active: false }, { active: true, note: 'A#2' },
+                    { active: true, note: 'C2' }, { active: false }, { active: false }, { active: true, note: 'D2' },
+                    { active: false }, { active: true, note: 'F#2' }, { active: false }, { active: true, note: 'A#2' }
+                ]
+            },
+            "Latin Feel": { "vol":0.8, "drive":0.1,
+                "sequence": [
+                    { active: true, note: 'C2' }, { active: true, note: 'A#2' }, { active: true, note: 'F#2' }, { active: true, note: 'A#2' },
+                    { active: true, note: 'D2' }, { active: true, note: 'A#2' }, { active: true, note: 'F#2' }, { active: true, note: 'A#2' },
+                    { active: true, note: 'C2' }, { active: true, note: 'A#2' }, { active: true, note: 'F#2' }, { active: true, note: 'A#2' },
+                    { active: true, note: 'D2' }, { active: true, note: 'A#2' }, { active: true, note: 'F#2' }, { active: true, note: 'A#2' }
+                ]
+            }
+        };
+
+        const pSel = controls.uiRefs.presetSelector; // Access preset selector via controls.uiRefs
+        Object.keys(PRESETS).forEach(k => {
+            const o = document.createElement('option'); o.value = k; o.innerText = k; pSel.appendChild(o);
+        });
+
+        pSel.addEventListener('change', (e) => {
+            const p = PRESETS[e.target.value];
+            if(!p) return;
+            for(const [id, val] of Object.entries(p)) {
+                if (id === "sequence") {
+                    seq.setSequence(val); // Update sequencer steps
+                } else {
+                    controls.setValue(id, val);
+                    const el = document.getElementById(id);
+                    if(el) window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(el.dataset.param), value: val }, '*');
+                }
+            }
+        });
+
+        // Init presets/handshake
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'BVST_READY') {
+                // Load init preset
+                pSel.value = 'Init';
+                pSel.dispatchEvent(new Event('change'));
+            }
+        });
+    </script>
+</body>
+</html>

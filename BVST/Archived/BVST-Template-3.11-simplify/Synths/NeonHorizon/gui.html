@@ -1,0 +1,390 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEON HORIZON | BVST</title>
+    <style>
+        :root {
+            --bg-dark: #050510;
+            --panel-bg: #111118;
+            --neon-pink: #ff00ff;
+            --neon-cyan: #00ffff;
+            --neon-yellow: #ffee00;
+            --text-color: #e0e0e0;
+        }
+
+        body {
+            margin: 0; padding: 20px;
+            background-color: var(--bg-dark);
+            color: var(--text-color);
+            font-family: 'Courier New', Courier, monospace;
+            display: flex; flex-direction: column; align-items: center;
+            min-height: 100vh; user-select: none;
+            overflow: hidden;
+        }
+
+        /* SCANLINES */
+        .scanlines {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none; z-index: 100;
+        }
+
+        /* VISUALIZER BG */
+        #visualizer {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            z-index: 0; opacity: 0.5;
+        }
+
+        /* MAIN UI */
+        #synth-container {
+            position: relative; z-index: 10;
+            width: 100%; max-width: 1100px;
+            display: flex; flex-direction: column; gap: 10px;
+        }
+
+        .panel {
+            background: rgba(17, 17, 24, 0.85);
+            border: 1px solid var(--neon-cyan);
+            box-shadow: 0 0 20px rgba(0, 255, 255, 0.1);
+            backdrop-filter: blur(5px);
+            padding: 20px;
+            display: grid; grid-template-columns: repeat(6, 1fr); gap: 15px;
+            border-radius: 4px;
+        }
+
+        .section {
+            border: 1px solid #333; border-radius: 4px; padding: 10px;
+            display: flex; flex-direction: column; align-items: center; position: relative;
+        }
+        .section-title {
+            position: absolute; top: -10px; background: var(--panel-bg);
+            padding: 0 5px; font-size: 0.7rem; color: var(--neon-pink);
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+
+        .controls-grid {
+            display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px;
+            width: 100%; margin-top: 10px;
+        }
+
+        /* KNOBS */
+        .knob-container { display: flex; flex-direction: column; align-items: center; }
+        .knob {
+            width: 40px; height: 40px; border-radius: 50%;
+            background: conic-gradient(var(--neon-cyan) 0%, var(--neon-cyan) 0%, #333 0%, #333 100%);
+            position: relative; cursor: ns-resize;
+            box-shadow: 0 0 5px rgba(0, 255, 255, 0.3);
+        }
+        .knob::after {
+            content: ''; position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%); width: 32px; height: 32px;
+            background: #1a1a1a; border-radius: 50%;
+        }
+        .knob-label { font-size: 0.6rem; margin-top: 5px; color: #aaa; text-align: center; }
+
+        /* DISPLAY */
+        .screen-section { grid-column: span 1; display: flex; flex-direction: column; gap: 10px; }
+        #lcd-display {
+            background: #121212; border: 2px solid #333; height: 80px;
+            border-radius: 4px; padding: 10px; color: var(--neon-yellow);
+            display: flex; flex-direction: column; justify-content: space-between;
+            box-shadow: inset 0 0 10px rgba(0,0,0,0.8); text-shadow: 0 0 5px var(--neon-yellow);
+        }
+        #patch-name { font-size: 0.9rem; font-weight: bold; white-space: nowrap; overflow: hidden; }
+        .btn {
+            background: #222; border: 1px solid #444; color: #fff;
+            padding: 5px; cursor: pointer; font-size: 0.7rem; flex: 1;
+        }
+        .btn:hover { border-color: var(--neon-cyan); color: var(--neon-cyan); }
+        .btn.active { background: var(--neon-cyan); color: #000; }
+
+        /* KEYBOARD */
+        #keyboard-container {
+            background: #000; border-top: 5px solid var(--neon-pink);
+            box-shadow: 0 -5px 20px rgba(255, 0, 255, 0.2);
+            position: relative; z-index: 10;
+        }
+    </style>
+</head>
+<body>
+    <div class="scanlines"></div>
+    <canvas id="visualizer"></canvas>
+
+    <div id="synth-container">
+        <div class="panel">
+            <!-- SCREEN -->
+            <div class="screen-section">
+                <div id="lcd-display">
+                    <div id="patch-name">INIT PAD</div>
+                    <div style="font-size: 0.7rem;">POLYPHONIC</div>
+                </div>
+                <div style="display: flex; gap: 5px;">
+                    <button class="btn" id="prev-preset">&lt;</button>
+                    <button class="btn" id="next-preset">&gt;</button>
+                </div>
+                <div style="display: flex; gap: 5px; margin-top: 5px;">
+                    <button class="btn" id="arp-toggle">ARP</button>
+                    <button class="btn" id="latch-toggle">HOLD</button>
+                </div>
+                <div style="display: flex; gap: 5px; margin-top: 5px;">
+                    <select id="midi-in" style="width:100%; background:#000; color:var(--neon-cyan); border:1px solid #333; font-size:0.7rem;"><option>MIDI...</option></select>
+                </div>
+            </div>
+
+            <!-- OSC -->
+            <div class="section">
+                <div class="section-title">Oscillator</div>
+                <div class="controls-grid">
+                    <div class="knob-container"><div class="knob" id="detune" data-param="1" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Detune</div></div>
+                    <div class="knob-container"><div class="knob" id="subLevel" data-param="2" data-min="0" data-max="1" data-val="0"></div><div class="knob-label">Sub Osc</div></div>
+                    <div class="knob-container"><div class="knob" id="pulseWidth" data-param="3" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">PWM</div></div>
+                    <div class="knob-container"><div class="knob" id="glide" data-param="4" data-min="0" data-max="1" data-val="0"></div><div class="knob-label">Glide</div></div>
+                </div>
+            </div>
+
+            <!-- FILTER -->
+            <div class="section">
+                <div class="section-title">VCF</div>
+                <div class="controls-grid">
+                    <div class="knob-container"><div class="knob" id="cutoff" data-param="5" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Cutoff</div></div>
+                    <div class="knob-container"><div class="knob" id="resonance" data-param="6" data-min="0" data-max="1" data-val="0.1"></div><div class="knob-label">Reso</div></div>
+                    <div class="knob-container"><div class="knob" id="filterEnv" data-param="7" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Env Amt</div></div>
+                </div>
+            </div>
+
+            <!-- ENV -->
+            <div class="section">
+                <div class="section-title">Envelope</div>
+                <div class="controls-grid">
+                    <div class="knob-container"><div class="knob" id="attack" data-param="8" data-min="0" data-max="1" data-val="0.1"></div><div class="knob-label">Attack</div></div>
+                    <div class="knob-container"><div class="knob" id="decay" data-param="9" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Decay</div></div>
+                    <div class="knob-container"><div class="knob" id="sustain" data-param="10" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Sustain</div></div>
+                    <div class="knob-container"><div class="knob" id="release" data-param="11" data-min="0" data-max="1" data-val="0.3"></div><div class="knob-label">Release</div></div>
+                </div>
+            </div>
+
+            <!-- FX -->
+            <div class="section">
+                <div class="section-title">Effects</div>
+                <div class="controls-grid">
+                    <div class="knob-container"><div class="knob" id="chorus" data-param="12" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Chorus</div></div>
+                    <div class="knob-container"><div class="knob" id="delay" data-param="13" data-min="0" data-max="1" data-val="0.3"></div><div class="knob-label">Delay</div></div>
+                    <div class="knob-container"><div class="knob" id="reverb" data-param="14" data-min="0" data-max="1" data-val="0.3"></div><div class="knob-label">Reverb</div></div>
+                    <div class="knob-container"><div class="knob" id="vol" data-param="15" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Volume</div></div>
+                </div>
+            </div>
+        </div>
+
+        <div id="keyboard-container"></div>
+    </div>
+
+    <script type="module">
+        import { Keyboard } from '../../System/shared/keyboard.js';
+        import { MidiManager } from '../../System/shared/midi.js';
+
+        // --- PARAMS ---
+        // 0: Note (Internal)
+        // 1: Detune
+        // 2: Sub Level
+        // 3: PWM
+        // 4: Glide (Portamento)
+        // 5: Cutoff
+        // 6: Res
+        // 7: Filt Env Amt
+        // 8: A, 9: D, 10: S, 11: R
+        // 12: Chorus
+        // 13: Delay
+        // 14: Reverb
+        // 15: Volume
+        // 16: Gate (Internal)
+        // 17: Velocity (Internal)
+        // 18: Voice Index (Internal/Auto)
+
+        function sendParam(id, val) {
+            window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(id), value: parseFloat(val) }, '*');
+        }
+
+        // --- KNOBS ---
+        function updateKnob(el, val) {
+            el.dataset.val = val;
+            const min = parseFloat(el.dataset.min);
+            const max = parseFloat(el.dataset.max);
+            const pct = (val - min) / (max - min);
+            el.style.background = `conic-gradient(var(--neon-cyan) ${pct*270}deg, #333 0deg)`;
+        }
+
+        document.querySelectorAll('.knob').forEach(el => {
+            updateKnob(el, parseFloat(el.dataset.val));
+            let dragging = false;
+            let startY = 0;
+            let startVal = 0;
+            el.addEventListener('mousedown', e => { dragging = true; startY = e.clientY; startVal = parseFloat(el.dataset.val); });
+            window.addEventListener('mouseup', () => dragging = false);
+            window.addEventListener('mousemove', e => {
+                if(!dragging) return;
+                const delta = startY - e.clientY;
+                const range = parseFloat(el.dataset.max) - parseFloat(el.dataset.min);
+                let val = startVal + (delta / 200) * range;
+                val = Math.max(parseFloat(el.dataset.min), Math.min(parseFloat(el.dataset.max), val));
+                updateKnob(el, val);
+                sendParam(el.dataset.param, val);
+            });
+        });
+
+        // --- ARP ---
+        const arp = { on: false, latch: false, notes: new Set(), latched: [], step: 0, timer: null };
+        const arpToggle = document.getElementById('arp-toggle');
+        const latchToggle = document.getElementById('latch-toggle');
+
+        arpToggle.onclick = () => {
+            arp.on = !arp.on;
+            arpToggle.classList.toggle('active');
+            if(!arp.on) stopArp(); else startArp();
+        };
+        latchToggle.onclick = () => {
+            arp.latch = !arp.latch;
+            latchToggle.classList.toggle('active');
+            if(!arp.latch) arp.latched = [];
+        };
+
+        function startArp() {
+            if(arp.timer) return;
+            arp.timer = setInterval(arpStep, 120); // ~125ms = 120bpm 16ths approx
+        }
+        function stopArp() {
+            clearInterval(arp.timer); arp.timer = null;
+            // All notes off
+            sendParam(20, 0); // Panic/AllOff
+        }
+
+        function arpStep() {
+            let pool = Array.from(arp.notes).sort((a,b)=>a-b);
+            if(arp.latch && pool.length === 0 && arp.latched.length > 0) pool = arp.latched;
+            if(arp.latch && pool.length > 0) arp.latched = pool;
+
+            if(pool.length === 0) return;
+            
+            const note = pool[arp.step % pool.length];
+            // Trigger Note
+            sendParam(16, 0); // Gate Off
+            sendParam(18, note); // Note Num
+            sendParam(16, 1); // Gate On
+            
+            arp.step++;
+        }
+
+        // --- KEYBOARD & MIDI ---
+        // This synth is POLYPHONIC.
+        // However, the BVST template usually handles 1 voice in Rust or a fixed set.
+        // We will implement a "Voice Allocator" in Rust or JS?
+        // Simpler: Send NoteOn/Off events to Rust, let Rust manage voices.
+        // We'll use Param ID 21 for "Note On" (Value = MidiNum) and 22 for "Note Off".
+        
+        const kb = new Keyboard('keyboard-container', {
+            startNote: 48, numKeys: 49, responsive: true,
+            onNoteOn: (n) => handleNoteOn(n, 0.8),
+            onNoteOff: (n) => handleNoteOff(n)
+        });
+
+        function handleNoteOn(n, v) {
+            // Force full velocity (1.0) for both MIDI and UI to ensure consistent "full on" sound
+            const velocity = 1.0; 
+            sendParam(17, velocity); // Always update velocity state, even if Arp is on
+            
+            if(arp.on) {
+                arp.notes.add(n);
+            } else {
+                sendParam(21, n); // Note On Trigger
+            }
+            kb.triggerVisual(n, true);
+        }
+
+        function handleNoteOff(n) {
+            if(arp.on) {
+                arp.notes.delete(n);
+            } else {
+                sendParam(22, n); // Note Off Trigger
+            }
+            kb.triggerVisual(n, false);
+        }
+
+        const midi = new MidiManager({
+            deviceSelectorId: 'midi-in',
+            onNoteOn: (n,v) => handleNoteOn(n, v/127),
+            onNoteOff: (n) => handleNoteOff(n),
+            onCC: (c,v) => { if(c===74) { const k=document.getElementById('cutoff'); updateKnob(k, v/127); sendParam(5, v/127); } }
+        });
+
+        // --- VISUALS (RETRO GRID) ---
+        const cvs = document.getElementById('visualizer');
+        const ctx = cvs.getContext('2d');
+        let time = 0;
+
+        function draw() {
+            requestAnimationFrame(draw);
+            cvs.width = window.innerWidth; cvs.height = window.innerHeight;
+            const w = cvs.width; const h = cvs.height;
+            time += 0.005;
+
+            ctx.fillStyle = '#000'; ctx.fillRect(0,0,w,h);
+            
+            // Horizon
+            const horizon = h * 0.6;
+            
+            // Sun
+            const grad = ctx.createLinearGradient(w/2, horizon-150, w/2, horizon);
+            grad.addColorStop(0, '#ff00ff'); grad.addColorStop(1, '#ffff00');
+            ctx.fillStyle = grad;
+            ctx.beginPath(); ctx.arc(w/2, horizon, 100, Math.PI, 0); ctx.fill();
+
+            // Grid
+            ctx.strokeStyle = '#ff00ff'; ctx.lineWidth = 1;
+            
+            // Vertical lines (Perspective)
+            for(let i=-10; i<=10; i++) {
+                const x = w/2 + (i * 100);
+                ctx.beginPath(); ctx.moveTo(w/2 + i*10, horizon); ctx.lineTo(x * 3, h); ctx.stroke();
+            }
+            
+            // Horizontal lines (Moving)
+            for(let i=0; i<10; i++) {
+                const y = horizon + Math.pow((i + (time%1)), 2) * 20;
+                if(y > h) continue;
+                ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
+            }
+        }
+        draw();
+        
+        // --- PRESETS ---
+        const PRESETS = [
+             { name: "NEON NIGHTS", p: { 1:0.5, 2:0.2, 3:0.5, 4:0.1, 5:0.4, 6:0.2, 7:0.5, 8:0.1, 9:0.5, 10:0.5, 11:0.3, 12:0.6, 13:0.3, 14:0.4, 15:0.5 } },
+             { name: "BLADE PAD", p: { 1:0.6, 2:0.3, 3:0.5, 4:0.2, 5:0.2, 6:0.1, 7:0.1, 8:0.8, 9:0.8, 10:0.8, 11:0.8, 12:0.8, 13:0.5, 14:0.7, 15:0.5 } },
+             { name: "CHROME BASS", p: { 1:0.4, 2:0.8, 3:0.2, 4:0.0, 5:0.1, 6:0.4, 7:0.8, 8:0.0, 9:0.2, 10:0.2, 11:0.2, 12:0.2, 13:0.1, 14:0.1, 15:0.6 } }
+        ];
+        let pIdx = 0;
+        function loadP(i) {
+            const p = PRESETS[i];
+            document.getElementById('patch-name').innerText = p.name;
+            for(const [id, val] of Object.entries(p.p)) {
+                const el = document.querySelector(`.knob[data-param="${id}"]`);
+                if(el) { updateKnob(el, val); sendParam(id, val); }
+            }
+        }
+        document.getElementById('prev-preset').onclick = () => { pIdx = (pIdx - 1 + PRESETS.length) % PRESETS.length; loadP(pIdx); };
+        document.getElementById('next-preset').onclick = () => { pIdx = (pIdx + 1) % PRESETS.length; loadP(pIdx); };
+        
+        // Auto Scale
+        function autoScale() {
+             const el = document.getElementById('synth-container');
+             const sc = Math.min(window.innerWidth/1100, window.innerHeight/800, 1);
+             el.style.transform = `scale(${sc})`;
+        }
+        window.onresize = autoScale; setTimeout(autoScale, 100);
+        setTimeout(() => loadP(0), 200);
+
+    </script>
+</body>
+</html>

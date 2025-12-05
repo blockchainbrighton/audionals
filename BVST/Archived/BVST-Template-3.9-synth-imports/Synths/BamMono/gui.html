@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAM Mono | BVST</title>
+    <style>
+        :root {
+            --bg: #1a1a1a;
+            --panel: #252525;
+            --border: #333;
+            --accent: #ff9900;
+            --text: #ddd;
+            --knob: #111;
+            --key-white: #fffff0;
+            --key-black: #151515;
+        }
+
+        body {
+            background-color: var(--bg);
+            color: var(--text);
+            font-family: 'Courier New', monospace;
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none;
+        }
+
+        /* MAIN RACK */
+        #rack {
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+            max-width: 1000px;
+            width: 100%;
+            background: #000;
+            padding: 10px;
+            border: 2px solid #444;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.8);
+        }
+
+        /* MODULES */
+        .module {
+            background: var(--panel);
+            border: 1px solid var(--border);
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+        .module.wide { grid-column: span 2; }
+        .module.full { grid-column: span 4; }
+
+        .header {
+            font-size: 0.7rem;
+            color: #888;
+            border-bottom: 1px solid #444;
+            margin-bottom: 8px;
+            padding-bottom: 2px;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        /* CONTROLS */
+        .row {
+            display: flex;
+            justify-content: space-around;
+            align-items: flex-end;
+            gap: 5px;
+            flex: 1;
+        }
+        
+        .ctrl {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 50px;
+        }
+        .ctrl label {
+            font-size: 0.6rem;
+            margin-top: 5px;
+            color: #aaa;
+            text-align: center;
+        }
+
+        /* KNOBS */
+        .knob-wrap {
+            width: 45px; height: 45px;
+            position: relative;
+        }
+        .knob {
+            width: 100%; height: 100%;
+            border-radius: 50%;
+            background: radial-gradient(circle at 30% 30%, #444, #111);
+            border: 1px solid #555;
+            position: relative;
+            cursor: ns-resize;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            transform: rotate(-135deg); /* Init pos */
+        }
+        .knob::after {
+            content: '';
+            position: absolute;
+            top: 10%; left: 50%;
+            width: 2px; height: 40%;
+            background: var(--accent);
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+
+        /* SLIDERS */
+        input[type="range"].v-slider {
+            -webkit-appearance: slider-vertical;
+            width: 8px;
+            height: 80px;
+            background: transparent;
+        }
+
+        /* SELECT */
+        select {
+            background: #111; color: var(--accent);
+            border: 1px solid #444;
+            font-size: 0.7rem;
+            width: 100%;
+            margin-bottom: 5px;
+        }
+
+        /* VISUALS */
+        canvas#scope {
+            width: 100%; height: 60px;
+            background: #000;
+            border: 1px solid #444;
+        }
+        
+        #preset-list {
+            display: flex; gap: 5px; overflow-x: auto; padding-bottom: 5px;
+        }
+        .p-btn {
+            background: #333; border: 1px solid #555; color: #ccc;
+            padding: 4px 8px; font-family: inherit; font-size: 0.7rem;
+            cursor: pointer; white-space: nowrap;
+        }
+        .p-btn:hover { border-color: var(--accent); }
+        
+        .midi-led {
+            width: 8px; height: 8px; background: #300; border-radius: 50%;
+            display: inline-block; margin-left: 5px;
+        }
+        .midi-led.on { background: #f00; box-shadow: 0 0 5px #f00; }
+        
+        /* KEYBOARD Container */
+        #piano {
+            width: 100%;
+            height: 100px;
+            position: relative;
+        }
+
+    </style>
+</head>
+<body>
+
+    <div id="rack">
+        <!-- HEADER -->
+        <div class="module full" style="display:flex; flex-direction:row; align-items:center; justify-content:space-between;">
+            <div style="font-weight:bold; font-size:1.2rem; color:var(--accent);">BAM MONO</div>
+            <div style="display:flex; align-items:center; gap:10px; font-size:0.7rem;">
+                MIDI <div id="midi-led" class="midi-led"></div>
+                <select id="midi-in" style="width:100px; margin:0;"><option>None</option></select>
+            </div>
+        </div>
+
+        <!-- OSC 1 -->
+        <div class="module">
+            <div class="header">Oscillator 1</div>
+            <select id="osc1-type" data-param="0">
+                <option value="0">Sawtooth</option>
+                <option value="1">Square</option>
+                <option value="2">Pulse</option>
+                <option value="3">Triangle</option>
+            </select>
+            <div class="row">
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="osc1-oct" data-param="1" data-min="-2" data-max="2" data-step="1" data-val="0"></div></div>
+                    <label>Oct</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="osc1-tune" data-param="2" data-min="-1200" data-max="1200" data-val="0"></div></div>
+                    <label>Tune</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- OSC 2 -->
+        <div class="module">
+            <div class="header">Oscillator 2</div>
+            <select id="osc2-type" data-param="3">
+                <option value="1">Square</option>
+                <option value="0">Sawtooth</option>
+                <option value="2">Pulse</option>
+                <option value="3">Triangle</option>
+            </select>
+            <div class="row">
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="osc2-oct" data-param="4" data-min="-2" data-max="2" data-step="1" data-val="-1"></div></div>
+                    <label>Oct</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="osc2-tune" data-param="5" data-min="-1200" data-max="1200" data-val="7"></div></div>
+                    <label>Tune</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- MIXER -->
+        <div class="module">
+            <div class="header">Mixer</div>
+            <div class="row">
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="mix-osc1" data-param="6" data-min="0" data-max="1" data-val="1"></div></div>
+                    <label>Osc 1</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="mix-osc2" data-param="7" data-min="0" data-max="1" data-val="0.5"></div></div>
+                    <label>Osc 2</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="mix-noise" data-param="8" data-min="0" data-max="0.5" data-val="0"></div></div>
+                    <label>Noise</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- FILTER -->
+        <div class="module">
+            <div class="header">Filter (24dB)</div>
+            <div class="row">
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="filt-cut" data-param="9" data-min="50" data-max="12000" data-exp="1" data-val="2000"></div></div>
+                    <label>Freq</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="filt-res" data-param="10" data-min="0" data-max="4" data-val="1"></div></div>
+                    <label>Res</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="filt-env-amt" data-param="11" data-min="0" data-max="5000" data-val="2000"></div></div>
+                    <label>Env</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- AMP ENV -->
+        <div class="module">
+            <div class="header">Amp Env</div>
+            <div class="row">
+                <div class="ctrl"><input type="range" class="v-slider" id="amp-a" data-param="12" min="0.005" max="2" step="0.01" value="0.01"><label>A</label></div>
+                <div class="ctrl"><input type="range" class="v-slider" id="amp-d" data-param="13" min="0.0" max="2" step="0.01" value="0.1"><label>D</label></div>
+                <div class="ctrl"><input type="range" class="v-slider" id="amp-s" data-param="14" min="0" max="1" step="0.01" value="1.0"><label>S</label></div>
+                <div class="ctrl"><input type="range" class="v-slider" id="amp-r" data-param="15" min="0.01" max="4" step="0.01" value="0.1"><label>R</label></div>
+            </div>
+        </div>
+
+        <!-- FILT ENV -->
+        <div class="module">
+            <div class="header">Filter Env</div>
+            <div class="row">
+                <div class="ctrl"><input type="range" class="v-slider" id="filt-a" data-param="16" min="0.005" max="2" step="0.01" value="0.01"><label>A</label></div>
+                <div class="ctrl"><input type="range" class="v-slider" id="filt-d" data-param="17" min="0.0" max="2" step="0.01" value="0.2"><label>D</label></div>
+                <div class="ctrl"><input type="range" class="v-slider" id="filt-s" data-param="18" min="0" max="1" step="0.01" value="0.5"><label>S</label></div>
+                <div class="ctrl"><input type="range" class="v-slider" id="filt-r" data-param="19" min="0.01" max="4" step="0.01" value="0.5"><label>R</label></div>
+            </div>
+        </div>
+
+        <!-- MODULATION -->
+        <div class="module">
+            <div class="header">Modulation</div>
+            <div class="row">
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="lfo-rate" data-param="20" data-min="0.1" data-max="20" data-val="5"></div></div>
+                    <label>LFO Hz</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="lfo-amt" data-param="21" data-min="0" data-max="1000" data-val="0"></div></div>
+                    <label>LFO>VCF</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="glide" data-param="22" data-min="0" data-max="0.5" data-val="0"></div></div>
+                    <label>Glide</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- FX -->
+        <div class="module">
+            <div class="header">Output / FX</div>
+            <div class="row">
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="dist" data-param="23" data-min="0" data-max="1" data-val="0"></div></div>
+                    <label>Drive</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="delay" data-param="24" data-min="0" data-max="0.6" data-val="0.2"></div></div>
+                    <label>Delay</label>
+                </div>
+                <div class="ctrl">
+                    <div class="knob-wrap"><div class="knob" id="vol" data-param="25" data-min="0" data-max="1" data-val="0.5"></div></div>
+                    <label>Vol</label>
+                </div>
+            </div>
+        </div>
+
+        <!-- VISUAL & PRESETS -->
+        <div class="module full">
+            <div class="header">Visuals & Presets</div>
+            <div style="display: flex; gap: 10px;">
+                <div style="flex: 1;">
+                    <!-- Scope Placeholder -->
+                    <div style="width:100%; height:60px; background:#000; border:1px solid #444; display:flex; align-items:center; justify-content:center; color:#333;">
+                        SCOPE (N/A in WASM MVP)
+                    </div>
+                </div>
+                <div style="flex: 1; display: flex; flex-direction: column; gap: 5px;">
+                    <div id="preset-list">
+                        <!-- Buttons -->
+                    </div>
+                    <div style="font-size: 0.7rem; color: #666;">Shared Keyboard Loaded</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- KEYBOARD -->
+        <div class="module full" style="padding:0; border:none; background:transparent;">
+            <div id="piano"></div>
+        </div>
+
+    </div>
+
+    <script type="module">
+        import { Keyboard } from '../../System/shared/keyboard.js';
+        import { MidiManager } from '../../System/shared/midi.js';
+
+        // --- PARAMETER SENDER ---
+        function sendParam(id, value) {
+            // console.log("Param", id, value);
+            window.parent.postMessage({
+                type: 'BVST_PARAM',
+                id: parseInt(id),
+                value: parseFloat(value)
+            }, '*');
+        }
+
+        // --- KNOB CONTROL LOGIC (Inlined for custom style) ---
+        class KnobControl {
+            constructor(selector, onChange) {
+                this.onChange = onChange;
+                this.elements = document.querySelectorAll(selector);
+                this.activeKnob = null;
+                this.startY = 0;
+                this.startVal = 0;
+
+                this.init();
+            }
+
+            init() {
+                this.elements.forEach(el => {
+                    this.updateVisual(el);
+                    el.addEventListener('mousedown', (e) => this.startDrag(e, el));
+                });
+                window.addEventListener('mousemove', (e) => this.drag(e));
+                window.addEventListener('mouseup', () => this.endDrag());
+            }
+
+            startDrag(e, el) {
+                e.preventDefault();
+                this.activeKnob = el;
+                this.startY = e.clientY;
+                this.startVal = parseFloat(el.dataset.val);
+                document.body.style.cursor = 'ns-resize';
+            }
+
+            drag(e) {
+                if (!this.activeKnob) return;
+                e.preventDefault();
+                
+                const el = this.activeKnob;
+                const delta = this.startY - e.clientY;
+                const min = parseFloat(el.dataset.min);
+                const max = parseFloat(el.dataset.max);
+                const step = parseFloat(el.dataset.step) || 0;
+                const range = max - min;
+                
+                // Sensitivity
+                let change = (delta / 150) * range;
+                let newVal = this.startVal + change;
+                
+                // Clamp
+                newVal = Math.max(min, Math.min(max, newVal));
+                
+                // Step
+                if(step > 0) {
+                    newVal = Math.round(newVal / step) * step;
+                }
+
+                // Update
+                el.dataset.val = newVal;
+                this.updateVisual(el);
+                
+                const paramId = el.dataset.param;
+                if(paramId !== undefined) {
+                    this.onChange(paramId, newVal);
+                }
+            }
+
+            endDrag() {
+                this.activeKnob = null;
+                document.body.style.cursor = '';
+            }
+
+            updateVisual(el) {
+                const val = parseFloat(el.dataset.val);
+                const min = parseFloat(el.dataset.min);
+                const max = parseFloat(el.dataset.max);
+                const pct = (val - min) / (max - min);
+                const deg = -135 + (pct * 270);
+                el.style.transform = `rotate(${deg}deg)`;
+            }
+            
+            setValue(el, val) {
+                el.dataset.val = val;
+                this.updateVisual(el);
+                const paramId = el.dataset.param;
+                if(paramId) this.onChange(paramId, val);
+            }
+        }
+
+        // --- INIT CONTROLS ---
+        const knobs = new KnobControl('.knob', (id, val) => sendParam(id, val));
+
+        // Sliders
+        document.querySelectorAll('input[type="range"]').forEach(sl => {
+            sl.addEventListener('input', (e) => {
+                sendParam(e.target.dataset.param, e.target.value);
+            });
+        });
+
+        // Selects
+        document.querySelectorAll('select').forEach(sel => {
+            if (sel.id.startsWith('midi')) return; // Skip MIDI selector here
+            sel.addEventListener('change', (e) => {
+                sendParam(e.target.dataset.param, e.target.value);
+            });
+        });
+
+        // --- KEYBOARD & MIDI ---
+        // Freq Helper
+        function mtof(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+        let activeKeys = new Set();
+
+        const kb = new Keyboard('piano', {
+            startNote: 36, // C2
+            numKeys: 49,
+            responsive: true,
+            onNoteOn: (midi) => {
+                activeKeys.add(midi);
+                sendParam(26, mtof(midi)); // Freq
+                sendParam(28, 0.8); // Velocity (Default for UI click)
+                sendParam(27, 1.0); // Gate
+            },
+            onNoteOff: (midi) => {
+                activeKeys.delete(midi);
+                // Simple Mono logic: if keys still held, retrigger last? 
+                // For MVP, just Gate Off if no keys.
+                // Real mono logic requires stack in Rust or JS.
+                if (activeKeys.size === 0) {
+                    sendParam(27, 0.0);
+                } else {
+                    // Retrigger highest
+                    const highest = Math.max(...activeKeys);
+                    sendParam(26, mtof(highest));
+                    sendParam(27, 1.0);
+                }
+            }
+        });
+
+        const midi = new MidiManager({
+            deviceSelectorId: 'midi-in',
+            statusElementId: 'midi-led',
+            onNoteOn: (n, v) => {
+                kb.triggerVisual(n, true);
+                activeKeys.add(n);
+                sendParam(26, mtof(n));
+                sendParam(28, v / 127.0); // Velocity
+                sendParam(27, 1.0); // Gate
+            },
+            onNoteOff: (n) => {
+                kb.triggerVisual(n, false);
+                activeKeys.delete(n);
+                if (activeKeys.size === 0) {
+                    sendParam(27, 0.0);
+                } else {
+                    const highest = Math.max(...activeKeys);
+                    sendParam(26, mtof(highest));
+                    sendParam(27, 1.0);
+                }
+            },
+            onCC: (cc, val) => {
+                // Example: Mod Wheel -> LFO Amt (Param 21)
+                if (cc === 1) {
+                    sendParam(21, val * 10); // Scale 0-127 to 0-1270
+                }
+                // Cutoff (74)
+                if (cc === 74) {
+                    const cut = 50 + (val * 100); // Simplified scale
+                    sendParam(9, cut);
+                }
+            }
+        });
+        
+        // --- PRESETS ---
+        const presets = [
+            { name: "INIT", params: { "osc1-type":0, "osc2-type":1, "mix-osc1":1, "mix-osc2":0, "filt-cut":2000, "filt-res":1, "filt-env-amt":2000, "dist":0, "delay":0, "vol": 0.5 } },
+            { name: "BASS", params: { "osc1-type":1, "osc2-type":3, "mix-osc1":0.8, "mix-osc2":0.8, "filt-cut":400, "filt-res":2, "filt-env-amt":500, "dist":0.2, "delay":0, "vol": 0.6 } },
+            { name: "LEAD", params: { "osc1-type":0, "osc2-type":0, "mix-osc1":0.6, "mix-osc2":0.6, "filt-cut":5000, "filt-res":2, "filt-env-amt":0, "dist":0.4, "delay":0.3, "vol": 0.5 } },
+            { name: "ACID", params: { "osc1-type":0, "osc2-type":1, "mix-osc1":1, "mix-osc2":0, "filt-cut":600, "filt-res":3.5, "filt-env-amt":3000, "dist":0.8, "delay":0.2, "vol": 0.5 } }
+        ];
+
+        const pList = document.getElementById('preset-list');
+        presets.forEach(p => {
+            const btn = document.createElement('button');
+            btn.className = 'p-btn';
+            btn.innerText = p.name;
+            btn.onclick = () => loadPreset(p);
+            pList.appendChild(btn);
+        });
+
+        function loadPreset(p) {
+            for (const [id, val] of Object.entries(p.params)) {
+                const el = document.getElementById(id);
+                if (el) {
+                    if (el.classList.contains('knob')) {
+                        knobs.setValue(el, val);
+                    } else if (el.tagName === 'SELECT' || el.type === 'range') {
+                        el.value = val;
+                        sendParam(el.dataset.param, val);
+                    }
+                }
+            }
+        }
+        
+        // Init
+        setTimeout(() => loadPreset(presets[0]), 100);
+
+        // --- AUTO SCALE ---
+        function autoScale() {
+            const rack = document.getElementById('rack');
+            const body = document.body;
+            const availableW = window.innerWidth - 40; // Padding
+            const availableH = window.innerHeight - 40; 
+            const rackW = 1000; // Base width defined in CSS
+            const rackH = 800; // Approx height or measure it
+            
+            // Measure actual natural height
+            rack.style.transform = 'none';
+            rack.style.width = '1000px'; // Force base width
+            const naturalH = rack.scrollHeight;
+            
+            const scaleX = availableW / rackW;
+            const scaleY = availableH / naturalH;
+            
+            // Scale to fit whichever is smaller, but max 1.0 (don't upscale pixel art style too much maybe? actually upscaling is fine for ease of use)
+            const scale = Math.min(scaleX, scaleY, 1.5); // Max 1.5x
+            
+            if (scale < 0.99 || scale > 1.01) {
+                rack.style.transformOrigin = 'top center';
+                rack.style.transform = `scale(${scale})`;
+                // Adjust body height to prevent scrollbars from the original size ghost
+                body.style.height = (naturalH * scale) + 50 + 'px';
+                body.style.overflow = 'hidden'; // Hide scrollbars
+            } else {
+                rack.style.transform = 'none';
+                body.style.height = 'auto';
+                body.style.overflow = 'auto';
+            }
+        }
+
+        window.addEventListener('resize', autoScale);
+        // Call after a slight delay to allow rendering
+        setTimeout(autoScale, 200);
+
+    </script>
+</body>
+</html>

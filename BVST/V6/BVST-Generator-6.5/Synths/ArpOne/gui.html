@@ -1,0 +1,231 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ArpOne</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #222; color: #eee; display: flex; justify-content: center; min-height: 100vh; font-family: monospace; }
+        #arp-controls { margin-bottom: 10px; padding: 10px; background: #333; border-radius: 5px; text-align: center; }
+        select { background: #111; color: #fff; border: 1px solid #555; padding: 5px; }
+    </style>
+</head>
+<body>
+    <div style="display:flex; flex-direction:column; align-items:center;">
+        
+        <!-- ARP UI -->
+        <div id="arp-controls">
+            <label>ARP MODE</label>
+            <select id="arp-dir">
+                <option value="up">UP</option>
+                <option value="down">DOWN</option>
+                <option value="updown">UP/DOWN</option>
+                <option value="random">RANDOM</option>
+            </select>
+            
+            <label>RATE</label>
+            <select id="arp-rate">
+                <option value="125">1/8</option>
+                <option value="62.5">1/16</option>
+                <option value="250">1/4</option>
+            </select>
+            
+            <label>RANGE</label>
+            <select id="arp-oct">
+                <option value="1">1 Oct</option>
+                <option value="2">2 Oct</option>
+                <option value="3">3 Oct</option>
+            </select>
+            
+            <button id="arp-enable" style="background:#444; color:white; border:1px solid #666; padding:5px;">ARP: ON</button>
+        </div>
+
+        <div id="app-container"></div>
+    </div>
+
+    <script type="module">
+        import { Controls } from '../../System/shared/controls.js';
+        import { Keyboard } from '../../System/shared/keyboard.js';
+        import { MidiManager } from '../../System/shared/midi.js';
+
+        const CONFIG = {
+            name: "ARP ONE",
+            modules: [
+                {
+                    name: "Oscillators",
+                    controls: [
+                        { type: 'knob', id: 'mix', label: 'Saw/Pulse', param: 1, min: 0, max: 1, val: 0.5 },
+                        { type: 'knob', id: 'pw', label: 'Width', param: 2, min: 0.1, max: 0.9, val: 0.5 },
+                        { type: 'knob', id: 'det', label: 'Detune', param: 3, min: 1.0, max: 1.02, val: 1.005 }
+                    ]
+                },
+                {
+                    name: "Filter/Env",
+                    controls: [
+                        { type: 'knob', id: 'cut', label: 'Cutoff', param: 4, min: 50, max: 8000, curve: 'log', val: 1500 },
+                        { type: 'knob', id: 'res', label: 'Res', param: 5, min: 0, max: 8, val: 2 },
+                        { type: 'knob', id: 'env', label: 'Env Amt', param: 6, min: 0, max: 5000, val: 2000 },
+                        { type: 'knob', id: 'dec', label: 'Decay', param: 7, min: 0.05, max: 2.0, val: 0.3 }
+                    ]
+                },
+                {
+                    name: "Effects",
+                    controls: [
+                        { type: 'knob', id: 'd_time', label: 'D.Time', param: 9, min: 0, max: 0.8, val: 0.3 },
+                        { type: 'knob', id: 'd_mix', label: 'D.Mix', param: 10, min: 0, max: 0.6, val: 0.3 },
+                        { type: 'knob', id: 'vol', label: 'Volume', param: 11, min: 0, max: 1, val: 0.6 }
+                    ]
+                }
+            ]
+        };
+
+        const controls = new Controls({
+             onChange: (id, val) => {
+                 const el = document.getElementById(id);
+                 if(el && el.dataset.param) window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(el.dataset.param), value: val }, '*');
+             }
+        });
+
+        controls.buildUI('app-container', CONFIG);
+
+        // --- ARPEGGIATOR LOGIC ---
+        const arpState = {
+            active: true,
+            notes: [], // Held notes (sorted)
+            index: 0,
+            dir: 'up', // up, down, updown, random
+            dirFlag: 1, // 1 for up, -1 for down (for updown mode)
+            rateMs: 125, // 1/8 at 120bpm approx
+            octaves: 2,
+            timer: null
+        };
+
+        // UI Bindings
+        document.getElementById('arp-dir').onchange = (e) => arpState.dir = e.target.value;
+        document.getElementById('arp-rate').onchange = (e) => {
+            arpState.rateMs = parseFloat(e.target.value);
+            restartArp();
+        };
+        document.getElementById('arp-oct').onchange = (e) => arpState.octaves = parseInt(e.target.value);
+        
+        const btnArp = document.getElementById('arp-enable');
+        btnArp.onclick = () => {
+            arpState.active = !arpState.active;
+            btnArp.innerText = arpState.active ? "ARP: ON" : "ARP: OFF";
+            btnArp.style.color = arpState.active ? "white" : "gray";
+            if(!arpState.active) stopArp(); // Kill notes
+        };
+
+        function restartArp() {
+            if(arpState.timer) clearInterval(arpState.timer);
+            if(arpState.active) arpState.timer = setInterval(clockTick, arpState.rateMs);
+        }
+
+        function stopArp() {
+            if(arpState.timer) clearInterval(arpState.timer);
+            arpState.timer = null;
+            // Send note off
+            window.parent.postMessage({ type: 'BVST_PARAM', id: 129, value: 0 }, '*'); 
+        }
+
+        function clockTick() {
+            if(arpState.notes.length === 0) return;
+
+            // Calculate Pattern
+            // Pattern: Expand notes by octaves
+            let pattern = [];
+            for(let o=0; o<arpState.octaves; o++) {
+                for(let n of arpState.notes) {
+                    pattern.push(n + (o*12));
+                }
+            }
+            
+            // Sort pattern for Up/Down logic
+            pattern.sort((a,b) => a-b);
+            
+            let noteToPlay = 0;
+            
+            if (arpState.dir === 'random') {
+                const r = Math.floor(Math.random() * pattern.length);
+                noteToPlay = pattern[r];
+            } else if (arpState.dir === 'up') {
+                arpState.index = (arpState.index + 1) % pattern.length;
+                noteToPlay = pattern[arpState.index];
+            } else if (arpState.dir === 'down') {
+                // Logic for down
+                arpState.index--;
+                if(arpState.index < 0) arpState.index = pattern.length - 1;
+                noteToPlay = pattern[arpState.index];
+            } else if (arpState.dir === 'updown') {
+                 arpState.index += arpState.dirFlag;
+                 if (arpState.index >= pattern.length) {
+                     arpState.index = pattern.length - 2; // Bounce back
+                     arpState.dirFlag = -1;
+                 } else if (arpState.index < 0) {
+                     arpState.index = 1; // Bounce fwd
+                     arpState.dirFlag = 1;
+                 }
+                 // Safety clamp
+                 if(pattern.length === 1) arpState.index = 0;
+                 else arpState.index = Math.max(0, Math.min(pattern.length-1, arpState.index));
+                 
+                 noteToPlay = pattern[arpState.index];
+            }
+
+            // Trigger
+            window.parent.postMessage({ type: 'BVST_PARAM', id: 128, value: noteToPlay }, '*');
+        }
+        
+        // Start Clock
+        restartArp();
+
+        // --- KEYBOARD INTEGRATION ---
+        const kb = new Keyboard('piano', {
+            startNote: 36, numKeys: 25, responsive: true,
+            onNoteOn: (midi) => {
+                if(!arpState.notes.includes(midi)) {
+                    arpState.notes.push(midi);
+                    arpState.notes.sort((a,b) => a-b);
+                }
+                
+                if (!arpState.active) {
+                    // Passthrough if arp off
+                    window.parent.postMessage({ type: 'BVST_PARAM', id: 128, value: midi }, '*');
+                } else {
+                    // If first note, reset index and maybe trigger immediately?
+                    if(arpState.notes.length === 1) {
+                        arpState.index = -1; // Reset so next tick hits 0
+                        // Optional: trigger immediate?
+                        // clockTick(); // Sync issues?
+                    }
+                }
+            },
+            onNoteOff: (midi) => {
+                const idx = arpState.notes.indexOf(midi);
+                if(idx > -1) arpState.notes.splice(idx, 1);
+                
+                if (!arpState.active) {
+                    window.parent.postMessage({ type: 'BVST_PARAM', id: 129, value: midi }, '*');
+                }
+            }
+        });
+        
+        const midi = new MidiManager({
+            deviceSelectorId: 'midi-in',
+            statusElementId: 'midi-led',
+            onNoteOn: (n) => kb._handleNoteOn(n),
+            onNoteOff: (n) => kb._handleNoteOff(n)
+        });
+
+        // Restore Params
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'BVST_READY') {
+                document.querySelectorAll('[data-param]').forEach(el => {
+                     const p = parseInt(el.dataset.param);
+                     const v = parseFloat(el.dataset.val);
+                     window.parent.postMessage({ type: 'BVST_PARAM', id: p, value: v }, '*');
+                });
+            }
+        });
+    </script>
+</body>
+</html>

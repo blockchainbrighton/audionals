@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>JMS-10</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #1a1a1a; color: #ccc; display: flex; justify-content: center; min-height: 100vh; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div id="app-container"></div>
+
+    <script type="module">
+        import { Controls } from '../../System/shared/controls.js';
+        import { Keyboard } from '../../System/shared/keyboard.js';
+        import { MidiManager } from '../../System/shared/midi.js';
+
+        const CONFIG = {
+            name: "JMS-10",
+            modules: [
+                {
+                    name: "VCO",
+                    controls: [
+                        // Wave: Tri, Saw, Pulse, Noise
+                        { type: 'knob', id: 'wave', label: 'Wave', param: 1, min: 0, max: 3, step: 1, val: 1 },
+                        // Octave: -24, -12, 0, 12 (Displayed as 32', 16', 8', 4')
+                        { type: 'knob', id: 'oct', label: 'Scale', param: 2, min: -24, max: 12, step: 12, val: 0 },
+                        { type: 'knob', id: 'pwm', label: 'PW', param: 3, min: 0.1, max: 0.9, val: 0.5 }
+                    ]
+                },
+                {
+                    name: "VCF",
+                    controls: [
+                        { type: 'knob', id: 'cut', label: 'Cutoff', param: 4, min: 50, max: 10000, curve: 'log', val: 1000 },
+                        { type: 'knob', id: 'peak', label: 'Peak', param: 5, min: 0, max: 9.5, val: 2 }, // Self oscillation limit
+                        { type: 'knob', id: 'eg_amt', label: 'EG/Ext', param: 6, min: -5000, max: 5000, val: 1000 },
+                        { type: 'knob', id: 'mg_amt', label: 'MG/Ext', param: 7, min: 0, max: 2000, val: 0 }
+                    ]
+                },
+                {
+                    name: "Modulation Generator",
+                    controls: [
+                        { type: 'knob', id: 'mg_rate', label: 'Freq', param: 8, min: 0.1, max: 20, val: 3 },
+                        // Wave: 0=Tri, 1=Square
+                        { type: 'knob', id: 'mg_wave', label: 'Wave', param: 9, min: 0, max: 1, step: 1, val: 0 },
+                        { type: 'knob', id: 'mg_pitch', label: 'FM', param: 10, min: 0, max: 12, val: 0 }
+                    ]
+                },
+                {
+                    name: "Envelope Generator",
+                    controls: [
+                        // Using knobs for MS-10 style
+                        { type: 'knob', id: 'att', label: 'Attack', param: 11, min: 0.01, max: 3, val: 0.01 },
+                        { type: 'knob', id: 'dec', label: 'Decay', param: 12, min: 0.01, max: 3, val: 0.4 },
+                        { type: 'knob', id: 'sus', label: 'Sustain', param: 13, min: 0, max: 1, val: 0.5 },
+                        { type: 'knob', id: 'rel', label: 'Release', param: 14, min: 0.01, max: 5, val: 0.5 }
+                    ]
+                },
+                {
+                    name: "Output",
+                    controls: [
+                        { type: 'knob', id: 'vol', label: 'Volume', param: 15, min: 0, max: 1, val: 0.6 },
+                        { type: 'knob', id: 'glide', label: 'Porta', param: 16, min: 0, max: 1, val: 0.0 }
+                    ]
+                }
+            ]
+        };
+
+        const controls = new Controls({
+             onChange: (id, val) => {
+                 const el = document.getElementById(id);
+                 if(el && el.dataset.param) window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(el.dataset.param), value: val }, '*');
+                 
+                 // Custom UI updates
+                 if(id === 'wave') {
+                     const w = Math.round(val);
+                     const labels = ["Tri", "Saw", "Pulse", "Noise"];
+                     // Maybe update a label somewhere?
+                 }
+                 if(id === 'oct') {
+                     const octs = {"-24":"32'", "-12":"16'", "0":"8'", "12":"4'"};
+                     // Update label?
+                 }
+             }
+        });
+
+        controls.buildUI('app-container', CONFIG);
+        
+        const kb = new Keyboard('piano', {
+            startNote: 36, numKeys: 25, responsive: true,
+            onNoteOn: (midi, freq) => {
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 26, value: freq }, '*'); 
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 27, value: 1.0 }, '*');
+            },
+            onNoteOff: (midi) => {
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 27, value: 0.0 }, '*');
+            }
+        });
+        
+        const midi = new MidiManager({
+            deviceSelectorId: 'midi-in',
+            statusElementId: 'midi-led',
+            onNoteOn: (n) => kb._handleNoteOn(n),
+            onNoteOff: (n) => kb._handleNoteOff(n)
+        });
+
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'BVST_READY') {
+                document.querySelectorAll('[data-param]').forEach(el => {
+                     const p = parseInt(el.dataset.param);
+                     const v = parseFloat(el.dataset.val);
+                     window.parent.postMessage({ type: 'BVST_PARAM', id: p, value: v }, '*');
+                });
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { margin: 0; overflow: hidden; background: transparent; }
+        #gui-container { width: 100%; height: 500px; position: relative; }
+        canvas { width: 100%; height: 150px; background: #111; border-bottom: 1px solid #007a82; display: block; }
+        
+        /* Overlay for Loop Points on Canvas */
+        #waveform-overlay {
+            position: absolute; top: 0; left: 0; width: 100%; height: 150px; pointer-events: none;
+        }
+        .marker {
+            position: absolute; top: 0; height: 100%; width: 2px; background: #fff;
+        }
+        #start-marker { background: #0f0; }
+        #end-marker { background: #f00; }
+    </style>
+</head>
+<body>
+    <div id="gui-container">
+        <!-- Waveform Area -->
+        <div style="position: relative; height: 150px;">
+            <canvas id="waveform"></canvas>
+            <div id="waveform-overlay">
+                <div id="start-marker" class="marker" style="left: 0%;"></div>
+                <div id="end-marker" class="marker" style="left: 100%;"></div>
+            </div>
+            <div style="position: absolute; top: 5px; left: 10px; color: #0f0; font-family: monospace; font-size: 10px;">
+                DROP AUDIO HERE OR PASTE URL BELOW
+            </div>
+        </div>
+
+        <!-- URL Loader -->
+        <div style="background: #000; padding: 5px; display: flex; border-bottom: 1px solid #333;">
+            <input type="text" id="urlInput" placeholder="https://example.com/sample.mp3" 
+                   style="flex: 1; background: #222; border: 1px solid #444; color: #ddd; padding: 4px;">
+            <button id="loadBtn" style="background: #007a82; color: #fff; border: none; padding: 0 10px; cursor: pointer;">LOAD</button>
+        </div>
+
+        <!-- Controls -->
+        <div id="controls"></div>
+    </div>
+
+    <script type="module">
+        import { Controls } from '../../../../System/shared/controls.js';
+        import { Keyboard } from '../../../../System/shared/keyboard.js';
+
+        // --- CONFIG ---
+        const config = {
+            name: "CosmoSampler",
+            modules: [
+                {
+                    name: "Playback",
+                    controls: [
+                        { id: 'speed', type: 'knob', param: 0, min: 0.1, max: 4.0, val: 1.0, label: 'Speed' },
+                        { id: 'drive', type: 'knob', param: 22, min: 0.0, max: 1.0, val: 0.0, label: 'Drive' },
+                    ]
+                },
+                {
+                    name: "Looping",
+                    controls: [
+                        { id: 'loop_start', type: 'knob', param: 1, min: 0.0, max: 1.0, val: 0.0, label: 'Start', step: 0.01 },
+                        { id: 'loop_end', type: 'knob', param: 2, min: 0.0, max: 1.0, val: 1.0, label: 'End', step: 0.01 },
+                        { id: 'loop_enable', type: 'switch', param: 3, val: 0, label: 'Loop' },
+                    ]
+                },
+                {
+                    name: "Filter",
+                    controls: [
+                        { id: 'cut', type: 'knob', param: 10, min: 20, max: 20000, val: 20000, label: 'Cutoff', curve: 'log' },
+                        { id: 'res', type: 'knob', param: 11, min: 0.1, max: 10.0, val: 1.0, label: 'Res' },
+                        { id: 'mode', type: 'select', param: 12, options: ['LP', 'HP', 'BP'], val: 0, label: 'Mode' }
+                    ]
+                },
+                {
+                    name: "Envelope",
+                    controls: [
+                        { id: 'att', type: 'knob', param: 20, min: 0.01, max: 2.0, val: 0.01, label: 'Attack' },
+                        { id: 'rel', type: 'knob', param: 21, min: 0.01, max: 5.0, val: 0.5, label: 'Release' },
+                        { id: 'dly', type: 'knob', param: 23, min: 0.0, max: 0.8, val: 0.0, label: 'Delay' }
+                    ]
+                }
+            ]
+        };
+
+        // --- INIT UI ---
+        const controls = new Controls({
+            onChange: (id, val) => {
+                const el = document.getElementById(id);
+                const paramId = parseInt(el.dataset.param);
+                window.parent.postMessage({ type: 'BVST_PARAM', id: paramId, value: val }, '*');
+                
+                // Update Markers locally
+                if (id === 'loop_start') {
+                    document.getElementById('start-marker').style.left = (val * 100) + '%';
+                } else if (id === 'loop_end') {
+                    document.getElementById('end-marker').style.left = (val * 100) + '%';
+                }
+            }
+        });
+
+        controls.buildUI('controls', config);
+        
+        // Move controls below canvas/url bar
+        const builtUI = document.getElementById('bvst-app-root');
+        if(builtUI) {
+            // The builder creates the whole app wrapper. 
+            // We want to inject our canvas/url bar INTO that wrapper, at the top.
+            const topBar = builtUI.querySelector('.bvst-top-bar');
+            const customHeader = document.createElement('div');
+            // Move the existing canvas/url divs into this new header
+            customHeader.appendChild(document.querySelector('div[style*="height: 150px"]')); // Waveform container
+            customHeader.appendChild(document.querySelector('div[style*="background: #000"]')); // URL Bar
+            
+            builtUI.insertBefore(customHeader, builtUI.querySelector('.bvst-controls-grid'));
+        }
+
+        // Keyboard
+        const kb = new Keyboard('piano', {
+            onNoteOn: (n) => window.parent.postMessage({ type: 'BVST_PARAM', id: 128, value: n }, '*'),
+            onNoteOff: (n) => window.parent.postMessage({ type: 'BVST_PARAM', id: 129, value: n }, '*')
+        });
+
+        // DEBUG: Global click logger to see if JS is running in iframe
+        document.body.addEventListener('click', () => {
+            console.log('DEBUG GUI: Document Body Clicked!');
+        });
+
+        // --- WAVEFORM VISUALIZATION ---
+        const cvs = document.getElementById('waveform');
+        const ctx = cvs.getContext('2d');
+        
+        function drawWaveform(samples) {
+            const width = cvs.width = cvs.clientWidth;
+            const height = cvs.height = cvs.clientHeight;
+            
+            ctx.fillStyle = '#111';
+            ctx.fillRect(0, 0, width, height);
+            
+            ctx.lineWidth = 1;
+            ctx.strokeStyle = '#00f0ff';
+            ctx.beginPath();
+            
+            const step = Math.ceil(samples.length / width);
+            const amp = height / 2;
+            
+            for (let i = 0; i < width; i++) {
+                let min = 1.0;
+                let max = -1.0;
+                
+                for (let j = 0; j < step; j++) {
+                    const datum = samples[(i * step) + j];
+                    if (datum < min) min = datum;
+                    if (datum > max) max = datum;
+                }
+                
+                ctx.moveTo(i, amp + min * amp);
+                ctx.lineTo(i, amp + max * amp);
+            }
+            ctx.stroke();
+        }
+
+        // Listen for Sample Data from Host
+        window.addEventListener('message', (e) => {
+            if (e.data.type === 'BVST_SAMPLE_DATA') {
+                drawWaveform(e.data.samples);
+            }
+            else if (e.data.type === 'BVST_READY') {
+                // Initial Draw (Empty)
+                drawWaveform(new Float32Array(0));
+            }
+        });
+
+        // --- URL LOADING ---
+        document.getElementById('loadBtn').addEventListener('click', async () => {
+            const urlInput = document.getElementById('urlInput');
+            const url = urlInput.value.trim();
+            console.log("DEBUG GUI: Load Button Clicked. URL:", url);
+            
+            if (!url) {
+                alert("Please enter a URL");
+                return;
+            }
+            
+            const btn = document.getElementById('loadBtn');
+            const originalText = btn.innerText;
+            btn.innerText = "...";
+            
+            try {
+                // 1. Fetch
+                console.log("DEBUG GUI: Fetching...");
+                const response = await fetch(url);
+                console.log("DEBUG GUI: Response Status:", response.status);
+                
+                if (!response.ok) throw new Error(`Fetch failed: ${response.status} ${response.statusText}`);
+                
+                const arrayBuffer = await response.arrayBuffer();
+                console.log("DEBUG GUI: Fetch complete, bytes:", arrayBuffer.byteLength);
+                
+                if (arrayBuffer.byteLength === 0) throw new Error("Fetched empty file.");
+
+                // 2. Decode
+                console.log("DEBUG GUI: Decoding...");
+                const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+                const audioBuffer = await tempCtx.decodeAudioData(arrayBuffer);
+                console.log("DEBUG GUI: Decoded:", audioBuffer);
+                
+                const data = audioBuffer.getChannelData(0);
+                
+                // 3. Visualize
+                drawWaveform(data);
+                
+                // 4. Send to Host
+                console.log("DEBUG GUI: Sending to Host...");
+                window.parent.postMessage({
+                    type: 'BVST_LOAD_SAMPLE_FROM_GUI',
+                    samples: data
+                }, '*');
+                
+                btn.innerText = "OK";
+                setTimeout(() => btn.innerText = originalText, 1000);
+                
+            } catch (e) {
+                console.error("DEBUG GUI: URL Load Error:", e);
+                btn.innerText = "ERR";
+                alert("Failed to load URL: " + e.message);
+                setTimeout(() => btn.innerText = originalText, 2000);
+            }
+        });
+
+        // --- DRAG AND DROP (IFRAME LOCAL) ---
+        // The iframe needs its own drop handler because it swallows events from the parent window.
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        document.body.addEventListener('drop', async (e) => {
+            console.log("DEBUG GUI: Drop detected on iframe");
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (files.length > 0) {
+                const file = files[0];
+                console.log(`DEBUG GUI: Processing file: ${file.name}`);
+                
+                if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a)$/i)) {
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const tempCtx = new (window.AudioContext || window.webkitAudioContext)();
+                        const audioBuffer = await tempCtx.decodeAudioData(arrayBuffer);
+                        const data = audioBuffer.getChannelData(0);
+
+                        // 1. Visualize locally
+                        drawWaveform(data);
+
+                        // 2. Send to Host
+                        console.log("DEBUG GUI: Sending dropped sample to Host");
+                        window.parent.postMessage({
+                            type: 'BVST_LOAD_SAMPLE_FROM_GUI',
+                            samples: data
+                        }, '*');
+
+                    } catch (err) {
+                        console.error("DEBUG GUI: Drop Load Error:", err);
+                        alert("Error loading dropped sample: " + err.message);
+                    }
+                }
+            }
+        });
+
+    </script>
+</body>
+</html>

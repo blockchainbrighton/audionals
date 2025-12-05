@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>BVST Local Host</title>
+  <style>
+    body { background: #111; color: white; font-family: sans-serif; padding: 20px; }
+    iframe { border: none; width: 250px; height: 300px; }
+    button { padding: 10px 20px; font-size: 16px; cursor: pointer; background: #0f0; border: none; }
+  </style>
+</head>
+<body>
+  <h1>BVST DAW Host (MVP)</h1>
+  <p>Status: <span id="status">Waiting for user...</span></p>
+  <button id="startBtn">START AUDIO ENGINE</button>
+  <hr>
+  <div id="rack"></div>
+
+  <script type="module">
+    let audioCtx;
+    let workletNode;
+
+    // Get the synth name from the URL, default to 'SimpleSynth'
+    const urlParams = new URLSearchParams(window.location.search);
+    const synthName = urlParams.get('synth') || 'SimpleSynth';
+    const synthPath = `./Synths/${synthName}`;
+
+    console.log(`BVST Host: Loading synth '${synthName}' from '${synthPath}'`);
+    document.title = `BVST Host - ${synthName}`;
+
+    document.getElementById('startBtn').addEventListener('click', async () => {
+      document.getElementById('status').innerText = "Loading...";
+      audioCtx = new AudioContext();
+
+      // 1. Fetch Manifest
+      const manifestUrl = `${synthPath}/manifest.json`;
+      let manifest;
+      try {
+        const manifestReq = await fetch(manifestUrl);
+        if (!manifestReq.ok) throw new Error(`Manifest not found at ${manifestUrl}`);
+        manifest = await manifestReq.json();
+      } catch (e) {
+          console.error(e);
+          document.getElementById('status').innerText = "Error loading manifest: " + e.message;
+          return;
+      }
+
+      // 2. Load Glue (with cache bust)
+      try {
+        // Use processor.js from the synth directory
+        const glueUrl = `${synthPath}/processor.js?t=` + Date.now();
+        console.warn("Main: Loading AudioWorklet module from:", glueUrl);
+        await audioCtx.audioWorklet.addModule(glueUrl);
+        console.warn("Main: addModule resolved successfully.");
+      } catch (e) {
+        console.error("Main: Failed to add module:", e);
+        document.getElementById('status').innerText = "Error loading processor.js: " + e.message;
+        return;
+      }
+
+      // 3. Create Node
+      try {
+        console.warn("Main: Attempting to create AudioWorkletNode 'bvst-processor'...");
+        workletNode = new AudioWorkletNode(audioCtx, 'bvst-processor');
+        console.warn("Main: AudioWorkletNode created successfully.");
+      } catch (e) {
+         console.error("Failed to create node:", e);
+         document.getElementById('status').innerText = "Error creating node: " + e.message;
+         return;
+      }
+
+      // 4. Fetch WASM
+      // Assume manifest path is relative to the synth folder
+      const wasmUrl = `${synthPath}/${manifest.components.audio_engine}`;
+      const wasmReq = await fetch(wasmUrl);
+      const wasmBytes = await wasmReq.arrayBuffer();
+
+      // 5. Init Wasm
+      workletNode.port.postMessage({ type: 'INIT_WASM', wasmBytes: wasmBytes });
+
+      // 6. Connect
+      workletNode.connect(audioCtx.destination);
+
+      // 7. Load UI
+      const iframe = document.createElement('iframe');
+      iframe.src = `${synthPath}/${manifest.components.ui_html}`;
+      document.getElementById('rack').innerHTML = ''; // Clear previous
+      document.getElementById('rack').appendChild(iframe);
+
+      // 8. Listen for UI
+      window.addEventListener('message', (event) => {
+        if (event.data.type === 'BVST_PARAM') {
+          workletNode.port.postMessage({ type: 'PARAM', id: event.data.id, value: event.data.value });
+        }
+      });
+
+      workletNode.port.onmessage = (e) => {
+        if (e.data.type === 'READY') {
+          document.getElementById('status').innerText = `Audio Engine Running (${synthName})`;
+        } else if (e.data.type === 'ERROR') {
+            document.getElementById('status').innerText = "Worklet Error: " + e.data.error;
+        }
+      };
+    });
+  </script>
+</body>
+</html>
