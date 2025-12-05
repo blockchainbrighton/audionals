@@ -93,11 +93,15 @@
             console.log("DEBUG GUI: Building Controls...");
             const controls = new Controls({
                 onChange: (id, val) => {
+                    // Update Local State
+                    if (id === 'speed') playSpeed = val;
+                    else if (id === 'loop_start') { loopStart = val; drawWaveform(sampleData, isPlaying ? -1 : -1); }
+                    else if (id === 'loop_end') { loopEnd = val; drawWaveform(sampleData, isPlaying ? -1 : -1); }
+                    else if (id === 'loop_enable') loopEnabled = val > 0;
+
                     // Handle Preview Button Special Case
                     if (id === 'btn_play') {
-                        const msgType = val > 0 ? 128 : 129; // 128=NoteOn, 129=NoteOff
-                        const note = 60; // C4
-                        window.parent.postMessage({ type: 'BVST_PARAM', id: msgType, value: note }, '*');
+                        handlePlayButton(val);
                         return;
                     }
 
@@ -105,12 +109,11 @@
                     const paramId = parseInt(el.dataset.param);
                     window.parent.postMessage({ type: 'BVST_PARAM', id: paramId, value: val }, '*');
                     
-                    // Update Markers locally
-                    if (id === 'loop_start') {
-                        document.getElementById('start-marker').style.left = (val * 100) + '%';
-                    } else if (id === 'loop_end') {
-                        document.getElementById('end-marker').style.left = (val * 100) + '%';
-                    }
+                    // Update Markers locally (Legacy - but kept for consistency if markers exist in DOM)
+                    const sm = document.getElementById('start-marker');
+                    const em = document.getElementById('end-marker');
+                    if (sm && id === 'loop_start') sm.style.left = (val * 100) + '%';
+                    if (em && id === 'loop_end') em.style.left = (val * 100) + '%';
                 }
             });
 
@@ -138,32 +141,150 @@
             alert("GUI Setup Error: " + e.message);
         }
 
+        // --- STATE ---
+        let sampleData = new Float32Array(0);
+        let isPlaying = false;
+        let playStartTime = 0;
+        let animationFrameId;
+        let loopStart = 0.0;
+        let loopEnd = 1.0;
+        let loopEnabled = false;
+        let playSpeed = 1.0;
+        let audioCtx = new (window.AudioContext || window.webkitAudioContext)(); // Persist context for timing
+
         // --- WAVEFORM VISUALIZATION & INTERACTION ---
         const cvs = document.getElementById('waveform');
         const ctx = cvs.getContext('2d');
 
         function triggerPreview(active) {
-            const msgType = active ? 128 : 129;
-            window.parent.postMessage({ type: 'BVST_PARAM', id: msgType, value: 60 }, '*');
-            cvs.style.opacity = active ? '0.8' : '1.0'; // Visual feedback
+            if (active) {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                
+                // Start Playback
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 128, value: 60 }, '*');
+                
+                isPlaying = true;
+                playStartTime = audioCtx.currentTime;
+                startTransport();
+            } else {
+                // Stop Playback
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 129, value: 60 }, '*');
+                
+                isPlaying = false;
+                stopTransport();
+                drawWaveform(sampleData, -1); // Clear playhead
+            }
         }
 
+        // Waveform Click Interaction (Gate Mode)
         cvs.addEventListener('mousedown', () => triggerPreview(true));
         cvs.addEventListener('mouseup', () => triggerPreview(false));
-        cvs.addEventListener('mouseleave', () => triggerPreview(false));
+        cvs.addEventListener('mouseleave', () => {
+            if (isPlaying) triggerPreview(false);
+        });
         
         cvs.addEventListener('touchstart', (e) => { e.preventDefault(); triggerPreview(true); });
         cvs.addEventListener('touchend', (e) => { e.preventDefault(); triggerPreview(false); });
-        
 
+        // Play Button Interaction (One-Shot / Loop Toggle)
+        function handlePlayButton(val) {
+            // Toggle Logic handled by button state in UI, but we need to manage the engine
+            if (val > 0) {
+                // Button Pressed -> Start
+                if (isPlaying) {
+                    // If already playing, restart? Or ignore?
+                    // Let's restart for "One Shot" feel
+                    triggerPreview(false);
+                    setTimeout(() => triggerPreview(true), 10);
+                } else {
+                    triggerPreview(true);
+                }
+            } else {
+                // Button Released
+                // If Loop is ON, do NOT stop.
+                // If Loop is OFF, do NOT stop immediately (let it play out one-shot style logic handled in transport)
+                
+                // Actually, standard Play button behavior:
+                // Click (Toggle ON) -> Play
+                // Click (Toggle OFF) -> Stop
+                
+                // But the user asked for "Play button should be a oneshot... and plays in a continued loop if loop is on".
+                // And "make play when clicking the waveform only play during mouse down".
+                
+                // If the UI button is momentary (pop up on release), then we need to latch the logic here.
+                // BUT, `controls.js` button is momentary by default.
+                // We'll assume the user keeps the button logic as-is (momentary triggers).
+                
+                // Special logic: If triggered via button, we DON'T stop on release.
+                // We let the Transport loop handle the stop condition.
+            }
+        }
 
-        function drawWaveform(samples) {
+        // Transport Animation Loop
+        function startTransport() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+            
+            function loop() {
+                if (!isPlaying) return;
+
+                const now = audioCtx.currentTime;
+                const elapsed = (now - playStartTime) * playSpeed; // Seconds into playback
+                const duration = sampleData.length / 44100; // Approx duration (assuming 44.1k for viz)
+                
+                if (duration === 0) return;
+
+                let normalizedPos = 0;
+
+                if (loopEnabled) {
+                    // Loop Logic for Viz
+                    const startSec = loopStart * duration;
+                    const endSec = loopEnd * duration;
+                    const loopLen = endSec - startSec;
+                    
+                    if (loopLen > 0) {
+                        const loopProgress = (elapsed % loopLen);
+                        const currentSec = startSec + loopProgress;
+                        normalizedPos = currentSec / duration;
+                    }
+                } else {
+                    // One-Shot Logic
+                    // Start at loop_start (usually 0, but user might want to play from start point?)
+                    // User said: "plays the full selected section". This implies starting at Loop Start?
+                    // Or starting at 0? Usually one-shot plays the *selection*.
+                    
+                    const startSec = loopStart * duration;
+                    const endSec = loopEnd * duration;
+                    const currentSec = startSec + elapsed;
+                    
+                    normalizedPos = currentSec / duration;
+
+                    // Auto-Stop if end reached
+                    if (currentSec >= endSec) {
+                        triggerPreview(false);
+                        // Reset UI Button if possible? 
+                        // (Can't easily reach into controls instance without ref, but visual feedback stops)
+                        return; 
+                    }
+                }
+
+                drawWaveform(sampleData, normalizedPos);
+                animationFrameId = requestAnimationFrame(loop);
+            }
+            loop();
+        }
+
+        function stopTransport() {
+            if (animationFrameId) cancelAnimationFrame(animationFrameId);
+        }
+
+        function drawWaveform(samples, playHeadPos = -1) {
             const width = cvs.width = cvs.clientWidth;
             const height = cvs.height = cvs.clientHeight;
             
             ctx.fillStyle = '#111';
             ctx.fillRect(0, 0, width, height);
             
+            // 1. Draw Waveform
             ctx.lineWidth = 1;
             ctx.strokeStyle = '#00f0ff';
             ctx.beginPath();
@@ -176,27 +297,60 @@
                 let max = -1.0;
                 
                 for (let j = 0; j < step; j++) {
-                    const datum = samples[(i * step) + j];
-                    if (datum < min) min = datum;
-                    if (datum > max) max = datum;
+                    if ((i * step) + j < samples.length) {
+                        const datum = samples[(i * step) + j];
+                        if (datum < min) min = datum;
+                        if (datum > max) max = datum;
+                    }
                 }
                 
                 ctx.moveTo(i, amp + min * amp);
                 ctx.lineTo(i, amp + max * amp);
             }
             ctx.stroke();
+
+            // 2. Draw Dimmed Overlay (Trimmed Sections)
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)'; // Semi-transparent black
+            
+            // Left Trim
+            const leftX = Math.floor(loopStart * width);
+            if (leftX > 0) {
+                ctx.fillRect(0, 0, leftX, height);
+            }
+            
+            // Right Trim
+            const rightX = Math.ceil(loopEnd * width);
+            if (rightX < width) {
+                ctx.fillRect(rightX, 0, width - rightX, height);
+            }
+
+            // 3. Draw Playhead
+            if (playHeadPos >= 0 && playHeadPos <= 1) {
+                const x = playHeadPos * width;
+                ctx.strokeStyle = '#fff';
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, height);
+                ctx.stroke();
+            }
         }
 
         // Listen for Sample Data from Host
         window.addEventListener('message', (e) => {
             if (e.data.type === 'BVST_SAMPLE_DATA') {
-                drawWaveform(e.data.samples);
+                sampleData = e.data.samples;
+                drawWaveform(sampleData);
             }
             else if (e.data.type === 'BVST_READY') {
                 // Initial Draw (Empty)
                 drawWaveform(new Float32Array(0));
             }
         });
+        
+        // Initialize controls with state tracking
+        // We need to hijack the onChange to update our local state
+        // ... (Logic inserted below) ...
 
         // --- URL LOADING ---
         document.getElementById('loadBtn').addEventListener('click', async () => {
