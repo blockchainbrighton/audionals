@@ -18,7 +18,10 @@ export class SamplerUI {
             loopStart: 0.0, // 0.0 to 1.0
             loopEnd: 1.0,   // 0.0 to 1.0
             loopEnabled: false,
-            note: 60 // Base note for tracking pitch shifts
+            note: 60, // Base note for tracking pitch shifts
+            sliceGrid: 0, // Number of slices to visualize (0 = off)
+            grainSize: 0.0, // Width of grain window (0.0 = off)
+            grainPos: 0.0   // Center position of grain
         };
 
         this.animFrame = null;
@@ -133,8 +136,8 @@ export class SamplerUI {
             if (key === 'loopStart') this.setStartMarker(value);
             if (key === 'loopEnd') this.setEndMarker(value);
             
-            // Redraw to update shading
-            if (key === 'loopStart' || key === 'loopEnd' || key === 'loopEnabled') {
+            // Redraw to update shading and grids
+            if (['loopStart', 'loopEnd', 'loopEnabled', 'sliceGrid', 'grainSize', 'grainPos'].includes(key)) {
                 this.draw();
             }
         }
@@ -307,6 +310,42 @@ export class SamplerUI {
             // Active Region Highlight (subtle)
             ctx.fillStyle = 'rgba(0, 255, 200, 0.05)';
             ctx.fillRect(startX, 0, endX - startX, h);
+        }
+
+        // Slice Grid
+        if (this.state.sliceGrid > 0) {
+            ctx.strokeStyle = 'rgba(255, 255, 0, 0.5)';
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            const sliceCount = Math.floor(this.state.sliceGrid);
+            const sliceW = w / sliceCount;
+            for (let i = 1; i < sliceCount; i++) {
+                const x = i * sliceW;
+                ctx.moveTo(x, 0);
+                ctx.lineTo(x, h);
+            }
+            ctx.stroke();
+            
+            // Draw slice numbers
+            ctx.fillStyle = 'rgba(255,255,0,0.8)';
+            ctx.font = '10px monospace';
+            for (let i = 0; i < sliceCount; i++) {
+                ctx.fillText((i+1).toString(), i * sliceW + 5, 12);
+            }
+        }
+
+        // Grain Window
+        if (this.state.grainSize > 0) {
+            const cx = this.state.grainPos * w;
+            const halfW = (this.state.grainSize * w) / 2;
+            
+            ctx.fillStyle = 'rgba(255, 0, 255, 0.2)';
+            ctx.fillRect(cx - halfW, 0, halfW * 2, h);
+            
+            ctx.strokeStyle = '#f0f';
+            ctx.beginPath();
+            ctx.moveTo(cx, 0); ctx.lineTo(cx, h);
+            ctx.stroke();
         }
     }
 
