@@ -1,0 +1,740 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>VOID DRIVER v2.5 // TACTICAL</title>
+    <style>
+        :root {
+            --bg-color: #050505;
+            --term-color: #4af626; /* Phosphor Green */
+            --term-dim: #1d4d14;
+            --alert-color: #ff3333;
+            --ui-border: 2px solid #1a5c00;
+        }
+
+        body {
+            background-color: #000;
+            margin: 0;
+            height: 100vh;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+            color: var(--term-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            user-select: none;
+        }
+
+        #monitor-casing {
+            width: 95vw;
+            height: 90vh;
+            background: #111;
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 0 50px rgba(0,0,0,0.8);
+            position: relative;
+        }
+
+        #crt-screen {
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            border-radius: 60px/20px;
+            position: relative;
+            overflow: hidden;
+            display: flex;
+            box-shadow: inset 0 0 80px rgba(0,0,0,0.7);
+            border: 1px solid #333;
+        }
+
+        #crt-overlay {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: 
+                linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), 
+                linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+            background-size: 100% 2px, 3px 100%;
+            pointer-events: none;
+            z-index: 100;
+            animation: flicker 0.15s infinite;
+            opacity: 0.8;
+            box-shadow: inset 0 0 100px rgba(0,0,0,0.9);
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.85; }
+            5% { opacity: 0.82; }
+            10% { opacity: 0.85; }
+        }
+
+        #game-ui {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+        }
+
+        #radar-panel {
+            flex: 2;
+            position: relative;
+            border-right: var(--ui-border);
+        }
+
+        /* Range Indicator Overlay */
+        #range-indicator {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            background: rgba(0,0,0,0.7);
+            padding: 5px 10px;
+            border: 1px solid var(--term-dim);
+            font-size: 12px;
+            color: var(--term-color);
+        }
+
+        #data-panel {
+            flex: 1;
+            display: flex;
+            flex-direction: column;
+            background: rgba(0, 20, 0, 0.2);
+            padding: 20px;
+            max-width: 400px;
+            border-left: 1px solid #111;
+        }
+
+        .hud-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            border-bottom: 1px solid var(--term-dim);
+            padding-bottom: 5px;
+        }
+        
+        .stat { text-shadow: 0 0 5px var(--term-color); font-weight: bold;}
+        .label { font-size: 10px; opacity: 0.7; letter-spacing: 1px;}
+
+        #console-log {
+            flex-grow: 1;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+            font-size: 13px;
+            margin-top: 20px;
+            margin-bottom: 20px;
+        }
+
+        .log-line { margin-bottom: 6px; text-transform: uppercase; }
+        .log-line.alert { color: var(--alert-color); text-shadow: 0 0 5px red; }
+        .log-line.loot { color: #ffff00; }
+        .log-line.sys { color: #888; font-size: 11px; }
+
+        #action-menu {
+            border: 1px solid var(--term-color);
+            padding: 10px;
+            display: none;
+            background: rgba(0,0,0,0.9);
+        }
+        
+        .action-btn {
+            display: block;
+            background: none;
+            border: none;
+            color: var(--term-color);
+            font-family: inherit;
+            font-size: 16px;
+            cursor: pointer;
+            text-align: left;
+            width: 100%;
+            padding: 8px 5px;
+            border-bottom: 1px solid #222;
+        }
+        .action-btn:hover { background: var(--term-color); color: #000; }
+        .action-btn span { color: #888; font-size: 12px; float: right;}
+
+        #boot-screen {
+            position: absolute;
+            top:0; left:0; width:100%; height:100%;
+            background: #000;
+            z-index: 200;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            text-align: left;
+        }
+
+        /* Scan line animation for sonar */
+        .scan-line {
+            position: absolute;
+            left: 50%; top: 50%;
+            width: 500px; height: 500px;
+            border-radius: 50%;
+            border: 1px solid rgba(74, 246, 38, 0.3);
+            transform: translate(-50%, -50%) scale(0);
+            pointer-events: none;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="monitor-casing">
+    <div id="crt-screen">
+        <div id="crt-overlay"></div>
+        
+        <div id="boot-screen">
+            <div id="boot-text" style="width: 320px;"></div>
+            <br>
+            <div id="start-prompt" style="display:none; text-align: center; animation: blink 1s infinite;">
+                PRESS [SPACE] TO INITIALIZE
+            </div>
+            <div style="margin-top: 50px; font-size: 10px; color: #666; text-align: center;">
+                CONTROLS: ARROWS (Move) | SPACE (Sonar) | SCROLL (Zoom) | ENTER (Interact)
+            </div>
+        </div>
+
+        <div id="game-ui">
+            <div id="radar-panel">
+                <canvas id="gameCanvas"></canvas>
+                <div id="range-indicator">ZOOM: x1.0</div>
+            </div>
+            
+            <div id="data-panel">
+                <div class="hud-row">
+                    <div>
+                        <div class="label">HULL INTEGRITY</div>
+                        <div class="stat" id="hull-disp">100%</div>
+                    </div>
+                    <div>
+                        <div class="label">FUEL RESERVES</div>
+                        <div class="stat" id="fuel-disp">100%</div>
+                    </div>
+                </div>
+                <div class="hud-row">
+                    <div>
+                        <div class="label">ENCRYPTED DATA</div>
+                        <div class="stat" id="score-disp">0 TB</div>
+                    </div>
+                    <div>
+                        <div class="label">VELOCITY</div>
+                        <div class="stat" id="speed-disp">0 m/s</div>
+                    </div>
+                </div>
+
+                <div id="console-log"></div>
+
+                <div id="action-menu">
+                    <div style="border-bottom: 1px solid #333; margin-bottom:5px; padding-bottom:5px; font-size: 12px;">TARGET INTERFACE:</div>
+                    <button class="action-btn" id="btn-1">1. PASSIVE SCAN <span>SAFE</span></button>
+                    <button class="action-btn" id="btn-2">2. SALVAGE FUEL <span>LOW RISK</span></button>
+                    <button class="action-btn" id="btn-3">3. DATA BREACH <span>HIGH RISK</span></button>
+                    <button class="action-btn" id="btn-4">4. DISENGAGE</button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+/* --- AUDIO ENGINE --- */
+const AudioContext = window.AudioContext || window.webkitAudioContext;
+const audioCtx = new AudioContext();
+
+function playSound(type, intensity = 1.0) {
+    if(audioCtx.state === 'suspended') audioCtx.resume();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    const now = audioCtx.currentTime;
+
+    if (type === 'ping') {
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(600, now);
+        osc.frequency.exponentialRampToValueAtTime(1500, now + 0.15);
+        gain.gain.setValueAtTime(0.1, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.8);
+        osc.start(now);
+        osc.stop(now + 0.8);
+    } 
+    else if (type === 'weak-ping') {
+        // Grainy, distant sound
+        osc.type = 'triangle';
+        osc.frequency.setValueAtTime(800, now);
+        gain.gain.setValueAtTime(0.02, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    }
+    else if (type === 'blip') {
+        osc.type = 'square';
+        osc.frequency.setValueAtTime(400, now);
+        gain.gain.setValueAtTime(0.05 * intensity, now);
+        gain.gain.exponentialRampToValueAtTime(0.001, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    }
+    else if (type === 'motor') {
+        osc.type = 'sawtooth';
+        osc.frequency.setValueAtTime(40, now);
+        gain.gain.setValueAtTime(0.03, now);
+        gain.gain.linearRampToValueAtTime(0, now + 0.1);
+        osc.start(now);
+        osc.stop(now + 0.1);
+    }
+}
+
+/* --- GAME ENGINE --- */
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+let width, height;
+
+const CAMERA = {
+    zoom: 1.0,
+    targetZoom: 1.0
+};
+
+const PLAYER = {
+    x: 0, y: 0,
+    vx: 0, vy: 0,
+    fuel: 100,
+    hull: 100,
+    score: 0,
+    sonarRange: 600,      // Max detection range
+    sonarClearRange: 250  // Range where signal is "Solid"
+};
+
+const GAME = {
+    state: 'BOOT',
+    entities: [],
+    particles: [],
+    stars: [],
+    lastTime: 0,
+    activeEncounter: null
+};
+
+/* --- INPUTS --- */
+const keys = {};
+window.addEventListener('keydown', e => {
+    keys[e.code] = true;
+    if(GAME.state === 'BOOT' && e.code === 'Space') startGame();
+    // Keyboard Zoom
+    if(e.key === ']') CAMERA.targetZoom = Math.min(4.0, CAMERA.targetZoom + 0.5);
+    if(e.key === '[') CAMERA.targetZoom = Math.max(0.4, CAMERA.targetZoom - 0.5);
+});
+window.addEventListener('keyup', e => keys[e.code] = false);
+
+// Mouse Zoom
+canvas.addEventListener('wheel', e => {
+    e.preventDefault();
+    const delta = e.deltaY > 0 ? -0.2 : 0.2;
+    CAMERA.targetZoom = Math.max(0.4, Math.min(4.0, CAMERA.targetZoom + delta));
+});
+
+/* --- GENERATION --- */
+function initWorld() {
+    GAME.entities = [];
+    GAME.stars = [];
+    
+    // Increased world size for better zooming usage
+    const range = 6000;
+    
+    // Generate Objects
+    for(let i=0; i<80; i++) {
+        GAME.entities.push({
+            x: (Math.random()-0.5) * range,
+            y: (Math.random()-0.5) * range,
+            r: 10 + Math.random()*25,
+            revealed: false,
+            signalStrength: 0, // 0 to 1
+            scanned: false,
+            name: generateName(),
+            risk: Math.random(),
+            pingLife: 0 // Visual fade
+        });
+    }
+
+    // Generate Background Stars (3 layers)
+    for(let i=0; i<400; i++) {
+        GAME.stars.push({
+            x: Math.random() * 2000,
+            y: Math.random() * 2000,
+            z: Math.random() * 3 + 0.5 // Depth
+        });
+    }
+}
+
+function generateName() {
+    const pre = ["Omega", "Void", "Echo", "Silent", "Broken", "Dark", "Null", "Deep"];
+    const type = ["Relay", "Hulk", "Pod", "Signal", "Fragment", "Construct"];
+    const id = Math.floor(Math.random() * 999);
+    return `${pre[Math.floor(Math.random()*pre.length)]}-${type[Math.floor(Math.random()*type.length)]} ${id}`;
+}
+
+/* --- LOGGING SYSTEM --- */
+const consoleDiv = document.getElementById('console-log');
+function log(msg, style='') {
+    const div = document.createElement('div');
+    div.className = `log-line ${style}`;
+    div.innerText = `> ${msg}`;
+    consoleDiv.appendChild(div);
+    if(consoleDiv.children.length > 8) consoleDiv.removeChild(consoleDiv.firstChild);
+}
+
+/* --- LOOP --- */
+function update(dt) {
+    if(GAME.state !== 'PLAY') return;
+
+    // Camera Smooth Zoom
+    CAMERA.zoom += (CAMERA.targetZoom - CAMERA.zoom) * 0.1;
+    document.getElementById('range-indicator').innerText = `ZOOM: x${CAMERA.zoom.toFixed(1)}`;
+
+    // Movement
+    let thrusting = false;
+    const accel = 0.15;
+    if (keys['ArrowUp'] || keys['KeyW']) { PLAYER.vy -= accel; thrusting = true; }
+    if (keys['ArrowDown'] || keys['KeyS']) { PLAYER.vy += accel; thrusting = true; }
+    if (keys['ArrowLeft'] || keys['KeyA']) { PLAYER.vx -= accel; thrusting = true; }
+    if (keys['ArrowRight'] || keys['KeyD']) { PLAYER.vx += accel; thrusting = true; }
+
+    // Physics
+    PLAYER.x += PLAYER.vx;
+    PLAYER.y += PLAYER.vy;
+    PLAYER.vx *= 0.98; // Space drag
+    PLAYER.vy *= 0.98;
+
+    if(thrusting) {
+        PLAYER.fuel -= 0.03;
+        if(Math.random() > 0.7) playSound('motor');
+        // Thruster particles
+        GAME.particles.push({
+            x: PLAYER.x, y: PLAYER.y,
+            vx: (Math.random()-0.5)*2, vy: (Math.random()-0.5)*2,
+            life: 1.0
+        });
+    }
+
+    // SONAR LOGIC
+    if (keys['Space'] && !PLAYER.cooldown) {
+        PLAYER.fuel -= 1.5;
+        PLAYER.cooldown = true;
+        setTimeout(() => PLAYER.cooldown = false, 1200);
+        
+        playSound('ping');
+        
+        // Expansion visual
+        GAME.particles.push({ type:'wave', x: PLAYER.x, y: PLAYER.y, r: 0, life: 1.0 });
+
+        let contactCount = 0;
+        
+        GAME.entities.forEach(e => {
+            const dist = Math.hypot(e.x - PLAYER.x, e.y - PLAYER.y);
+            
+            // Calculate signal strength based on distance
+            if (dist < PLAYER.sonarRange) {
+                // Normalize strength: 1.0 at 0 dist, 0.0 at max dist
+                let strength = 1 - (dist / PLAYER.sonarRange);
+                
+                // Boost strength if within clear range
+                if(dist < PLAYER.sonarClearRange) strength = 1.0;
+
+                e.signalStrength = strength;
+                e.pingLife = 1.0; // Reset fade timer
+                e.revealed = true;
+                
+                if(strength > 0.2) contactCount++;
+            }
+        });
+
+        if(contactCount > 0) setTimeout(() => playSound('blip'), 200);
+    }
+
+    // Collision & Interaction
+    for (let e of GAME.entities) {
+        // Ping Fade
+        if(e.pingLife > 0) e.pingLife -= 0.01;
+
+        const dist = Math.hypot(e.x - PLAYER.x, e.y - PLAYER.y);
+        
+        // Physical Collision
+        if (dist < e.r + 10) {
+            const speed = Math.hypot(PLAYER.vx, PLAYER.vy);
+            if(speed > 4) {
+                PLAYER.hull -= 15;
+                PLAYER.vx *= -0.5; PLAYER.vy *= -0.5;
+                log("COLLISION! HULL INTEGRITY DROPPING.", "alert");
+                screenShake = 15;
+            } else if (!e.scanned && keys['Enter']) {
+                startEncounter(e);
+            }
+        }
+    }
+
+    // Game Over
+    if(PLAYER.hull <= 0 || PLAYER.fuel <= 0) {
+        GAME.state = 'GAMEOVER';
+        log("CRITICAL FAILURE. SIGNAL LOST.", "alert");
+    }
+
+    // HUD
+    document.getElementById('hull-disp').innerText = Math.floor(PLAYER.hull) + "%";
+    document.getElementById('fuel-disp').innerText = Math.floor(PLAYER.fuel) + "%";
+    document.getElementById('score-disp').innerText = PLAYER.score + " TB";
+    document.getElementById('speed-disp').innerText = Math.floor(Math.hypot(PLAYER.vx,PLAYER.vy)*10) + " m/s";
+}
+
+let screenShake = 0;
+
+function draw() {
+    requestAnimationFrame(draw);
+    const now = performance.now();
+    const dt = (now - GAME.lastTime) / 1000;
+    GAME.lastTime = now;
+
+    update(dt);
+
+    // Canvas Resize
+    width = canvas.width = document.getElementById('radar-panel').offsetWidth;
+    height = canvas.height = document.getElementById('radar-panel').offsetHeight;
+    const cx = width/2;
+    const cy = height/2;
+
+    // Apply Shake
+    let sx = 0, sy = 0;
+    if(screenShake > 0) {
+        sx = (Math.random()-0.5)*screenShake;
+        sy = (Math.random()-0.5)*screenShake;
+        screenShake *= 0.9;
+    }
+
+    // Clear Screen
+    ctx.fillStyle = '#050505';
+    ctx.fillRect(0,0,width,height);
+    
+    ctx.save();
+    ctx.translate(sx, sy);
+
+    // --- DRAW GRID (Scales with Zoom) ---
+    ctx.strokeStyle = '#0e2b05';
+    ctx.lineWidth = 1;
+    const gridSize = 100 * CAMERA.zoom;
+    
+    // We need to calculate offset based on world position AND zoom
+    // The grid should appear to slide past the camera
+    const offX = (PLAYER.x * CAMERA.zoom) % gridSize;
+    const offY = (PLAYER.y * CAMERA.zoom) % gridSize;
+
+    ctx.beginPath();
+    // Vertical lines
+    for(let x = -gridSize; x < width + gridSize; x += gridSize) {
+        ctx.moveTo(x - offX, 0); ctx.lineTo(x - offX, height);
+    }
+    // Horizontal lines
+    for(let y = -gridSize; y < height + gridSize; y += gridSize) {
+        ctx.moveTo(0, y - offY); ctx.lineTo(width, y - offY);
+    }
+    ctx.stroke();
+
+    // --- DRAW STARS (Parallax + Zoom) ---
+    ctx.fillStyle = '#1a5c00';
+    GAME.stars.forEach(s => {
+        // Parallax factor (z) determines movement speed relative to player
+        // We multiply position by zoom to keep stars consistent with world
+        let starX = (s.x - PLAYER.x * (1/s.z)) * CAMERA.zoom;
+        let starY = (s.y - PLAYER.y * (1/s.z)) * CAMERA.zoom;
+        
+        // Wrap around screen dimensions
+        starX = ((starX % width) + width) % width;
+        starY = ((starY % height) + height) % height;
+        
+        const size = Math.max(1, (1.5 * CAMERA.zoom) / s.z);
+        ctx.fillRect(starX, starY, size, size);
+    });
+
+    // --- DRAW PARTICLES ---
+    for(let i=GAME.particles.length-1; i>=0; i--) {
+        const p = GAME.particles[i];
+        
+        // Convert world pos to screen pos
+        const screenX = cx + (p.x - PLAYER.x) * CAMERA.zoom;
+        const screenY = cy + (p.y - PLAYER.y) * CAMERA.zoom;
+        
+        if (p.type === 'wave') {
+            p.r += 10;
+            p.life -= 0.02;
+            const radius = p.r * CAMERA.zoom;
+            ctx.strokeStyle = `rgba(74, 246, 38, ${p.life})`;
+            ctx.beginPath();
+            ctx.arc(screenX, screenY, radius, 0, Math.PI*2);
+            ctx.stroke();
+        } else {
+            p.life -= 0.05;
+            ctx.fillStyle = `rgba(100,100,100,${p.life})`;
+            const size = 3 * CAMERA.zoom;
+            ctx.fillRect(screenX, screenY, size, size);
+        }
+        if(p.life <= 0) GAME.particles.splice(i,1);
+    }
+
+    // --- DRAW ENTITIES (The "Weak Signal" Logic) ---
+    GAME.entities.forEach(e => {
+        if(e.pingLife <= 0 && !e.scanned) return;
+
+        // Calculate screen position
+        let ex = cx + (e.x - PLAYER.x) * CAMERA.zoom;
+        let ey = cy + (e.y - PLAYER.y) * CAMERA.zoom;
+
+        // If scanning is weak, add jitter (uncertainty)
+        if(e.signalStrength < 0.5 && !e.scanned) {
+            ex += (Math.random()-0.5) * 20; // Jitter X
+            ey += (Math.random()-0.5) * 20; // Jitter Y
+        }
+
+        // Draw Logic
+        if(e.scanned) {
+            // Already visited - Solid Square
+            ctx.strokeStyle = '#1d4d14';
+            const size = (e.r * 2) * CAMERA.zoom;
+            ctx.strokeRect(ex - size/2, ey - size/2, size, size);
+        }
+        else {
+            // Active Signal
+            const alpha = e.pingLife * e.signalStrength;
+            const size = e.r * CAMERA.zoom;
+            
+            ctx.beginPath();
+            ctx.arc(ex, ey, size, 0, Math.PI*2);
+
+            if(e.signalStrength > 0.8) {
+                // STRONG SIGNAL: Solid Green
+                ctx.fillStyle = `rgba(74, 246, 38, ${alpha})`;
+                ctx.fill();
+                
+                // Show text only on strong signal
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.font = '10px Courier New';
+                ctx.fillText(e.name, ex + size + 5, ey);
+                
+                // Docking prompt if close
+                const physDist = Math.hypot(e.x - PLAYER.x, e.y - PLAYER.y);
+                if(physDist < e.r + 30) {
+                    ctx.fillStyle = '#fff';
+                    ctx.fillText("[ENTER] LINK", ex - 30, ey + size + 15);
+                }
+
+            } else {
+                // WEAK SIGNAL: Ghostly White/Grey
+                ctx.fillStyle = `rgba(200, 255, 200, ${alpha * 0.5})`;
+                ctx.fill();
+                
+                // Unknown Marker
+                if(Math.random() > 0.5) { // Flicker text
+                    ctx.fillStyle = `rgba(74, 246, 38, ${alpha})`;
+                    ctx.font = '9px Courier New';
+                    ctx.fillText("UNKNOWN", ex + size + 5, ey);
+                }
+            }
+        }
+    });
+
+    // --- DRAW PLAYER ---
+    ctx.fillStyle = '#4af626';
+    const pSize = 6 * CAMERA.zoom;
+    ctx.beginPath();
+    ctx.moveTo(cx, cy - pSize);
+    ctx.lineTo(cx - pSize, cy + pSize);
+    ctx.lineTo(cx + pSize, cy + pSize);
+    ctx.fill();
+
+    ctx.restore();
+}
+
+/* --- INTERACTION MENU --- */
+function startEncounter(e) {
+    GAME.state = 'MENU';
+    GAME.activeEncounter = e;
+    PLAYER.vx = 0; PLAYER.vy = 0; // Stop ship
+    
+    document.getElementById('action-menu').style.display = 'block';
+    log(`LOCKED ON: ${e.name}`, 'sys');
+    log(`RISK ASSESSMENT: ${(e.risk*100).toFixed(0)}%`);
+
+    // Wire buttons
+    document.getElementById('btn-1').onclick = () => resolve('scan');
+    document.getElementById('btn-2').onclick = () => resolve('salvage');
+    document.getElementById('btn-3').onclick = () => resolve('breach');
+    document.getElementById('btn-4').onclick = () => resolve('leave');
+}
+
+function resolve(type) {
+    const e = GAME.activeEncounter;
+    document.getElementById('action-menu').style.display = 'none';
+    
+    if(type === 'leave') {
+        log("LINK TERMINATED.");
+    }
+    else if(type === 'scan') {
+        const amt = Math.floor(Math.random()*5)+1;
+        PLAYER.score += amt;
+        log(`SCAN COMPLETE. +${amt}TB.`);
+    }
+    else if(type === 'salvage') {
+        if(Math.random() > 0.2) {
+            const amt = Math.floor(Math.random()*15)+5;
+            PLAYER.fuel = Math.min(100, PLAYER.fuel + amt);
+            log(`SIPHON SUCCESSFUL. +${amt}% FUEL.`, 'loot');
+        } else {
+            log("SIPHON FAILED. PUMP JAMMED.", 'alert');
+        }
+    }
+    else if(type === 'breach') {
+        if(Math.random() > e.risk) {
+            const fuel = 30;
+            const data = 50;
+            PLAYER.fuel = Math.min(100, PLAYER.fuel+fuel);
+            PLAYER.score += data;
+            log(`SYSTEM CRACKED. +${data}TB | +${fuel}% FUEL`, 'loot');
+            playSound('ping');
+        } else {
+            PLAYER.hull -= 25;
+            log("SECURITY COUNTER-ATTACK! HULL CRITICAL.", 'alert');
+            playSound('blip');
+            screenShake = 30;
+        }
+    }
+    
+    e.scanned = true;
+    setTimeout(() => GAME.state = 'PLAY', 500);
+}
+
+/* --- BOOT SEQUENCE --- */
+async function boot() {
+    const lines = [
+        "KERNEL LOAD...",
+        "OPTICAL SENSORS... OFFLINE",
+        "LIDAR ARRAY... ONLINE",
+        "CALIBRATING ZOOM LENS...",
+        "SYSTEM READY."
+    ];
+    const el = document.getElementById('boot-text');
+    for(let l of lines) {
+        el.innerText += l + "\n";
+        await new Promise(r => setTimeout(r, 400));
+    }
+    document.getElementById('start-prompt').style.display = 'block';
+}
+
+function startGame() {
+    document.getElementById('boot-screen').style.display = 'none';
+    GAME.state = 'PLAY';
+    initWorld();
+    log("ENGINE ONLINE.");
+    draw();
+}
+
+boot();
+
+</script>
+</body>
+</html>

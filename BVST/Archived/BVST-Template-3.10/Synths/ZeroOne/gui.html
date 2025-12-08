@@ -1,0 +1,468 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ZERO-ONE | BVST</title>
+    <style>
+        :root {
+            --bg: #121214;
+            --panel: #1e1e24;
+            --accent: #00f0ff;
+            --accent-dim: #007a82;
+            --text: #e0e0e0;
+            --knob-bg: #2a2a30;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background: var(--bg);
+            color: var(--text);
+            font-family: 'Courier New', Courier, monospace;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+            user-select: none;
+        }
+
+        /* APP UI */
+        #app {
+            width: 100%;
+            max-width: 1000px;
+            background: var(--panel);
+            border: 2px solid var(--accent-dim);
+            box-shadow: 0 0 30px rgba(0,0,0,0.7);
+            border-radius: 8px;
+            display: flex;
+            flex-direction: column;
+            position: relative;
+        }
+
+        /* Top Bar */
+        .top-bar {
+            height: 60px;
+            background: #000;
+            border-bottom: 1px solid var(--accent-dim);
+            display: flex;
+            align-items: center;
+            padding: 0 20px;
+            justify-content: space-between;
+        }
+        h1 { margin: 0; font-size: 1.2rem; color: var(--accent); text-shadow: 0 0 5px var(--accent-dim); }
+        
+        /* Controls Grid */
+        .controls-grid {
+            padding: 20px;
+            display: grid;
+            grid-template-columns: repeat(4, 1fr);
+            gap: 10px;
+        }
+
+        .module {
+            background: rgba(255,255,255,0.03);
+            border: 1px solid #333;
+            border-radius: 4px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .module h3 {
+            margin: 0 0 10px 0;
+            font-size: 0.7rem;
+            color: #888;
+            text-transform: uppercase;
+            width: 100%;
+            text-align: center;
+            border-bottom: 1px solid #333;
+            padding-bottom: 5px;
+        }
+
+        .knob-row {
+            display: flex;
+            gap: 15px;
+            justify-content: center;
+            flex-wrap: wrap;
+        }
+
+        /* Knob Components */
+        .knob-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 50px;
+        }
+        .knob {
+            width: 40px;
+            height: 40px;
+            background: var(--knob-bg);
+            border-radius: 50%;
+            position: relative;
+            cursor: ns-resize;
+            border: 2px solid #444;
+            box-shadow: inset 0 0 5px #000;
+            transform: rotate(-135deg);
+        }
+        .knob::after {
+            content: '';
+            position: absolute;
+            top: 10%; left: 50%;
+            width: 2px; height: 40%;
+            background: var(--accent);
+            transform: translateX(-50%);
+            pointer-events: none;
+        }
+        .knob-label {
+            font-size: 0.6rem;
+            margin-top: 5px;
+            text-align: center;
+        }
+
+        /* Select */
+        select {
+            background: #000;
+            color: var(--accent);
+            border: 1px solid var(--accent-dim);
+            padding: 5px;
+            font-family: inherit;
+            font-size: 0.7rem;
+            cursor: pointer;
+            margin-top: 5px;
+            width: 100%;
+        }
+
+        /* Keyboard Area */
+        #keyboard-container {
+            background: #000;
+            border-top: 2px solid var(--accent-dim);
+            padding-top: 5px;
+            min-height: 100px;
+        }
+        
+        /* Visualizer */
+        .visualizer-container {
+            width: 100%; height: 40px;
+            background: #000;
+            margin-top: auto;
+            position: relative;
+            overflow: hidden;
+        }
+        #bend-bar {
+            position: absolute; top: 0; bottom: 0; left: 50%;
+            width: 4px; background: var(--accent);
+            transform: translateX(-50%);
+            transition: left 0.1s ease-out;
+            opacity: 0.7;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="app">
+        <!-- Top Bar -->
+        <div class="top-bar">
+            <h1>ZERO-<span style="color:#fff;">ONE</span></h1>
+            <select id="preset-selector" style="width: 200px;">
+                <option value="" disabled selected>Load Preset...</option>
+            </select>
+            <div style="display: flex; align-items: center; gap: 10px; font-size: 0.8rem;">
+                MIDI: <select id="midi-in" style="width:100px; margin:0;"><option>None</option></select>
+                <div id="midi-led" style="width:10px; height:10px; background:#333; border-radius:50%;"></div>
+            </div>
+        </div>
+
+        <!-- Controls -->
+        <div class="controls-grid">
+            <!-- OSCILLATORS -->
+            <div class="module">
+                <h3>Oscillators</h3>
+                <div class="knob-row">
+                    <div class="knob-container">
+                        <div class="knob" id="oscMix" data-param="12" data-min="0" data-max="1" data-val="0.5"></div>
+                        <div class="knob-label">Mix 1/2</div>
+                    </div>
+                    <div class="knob-container">
+                        <div class="knob" id="detune" data-param="11" data-min="0" data-max="1" data-val="0.5"></div>
+                        <div class="knob-label">Detune</div>
+                    </div>
+                    <div class="knob-container">
+                        <div class="knob" id="subLevel" data-param="13" data-min="0" data-max="1" data-val="0"></div>
+                        <div class="knob-label">Sub Vol</div>
+                    </div>
+                </div>
+                <select id="osc-type" data-param="18">
+                    <option value="0">Sawtooth</option>
+                    <option value="1">Square</option>
+                    <option value="2">Triangle</option>
+                </select>
+            </div>
+
+            <!-- FILTER -->
+            <div class="module">
+                <h3>Filter</h3>
+                <div class="knob-row">
+                    <div class="knob-container">
+                        <div class="knob" id="cutoff" data-param="0" data-min="0" data-max="1" data-val="0.8"></div>
+                        <div class="knob-label">Cutoff</div>
+                    </div>
+                    <div class="knob-container">
+                        <div class="knob" id="resonance" data-param="1" data-min="0" data-max="1" data-val="0.1"></div>
+                        <div class="knob-label">Res</div>
+                    </div>
+                    <div class="knob-container">
+                        <div class="knob" id="drive" data-param="2" data-min="0" data-max="1" data-val="0.2"></div>
+                        <div class="knob-label">Drive</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ENVELOPE -->
+            <div class="module">
+                <h3>Envelope</h3>
+                <div class="knob-row">
+                    <div class="knob-container"><div class="knob" id="attack" data-param="3" data-min="0" data-max="1" data-val="0.01"></div><div class="knob-label">Atk</div></div>
+                    <div class="knob-container"><div class="knob" id="decay" data-param="4" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Dec</div></div>
+                    <div class="knob-container"><div class="knob" id="sustain" data-param="5" data-min="0" data-max="1" data-val="0.8"></div><div class="knob-label">Sus</div></div>
+                    <div class="knob-container"><div class="knob" id="release" data-param="6" data-min="0" data-max="1" data-val="0.3"></div><div class="knob-label">Rel</div></div>
+                </div>
+                <div class="knob-row" style="margin-top:5px;">
+                     <div class="knob-container"><div class="knob" id="filterEnv" data-param="7" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Filt. Env</div></div>
+                </div>
+            </div>
+
+            <!-- MODULATION -->
+            <div class="module">
+                <h3>Mod / LFO</h3>
+                <div class="knob-row">
+                    <div class="knob-container"><div class="knob" id="lfoRate" data-param="8" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Rate</div></div>
+                    <div class="knob-container"><div class="knob" id="lfoDepth" data-param="9" data-min="0" data-max="1" data-val="0"></div><div class="knob-label">Depth</div></div>
+                    <div class="knob-container"><div class="knob" id="glide" data-param="10" data-min="0" data-max="1" data-val="0.1"></div><div class="knob-label">Glide</div></div>
+                </div>
+            </div>
+
+            <!-- EFFECTS -->
+            <div class="module" style="grid-column: span 2;">
+                <h3>Effects Chain</h3>
+                <div class="knob-row">
+                    <div class="knob-container"><div class="knob" id="delayWet" data-param="14" data-min="0" data-max="1" data-val="0.1"></div><div class="knob-label">Delay</div></div>
+                    <div class="knob-container"><div class="knob" id="delayTime" data-param="15" data-min="0" data-max="1" data-val="0.2"></div><div class="knob-label">Time</div></div>
+                    <div class="knob-container"><div class="knob" id="reverbWet" data-param="16" data-min="0" data-max="1" data-val="0.1"></div><div class="knob-label">Reverb</div></div>
+                    <div class="knob-container"><div class="knob" id="width" data-param="17" data-min="0" data-max="1" data-val="0.5"></div><div class="knob-label">Width</div></div>
+                </div>
+            </div>
+            
+            <!-- MASTER -->
+            <div class="module" style="grid-column: span 2;">
+                <h3>Performance</h3>
+                <div class="visualizer-container">
+                    <div id="bend-bar"></div>
+                </div>
+                <div style="font-size:0.6rem; color:#666; margin-top:5px; text-align:center;">PITCH BEND / MOD WHEEL</div>
+            </div>
+        </div>
+
+        <!-- Keyboard -->
+        <div id="keyboard-container">
+             <div id="piano"></div>
+        </div>
+    </div>
+
+    <script type="module">
+        import { Keyboard } from '../../System/shared/keyboard.js';
+        import { MidiManager } from '../../System/shared/midi.js';
+
+        function sendParam(id, value) {
+            window.parent.postMessage({
+                type: 'BVST_PARAM',
+                id: parseInt(id),
+                value: parseFloat(value)
+            }, '*');
+        }
+
+        // --- KNOB LOGIC ---
+        class KnobControl {
+            constructor(selector) {
+                this.elements = document.querySelectorAll(selector);
+                this.activeKnob = null;
+                this.startY = 0;
+                this.startVal = 0;
+                this.init();
+            }
+            init() {
+                this.elements.forEach(el => {
+                    this.updateVisual(el);
+                    el.addEventListener('mousedown', (e) => this.startDrag(e, el));
+                });
+                window.addEventListener('mousemove', (e) => this.drag(e));
+                window.addEventListener('mouseup', () => this.endDrag());
+            }
+            startDrag(e, el) {
+                e.preventDefault();
+                this.activeKnob = el;
+                this.startY = e.clientY;
+                this.startVal = parseFloat(el.dataset.val);
+                document.body.style.cursor = 'ns-resize';
+            }
+            drag(e) {
+                if (!this.activeKnob) return;
+                e.preventDefault();
+                const el = this.activeKnob;
+                const delta = this.startY - e.clientY;
+                const min = parseFloat(el.dataset.min);
+                const max = parseFloat(el.dataset.max);
+                const range = max - min;
+                let change = (delta / 150) * range;
+                let newVal = Math.max(min, Math.min(max, this.startVal + change));
+                el.dataset.val = newVal;
+                this.updateVisual(el);
+                const paramId = el.dataset.param;
+                if(paramId) sendParam(paramId, newVal);
+            }
+            endDrag() {
+                this.activeKnob = null;
+                document.body.style.cursor = '';
+            }
+            updateVisual(el) {
+                const val = parseFloat(el.dataset.val);
+                const min = parseFloat(el.dataset.min);
+                const max = parseFloat(el.dataset.max);
+                const pct = (val - min) / (max - min);
+                const deg = -135 + (pct * 270);
+                el.style.transform = `rotate(${deg}deg)`;
+            }
+            setValue(el, val) {
+                el.dataset.val = val;
+                this.updateVisual(el);
+                if(el.dataset.param) sendParam(el.dataset.param, val);
+            }
+        }
+
+        const knobs = new KnobControl('.knob');
+        
+        // Select logic
+        const oscType = document.getElementById('osc-type');
+        oscType.addEventListener('change', (e) => {
+             sendParam(e.target.dataset.param, e.target.value);
+        });
+
+        // --- KEYBOARD & MIDI ---
+        function mtof(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+        let activeKeys = new Set();
+
+        const kb = new Keyboard('piano', {
+            startNote: 48, numKeys: 49, responsive: true,
+            onNoteOn: (n) => {
+                activeKeys.add(n);
+                sendParam(19, mtof(n)); // Freq
+                sendParam(21, 0.8); // Velocity
+                sendParam(20, 1.0); // Gate
+            },
+            onNoteOff: (n) => {
+                activeKeys.delete(n);
+                if(activeKeys.size === 0) {
+                    sendParam(20, 0.0);
+                } else {
+                    const highest = Math.max(...activeKeys);
+                    sendParam(19, mtof(highest));
+                    sendParam(20, 1.0);
+                }
+            }
+        });
+
+        const midi = new MidiManager({
+            deviceSelectorId: 'midi-in',
+            statusElementId: 'midi-led',
+            onNoteOn: (n, v) => {
+                kb.triggerVisual(n, true);
+                activeKeys.add(n);
+                sendParam(19, mtof(n));
+                sendParam(21, v / 127.0);
+                sendParam(20, 1.0);
+            },
+            onNoteOff: (n) => {
+                kb.triggerVisual(n, false);
+                activeKeys.delete(n);
+                if(activeKeys.size === 0) sendParam(20, 0.0);
+                else {
+                    const highest = Math.max(...activeKeys);
+                    sendParam(19, mtof(highest));
+                    sendParam(20, 1.0);
+                }
+            },
+            onCC: (cc, val) => {
+                if(cc === 1) { // Mod Wheel -> LFO Amt (Param 23 internally? No, param 23 is Mod Wheel in Rust, map it there)
+                    sendParam(23, val / 127.0);
+                    // Also update UI if possible?
+                }
+            }
+        });
+        
+        // Pitch Bend Listeners (Custom, since MidiManager might not expose PB direct event easily)
+        if (navigator.requestMIDIAccess) {
+            navigator.requestMIDIAccess().then(access => {
+                for (let input of access.inputs.values()) {
+                    input.addEventListener('midimessage', (msg) => {
+                        const [status, d1, d2] = msg.data;
+                        if ((status & 0xF0) === 0xE0) { // Pitch Bend
+                            const val = (d2 << 7) | d1;
+                            const norm = (val - 8192) / 8192; // -1 to 1
+                            sendParam(22, norm);
+                            // Visual
+                            const bar = document.getElementById('bend-bar');
+                            if(bar) bar.style.left = `${50 + (norm * 40)}%`;
+                        }
+                    });
+                }
+            });
+        }
+
+        // --- PRESETS ---
+        const PRESETS = {
+            "Init Lead": { t: 0, k: { "cutoff": 0.8, "resonance": 0.1, "attack": 0.01, "decay": 0.5, "sustain": 0.8, "release": 0.3, "lfoDepth": 0.1, "delayWet": 0.1, "reverbWet": 0.1, "drive": 0.2, "subLevel": 0.0 } },
+            "Saw Lead": { t: 0, k: { "cutoff": 1.0, "resonance": 0.2, "attack": 0.05, "decay": 0.2, "sustain": 1.0, "release": 0.5, "delayWet": 0.3, "reverbWet": 0.4, "width": 0.7, "detune": 0.6, "subLevel": 0.2 } },
+            "Sync Hook": { t: 1, k: { "cutoff": 0.6, "resonance": 0.6, "filterEnv": 0.7, "attack": 0.01, "decay": 0.3, "sustain": 0.2, "release": 0.2, "glide": 0.2, "drive": 0.5, "subLevel": 0.4 } },
+            "Silky Solo": { t: 2, k: { "cutoff": 0.7, "resonance": 0.0, "glide": 0.3, "attack": 0.1, "sustain": 0.9, "release": 0.5, "lfoRate": 0.6, "lfoDepth": 0.3, "delayWet": 0.4, "subLevel": 0.3 } },
+            "Soft Glide": { t: 2, k: { "cutoff": 0.3, "resonance": 0.0, "glide": 0.6, "attack": 0.2, "sustain": 0.8, "release": 0.8, "reverbWet": 0.7, "delayWet": 0.2 } }
+        };
+
+        const pSel = document.getElementById('preset-selector');
+        Object.keys(PRESETS).forEach(k => {
+            const o = document.createElement('option'); o.value = k; o.innerText = k; pSel.appendChild(o);
+        });
+
+        pSel.addEventListener('change', (e) => loadPreset(e.target.value));
+
+        function loadPreset(name) {
+            const p = PRESETS[name];
+            if(!p) return;
+            
+            oscType.value = p.t;
+            sendParam(oscType.dataset.param, p.t);
+
+            for(const [id, val] of Object.entries(p.k)) {
+                const el = document.getElementById(id);
+                if(el && el.classList.contains('knob')) {
+                    knobs.setValue(el, val);
+                }
+            }
+        }
+
+        // Auto Scale
+        function autoScale() {
+            const app = document.getElementById('app');
+            const scale = Math.min(window.innerWidth / 1050, window.innerHeight / 850, 1.0);
+            if(scale < 0.99) {
+                 app.style.transform = `scale(${scale})`;
+            } else {
+                 app.style.transform = 'none';
+            }
+        }
+        window.addEventListener('resize', autoScale);
+        setTimeout(autoScale, 100);
+        setTimeout(() => loadPreset("Init Lead"), 200);
+
+    </script>
+</body>
+</html>

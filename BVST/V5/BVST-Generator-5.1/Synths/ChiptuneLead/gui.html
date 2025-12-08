@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Chiptune | BVST</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #202020; color: #0f0; display: flex; justify-content: center; min-height: 100vh; }
+        .bvst-app { border: 4px solid #0f0; background: #000; border-radius: 0; font-family: 'Courier New', monospace; }
+        .bvst-top-bar { background: #0f0; color: #000; border-bottom: none; }
+        .bvst-title { color: #000; font-weight: bold; text-shadow: none; }
+        .knob-outer { border-radius: 0; border: 2px solid #0f0; background: #000; }
+        .knob-track { border-radius: 0; background: #000; }
+        .knob-rotator::after { background: #0f0; width: 4px; }
+        .knob-value { color: #0f0; display: block; text-align: center; margin-bottom: 2px; }
+        .key { border-radius: 0; }
+        .bvst-select { border: 1px solid #0f0; color: #0f0; background: #000; }
+    </style>
+</head>
+<body>
+    <div id="app-container"></div>
+    <script type="module">
+        import { Controls } from '../../System/shared/controls.js';
+        import { Keyboard } from '../../System/shared/keyboard.js';
+        import { MidiManager } from '../../System/shared/midi.js';
+
+        const CONFIG = {
+            name: "8-BIT LEAD",
+            modules: [
+                {
+                    name: "PULSE",
+                    controls: [
+                        { type: 'knob', id: 'pw', label: 'Width', param: 1, min: 0.1, max: 0.9, val: 0.5 }
+                    ]
+                },
+                {
+                    name: "ENV",
+                    controls: [
+                        { type: 'knob', id: 'decay', label: 'Decay', param: 2, min: 0.05, max: 0.5, val: 0.1 }
+                    ]
+                },
+                {
+                    name: "FX",
+                    controls: [
+                        { type: 'knob', id: 'crush', label: 'BitCrush', param: 3, min: 0, max: 1, val: 0 }
+                    ]
+                },
+                {
+                    name: "MAIN",
+                    controls: [
+                        { type: 'knob', id: 'vol', label: 'Vol', param: 4, min: 0, max: 1, val: 0.6 }
+                    ]
+                }
+            ]
+        };
+
+        const controls = new Controls({
+             onChange: (id, val) => {
+                 const el = document.getElementById(id);
+                 if(el && el.dataset.param) window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(el.dataset.param), value: val }, '*');
+             }
+        });
+
+        controls.buildUI('app-container', CONFIG);
+        
+        const kb = new Keyboard('piano', {
+            startNote: 60, numKeys: 25, responsive: true,
+            onNoteOn: (m) => {
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 26, value: 440 * Math.pow(2, (m-69)/12) }, '*');
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 27, value: 1.0 }, '*');
+            },
+            onNoteOff: (m) => {
+                 if(kb.activeKeys.length === 0)
+                    window.parent.postMessage({ type: 'BVST_PARAM', id: 27, value: 0.0 }, '*');
+            }
+        });
+        
+        new MidiManager({
+            deviceSelectorId: 'midi-in', statusElementId: 'midi-led',
+            onNoteOn: (n) => kb._handleNoteOn(n), onNoteOff: (n) => kb._handleNoteOff(n)
+        });
+
+        // --- PRESETS ---
+        const PRESETS = {
+            "Init": { "pw":0.5, "decay":0.1, "crush":0.0, "vol":0.6 },
+            "Wide Pulse": { "pw":0.9, "decay":0.2, "crush":0.0, "vol":0.6 },
+            "8-Bit Bass": { "pw":0.5, "decay":0.05, "crush":0.3, "vol":0.7 },
+            "Broken Gameboy": { "pw":0.2, "decay":0.4, "crush":0.8, "vol":0.5 },
+            "Crystal": { "pw":0.1, "decay":0.5, "crush":0.1, "vol":0.6 },
+            "Fuzz Lead": { "pw":0.5, "decay":0.1, "crush":0.6, "vol":0.5 },
+            "Pure Square": { "pw":0.5, "decay":0.1, "crush":0.0, "vol":0.7 },
+        };
+
+        const pSel = controls.uiRefs.presetSelector;
+        Object.keys(PRESETS).forEach(k => {
+            const o = document.createElement('option'); o.value = k; o.innerText = k; pSel.appendChild(o);
+        });
+
+        pSel.addEventListener('change', (e) => {
+            const p = PRESETS[e.target.value];
+            if(!p) return;
+            for(const [id, val] of Object.entries(p)) {
+                controls.setValue(id, val);
+                const el = document.getElementById(id);
+                if(el) window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(el.dataset.param), value: val }, '*');
+            }
+        });
+
+        window.addEventListener('message', (event) => {
+            if (event.data && event.data.type === 'BVST_READY') {
+                pSel.value = 'Init';
+                pSel.dispatchEvent(new Event('change'));
+            }
+        });
+    </script>
+</body>
+</html>

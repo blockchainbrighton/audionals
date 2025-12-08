@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>EtherHarp | BVST</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #e0f7fa; color: #006064; display: flex; justify-content: center; min-height: 100vh; }
+        .bvst-app { background: #fff; border: 1px solid #b2ebf2; box-shadow: 0 0 20px rgba(0,200,255,0.2); color: #00838f; }
+        .bvst-top-bar { background: #e0f7fa; border-bottom: 1px solid #b2ebf2; }
+        .bvst-title { color: #00bcd4; text-shadow: none; }
+        .knob-outer { border: 1px solid #b2ebf2; background: #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.05); }
+        .knob-track { background: #e0f7fa; }
+        .knob-rotator::after { background: #00bcd4; }
+        .knob-value { color: #00bcd4; }
+        #seq-container { margin-top: 20px; background: #f0ffff; border: 1px solid #e0f7fa; padding: 10px; }
+        .seq-btn.active { background: #00bcd4; color: #fff; }
+        .led.current { background: #00e5ff; box-shadow: 0 0 10px #00e5ff; }
+    </style>
+</head>
+<body>
+    <div id="app-container"></div>
+
+    <script type="module">
+        import { Controls } from '../../System/shared/controls.js';
+        import { StepSequencer } from '../../System/shared/sequencer.js';
+
+        const CONFIG = {
+            name: "ETHER HARP",
+            modules: [
+                {
+                    name: "Tone",
+                    controls: [
+                        { type: 'knob', id: 'decay', label: 'Pluck', param: 1, min: 0.1, max: 2.0, val: 0.5 },
+                        { type: 'knob', id: 'fm', label: 'Bell', param: 3, min: 0, max: 200, val: 50 }
+                    ]
+                },
+                {
+                    name: "Atmosphere",
+                    controls: [
+                        { type: 'knob', id: 'delay', label: 'Echo', param: 2, min: 0, max: 0.6, val: 0.3 },
+                        { type: 'knob', id: 'vol', label: 'Vol', param: 4, min: 0, max: 1, val: 0.5 }
+                    ]
+                },
+                {
+                    name: "Transport",
+                    controls: [
+                        { type: 'button', id: 'btn-play', text: 'PLAY' },
+                        { type: 'button', id: 'btn-stop', text: 'STOP' },
+                        { type: 'knob', id: 'bpm', label: 'BPM', param: 999, min: 60, max: 200, val: 140, step: 1 }
+                    ]
+                }
+            ]
+        };
+
+        let isPlaying = false;
+        let currentStep = 0;
+        let nextNoteTime = 0;
+        let bpm = 140;
+        let timerId = null;
+
+        const controls = new Controls({
+            onChange: (id, val) => {
+                if (id === 'btn-play' && val === 1) startSeq();
+                if (id === 'btn-stop' && val === 1) stopSeq();
+                if (id === 'bpm') bpm = val;
+                
+                const el = document.getElementById(id);
+                if(el && el.dataset.param !== "999") window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(el.dataset.param), value: val }, '*');
+            }
+        });
+
+        controls.buildUI('app-container', CONFIG);
+
+        const appRoot = document.getElementById('bvst-app-root');
+        const seqDiv = document.createElement('div');
+        seqDiv.id = 'seq-container';
+        appRoot.appendChild(seqDiv);
+
+        const seq = new StepSequencer('seq-container', {
+            numSteps: 16,
+            initialSteps: Array(16).fill().map((_, i) => ({
+                active: true, 
+                note: ['C3','E3','G3','B3'][i%4], 
+                accent: false, slide: false
+            }))
+        });
+
+        function startSeq() {
+            if(isPlaying) return;
+            isPlaying = true;
+            currentStep = 0;
+            nextNoteTime = performance.now() / 1000;
+            schedule();
+        }
+
+        function stopSeq() {
+            isPlaying = false;
+            cancelAnimationFrame(timerId);
+            window.parent.postMessage({ type: 'BVST_PARAM', id: 23, value: 0.0 }, '*');
+        }
+
+        function schedule() {
+            const secPerBeat = 60.0 / bpm;
+            const stepTime = secPerBeat / 4; // 16th notes
+            const now = performance.now() / 1000;
+            while (nextNoteTime < now + 0.1) {
+                runStep(currentStep);
+                currentStep = (currentStep + 1) % 16;
+                nextNoteTime += stepTime;
+            }
+            if(isPlaying) timerId = requestAnimationFrame(schedule);
+        }
+
+        function mtof(n) {
+            const notes = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+            const note = n.slice(0, -1);
+            const oct = parseInt(n.slice(-1));
+            const semi = notes.indexOf(note);
+            const m = 12 + (oct * 12) + semi;
+            return 440 * Math.pow(2, (m-69)/12);
+        }
+
+        function runStep(idx) {
+            seq.highlightStep(idx);
+            const s = seq.getStep(idx);
+            if(s.active) {
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 20, value: mtof(s.note) }, '*');
+                window.parent.postMessage({ type: 'BVST_PARAM', id: 23, value: 1.0 }, '*');
+                // Gate off short for pluck
+                setTimeout(() => {
+                    if(isPlaying) window.parent.postMessage({ type: 'BVST_PARAM', id: 23, value: 0.0 }, '*');
+                }, 50);
+            }
+        }
+        
+        window.addEventListener('message', (event) => {
+             if (event.data && event.data.type === 'BVST_READY') {
+                 window.parent.postMessage({ type: 'BVST_PARAM', id: 4, value: 0.5 }, '*');
+             }
+        });
+
+        // --- PRESETS ---
+        const PRESETS = {
+            "Init": { "decay":0.5, "fm":50, "delay":0.3, "vol":0.5,
+                "sequence": Array(16).fill().map((_, i) => ({
+                    active: true, note: ['C3','E3','G3','B3'][i%4], accent: false, slide: false
+                }))
+            },
+            "Glass Bell": { "decay":0.2, "fm":150, "delay":0.2, "vol":0.6,
+                "sequence": Array(16).fill().map((_, i) => ({
+                    active: i % 2 === 0, note: ['C3', 'E3', 'G3', 'B3'][Math.floor(i / 2) % 4], accent: false, slide: false
+                }))
+            },
+            "Long Chords": { "decay":1.5, "fm":30, "delay":0.5, "vol":0.4,
+                "sequence": [
+                    { active: true, note: 'C3' }, { active: false }, { active: false }, { active: false },
+                    { active: true, note: 'E3' }, { active: false }, { active: false }, { active: false },
+                    { active: true, note: 'G3' }, { active: false }, { active: false }, { active: false },
+                    { active: true, note: 'C4' }, { active: false }, { active: false }, { active: false }
+                ]
+            },
+            "Fast Arp": { "decay":0.1, "fm":100, "delay":0.1, "vol":0.7,
+                "sequence": Array(16).fill().map((_, i) => ({
+                    active: true, note: ['C3','D3','E3','F3','G3','A3','B3','C4'][i%8], accent: false, slide: false
+                }))
+            },
+            "Synth Flute": { "decay":0.8, "fm":10, "delay":0.1, "vol":0.6,
+                "sequence": [
+                    { active: true, note: 'C4' }, { active: false }, { active: false }, { active: false },
+                    { active: true, note: 'A3' }, { active: false }, { active: false }, { active: false },
+                    { active: true, note: 'F3' }, { active: false }, { active: false }, { active: false },
+                    { active: true, note: 'D3' }, { active: false }, { active: false }, { active: false }
+                ]
+            },
+            "Metallic Pad": { "decay":1.8, "fm":80, "delay":0.4, "vol":0.4,
+                "sequence": [
+                    { active: true, note: 'C3' }, { active: false }, { active: false }, { active: false },
+                    { active: false }, { active: false }, { active: false }, { active: false },
+                    { active: false }, { active: false }, { active: false }, { active: false },
+                    { active: false }, { active: false }, { active: false }, { active: false }
+                ]
+            },
+            "Underwater": { "decay":2.0, "fm":180, "delay":0.6, "vol":0.3,
+                "sequence": Array(16).fill().map((_, i) => ({
+                    active: i % 3 === 0, note: ['C2','G2','C3'][i%3], accent: false, slide: false
+                }))
+            }
+        };
+
+        const pSel = controls.uiRefs.presetSelector;
+        Object.keys(PRESETS).forEach(k => {
+            const o = document.createElement('option'); o.value = k; o.innerText = k; pSel.appendChild(o);
+        });
+
+        pSel.addEventListener('change', (e) => {
+            const p = PRESETS[e.target.value];
+            if(!p) return;
+            for(const [id, val] of Object.entries(p)) {
+                if (id === "sequence") {
+                    seq.setSequence(val); // Update sequencer steps
+                } else {
+                    controls.setValue(id, val);
+                    const el = document.getElementById(id);
+                    if(el) window.parent.postMessage({ type: 'BVST_PARAM', id: parseInt(el.dataset.param), value: val }, '*');
+                }
+            }
+        });
+        // Init Preset
+        pSel.value = 'Init';
+        pSel.dispatchEvent(new Event('change'));
+    </script>
+</body>
+</html>

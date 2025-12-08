@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple Stacks NFT Viewer</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            background-color: #f4f4f5;
+            display: flex;
+            justify-content: center;
+            padding: 50px;
+            color: #333;
+        }
+        .container {
+            background: white;
+            padding: 2rem;
+            border-radius: 12px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+            width: 100%;
+            max-width: 600px;
+        }
+        h1 { margin-top: 0; color: #5546FF; }
+        .input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+        }
+        input {
+            flex-grow: 1;
+            padding: 12px;
+            border: 1px solid #ddd;
+            border-radius: 6px;
+            font-size: 16px;
+        }
+        button {
+            padding: 12px 24px;
+            background-color: #5546FF;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 16px;
+            font-weight: bold;
+        }
+        button:hover { background-color: #3e30d6; }
+        button:disabled { background-color: #ccc; cursor: not-allowed; }
+        
+        #results { margin-top: 20px; }
+        
+        .nft-item {
+            border: 1px solid #eee;
+            padding: 15px;
+            margin-bottom: 10px;
+            border-radius: 8px;
+            background-color: #fafafa;
+            word-break: break-all;
+        }
+        .nft-name { font-weight: bold; color: #333; }
+        .nft-id { color: #666; font-size: 0.9em; margin-top: 5px; }
+        .error { color: #d32f2f; background: #ffebee; padding: 10px; border-radius: 6px; }
+        .loading { color: #5546FF; font-style: italic; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1>Stacks NFT Viewer</h1>
+    <p>Paste a Stacks wallet address to see its holdings.</p>
+    
+    <div class="input-group">
+        <input type="text" id="walletAddress" placeholder="Enter Stacks Address (e.g., SP2...)" />
+        <button id="searchBtn" onclick="fetchNFTs()">Scan</button>
+    </div>
+
+    <div id="results"></div>
+</div>
+
+<script>
+    async function fetchNFTs() {
+        const addressInput = document.getElementById('walletAddress').value.trim();
+        const resultsDiv = document.getElementById('results');
+        const btn = document.getElementById('searchBtn');
+
+        // Clear previous results
+        resultsDiv.innerHTML = '';
+
+        if (!addressInput) {
+            resultsDiv.innerHTML = '<div class="error">Please enter a wallet address.</div>';
+            return;
+        }
+
+        // UI Loading State
+        btn.disabled = true;
+        btn.innerText = 'Loading...';
+        resultsDiv.innerHTML = '<div class="loading">Querying the Hiro API...</div>';
+
+        try {
+            // 1. Define the Hiro API Endpoint for NFT Holdings
+            // Limit is set to 50 for simplicity.
+            const apiUrl = `https://api.mainnet.hiro.so/extended/v1/tokens/nft/holdings?principal=${addressInput}&limit=50`;
+
+            // 2. Fetch data
+            const response = await fetch(apiUrl);
+            
+            if (!response.ok) {
+                throw new Error(`API Error: ${response.statusText}`);
+            }
+
+            const data = await response.json();
+            const nfts = data.results;
+
+            resultsDiv.innerHTML = ''; // Clear loading message
+
+            // 3. Handle Empty Wallet
+            if (nfts.length === 0) {
+                resultsDiv.innerHTML = '<p>No NFTs found on this address.</p>';
+                return;
+            }
+
+            // 4. Display Results
+            resultsDiv.innerHTML = `<h3>Found ${data.total} NFT(s) (Showing top 50)</h3>`;
+
+            nfts.forEach(nft => {
+                // Parse the asset identifier to get a clean name
+                // Format is usually: address.contract-name::asset-name
+                const fullIdentifier = nft.asset_identifier;
+                const parts = fullIdentifier.split('::');
+                const collectionName = parts[1] || 'Unknown Collection';
+                const contractAddress = parts[0];
+
+                const div = document.createElement('div');
+                div.className = 'nft-item';
+                div.innerHTML = `
+                    <div class="nft-name">${collectionName}</div>
+                    <div class="nft-id"><strong>Token ID:</strong> ${nft.value.repr}</div>
+                    <div class="nft-id" style="font-size:0.8em; color:#999;">Contract: ${contractAddress}</div>
+                `;
+                resultsDiv.appendChild(div);
+            });
+
+        } catch (error) {
+            console.error(error);
+            resultsDiv.innerHTML = `<div class="error">Failed to load NFTs. Please check the address and try again.<br><small>${error.message}</small></div>`;
+        } finally {
+            // Reset Button
+            btn.disabled = false;
+            btn.innerText = 'Scan';
+        }
+    }
+</script>
+
+</body>
+</html>

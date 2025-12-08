@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Signal Drifter</title>
+  <style>
+    body {
+      background: #05060a;
+      color: #e6e7ff;
+      font-family: system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      display: flex;
+      justify-content: center;
+      padding: 16px;
+    }
+    #game {
+      max-width: 720px;
+      width: 100%;
+      border: 1px solid #303040;
+      border-radius: 12px;
+      padding: 16px;
+      background: #080914;
+      box-shadow: 0 0 24px rgba(0,0,0,0.8);
+    }
+    #topbar {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin-bottom: 8px;
+      font-size: 13px;
+    }
+    #seedInput {
+      background: #05060a;
+      border: 1px solid #303040;
+      border-radius: 8px;
+      padding: 4px 6px;
+      color: inherit;
+      font-size: 13px;
+      width: 130px;
+    }
+    #status {
+      font-size: 13px;
+      margin-bottom: 8px;
+      color: #a4a6ff;
+    }
+    #log {
+      background: #05060a;
+      border-radius: 8px;
+      padding: 8px;
+      min-height: 260px;
+      max-height: 360px;
+      overflow-y: auto;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.4;
+      white-space: pre-wrap;
+    }
+    #prompt-line {
+      margin-top: 8px;
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 13px;
+    }
+    #cmdInput {
+      flex: 1;
+      background: #05060a;
+      border-radius: 8px;
+      border: 1px solid #303040;
+      padding: 4px 6px;
+      color: inherit;
+    }
+    #miniMap {
+      font-family: "SF Mono", Menlo, Consolas, monospace;
+      font-size: 11px;
+      color: #7779ff;
+      margin-bottom: 6px;
+      white-space: pre;
+    }
+  </style>
+</head>
+<body>
+  <div id="game">
+    <div id="topbar">
+      Seed:
+      <input id="seedInput" value="drifter-1" />
+      <button id="restartBtn">Reboot Ship</button>
+    </div>
+    <div id="status"></div>
+    <div id="miniMap"></div>
+    <div id="log"></div>
+    <div id="prompt-line">
+      <span>&gt;</span>
+      <input id="cmdInput" autocomplete="off" />
+    </div>
+  </div>
+
+  <script>
+    // --- Small utilities -----------------------------------------------------
+
+    const state = {
+      seedStr: "drifter-1",
+      seedInt: 0,
+      x: 0,
+      y: 0,
+      fuel: 40,
+      hull: 10,
+      stress: 0,
+      day: 0,
+      known: new Map() // "x,y" -> sector
+    };
+
+    const logEl = document.getElementById("log");
+    const statusEl = document.getElementById("status");
+    const cmdInput = document.getElementById("cmdInput");
+    const seedInput = document.getElementById("seedInput");
+    const restartBtn = document.getElementById("restartBtn");
+    const miniMapEl = document.getElementById("miniMap");
+
+    function hashString(str) {
+      let h = 2166136261 >>> 0;
+      for (let i = 0; i < str.length; i++) {
+        h ^= str.charCodeAt(i);
+        h = Math.imul(h, 16777619);
+      }
+      return h >>> 0;
+    }
+
+    function mulberry32(a) {
+      return function() {
+        let t = a += 0x6D2B79F5;
+        t = Math.imul(t ^ (t >>> 15), t | 1);
+        t ^= t + Math.imul(t ^ (t >>> 7), t | 61);
+        return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+      };
+    }
+
+    function hashCoords(seed, x, y) {
+      let h = seed ^ (x * 374761393) ^ (y * 668265263);
+      h = (h ^ (h >>> 13)) >>> 0;
+      return h;
+    }
+
+    function key(x, y) { return x + "," + y; }
+
+    function getSector(x, y) {
+      const k = key(x, y);
+      if (state.known.has(k)) return state.known.get(k);
+
+      const h = hashCoords(state.seedInt, x, y);
+      const r = mulberry32(h);
+      const roll = r();
+      let type = "empty";
+      if (roll < 0.12) type = "wreck";
+      else if (roll < 0.20) type = "station";
+      else if (roll < 0.28) type = "anomaly";
+      else if (roll < 0.34) type = "signal";
+      else if (roll < 0.40) type = "hazard";
+
+      const danger = type === "hazard" ? 0.7 + r() * 0.3 :
+                     type === "anomaly" ? 0.3 + r() * 0.4 :
+                     0.1 * r();
+
+      const sector = {
+        x, y,
+        type,
+        danger,
+        visited: false
+      };
+      state.known.set(k, sector);
+      return sector;
+    }
+
+    function log(line = "") {
+      logEl.textContent += line + "\n";
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function setStatus() {
+      statusEl.textContent =
+        `Day ${state.day}  |  Pos (${state.x}, ${state.y})  ` +
+        `| Fuel ${state.fuel}  | Hull ${state.hull}  | Stress ${state.stress}`;
+    }
+
+    function renderMiniMap(radius = 2) {
+      let out = "";
+      for (let dy = radius; dy >= -radius; dy--) {
+        let row = "";
+        for (let dx = -radius; dx <= radius; dx++) {
+          const cx = state.x + dx;
+          const cy = state.y + dy;
+          if (cx === state.x && cy === state.y) {
+            row += "◎ ";
+          } else {
+            const s = getSector(cx, cy);
+            row += sectorGlyph(s) + " ";
+          }
+        }
+        out += row.trimEnd() + "\n";
+      }
+      miniMapEl.textContent = out.trimEnd();
+    }
+
+    function sectorGlyph(s) {
+      switch (s.type) {
+        case "empty": return "·";
+        case "wreck": return "x";
+        case "station": return "□";
+        case "anomaly": return "?";
+        case "signal": return "~";
+        case "hazard": return "!";
+        default: return "·";
+      }
+    }
+
+    function describeSector(s, entering = false) {
+      const here = entering ? "You drop into" : "This sector is";
+      switch (s.type) {
+        case "empty":
+          log(`${here} dark and mostly empty. Faint dust clouds drift in the distance.`);
+          break;
+        case "wreck":
+          log(`${here} littered with the remains of a ship. Hulls torn, lights dead.`);
+          break;
+        case "station":
+          log(`${here} anchored around a silent station. No obvious life signs.`);
+          break;
+        case "anomaly":
+          log(`${here} warped by readings that make no physical sense.`);
+          break;
+        case "signal":
+          log(`${here} saturated with overlapping transmissions. Most of them ancient echoes.`);
+          break;
+        case "hazard":
+          log(`${here} unstable. Radiation spikes and sensor ghosts crowd the board.`);
+          break;
+      }
+    }
+
+    // --- Core actions --------------------------------------------------------
+
+    function initFromSeed(seedStr) {
+      state.seedStr = seedStr;
+      state.seedInt = hashString(seedStr);
+      state.x = 0;
+      state.y = 0;
+      state.fuel = 40;
+      state.hull = 10;
+      state.stress = 0;
+      state.day = 0;
+      state.known.clear();
+      logEl.textContent = "";
+      log(`Ship-core booting with seed "${seedStr}"...`);
+      log("You wake in a dim flight deck. Outside the canopy, only distant pinpricks of light.");
+      advanceTime(0); // refresh status + sector
+    }
+
+    function advanceTime(deltaDays = 1) {
+      state.day += deltaDays;
+      const sector = getSector(state.x, state.y);
+
+      if (!sector.visited) {
+        sector.visited = true;
+        describeSector(sector, true);
+      }
+
+      // Background stress creep in hazardous sectors
+      if (sector.type === "hazard" && Math.random() < 0.4) {
+        state.stress++;
+        log("The ship creaks under invisible forces. Your pulse quickens (+1 stress).");
+      }
+
+      // Check basic fail state
+      if (state.fuel <= 0) {
+        log("\nFuel reserves are exhausted. The ship drifts, instruments dimming one by one.");
+        log("GAME OVER");
+      }
+      if (state.hull <= 0) {
+        log("\nA final impact breaches the hull. There is no time to seal it.");
+        log("GAME OVER");
+      }
+
+      setStatus();
+      renderMiniMap();
+    }
+
+    function handleCommand(raw) {
+      const input = raw.trim();
+      if (!input) return;
+      log(`> ${input}`);
+      const [cmd, ...rest] = input.toLowerCase().split(/\s+/);
+      const arg = rest[0];
+
+      if (state.hull <= 0 || state.fuel <= 0) {
+        log("The run is over. Reboot the ship to start again.");
+        return;
+      }
+
+      switch (cmd) {
+        case "help":
+        case "?":
+          log("Commands:");
+          log("  move n|e|s|w   - burn fuel to travel one sector");
+          log("  scan           - sweep nearby space for points of interest");
+          log("  listen         - tune to faint signals");
+          log("  wait           - let time pass");
+          log("  status         - show current ship state");
+          log("  help           - show this help");
+          break;
+
+        case "status":
+          setStatus();
+          break;
+
+        case "move":
+          doMove(arg);
+          break;
+
+        case "scan":
+          doScan();
+          break;
+
+        case "listen":
+          doListen();
+          break;
+
+        case "wait":
+          doWait();
+          break;
+
+        default:
+          log("Unrecognized command. Try 'help'.");
+      }
+    }
+
+    function doMove(dir) {
+      if (!dir || !"nesw".includes(dir[0])) {
+        log("Specify direction: move n|e|s|w");
+        return;
+      }
+      if (state.fuel <= 0) {
+        log("You have no fuel left to move.");
+        return;
+      }
+      const ch = dir[0];
+      if (ch === "n") state.y += 1;
+      if (ch === "s") state.y -= 1;
+      if (ch === "e") state.x += 1;
+      if (ch === "w") state.x -= 1;
+
+      state.fuel -= 1;
+      state.stress += 0.1;
+      log("Engines flare briefly as you burn to a new vector.");
+      advanceTime(1);
+    }
+
+    function doScan() {
+      const here = getSector(state.x, state.y);
+      log("You run an active scan. Energy pings ripple out into the dark...");
+      const finds = [];
+      const radius = 2;
+      for (let dx = -radius; dx <= radius; dx++) {
+        for (let dy = -radius; dy <= radius; dy++) {
+          if (dx === 0 && dy === 0) continue;
+          const s = getSector(state.x + dx, state.y + dy);
+          if (s.type !== "empty" && Math.random() < 0.75) {
+            finds.push({ s, dx, dy });
+          }
+        }
+      }
+      if (!finds.length) {
+        log("No clear contacts. Just background noise and old debris.");
+      } else {
+        for (const { s, dx, dy } of finds) {
+          const dir = `${dx >= 0 ? "+" : ""}${dx},${dy >= 0 ? "+" : ""}${dy}`;
+          log(`  ${s.type.toUpperCase()} contact at offset (${dir}).`);
+        }
+      }
+      advanceTime(0.2);
+    }
+
+    function doListen() {
+      const s = getSector(state.x, state.y);
+      log("You kill the lights and let the receivers drink in the void...");
+
+      const r = Math.random();
+      if (s.type === "signal" && r < 0.7) {
+        log("A broken voice filters through, fragmented and distorted:");
+        log(`  "${generateFragment()}"`);
+      } else if (s.type === "wreck" && r < 0.6) {
+        log("You catch residual transponder ghosts, frozen at the moment of impact.");
+      } else if (s.type === "station" && r < 0.6) {
+        log("There is a carrier tone, steady and patient, but no handshake.");
+      } else if (s.type === "anomaly" && r < 0.7) {
+        log("The speakers pop and hiss in a pattern that might almost be language.");
+      } else if (r < 0.2) {
+        log("Only the hiss of cosmic background and the thrum of your ship.");
+      } else {
+        log("Something almost comes through, then slips away as if it noticed you listening.");
+      }
+
+      state.stress = Math.max(0, state.stress - 0.2);
+      advanceTime(0.3);
+    }
+
+    function doWait() {
+      log("You hold position, letting the ship drift while you re-check systems.");
+      state.stress = Math.max(0, state.stress - 0.4);
+      advanceTime(0.8);
+    }
+
+    function generateFragment() {
+      const fragments = [
+        "—if anyone still hears this—",
+        "vector locked to the beacon, we can’t turn—",
+        "don’t answer the signal, it’s not—",
+        "we cut power but it kept getting closer—",
+        "this was supposed to be a safe corridor—",
+        "tell them we tried to turn back—",
+        "the station wasn’t abandoned when we arrived—",
+        "it knows when you’re scanning for it—"
+      ];
+      return fragments[Math.floor(Math.random() * fragments.length)];
+    }
+
+    // --- Wiring --------------------------------------------------------------
+
+    cmdInput.addEventListener("keydown", (e) => {
+      if (e.key === "Enter") {
+        const value = cmdInput.value;
+        cmdInput.value = "";
+        handleCommand(value);
+      }
+    });
+
+    restartBtn.addEventListener("click", () => {
+      initFromSeed(seedInput.value || "drifter");
+    });
+
+    // Initial boot
+    initFromSeed(seedInput.value);
+    cmdInput.focus();
+  </script>
+</body>
+</html>
