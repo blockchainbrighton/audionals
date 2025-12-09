@@ -21,17 +21,22 @@ const loggedOutView = document.getElementById('logged-out-view');
 const loggedInView = document.getElementById('logged-in-view');
 const addressDisplay = document.getElementById('user-address-display');
 const nftList = document.getElementById('nft-list');
+const narcotixContainer = document.getElementById('narcotix-container');
+const narcotixList = document.getElementById('narcotix-list');
 const gameMsg = document.getElementById('game-access-msg');
 const loadingMsg = document.getElementById('loading-msg');
 
-// --- 5. INITIALIZATION ---
+// --- 5. CONSTANTS ---
+const NARCOTIX_CONTRACT = 'SP8HMQP4Q63V3E6SXXPXZ4WJXA263HBD95QY2AM3.narcotix';
+
+// --- 6. INITIALIZATION ---
 if (userSession.isUserSignedIn()) {
   showDashboard();
 } else if (userSession.isSignInPending()) {
   userSession.handlePendingSignIn().then(() => showDashboard());
 }
 
-// --- 6. BUTTON LISTENERS ---
+// --- 7. BUTTON LISTENERS ---
 if (connectBtn) {
   connectBtn.addEventListener('click', () => {
     if (showConnect) {
@@ -60,7 +65,7 @@ if (signOutBtn) {
   });
 }
 
-// --- 7. LOGIC ---
+// --- 8. LOGIC ---
 function showDashboard() {
   const userData = userSession.loadUserData();
   const address = userData.profile.stxAddress.mainnet;
@@ -95,6 +100,8 @@ async function fetchAllHoldings(address) {
 
     loadingMsg.classList.add('hidden');
     nftList.innerHTML = ''; 
+    narcotixList.innerHTML = '';
+    narcotixContainer.classList.add('hidden');
 
     if (!holdings || holdings.length === 0) {
       nftList.innerHTML = '<p>No NFTs found on this address.</p>';
@@ -117,6 +124,7 @@ async function fetchAllHoldings(address) {
       const contractAddress = parts[0];
       const id = nft.value.repr; 
 
+      // Create Element for General List
       const div = document.createElement('div');
       div.className = 'nft-item';
       div.innerHTML = `
@@ -125,6 +133,17 @@ async function fetchAllHoldings(address) {
         <div style="font-size: 0.7em; color: #aaa; margin-top: 5px; word-break: break-all;">${contractAddress}</div>
       `;
       nftList.appendChild(div);
+
+      // CHECK FOR NARCOTIX
+      if (contractAddress === NARCOTIX_CONTRACT) {
+        // Show container
+        narcotixContainer.classList.remove('hidden');
+        
+        // Clone for special list (or create new with specific style)
+        const specialDiv = div.cloneNode(true);
+        specialDiv.style.border = "1px solid #5546FF"; // Highlight it
+        narcotixList.appendChild(specialDiv);
+      }
     });
 
   } catch (error) {

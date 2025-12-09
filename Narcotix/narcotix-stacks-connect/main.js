@@ -14,6 +14,11 @@ const showConnect = StacksConnect.showConnect || StacksConnect.authenticate;
 const appConfig = new AppConfig(['store_write', 'publish_data']);
 const userSession = new UserSession({ appConfig });
 
+// REPLACE WITH THE ACTUAL NARCOTIX CONTRACT ADDRESS
+// Format: SP...contract-name
+// Example: 'SP2KAF9RF86JMX6LAYAZ7XUE0SEPC1LS6CT97AR50.narcotix'
+const NARCOTIX_CONTRACT = 'SP2KAF9RF86JMX6LAYAZ7XUE0SEPC1LS6CT97AR50.narcotix'; 
+
 // --- 4. DOM ELEMENTS ---
 const connectBtn = document.getElementById('connect-wallet-btn');
 const signOutBtn = document.getElementById('sign-out-btn');
@@ -37,7 +42,7 @@ if (connectBtn) {
     if (showConnect) {
       showConnect({
         appDetails: {
-          name: 'My NFT Game',
+          name: 'Narcotix Access',
           icon: window.location.origin + '/favicon.ico',
         },
         redirectTo: '/',
@@ -71,7 +76,7 @@ function showDashboard() {
   addressDisplay.textContent = `${address.slice(0, 4)}...${address.slice(-4)}`;
 
   // Update Status Header
-  gameMsg.textContent = "Your Wallet Holdings";
+  gameMsg.textContent = "Scanning for Narcotix...";
   gameMsg.className = "status";
 
   // Check for NFTs
@@ -79,8 +84,8 @@ function showDashboard() {
 }
 
 async function fetchAllHoldings(address) {
-  // Use the mainnet Hiro API to fetch ALL holdings, similar to the simple viewer
-  const apiURL = `https://api.mainnet.hiro.so/extended/v1/tokens/nft/holdings?principal=${address}&limit=50`;
+  // Use the mainnet Hiro API to fetch ALL holdings
+  const apiURL = `https://api.mainnet.hiro.so/extended/v1/tokens/nft/holdings?principal=${address}&limit=200`;
 
   console.log("Fetching all NFT holdings from:", apiURL);
 
@@ -91,45 +96,49 @@ async function fetchAllHoldings(address) {
     }
 
     const data = await response.json();
-    const holdings = data.results;
+    const allHoldings = data.results;
+
+    // Filter for Narcotix only
+    const narcotixHoldings = allHoldings.filter(nft => 
+      nft.asset_identifier.startsWith(NARCOTIX_CONTRACT)
+    );
 
     loadingMsg.classList.add('hidden');
     nftList.innerHTML = ''; 
 
-    if (!holdings || holdings.length === 0) {
-      nftList.innerHTML = '<p>No NFTs found on this address.</p>';
+    if (!narcotixHoldings || narcotixHoldings.length === 0) {
+      nftList.innerHTML = '<p class="fail">ACCESS DENIED: No Narcotix Tokens Found.</p>';
       return;
     }
 
     // Display Count
     const countDiv = document.createElement('div');
     countDiv.style.marginBottom = '15px';
-    countDiv.innerHTML = `<strong>Found ${data.total} NFT(s)</strong> (Showing top 50)`;
+    countDiv.style.color = '#0f0';
+    countDiv.innerHTML = `<strong>ACCESS GRANTED: ${narcotixHoldings.length} Token(s) Found</strong>`;
     nftList.appendChild(countDiv);
 
-    // Render Items
-    holdings.forEach(nft => {
-      // Parse asset identifier
+    // Render Items (Just IDs)
+    const listContainer = document.createElement('div');
+    listContainer.className = 'token-grid';
+    
+    narcotixHoldings.forEach(nft => {
       // Format: address.contract-name::asset-name
-      const fullIdentifier = nft.asset_identifier;
-      const parts = fullIdentifier.split('::');
-      const collectionName = parts[1] || 'Unknown Collection';
-      const contractAddress = parts[0];
-      const id = nft.value.repr; 
+      // We just want the ID (repr)
+      const id = nft.value.repr.replace('u', '#'); // Remove 'u' prefix usually found in Stacks uints
 
       const div = document.createElement('div');
-      div.className = 'nft-item';
-      div.innerHTML = `
-        <div style="font-weight: bold; color: #fff;">${collectionName}</div>
-        <div style="font-size: 0.9em; margin-top: 5px;">Token ID: <strong>${id}</strong></div>
-        <div style="font-size: 0.7em; color: #aaa; margin-top: 5px; word-break: break-all;">${contractAddress}</div>
-      `;
-      nftList.appendChild(div);
+      div.className = 'token-item';
+      div.innerText = id;
+      listContainer.appendChild(div);
     });
+    
+    nftList.appendChild(listContainer);
 
   } catch (error) {
     console.error("Fetch error:", error);
-    loadingMsg.textContent = "Error fetching data. Check console.";
+    loadingMsg.textContent = "SYSTEM ERROR: DATA FETCH FAILED";
     loadingMsg.classList.remove('hidden');
+    loadingMsg.style.color = 'red';
   }
 }

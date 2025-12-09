@@ -2,10 +2,9 @@ import { defineConfig } from 'vite';
 import { nodePolyfills } from 'vite-plugin-node-polyfills';
 
 export default defineConfig({
-  base: './', // Use relative paths for assets to support subdirectory deployment
-  // Enable the Polyfill Plugin
   plugins: [
     nodePolyfills({
+      // Specific options can be added here if needed, but defaults are usually sufficient for Stacks.js
       globals: {
         Buffer: true,
         global: true,
