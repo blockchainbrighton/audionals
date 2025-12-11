@@ -44,7 +44,7 @@ audition_log = []
 def get_clean_name(technical_id):
     """
     Converts 'af_heart' -> 'Heart', 'bm_george' -> 'George'
-    for better pronunciation in the audio intro.
+    for better pronunciation in the audio intro and cleaner filenames.
     """
     if '_' in technical_id:
         return technical_id.split('_')[1].title()
@@ -130,7 +130,7 @@ def generate_mixes(voice_list, region_code, count):
         # Mix them (50/50 average)
         mixed_voice = (t1 + t2) / 2
         
-        # Clean names for audio intro
+        # Clean names for audio intro AND filename
         n1 = get_clean_name(v1_name)
         n2 = get_clean_name(v2_name)
         
@@ -140,7 +140,8 @@ def generate_mixes(voice_list, region_code, count):
         intro_text = f"This is a fifty-fifty mix of {n1} and {n2}. "
         full_text = intro_text + TEST_TEXT
         
-        filename = f"02_{region_code}_mix_{i+1:02d}.wav"
+        # UPDATED: Filename now includes the specific voices
+        filename = f"02_{region_code}_mix_{i+1:02d}_{n1}_{n2}.wav"
         
         generator = pipeline(full_text, voice=mixed_voice, speed=1)
         save_audio(generator, filename, mix_name, region_code)
