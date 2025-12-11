@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <style>
+        body { margin: 0; overflow: hidden; background: #220033; color: white; }
+        #sampler-ui-temp { width: 100%; } 
+        #controls { width: 100%; height: 100%; }
+    </style>
+</head>
+<body>
+    <div id="gui-container">
+        <div id="sampler-ui-temp"></div>
+        <div id="controls"></div>
+    </div>
+    <script type="module">
+        import { Controls } from '../../../System/shared/controls.js';
+        import { SamplerUI } from '../../../System/shared/sampler.js';
+
+        try {
+            const sampler = new SamplerUI({
+                onSampleLoad: (data) => {
+                    window.parent.postMessage({ type: 'BVST_LOAD_SAMPLE_FROM_GUI', samples: data }, '*');
+                },
+                onSeek: (pct) => {
+                    // In GrainCloud, seeking updates the Grain Position
+                    // We also want to update the Knob UI if possible, but for now just send to engine
+                    // And update internal viz
+                    sampler.updateParam('grainPos', pct);
+                    window.parent.postMessage({ type: 'BVST_PARAM', id: 0, value: pct }, '*');
+                }
+            });
+            
+            // Initial State
+            sampler.updateParam('grainSize', 0.1);
+            sampler.updateParam('grainPos', 0.5);
+            sampler.updateParam('loopEnabled', false);
+            
+            sampler.buildUI('sampler-ui-temp');
+
+            const config = {
+                name: "GrainCloud",
+                modules: [
+                    {
+                        name: "Cloud Control",
+                        controls: [
+                            { id: 'pos', type: 'knob', param: 0, min: 0.0, max: 1.0, val: 0.5, label: 'Pos' },
+                            { id: 'spread', type: 'knob', param: 1, min: 0.0, max: 0.5, val: 0.1, label: 'Spread' },
+                            { id: 'dens', type: 'knob', param: 2, min: 1.0, max: 80.0, val: 20.0, label: 'Dens' },
+                            { id: 'size', type: 'knob', param: 3, min: 10.0, max: 500.0, val: 100.0, label: 'Size' }
+                        ]
+                    },
+                    {
+                        name: "Jitter / Speed",
+                        controls: [
+                            { id: 'jit_sz', type: 'knob', param: 4, min: 0.0, max: 200.0, val: 50.0, label: 'Jit.Size' },
+                            { id: 'jit_pi', type: 'knob', param: 5, min: 0.0, max: 1.0, val: 0.0, label: 'Jit.Pch' },
+                            { id: 'speed', type: 'knob', param: 6, min: 0.1, max: 2.0, val: 1.0, label: 'Speed' }
+                        ]
+                    },
+                    {
+                        name: "Output",
+                        controls: [
+                            { id: 'cut', type: 'knob', param: 10, min: 20, max: 20000, val: 20000, label: 'Cutoff', curve: 'log' },
+                            { id: 'dly', type: 'knob', param: 23, min: 0.0, max: 0.5, val: 0.0, label: 'Delay' }
+                        ]
+                    }
+                ]
+            };
+
+            const controls = new Controls({
+                onChange: (id, val) => {
+                    const el = document.getElementById(id);
+                    const paramId = parseInt(el.dataset.param);
+                    window.parent.postMessage({ type: 'BVST_PARAM', id: paramId, value: val }, '*');
+                    
+                    // Update Viz
+                    if (id === 'pos') sampler.updateParam('grainPos', val);
+                    if (id === 'spread') sampler.updateParam('grainSize', val * 2.0); // Spread is half-width, size is full
+                }
+            });
+
+            controls.buildUI('controls', config);
+
+            const appRoot = document.getElementById('bvst-app-root');
+            const samplerNode = document.getElementById('sampler-ui-temp').firstElementChild; 
+            if(appRoot && samplerNode) {
+                const topBar = appRoot.querySelector('.bvst-top-bar');
+                const grid = appRoot.querySelector('.bvst-controls-grid');
+                if (topBar && grid) appRoot.insertBefore(samplerNode, grid);
+                else if (topBar) appRoot.appendChild(samplerNode);
+                else appRoot.prepend(samplerNode);
+                document.getElementById('sampler-ui-temp').remove();
+            }
+
+        } catch (e) { console.error(e); }
+    </script>
+</body>
+</html>
