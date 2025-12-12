@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>BeatMachine</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #111; color: #ccc; font-family: monospace; display: flex; flex-direction: column; align-items: center; min-height: 100vh; }
+        
+        #transport { display: flex; gap: 10px; margin-bottom: 20px; align-items: center; background: #222; padding: 10px; border-radius: 8px; }
+        #transport button { padding: 8px 16px; background: #444; color: #fff; border: none; border-radius: 4px; cursor: pointer; font-family: monospace; font-weight: bold; }
+        #transport button.active { background: #0f0; color: #000; }
+        #transport button:hover { background: #555; }
+        
+        .grid-container { display: grid; grid-template-columns: 60px repeat(16, 1fr); gap: 4px; background: #222; padding: 10px; border-radius: 8px; margin-bottom: 20px; }
+        
+        .row-label { display: flex; align-items: center; font-size: 12px; color: #888; font-weight: bold; }
+        
+        .step {
+            width: 24px; height: 30px; background: #333; border: 1px solid #444; cursor: pointer;
+            display: flex; justify-content: center; align-items: center;
+        }
+        .step:hover { border-color: #666; }
+        .step.active { background: #f90; border-color: #f90; box-shadow: 0 0 5px #f90; }
+        .step.current { background: #fff; }
+        .step.active.current { background: #ffc; }
+        
+        .row-0 .step.active { background: #f44; border-color: #f44; box-shadow: 0 0 5px #f44; }
+        .row-1 .step.active { background: #4f4; border-color: #4f4; box-shadow: 0 0 5px #4f4; }
+        .row-2 .step.active { background: #4bf; border-color: #4bf; box-shadow: 0 0 5px #4bf; }
+        .row-3 .step.active { background: #d4f; border-color: #d4f; box-shadow: 0 0 5px #d4f; }
+    </style>
+</head>
+<body>
+    <div id="app-container"></div>
+
+    <script type="module">
+        import { BVST } from '../../../System/shared/plugin_core.js';
+
+        const CONFIG = {
+            name: "BEAT MACHINE",
+            keyboard: false,
+            modules: [
+                {
+                    name: "Kick",
+                    controls: [
+                        { type: 'knob', id: 'k_vol', label: 'Vol', param: 1, min: 0, max: 1, val: 0.8 },
+                        { type: 'knob', id: 'k_tune', label: 'Tune', param: 5, min: 30, max: 80, val: 50 },
+                        { type: 'knob', id: 'k_dec', label: 'Decay', param: 6, min: 0.1, max: 0.8, val: 0.4 }
+                    ]
+                },
+                {
+                    name: "Snare",
+                    controls: [
+                        { type: 'knob', id: 's_vol', label: 'Vol', param: 2, min: 0, max: 1, val: 0.6 },
+                        { type: 'knob', id: 's_snap', label: 'Snap', param: 7, min: 0, max: 1, val: 0.5 },
+                        { type: 'knob', id: 's_dec', label: 'Decay', param: 8, min: 0.05, max: 0.4, val: 0.2 }
+                    ]
+                },
+                {
+                    name: "Hat",
+                    controls: [
+                        { type: 'knob', id: 'h_vol', label: 'Vol', param: 3, min: 0, max: 1, val: 0.4 },
+                        { type: 'knob', id: 'h_col', label: 'Color', param: 9, min: 1000, max: 10000, val: 5000 },
+                        { type: 'knob', id: 'h_dec', label: 'Decay', param: 10, min: 0.02, max: 0.3, val: 0.05 }
+                    ]
+                },
+                {
+                    name: "Bass",
+                    controls: [
+                        { type: 'knob', id: 'b_vol', label: 'Vol', param: 4, min: 0, max: 1, val: 0.7 },
+                        { type: 'knob', id: 'b_cut', label: 'Cut', param: 11, min: 100, max: 2000, curve: 'log', val: 500 },
+                        { type: 'knob', id: 'b_note', label: 'Root', param: 13, min: 24, max: 60, step: 1, val: 36 } 
+                    ]
+                }
+            ]
+        };
+
+        BVST.init(CONFIG);
+        
+        // --- INJECT UI ---
+        const app = document.getElementById('bvst-app-root');
+        
+        // Transport
+        const transportDiv = document.createElement('div');
+        transportDiv.id = 'transport';
+        transportDiv.innerHTML = `
+            <button id="btn-play">PLAY</button>
+            <button id="btn-stop">STOP</button>
+            <div style="display: flex; flex-direction: column; gap: 2px;">
+                <label style="font-size: 10px;">BPM</label>
+                <input type="number" id="bpm" value="120" style="width: 50px; background: #111; color: #fff; border: 1px solid #444;">
+            </div>
+        `;
+        app.insertBefore(transportDiv, app.children[1]); // After header
+
+        // Grid
+        const gridDiv = document.createElement('div');
+        gridDiv.className = 'grid-container';
+        gridDiv.id = 'sequencer';
+        app.insertBefore(gridDiv, app.children[2]); // After transport
+
+        // --- SEQUENCER LOGIC ---
+        const ROWS = [
+            { name: "KICK", note: 36, class: "row-0" },
+            { name: "SNARE", note: 38, class: "row-1" },
+            { name: "HAT", note: 42, class: "row-2" },
+            { name: "BASS", note: 48, class: "row-3" }
+        ];
+        
+        const STEPS = 16;
+        let gridData = Array(ROWS.length).fill().map(() => Array(STEPS).fill(false));
+        
+        let isPlaying = false;
+        let currentStep = 0;
+        let tempo = 120;
+        
+        // Generate Grid UI
+        const seqContainer = document.getElementById('sequencer');
+        ROWS.forEach((row, rIdx) => {
+            const label = document.createElement('div');
+            label.className = 'row-label';
+            label.innerText = row.name;
+            seqContainer.appendChild(label);
+            
+            for(let s=0; s<STEPS; s++) {
+                const step = document.createElement('div');
+                step.className = `step ${row.class}`;
+                step.id = `step-${rIdx}-${s}`;
+                step.onclick = () => toggleStep(rIdx, s);
+                seqContainer.appendChild(step);
+            }
+        });
+
+        // Default Pattern
+        [0, 4, 8, 12].forEach(s => { gridData[0][s] = true; updateStepUI(0, s); });
+        [4, 12].forEach(s => { gridData[1][s] = true; updateStepUI(1, s); });
+        [2, 6, 10, 14].forEach(s => { gridData[2][s] = true; updateStepUI(2, s); });
+        [0, 3, 8, 11].forEach(s => { gridData[3][s] = true; updateStepUI(3, s); });
+        
+        function toggleStep(row, step) {
+            gridData[row][step] = !gridData[row][step];
+            updateStepUI(row, step);
+        }
+        
+        function updateStepUI(row, step) {
+            const el = document.getElementById(`step-${row}-${step}`);
+            if (gridData[row][step]) el.classList.add('active');
+            else el.classList.remove('active');
+        }
+        
+        document.getElementById('btn-play').onclick = () => {
+            if(!isPlaying) {
+                isPlaying = true;
+                document.getElementById('btn-play').classList.add('active');
+                runSequencer();
+            }
+        };
+        
+        document.getElementById('btn-stop').onclick = () => {
+            isPlaying = false;
+            document.getElementById('btn-play').classList.remove('active');
+            clearUI();
+            currentStep = 0;
+        };
+        
+        document.getElementById('bpm').onchange = (e) => { tempo = parseFloat(e.target.value); };
+        
+        function runSequencer() {
+            if(!isPlaying) return;
+            playStep(currentStep);
+            updatePlayhead(currentStep);
+            currentStep = (currentStep + 1) % STEPS;
+            const stepTime = (60000 / tempo) / 4;
+            setTimeout(runSequencer, stepTime);
+        }
+        
+        function playStep(s) {
+            if(gridData[0][s]) BVST.sendParam(128, 36);
+            if(gridData[1][s]) BVST.sendParam(128, 38);
+            if(gridData[2][s]) BVST.sendParam(128, 42);
+            if(gridData[3][s]) BVST.sendParam(128, 48);
+        }
+        
+        function updatePlayhead(s) {
+            document.querySelectorAll('.step.current').forEach(el => el.classList.remove('current'));
+            for(let r=0; r<ROWS.length; r++) {
+                document.getElementById(`step-${r}-${s}`).classList.add('current');
+            }
+        }
+        
+        function clearUI() {
+             document.querySelectorAll('.step.current').forEach(el => el.classList.remove('current'));
+        }
+    </script>
+</body>
+</html>

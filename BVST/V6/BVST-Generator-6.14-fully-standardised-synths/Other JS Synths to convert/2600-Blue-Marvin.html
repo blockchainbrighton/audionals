@@ -1,0 +1,710 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ARP 2600 "Blue Marvin" Emulator</title>
+    <style>
+        :root {
+            --bg-color: #1a2b45; /* The "Blue Marvin" Blue */
+            --panel-border: #4a5d7a;
+            --text-color: #f0f0f0;
+            --slider-track: #0e1826;
+            --slider-thumb: #dcdcdc;
+            --highlight: #ff9f1c;
+        }
+
+        * {
+            box-sizing: border-box;
+            user-select: none;
+        }
+
+        body {
+            margin: 0;
+            padding: 20px;
+            background-color: #111;
+            font-family: 'Helvetica', 'Arial', sans-serif;
+            color: var(--text-color);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        /* --- THE CASE --- */
+        .synth-case {
+            background-color: var(--bg-color);
+            border: 4px solid #0f1a2b;
+            border-radius: 8px;
+            padding: 20px;
+            box-shadow: 0 20px 50px rgba(0,0,0,0.6);
+            width: 100%;
+            max-width: 900px;
+            position: relative;
+        }
+
+        /* Industrial Screws (CSS Gradients) */
+        .screw {
+            position: absolute;
+            width: 12px;
+            height: 12px;
+            background: radial-gradient(circle, #555 20%, #222 60%, #1a2b45 70%);
+            border-radius: 50%;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.5);
+        }
+        .screw::after {
+            content: '';
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 80%;
+            height: 2px;
+            background: #111;
+            transform: translate(-50%, -50%) rotate(45deg);
+        }
+        .tl { top: 10px; left: 10px; }
+        .tr { top: 10px; right: 10px; }
+        .bl { bottom: 10px; left: 10px; }
+        .br { bottom: 10px; right: 10px; }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            padding: 0 20px;
+            border-bottom: 2px solid var(--panel-border);
+            padding-bottom: 15px;
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 1.5rem;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        button#power-btn {
+            background: var(--highlight);
+            border: none;
+            color: #111;
+            font-weight: bold;
+            padding: 8px 16px;
+            border-radius: 2px;
+            cursor: pointer;
+            text-transform: uppercase;
+            box-shadow: 0 0 10px rgba(255, 159, 28, 0.4);
+            transition: all 0.2s;
+        }
+        button#power-btn:hover {
+            background: #ffbf69;
+            box-shadow: 0 0 15px rgba(255, 159, 28, 0.8);
+        }
+        button#power-btn.active {
+            background: #2ec4b6;
+            box-shadow: 0 0 10px rgba(46, 196, 182, 0.4);
+            content: "ON";
+        }
+
+        /* --- MODULE GRID --- */
+        .modules-container {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+            gap: 15px;
+            margin-bottom: 20px;
+        }
+
+        .module {
+            border: 2px solid var(--panel-border);
+            background: rgba(0,0,0,0.1);
+            border-radius: 4px;
+            padding: 10px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+
+        .module-title {
+            font-size: 0.8rem;
+            font-weight: bold;
+            text-transform: uppercase;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--panel-border);
+            width: 100%;
+            text-align: center;
+            padding-bottom: 5px;
+            letter-spacing: 1px;
+        }
+
+        /* --- VERTICAL SLIDERS --- */
+        .slider-group {
+            display: flex;
+            justify-content: space-around;
+            width: 100%;
+            height: 180px; /* Height of the slider area */
+        }
+
+        .slider-control {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            height: 100%;
+            width: 40px;
+        }
+
+        .slider-wrapper {
+            height: 120px;
+            width: 30px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 10px;
+        }
+
+        /* Rotating a range input to make it vertical */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 120px; /* Actually the height */
+            height: 6px;  /* Actually the width */
+            background: var(--slider-track);
+            border-radius: 3px;
+            outline: none;
+            transform: rotate(-90deg);
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.5);
+            cursor: pointer;
+        }
+
+        /* Slider Thumb (The "Cap") */
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            appearance: none;
+            width: 16px;
+            height: 24px; /* Looks wide because of rotation */
+            background: linear-gradient(to right, #ccc, #fff, #ccc);
+            border: 1px solid #999;
+            border-radius: 2px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            cursor: ns-resize;
+        }
+
+        input[type=range]::-moz-range-thumb {
+            width: 16px;
+            height: 24px;
+            background: linear-gradient(to right, #ccc, #fff, #ccc);
+            border: 1px solid #999;
+            border-radius: 2px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+            cursor: ns-resize;
+        }
+
+        .label {
+            font-size: 0.65rem;
+            text-align: center;
+            margin-top: auto;
+            color: #aaa;
+            text-transform: uppercase;
+        }
+
+        /* --- KEYBOARD --- */
+        .keyboard-visual {
+            display: flex;
+            justify-content: center;
+            height: 80px;
+            background: #000;
+            padding: 5px;
+            border-top: 4px solid #444;
+            border-radius: 0 0 4px 4px;
+            overflow: hidden;
+        }
+
+        .key {
+            width: 30px;
+            margin: 0 2px;
+            background: white;
+            border-radius: 0 0 3px 3px;
+            position: relative;
+            cursor: pointer;
+            transition: background 0.1s;
+        }
+
+        .key.black {
+            width: 20px;
+            height: 50px;
+            background: #111;
+            margin-left: -12px;
+            margin-right: -12px;
+            z-index: 2;
+            border: 1px solid #444;
+        }
+
+        .key.active {
+            background: var(--highlight);
+        }
+        .key.black.active {
+            background: #c2780e;
+        }
+        
+        .key-label {
+            position: absolute;
+            bottom: 5px;
+            left: 50%;
+            transform: translateX(-50%);
+            font-size: 10px;
+            color: #999;
+        }
+
+        .hint {
+            text-align: center;
+            font-size: 0.8rem;
+            color: #667;
+            margin-top: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="synth-case">
+        <!-- Decoration Screws -->
+        <div class="screw tl"></div><div class="screw tr"></div>
+        <div class="screw bl"></div><div class="screw br"></div>
+
+        <div class="header">
+            <h1>ARP 2600 <span style="font-size: 0.6em; color: #88a;">BLUE MARVIN</span></h1>
+            <button id="power-btn">Power On</button>
+        </div>
+
+        <div class="modules-container">
+            <!-- VCO 1 -->
+            <div class="module">
+                <div class="module-title">VCO 1 (Saw)</div>
+                <div class="slider-group">
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="vco1-freq" min="-24" max="24" value="0" step="1">
+                        </div>
+                        <span class="label">Freq</span>
+                    </div>
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="vco1-mix" min="0" max="1" value="0.8" step="0.01">
+                        </div>
+                        <span class="label">Lvl</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VCO 2 -->
+            <div class="module">
+                <div class="module-title">VCO 2 (Pulse)</div>
+                <div class="slider-group">
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="vco2-detune" min="-50" max="50" value="5" step="1">
+                        </div>
+                        <span class="label">Fine</span>
+                    </div>
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="vco2-width" min="0" max="0.9" value="0.5" step="0.01">
+                        </div>
+                        <span class="label">Width</span>
+                    </div>
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="vco2-mix" min="0" max="1" value="0.6" step="0.01">
+                        </div>
+                        <span class="label">Lvl</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VCF (Filter) -->
+            <div class="module">
+                <div class="module-title">VCF (Filter)</div>
+                <div class="slider-group">
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="vcf-cutoff" min="100" max="10000" value="2000" step="10">
+                        </div>
+                        <span class="label">Freq</span>
+                    </div>
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="vcf-res" min="0" max="20" value="5" step="0.1">
+                        </div>
+                        <span class="label">Res</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ADSR -->
+            <div class="module">
+                <div class="module-title">ADSR Envelope</div>
+                <div class="slider-group">
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="env-a" min="0.01" max="2" value="0.05" step="0.01">
+                        </div>
+                        <span class="label">A</span>
+                    </div>
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="env-d" min="0.1" max="2" value="0.3" step="0.01">
+                        </div>
+                        <span class="label">D</span>
+                    </div>
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="env-s" min="0" max="1" value="0.5" step="0.01">
+                        </div>
+                        <span class="label">S</span>
+                    </div>
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="env-r" min="0.1" max="4" value="0.8" step="0.01">
+                        </div>
+                        <span class="label">R</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- VCA -->
+            <div class="module">
+                <div class="module-title">Mixer / VCA</div>
+                <div class="slider-group">
+                    <div class="slider-control">
+                        <div class="slider-wrapper">
+                            <input type="range" id="master-vol" min="0" max="1" value="0.7" step="0.01">
+                        </div>
+                        <span class="label">Vol</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="keyboard-visual" id="keyboard">
+            <!-- Keys generated by JS -->
+        </div>
+        <div class="hint">Press <b>A W S E D F T G Y H U J K</b> to play</div>
+    </div>
+
+<script>
+/**
+ * ARP 2600 "Blue Marvin" Emulator Logic
+ * * Audio Architecture:
+ * VCO1 (Saw) + VCO2 (Pulse/PWM) -> Mixer -> VCF (Lowpass) -> VCA -> Destination
+ * ADSR -> VCA Gain
+ */
+
+class BlueMarvin {
+    constructor() {
+        this.ctx = null;
+        this.vco1 = null;
+        this.vco2 = null;
+        this.vco1Gain = null;
+        this.vco2Gain = null;
+        this.filter = null;
+        this.masterVca = null;
+        this.compressor = null;
+        this.pulseShaper = null; // Used for PWM emulation
+
+        this.isPlaying = false;
+        this.currentOscillators = [];
+        
+        this.params = {
+            vco1Freq: 0, // Semitone offset
+            vco1Mix: 0.8,
+            vco2Detune: 5, // Cents
+            vco2Width: 0.0, // PWM Amount
+            vco2Mix: 0.6,
+            cutoff: 2000,
+            resonance: 5,
+            attack: 0.05,
+            decay: 0.3,
+            sustain: 0.5,
+            release: 0.8,
+            volume: 0.7
+        };
+
+        this.keysPressed = new Set();
+        this.noteMap = {
+            'a': 60, 'w': 61, 's': 62, 'e': 63, 'd': 64, 'f': 65,
+            't': 66, 'g': 67, 'y': 68, 'h': 69, 'u': 70, 'j': 71, 'k': 72
+        };
+
+        this.initUI();
+    }
+
+    initAudio() {
+        if (this.ctx) return;
+        
+        const AudioContext = window.AudioContext || window.webkitAudioContext;
+        this.ctx = new AudioContext();
+
+        // Master Output Stage
+        this.compressor = this.ctx.createDynamicsCompressor();
+        this.compressor.connect(this.ctx.destination);
+        
+        this.masterVca = this.ctx.createGain();
+        this.masterVca.gain.value = 0; // Start silent
+        this.masterVca.connect(this.compressor);
+
+        // Filter Stage (Shared)
+        this.filter = this.ctx.createBiquadFilter();
+        this.filter.type = 'lowpass';
+        this.filter.frequency.value = this.params.cutoff;
+        this.filter.Q.value = this.params.resonance;
+        this.filter.connect(this.masterVca);
+
+        // Mixer Stage (Nodes are created but inputs come from temp oscillators)
+        // We need a persistent entry point for the filter?
+        // Actually, in this simple monophonic synth, we recreate oscs per note
+        // or we keep them running. To avoid popping, we'll keep the graph static
+        // but start/stop the oscs or just gate the VCA.
+        // For standard Web Audio behavior, let's keep oscillators running to allow
+        // portamento later, or just recreate them. Recreating is safer for envelope resets.
+        // However, a true analog synth has free-running oscillators. 
+        // Let's implement free-running oscillators for authenticity.
+
+        this.createVoice();
+        
+        document.getElementById('power-btn').textContent = "SYSTEM ON";
+        document.getElementById('power-btn').classList.add('active');
+    }
+
+    // Create the static graph for a monophonic voice
+    createVoice() {
+        const now = this.ctx.currentTime;
+
+        // VCO 1: Sawtooth
+        this.vco1 = this.ctx.createOscillator();
+        this.vco1.type = 'sawtooth';
+        this.vco1Gain = this.ctx.createGain();
+        this.vco1Gain.gain.value = this.params.vco1Mix;
+        this.vco1.connect(this.vco1Gain);
+        this.vco1Gain.connect(this.filter);
+
+        // VCO 2: Pulse (Simulated via Triangle + Shaper for PWM)
+        // Standard Square doesn't allow PWM in Web Audio without custom shaper
+        this.vco2 = this.ctx.createOscillator();
+        this.vco2.type = 'triangle'; // Triangle is better for shaping into pulse
+        
+        // PWM Shaper
+        this.pulseShaper = this.ctx.createWaveShaper();
+        this.pulseShaper.curve = this.makePulseCurve(this.params.vco2Width);
+        
+        this.vco2Gain = this.ctx.createGain();
+        this.vco2Gain.gain.value = this.params.vco2Mix;
+        
+        this.vco2.connect(this.pulseShaper);
+        this.pulseShaper.connect(this.vco2Gain);
+        this.vco2Gain.connect(this.filter);
+
+        // Start them (but VCA is 0, so no sound)
+        this.vco1.start(now);
+        this.vco2.start(now);
+    }
+
+    // Creates a WaveShaper curve to turn a triangle into a pulse with specific width
+    makePulseCurve(width) {
+        // Width -1 to 1. 0 is square.
+        // Input is triangle -1 to 1.
+        const n_samples = 256;
+        const curve = new Float32Array(n_samples);
+        // Map slider 0->1 to width -0.9 to 0.9 (avoid extreme silence)
+        const threshold = (width * 1.8) - 0.9; 
+
+        for (let i = 0; i < n_samples; i++) {
+            let x = (i * 2) / n_samples - 1;
+            curve[i] = (x < threshold) ? -1 : 1;
+        }
+        return curve;
+    }
+
+    noteOn(noteVal) {
+        if (!this.ctx) return;
+        if (this.ctx.state === 'suspended') this.ctx.resume();
+
+        const now = this.ctx.currentTime;
+        const freq = 440 * Math.pow(2, (noteVal - 69) / 12);
+
+        // Set frequencies
+        // VCO1 Semitone offset
+        const freq1 = freq * Math.pow(2, this.params.vco1Freq / 12);
+        this.vco1.frequency.setValueAtTime(freq1, now);
+
+        // VCO2 Detune (Cents)
+        this.vco2.frequency.setValueAtTime(freq, now);
+        this.vco2.detune.setValueAtTime(this.params.vco2Detune, now);
+
+        // Trigger ADSR Envelope on VCA
+        // Cancel scheduled values to handle rapid playing
+        this.masterVca.gain.cancelScheduledValues(now);
+        this.masterVca.gain.setValueAtTime(this.masterVca.gain.value, now);
+        
+        // Attack
+        this.masterVca.gain.linearRampToValueAtTime(this.params.volume, now + this.params.attack);
+        // Decay to Sustain
+        this.masterVca.gain.exponentialRampToValueAtTime(this.params.volume * this.params.sustain + 0.001, now + this.params.attack + this.params.decay);
+        
+        // Visual
+        this.highlightKey(noteVal, true);
+    }
+
+    noteOff(noteVal) {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+        
+        // Check if other keys are still pressed (Mono priority logic simplified)
+        if (this.keysPressed.size === 0) {
+            this.masterVca.gain.cancelScheduledValues(now);
+            this.masterVca.gain.setValueAtTime(this.masterVca.gain.value, now);
+            // Release
+            this.masterVca.gain.exponentialRampToValueAtTime(0.0001, now + this.params.release);
+        }
+
+        // Visual
+        this.highlightKey(noteVal, false);
+    }
+
+    initUI() {
+        // Power
+        document.getElementById('power-btn').addEventListener('click', () => {
+            this.initAudio();
+        });
+
+        // Sliders
+        const bindSlider = (id, paramKey, isFloat = true) => {
+            const el = document.getElementById(id);
+            el.addEventListener('input', (e) => {
+                const val = isFloat ? parseFloat(e.target.value) : parseInt(e.target.value);
+                this.params[paramKey] = val;
+                this.updateAudioParams(paramKey);
+            });
+        };
+
+        bindSlider('vco1-freq', 'vco1Freq', false);
+        bindSlider('vco1-mix', 'vco1Mix');
+        bindSlider('vco2-detune', 'vco2Detune', false);
+        bindSlider('vco2-width', 'vco2Width');
+        bindSlider('vco2-mix', 'vco2Mix');
+        bindSlider('vcf-cutoff', 'cutoff');
+        bindSlider('vcf-res', 'resonance');
+        bindSlider('env-a', 'attack');
+        bindSlider('env-d', 'decay');
+        bindSlider('env-s', 'sustain');
+        bindSlider('env-r', 'release');
+        bindSlider('master-vol', 'volume');
+
+        // Keyboard Setup
+        window.addEventListener('keydown', (e) => {
+            if (e.repeat) return;
+            const key = e.key.toLowerCase();
+            if (this.noteMap[key]) {
+                const note = this.noteMap[key];
+                this.keysPressed.add(note);
+                this.noteOn(note);
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            const key = e.key.toLowerCase();
+            if (this.noteMap[key]) {
+                const note = this.noteMap[key];
+                this.keysPressed.delete(note);
+                this.noteOff(note);
+            }
+        });
+
+        this.generateVisualKeys();
+    }
+
+    updateAudioParams(changedParam) {
+        if (!this.ctx) return;
+        const now = this.ctx.currentTime;
+
+        // Real-time updates for things that don't need a re-trigger
+        if (changedParam === 'cutoff') {
+            this.filter.frequency.setTargetAtTime(this.params.cutoff, now, 0.1);
+        }
+        if (changedParam === 'resonance') {
+            this.filter.Q.setTargetAtTime(this.params.resonance, now, 0.1);
+        }
+        if (changedParam === 'vco1Mix') {
+            this.vco1Gain.gain.setTargetAtTime(this.params.vco1Mix, now, 0.05);
+        }
+        if (changedParam === 'vco2Mix') {
+            this.vco2Gain.gain.setTargetAtTime(this.params.vco2Mix, now, 0.05);
+        }
+        if (changedParam === 'vco2Detune') {
+            this.vco2.detune.setValueAtTime(this.params.vco2Detune, now);
+        }
+        if (changedParam === 'vco2Width') {
+            this.pulseShaper.curve = this.makePulseCurve(this.params.vco2Width);
+        }
+    }
+
+    generateVisualKeys() {
+        const container = document.getElementById('keyboard');
+        const startNote = 60; // C3
+        const endNote = 72;   // C4
+        const keys = [
+            { note: 60, type: 'white', label: 'A' },
+            { note: 61, type: 'black', label: 'W' },
+            { note: 62, type: 'white', label: 'S' },
+            { note: 63, type: 'black', label: 'E' },
+            { note: 64, type: 'white', label: 'D' },
+            { note: 65, type: 'white', label: 'F' },
+            { note: 66, type: 'black', label: 'T' },
+            { note: 67, type: 'white', label: 'G' },
+            { note: 68, type: 'black', label: 'Y' },
+            { note: 69, type: 'white', label: 'H' },
+            { note: 70, type: 'white', label: 'U' },
+            { note: 71, type: 'black', label: 'J' },
+            { note: 72, type: 'white', label: 'K' }
+        ];
+
+        keys.forEach(k => {
+            const div = document.createElement('div');
+            div.className = `key ${k.type}`;
+            div.dataset.note = k.note;
+            div.innerHTML = `<span class="key-label">${k.label}</span>`;
+            
+            // Mouse Interaction
+            div.addEventListener('mousedown', () => {
+                this.keysPressed.add(k.note);
+                this.noteOn(k.note);
+            });
+            div.addEventListener('mouseup', () => {
+                this.keysPressed.delete(k.note);
+                this.noteOff(k.note);
+            });
+            div.addEventListener('mouseleave', () => {
+                if (this.keysPressed.has(k.note)) {
+                    this.keysPressed.delete(k.note);
+                    this.noteOff(k.note);
+                }
+            });
+
+            container.appendChild(div);
+        });
+    }
+
+    highlightKey(note, isActive) {
+        const keys = document.querySelectorAll('.key');
+        keys.forEach(k => {
+            if (parseInt(k.dataset.note) === note) {
+                if (isActive) k.classList.add('active');
+                else k.classList.remove('active');
+            }
+        });
+    }
+}
+
+// Initialize
+const synth = new BlueMarvin();
+
+</script>
+</body>
+</html>

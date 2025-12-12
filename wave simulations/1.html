@@ -1,0 +1,547 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Wave Sim V3 - Lunar Cycle</title>
+    <style>
+        :root {
+            --glass: rgba(15, 23, 42, 0.6);
+            --border: rgba(255, 255, 255, 0.1);
+            --highlight: #38bdf8;
+        }
+
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #000;
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            color: white;
+            user-select: none;
+        }
+
+        canvas {
+            display: block;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        /* --- HUD UI --- */
+        .hud {
+            position: absolute;
+            bottom: 30px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 90%;
+            max-width: 500px;
+            background: var(--glass);
+            backdrop-filter: blur(20px);
+            -webkit-backdrop-filter: blur(20px);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            padding: 20px 30px;
+            box-shadow: 0 10px 40px rgba(0,0,0,0.5);
+            transition: opacity 0.3s;
+        }
+        
+        /* Hide HUD when inactive for immersion */
+        .hud.inactive {
+            opacity: 0.3;
+        }
+        .hud.inactive:hover {
+            opacity: 1;
+        }
+
+        .header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+
+        h1 {
+            font-size: 0.9rem;
+            text-transform: uppercase;
+            letter-spacing: 2px;
+            margin: 0;
+            color: rgba(255,255,255,0.9);
+        }
+
+        /* Toggle Switch for Auto-Cycle */
+        .cycle-toggle {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.75rem;
+            cursor: pointer;
+        }
+        
+        .switch {
+            width: 36px;
+            height: 20px;
+            background: rgba(255,255,255,0.2);
+            border-radius: 20px;
+            position: relative;
+            transition: 0.3s;
+        }
+        
+        .switch::after {
+            content: '';
+            position: absolute;
+            top: 2px; left: 2px;
+            width: 16px; height: 16px;
+            background: white;
+            border-radius: 50%;
+            transition: 0.3s;
+        }
+
+        .cycle-active .switch { background: var(--highlight); }
+        .cycle-active .switch::after { transform: translateX(16px); }
+
+        /* Sliders */
+        .controls { display: grid; gap: 15px; }
+        
+        .control-row {
+            display: flex;
+            flex-direction: column;
+            gap: 5px;
+        }
+
+        .label-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 0.75rem;
+            font-weight: 600;
+            color: rgba(255,255,255,0.6);
+        }
+
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        
+        input[type=range]::-webkit-slider-track {
+            height: 4px;
+            background: rgba(255,255,255,0.1);
+            border-radius: 2px;
+        }
+        
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 14px;
+            width: 14px;
+            border-radius: 50%;
+            background: white;
+            margin-top: -5px;
+            cursor: pointer;
+            box-shadow: 0 0 10px rgba(255,255,255,0.5);
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="hud" id="hud">
+        <div class="header">
+            <h1>Ocean Cycle</h1>
+            <div class="cycle-toggle" id="btn-cycle">
+                <span>AUTO CYCLE</span>
+                <div class="switch"></div>
+            </div>
+        </div>
+
+        <div class="controls">
+            <div class="control-row">
+                <div class="label-row">
+                    <span>TIME OF DAY</span>
+                    <span id="txt-time">12:00 PM</span>
+                </div>
+                <input type="range" id="inp-time" min="0" max="1440" value="720">
+            </div>
+
+            <div class="control-row">
+                <div class="label-row">
+                    <span>WAVE INTENSITY</span>
+                    <span id="txt-wave">50%</span>
+                </div>
+                <input type="range" id="inp-wave" min="0" max="100" value="50">
+            </div>
+        </div>
+    </div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        /**
+         * ENGINE CONFIGURATION
+         */
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+
+        const state = {
+            width: 0,
+            height: 0,
+            tick: 0,
+            // Time is in minutes (0 - 1440)
+            time: 720, // Start at noon
+            autoCycle: false,
+            cycleSpeed: 1.5, // How many minutes pass per frame
+            waveHeight: 0.5,
+            mouseX: 0.5,
+            mouseY: 0.5
+        };
+
+        // Static stars generated once
+        const stars = [];
+        const shootingStars = [];
+
+        /**
+         * COLOR PALETTES (RGB)
+         * We interpolate between these based on time
+         */
+        const SKY_PALETTE = [
+            { t: 0,    c: [2, 0, 36] },      // Midnight (Dark Blue)
+            { t: 300,  c: [20, 20, 60] },    // Pre-Dawn
+            { t: 360,  c: [76, 29, 149] },   // Dawn (Purple)
+            { t: 420,  c: [255, 120, 80] },  // Sunrise (Orange)
+            { t: 720,  c: [135, 206, 235] }, // Noon (Blue)
+            { t: 1020, c: [255, 120, 80] },  // Sunset (Orange)
+            { t: 1080, c: [76, 29, 149] },   // Dusk (Purple)
+            { t: 1140, c: [20, 20, 60] },    // Post-Dusk
+            { t: 1440, c: [2, 0, 36] }       // Midnight loop
+        ];
+
+        /**
+         * INIT & RESIZE
+         */
+        function init() {
+            window.addEventListener('resize', onResize);
+            window.addEventListener('mousemove', e => {
+                state.mouseX = e.clientX / state.width;
+                state.mouseY = e.clientY / state.height;
+                // Wake up HUD
+                const hud = document.getElementById('hud');
+                hud.classList.remove('inactive');
+                clearTimeout(hud.timeout);
+                hud.timeout = setTimeout(() => hud.classList.add('inactive'), 3000);
+            });
+
+            // Generate Stars
+            for(let i=0; i<200; i++) {
+                stars.push({
+                    x: Math.random(),
+                    y: Math.random() * 0.7, // Keep stars in upper 70%
+                    size: Math.random() * 1.5,
+                    blinkSpeed: 0.05 + Math.random() * 0.05
+                });
+            }
+
+            onResize();
+            loop();
+        }
+
+        function onResize() {
+            canvas.width = window.innerWidth;
+            canvas.height = window.innerHeight;
+            state.width = canvas.width;
+            state.height = canvas.height;
+        }
+
+        /**
+         * CORE LOGIC
+         */
+        
+        // Linear Interpolation
+        function lerp(start, end, amt) {
+            return (1 - amt) * start + amt * end;
+        }
+
+        function getSkyColor(minutes) {
+            // Find the two palette keyframes we are between
+            let start = SKY_PALETTE[0];
+            let end = SKY_PALETTE[SKY_PALETTE.length - 1];
+
+            for (let i = 0; i < SKY_PALETTE.length - 1; i++) {
+                if (minutes >= SKY_PALETTE[i].t && minutes <= SKY_PALETTE[i+1].t) {
+                    start = SKY_PALETTE[i];
+                    end = SKY_PALETTE[i+1];
+                    break;
+                }
+            }
+
+            // Calculate percentage between the two keyframes
+            const range = end.t - start.t;
+            const progress = (minutes - start.t) / range;
+
+            // Interpolate RGB
+            const r = Math.round(lerp(start.c[0], end.c[0], progress));
+            const g = Math.round(lerp(start.c[1], end.c[1], progress));
+            const b = Math.round(lerp(start.c[2], end.c[2], progress));
+
+            return `rgb(${r},${g},${b})`;
+        }
+
+        function drawStars(opacity) {
+            if (opacity <= 0) return;
+            
+            ctx.fillStyle = "white";
+            stars.forEach((star, i) => {
+                // Twinkle effect
+                const twinkle = Math.sin(state.tick * star.blinkSpeed + i) * 0.5 + 0.5;
+                const alpha = opacity * (0.5 + twinkle * 0.5);
+                
+                if(alpha > 0) {
+                    ctx.globalAlpha = alpha;
+                    ctx.beginPath();
+                    ctx.arc(star.x * state.width, star.y * state.height, star.size, 0, Math.PI*2);
+                    ctx.fill();
+                }
+            });
+            ctx.globalAlpha = 1.0;
+
+            // Shooting Stars (Random generation)
+            if (Math.random() < 0.01 && opacity > 0.8) {
+                shootingStars.push({
+                    x: Math.random() * state.width,
+                    y: Math.random() * (state.height * 0.5),
+                    vx: -2 - Math.random() * 4,
+                    vy: 1 + Math.random() * 1,
+                    life: 1.0
+                });
+            }
+
+            // Draw & Update Shooting Stars
+            shootingStars.forEach((s, i) => {
+                ctx.strokeStyle = `rgba(255,255,255,${s.life})`;
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(s.x, s.y);
+                ctx.lineTo(s.x - s.vx*3, s.y - s.vy*3); // Trail
+                ctx.stroke();
+                
+                s.x += s.vx;
+                s.y += s.vy;
+                s.life -= 0.02;
+                
+                if(s.life <= 0) shootingStars.splice(i, 1);
+            });
+        }
+
+        function drawCelestialBodies(time) {
+            const centerX = state.width / 2;
+            const centerY = state.height * 0.8; // Pivot point is below screen
+            const radius = state.height * 0.7;
+
+            // Normalize time to 0-2PI (Starting at -PI/2 for noon)
+            // Time 720 (Noon) needs to be at top (-PI/2)
+            const angleSun = ((time - 720) / 720) * Math.PI - (Math.PI/2);
+            const angleMoon = angleSun + Math.PI; // Moon is opposite
+
+            // SUN
+            const sx = centerX + Math.cos(angleSun) * radius;
+            const sy = centerY + Math.sin(angleSun) * radius;
+
+            // Sun Glow
+            if (sy < state.height) {
+                const sunGrad = ctx.createRadialGradient(sx, sy, 10, sx, sy, 120);
+                sunGrad.addColorStop(0, "rgba(255, 200, 50, 1)");
+                sunGrad.addColorStop(0.2, "rgba(255, 100, 50, 0.4)");
+                sunGrad.addColorStop(1, "rgba(255, 100, 50, 0)");
+                ctx.fillStyle = sunGrad;
+                ctx.beginPath(); ctx.arc(sx, sy, 120, 0, Math.PI*2); ctx.fill();
+                
+                // Sun Body
+                ctx.fillStyle = "#ffdb4d";
+                ctx.beginPath(); ctx.arc(sx, sy, 30, 0, Math.PI*2); ctx.fill();
+            }
+
+            // MOON
+            const mx = centerX + Math.cos(angleMoon) * radius;
+            const my = centerY + Math.sin(angleMoon) * radius;
+
+            if (my < state.height) {
+                // Moon Glow
+                const moonGrad = ctx.createRadialGradient(mx, my, 10, mx, my, 60);
+                moonGrad.addColorStop(0, "rgba(255, 255, 255, 0.8)");
+                moonGrad.addColorStop(1, "rgba(255, 255, 255, 0)");
+                ctx.fillStyle = moonGrad;
+                ctx.beginPath(); ctx.arc(mx, my, 60, 0, Math.PI*2); ctx.fill();
+
+                // Moon Body (with crater detail simulation via gradient)
+                const mBody = ctx.createRadialGradient(mx-5, my-5, 2, mx, my, 20);
+                mBody.addColorStop(0, "#ffffff");
+                mBody.addColorStop(1, "#ccc");
+                ctx.fillStyle = mBody;
+                ctx.beginPath(); ctx.arc(mx, my, 20, 0, Math.PI*2); ctx.fill();
+            }
+            
+            return { sx, sy, mx, my };
+        }
+
+        class Wave {
+            constructor(index, total) {
+                this.index = index;
+                this.total = total;
+                this.offset = Math.random() * 100;
+            }
+
+            draw(ctx, width, height, tick, time, celestialPos) {
+                const progress = this.index / this.total;
+                const layerY = height * (0.45 + (progress * 0.55));
+                
+                // Color Dynamic based on Day/Night
+                // Calculate "Dayness" (0 = Midnight, 1 = Noon)
+                const dayness = 1 - Math.min(1, Math.abs(time - 720) / 400);
+                
+                // Base colors
+                const dayH = 195, dayS = 85, dayL = 40; // Tropical Blue
+                const niteH = 230, niteS = 60, niteL = 10; // Deep Ocean Night
+
+                // Interpolate
+                const h = lerp(niteH, dayH, dayness);
+                const s = lerp(niteS, dayS, dayness);
+                const l = lerp(niteL, dayL, dayness) - (progress * 15); // Darker at front
+
+                ctx.fillStyle = `hsl(${h}, ${s}%, ${l}%)`;
+                
+                ctx.beginPath();
+                ctx.moveTo(0, height);
+
+                const resolution = 200;
+                for(let i=0; i<=resolution; i++) {
+                    const nx = i/resolution;
+                    const x = nx * width;
+                    
+                    // Wave Physics
+                    const freq = 3 + this.index;
+                    const speed = 0.01 + (this.index * 0.005);
+                    const waveAmp = state.waveHeight * 80;
+
+                    let y = layerY + Math.sin(nx * freq + tick * speed + this.offset) * waveAmp;
+                    y += Math.cos(nx * (freq*2) - tick * speed) * (waveAmp * 0.3);
+
+                    // Mouse interaction
+                    const mouseDist = Math.abs(state.mouseX - nx);
+                    if(mouseDist < 0.2) {
+                        y += Math.sin(mouseDist * Math.PI * 5) * 20 * (1-mouseDist/0.2);
+                    }
+
+                    ctx.lineTo(x, y);
+                }
+
+                ctx.lineTo(width, height);
+                ctx.fill();
+
+                // Simple reflection of Sun/Moon
+                // If sun/moon is within screen width
+                const drawReflection = (bx, by, color, strength) => {
+                   if (by < height && by > 0) {
+                        const relX = bx / width;
+                        const dist = Math.abs(relX - 0.5); // Center bias
+                        
+                        // Check segment x against body x
+                        // We do a cheap "vertical pill" reflection
+                        const spread = 0.1 * (1-progress) + 0.05; // Wider in back
+                        const rx = bx;
+                        
+                        // Draw a gradient pill
+                        const grad = ctx.createLinearGradient(rx, layerY-20, rx, height);
+                        grad.addColorStop(0, `rgba(${color}, 0)`);
+                        grad.addColorStop(0.5, `rgba(${color}, ${strength * 0.3})`);
+                        grad.addColorStop(1, `rgba(${color}, 0)`);
+                        
+                        ctx.fillStyle = grad;
+                        ctx.globalCompositeOperation = 'overlay';
+                        ctx.fillRect(rx - (width*spread/2), layerY-20, width*spread, height-layerY);
+                        ctx.globalCompositeOperation = 'source-over';
+                   }
+                };
+
+                if (dayness > 0.1) drawReflection(celestialPos.sx, celestialPos.sy, "255, 200, 100", dayness);
+                else drawReflection(celestialPos.mx, celestialPos.my, "200, 220, 255", 1-dayness);
+            }
+        }
+
+        const layers = Array.from({length: 6}, (_, i) => new Wave(i, 6));
+
+        function loop() {
+            state.tick++;
+
+            // Handle Auto Cycle
+            if (state.autoCycle) {
+                state.time += state.cycleSpeed;
+                if (state.time >= 1440) state.time = 0;
+                // Sync UI
+                document.getElementById('inp-time').value = state.time;
+                updateTimeDisplay(state.time);
+            }
+
+            // Draw Sky
+            ctx.fillStyle = getSkyColor(state.time);
+            ctx.fillRect(0, 0, state.width, state.height);
+
+            // Draw Stars (Calculate opacity based on distance from Noon)
+            const timeDist = Math.abs(state.time - 720); // 0 at noon, 720 at midnight
+            const starOp = Math.max(0, (timeDist - 400) / 320); // 0 at day, 1 at night
+            drawStars(starOp);
+
+            // Draw Sun/Moon
+            const celestialPos = drawCelestialBodies(state.time);
+
+            // Draw Waves
+            layers.forEach(layer => layer.draw(ctx, state.width, state.height, state.tick, state.time, celestialPos));
+
+            requestAnimationFrame(loop);
+        }
+
+        /**
+         * UI CONTROLLERS
+         */
+        const btnCycle = document.getElementById('btn-cycle');
+        const inpTime = document.getElementById('inp-time');
+        const txtTime = document.getElementById('txt-time');
+        const inpWave = document.getElementById('inp-wave');
+        const txtWave = document.getElementById('txt-wave');
+
+        function updateTimeDisplay(val) {
+            const h = Math.floor(val / 60);
+            const m = Math.floor(val % 60);
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const h12 = h % 12 || 12;
+            const mStr = m < 10 ? '0'+m : m;
+            txtTime.innerText = `${h12}:${mStr} ${ampm}`;
+        }
+
+        // Toggle Cycle
+        btnCycle.addEventListener('click', () => {
+            state.autoCycle = !state.autoCycle;
+            btnCycle.classList.toggle('cycle-active');
+        });
+
+        // Manual Time Drag
+        inpTime.addEventListener('input', (e) => {
+            state.time = parseFloat(e.target.value);
+            updateTimeDisplay(state.time);
+            
+            // Auto-pause if user interacts
+            if(state.autoCycle) {
+                state.autoCycle = false;
+                btnCycle.classList.remove('cycle-active');
+            }
+        });
+
+        // Wave Height
+        inpWave.addEventListener('input', (e) => {
+            state.waveHeight = e.target.value / 100;
+            txtWave.innerText = e.target.value + "%";
+        });
+
+        // Start
+        init();
+
+    </script>
+</body>
+</html>

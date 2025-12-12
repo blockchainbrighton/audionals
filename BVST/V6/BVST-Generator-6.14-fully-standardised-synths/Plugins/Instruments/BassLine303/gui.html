@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>30RD3 | BVST</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #1a1a1a; display: flex; justify-content: center; min-height: 100vh; }
+        #seq-container { margin-top: 10px; padding: 10px; background: rgba(0,0,0,0.3); border-radius: 4px; }
+    </style>
+</head>
+<body>
+
+    <div id="app-container"></div>
+
+    <script type="module">
+        import { BVST } from '../../../System/shared/plugin_core.js';
+        import { StepSequencer } from '../../../System/shared/sequencer.js';
+
+        // --- CONFIG ---
+        const CONFIG = {
+            name: "30RD3",
+            midiMap: { note: 20, gate: 23 }, // Custom DSP params
+            keyboard: { startNote: 36, numKeys: 25 },
+            modules: [
+                {
+                    name: "Oscillator",
+                    controls: [
+                        { type: 'select', id: 'wave', label: 'Wave', param: 1, options: ['Saw', 'Square'], val: 0 },
+                        { type: 'knob', id: 'sub', label: 'Sub', param: 2, min: 0, max: 1, val: 0 }
+                    ]
+                },
+                {
+                    name: "Filter",
+                    cols: 2,
+                    controls: [
+                        { type: 'knob', id: 'cutoff', label: 'Cutoff', param: 3, min: 0, max: 1, val: 0.5 },
+                        { type: 'knob', id: 'res', label: 'Res', param: 4, min: 0, max: 1, val: 0.2 },
+                        { type: 'knob', id: 'envmod', label: 'Env Amt', param: 5, min: 0, max: 1, val: 0.5 },
+                        { type: 'knob', id: 'decay', label: 'Decay', param: 6, min: 0.1, max: 2, val: 0.4 },
+                        { type: 'knob', id: 'accent', label: 'Accent', param: 7, min: 0, max: 1, val: 0.5 }
+                    ]
+                },
+                {
+                    name: "FX / Output",
+                    controls: [
+                        { type: 'knob', id: 'drive', label: 'Drive', param: 8, min: 0, max: 1, val: 0 },
+                        { type: 'knob', id: 'glide', label: 'Glide', param: 9, min: 0, max: 0.5, val: 0.1 },
+                        { type: 'knob', id: 'vol', label: 'Vol', param: 15, min: 0, max: 1, val: 0.5 }
+                    ]
+                },
+                {
+                    name: "Sequencer Control",
+                    controls: [
+                        { type: 'button', id: 'btn-play', text: 'PLAY', label: '' },
+                        { type: 'button', id: 'btn-stop', text: 'STOP', label: '' },
+                        { type: 'knob', id: 'bpm', label: 'BPM', param: 999, min: 60, max: 200, val: 120, step: 1 }
+                    ]
+                }
+            ]
+        };
+
+        BVST.init(CONFIG);
+
+        // --- CUSTOM LOGIC ---
+        
+        // 1. Hook into Controls for Sequencer Buttons
+        const originalOnChange = BVST.controls.onChange;
+        BVST.controls.onChange = (id, val) => {
+            if (originalOnChange) originalOnChange(id, val);
+            
+            if (id === 'btn-play' && val === 1) startSeq();
+            if (id === 'btn-stop' && val === 1) stopSeq();
+            if (id === 'bpm') {
+                bpm = val;
+                if(isPlaying) restartClock();
+            }
+        };
+
+        // 2. Inject Sequencer UI
+        const appRoot = document.getElementById('bvst-app-root');
+        const seqContainer = document.createElement('div');
+        seqContainer.id = 'seq-container';
+        
+        // Insert Sequencer before Keyboard (last child is keyboard-container)
+        const kbContainer = document.getElementById('keyboard-container');
+        appRoot.insertBefore(seqContainer, kbContainer);
+
+        const seqUI = new StepSequencer('seq-container', {
+            numSteps: 16,
+            onStepChange: (idx, data) => {}
+        });
+
+        // 3. Sequencer Engine
+        let isPlaying = false;
+        let bpm = 120;
+        let currentStep = 0;
+        let timerId = null;
+        let nextNoteTime = 0;
+
+        function startSeq() {
+            if(isPlaying) return;
+            isPlaying = true;
+            currentStep = 0;
+            nextNoteTime = performance.now() / 1000;
+            BVST.controls.setValue('btn-play', 1);
+            BVST.controls.setValue('btn-stop', 0);
+            schedule();
+        }
+
+        function stopSeq() {
+            isPlaying = false;
+            if(timerId) cancelAnimationFrame(timerId);
+            BVST.controls.setValue('btn-play', 0);
+            BVST.controls.setValue('btn-stop', 1);
+            setTimeout(() => BVST.controls.setValue('btn-stop', 0), 200);
+            BVST.sendParam(23, 0.0); // Gate off
+        }
+
+        function schedule() {
+            const secondsPerBeat = 60.0 / bpm;
+            const stepTime = secondsPerBeat / 4; 
+            const now = performance.now() / 1000;
+            while (nextNoteTime < now + 0.1) {
+                runStep(currentStep);
+                currentStep = (currentStep + 1) % 16;
+                nextNoteTime += stepTime;
+            }
+            if(isPlaying) timerId = requestAnimationFrame(schedule);
+        }
+
+        function restartClock() {
+            if(timerId) cancelAnimationFrame(timerId);
+            timerId = requestAnimationFrame(schedule);
+        }
+
+        function mtof(noteStr) { 
+            const notes = ['C','C#','D','D#','E','F','F#','G','G#','A','A#','B'];
+            const note = noteStr.slice(0, -1);
+            const oct = parseInt(noteStr.slice(-1));
+            const semi = notes.indexOf(note);
+            const midi = 12 + (oct * 12) + semi;
+            return 440 * Math.pow(2, (midi - 69) / 12);
+        }
+
+        function runStep(idx) {
+            seqUI.highlightStep(idx);
+            const step = seqUI.getStep(idx);
+            if (step.active) {
+                const freq = mtof(step.note);
+                BVST.sendParam(21, step.accent ? 1.0 : 0.0);
+                BVST.sendParam(22, step.slide ? 1.0 : 0.0);
+                BVST.sendParam(20, freq);
+                BVST.sendParam(23, 1.0); // Gate On
+                
+                if(!step.slide) {
+                    setTimeout(() => { if(isPlaying) BVST.sendParam(23, 0.0); }, (60/bpm/4 * 1000) * 0.5);
+                }
+            } else {
+                BVST.sendParam(23, 0.0);
+            }
+        }
+    </script>
+</body>
+</html>

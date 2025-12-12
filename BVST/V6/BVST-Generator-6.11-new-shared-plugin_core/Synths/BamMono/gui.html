@@ -1,0 +1,185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAM Mono | BVST</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #1a1a1a; display: flex; justify-content: center; min-height: 100vh; }
+    </style>
+</head>
+<body>
+    <div id="app-container"></div>
+
+    <script type="module">
+        import { BVST } from '../../System/shared/plugin_core.js';
+        import { Keyboard } from '../../System/shared/keyboard.js';
+        import { MidiManager } from '../../System/shared/midi.js';
+
+        const CONFIG = {
+            name: "BAM MONO",
+            keyboard: false,
+            modules: [
+                {
+                    name: "Oscillator 1",
+                    controls: [
+                        { type: 'select', id: 'osc1-type', param: 0, options: ['Sawtooth', 'Square', 'Pulse', 'Triangle'], val: 0 },
+                        { type: 'knob', id: 'osc1-oct', label: 'Oct', param: 1, min: -2, max: 2, step: 1, val: 0 },
+                        { type: 'knob', id: 'osc1-tune', label: 'Tune', param: 2, min: -1200, max: 1200, val: 0 }
+                    ]
+                },
+                {
+                    name: "Oscillator 2",
+                    controls: [
+                        { type: 'select', id: 'osc2-type', param: 3, options: ['Sawtooth', 'Square', 'Pulse', 'Triangle'], val: 1 },
+                        { type: 'knob', id: 'osc2-oct', label: 'Oct', param: 4, min: -2, max: 2, step: 1, val: -1 },
+                        { type: 'knob', id: 'osc2-tune', label: 'Tune', param: 5, min: -1200, max: 1200, val: 7 }
+                    ]
+                },
+                {
+                    name: "Mixer",
+                    controls: [
+                        { type: 'knob', id: 'mix-osc1', label: 'Osc 1', param: 6, min: 0, max: 1, val: 1 },
+                        { type: 'knob', id: 'mix-osc2', label: 'Osc 2', param: 7, min: 0, max: 1, val: 0.5 },
+                        { type: 'knob', id: 'mix-noise', label: 'Noise', param: 8, min: 0, max: 0.5, val: 0 }
+                    ]
+                },
+                {
+                    name: "Filter (24dB)",
+                    controls: [
+                        { type: 'knob', id: 'filt-cut', label: 'Freq', param: 9, min: 20, max: 20000, curve: 'log', val: 20000 },
+                        { type: 'knob', id: 'filt-res', label: 'Res', param: 10, min: 0, max: 4, val: 1 },
+                        { type: 'knob', id: 'filt-env-amt', label: 'Env', param: 11, min: -5000, max: 5000, val: 2000 }
+                    ]
+                },
+                {
+                    name: "Amp Env",
+                    controls: [
+                        { type: 'slider', id: 'amp-a', label: 'A', param: 12, min: 0.005, max: 2, step: 0.01, val: 0.01 },
+                        { type: 'slider', id: 'amp-d', label: 'D', param: 13, min: 0.0, max: 2, step: 0.01, val: 0.1 },
+                        { type: 'slider', id: 'amp-s', label: 'S', param: 14, min: 0, max: 1, step: 0.01, val: 1.0 },
+                        { type: 'slider', id: 'amp-r', label: 'R', param: 15, min: 0.01, max: 4, step: 0.01, val: 0.1 }
+                    ]
+                },
+                {
+                    name: "Filter Env",
+                    controls: [
+                        { type: 'slider', id: 'filt-a', label: 'A', param: 16, min: 0.005, max: 2, step: 0.01, val: 0.01 },
+                        { type: 'slider', id: 'filt-d', label: 'D', param: 17, min: 0.0, max: 2, step: 0.01, val: 0.2 },
+                        { type: 'slider', id: 'filt-s', label: 'S', param: 18, min: 0, max: 1, step: 0.01, val: 0.5 },
+                        { type: 'slider', id: 'filt-r', label: 'R', param: 19, min: 0.01, max: 4, step: 0.01, val: 0.5 }
+                    ]
+                },
+                {
+                    name: "Modulation",
+                    controls: [
+                        { type: 'knob', id: 'lfo-rate', label: 'LFO Hz', param: 20, min: 0.1, max: 20, val: 5 },
+                        { type: 'knob', id: 'lfo-amt', label: 'LFO>VCF', param: 21, min: 0, max: 1000, val: 0 },
+                        { type: 'knob', id: 'glide', label: 'Glide', param: 22, min: 0, max: 0.5, val: 0 }
+                    ]
+                },
+                {
+                    name: "Output / FX",
+                    controls: [
+                        { type: 'knob', id: 'dist', label: 'Drive', param: 23, min: 0, max: 1, val: 0 },
+                        { type: 'knob', id: 'delay', label: 'Delay', param: 24, min: 0, max: 0.6, val: 0.2 },
+                        { type: 'knob', id: 'vol', label: 'Vol', param: 25, min: 0, max: 1, val: 0.5 }
+                    ]
+                }
+            ]
+        };
+
+        BVST.init(CONFIG);
+
+        // --- KEYBOARD & MIDI ---
+        const activeKeys = new Set();
+        function mtof(midi) { return 440 * Math.pow(2, (midi - 69) / 12); }
+
+        // Inject Piano container since we disabled auto-keyboard
+        const app = document.getElementById('bvst-app-root');
+        const kbDiv = document.createElement('div');
+        kbDiv.id = 'keyboard-container';
+        kbDiv.style.cssText = "background: #000; border-top: 2px solid #007a82; padding-top: 5px; min-height: 100px;";
+        kbDiv.innerHTML = '<div id="piano"></div>';
+        app.appendChild(kbDiv);
+
+        const kb = new Keyboard('piano', {
+            startNote: 36, numKeys: 49, responsive: true,
+            onNoteOn: (midi) => {
+                activeKeys.add(midi);
+                BVST.sendParam(26, mtof(midi));
+                BVST.sendParam(28, 0.8); // Vel
+                BVST.sendParam(27, 1.0); // Gate
+            },
+            onNoteOff: (midi) => {
+                activeKeys.delete(midi);
+                if (activeKeys.size === 0) {
+                    BVST.sendParam(27, 0.0);
+                } else {
+                    const highest = Math.max(...activeKeys);
+                    BVST.sendParam(26, mtof(highest));
+                    BVST.sendParam(27, 1.0);
+                }
+            }
+        });
+
+        const midi = new MidiManager({
+            deviceSelectorId: 'midi-in',
+            statusElementId: 'midi-led',
+            onNoteOn: (n, v) => {
+                kb.triggerVisual(n, true);
+                activeKeys.add(n);
+                BVST.sendParam(26, mtof(n));
+                BVST.sendParam(28, 1.0); 
+                BVST.sendParam(27, 1.0); 
+            },
+            onNoteOff: (n) => {
+                kb.triggerVisual(n, false);
+                activeKeys.delete(n);
+                if (activeKeys.size === 0) {
+                    BVST.sendParam(27, 0.0);
+                } else {
+                    const highest = Math.max(...activeKeys);
+                    BVST.sendParam(26, mtof(highest));
+                    BVST.sendParam(27, 1.0);
+                }
+            },
+            onCC: (cc, val) => {
+                if (cc === 1) BVST.sendParam(21, val * 10); // LFO Amt
+                if (cc === 74) {
+                    const norm = val / 127;
+                    const cut = 20 * Math.pow(1000, norm);
+                    BVST.controls.setValue('filt-cut', cut);
+                    BVST.sendParam(9, cut);
+                }
+            }
+        });
+
+        // --- PRESETS ---
+        const PRESETS = {
+            "INIT": { "osc1-type":0, "osc2-type":1, "mix-osc1":1, "mix-osc2":0, "filt-cut":20000, "filt-res":1, "filt-env-amt":2000, "dist":0, "delay":0, "vol": 0.5 },
+            "BASS": { "osc1-type":1, "osc2-type":3, "mix-osc1":0.8, "mix-osc2":0.8, "filt-cut":400, "filt-res":2, "filt-env-amt":500, "dist":0.2, "delay":0, "vol": 0.6 },
+            "LEAD": { "osc1-type":0, "osc2-type":0, "mix-osc1":0.6, "mix-osc2":0.6, "filt-cut":5000, "filt-res":2, "filt-env-amt":0, "dist":0.4, "delay":0.3, "vol": 0.5 },
+            "ACID": { "osc1-type":0, "osc2-type":1, "mix-osc1":1, "mix-osc2":0, "filt-cut":600, "filt-res":3.5, "filt-env-amt":3000, "dist":0.8, "delay":0.2, "vol": 0.5 }
+        };
+
+        const pSel = document.getElementById('preset-selector');
+        if(pSel) {
+            Object.keys(PRESETS).forEach(k => {
+                const o = document.createElement('option'); o.value = k; o.innerText = k; pSel.appendChild(o);
+            });
+            pSel.addEventListener('change', (e) => {
+                const p = PRESETS[e.target.value];
+                if(!p) return;
+                for(const [id, val] of Object.entries(p)) {
+                    BVST.controls.setValue(id, val);
+                    const el = document.getElementById(id);
+                    if(el) BVST.sendParam(parseInt(el.dataset.param), val);
+                }
+            });
+            // Init preset
+            setTimeout(() => { pSel.value = 'INIT'; pSel.dispatchEvent(new Event('change')); }, 500);
+        }
+    </script>
+</body>
+</html>

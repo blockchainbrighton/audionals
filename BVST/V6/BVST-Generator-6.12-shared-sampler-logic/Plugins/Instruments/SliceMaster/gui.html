@@ -1,0 +1,83 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>SliceMaster</title>
+    <style>
+        body { margin: 0; padding: 0; background: #220033; color: white; overflow: hidden; }
+        #app-container { width: 100vw; height: 100vh; display: flex; justify-content: center; align-items: center; }
+    </style>
+</head>
+<body>
+    <div id="app-container"></div>
+    <script type="module">
+        import { BVST } from '../../../System/shared/plugin_core.js';
+        import { Keyboard } from '../../../System/shared/keyboard.js';
+
+        const CONFIG = {
+            name: "SliceMaster",
+            keyboard: false,
+            sampler: {
+                enabled: true,
+                defaults: {
+                    sliceGrid: 8,
+                    loopEnabled: false
+                }
+            },
+            modules: [
+                {
+                    name: "Envelope",
+                    controls: [
+                        { id: 'att', type: 'knob', param: 1, min: 0.001, max: 0.5, val: 0.005, label: 'Attack' },
+                        { id: 'rel', type: 'knob', param: 2, min: 0.01, max: 1.0, val: 0.2, label: 'Release' },
+                        { id: 'gate', type: 'switch', param: 3, val: 0, label: 'Gate' }
+                    ]
+                },
+                {
+                    name: "Filter",
+                    controls: [
+                        { id: 'cut', type: 'knob', param: 10, min: 20, max: 20000, val: 20000, label: 'Cutoff', curve: 'log' },
+                        { id: 'res', type: 'knob', param: 11, min: 0.1, max: 10.0, val: 1.0, label: 'Res' },
+                        { id: 'drive', type: 'knob', param: 22, min: 0.0, max: 1.0, val: 0.0, label: 'Drive' }
+                    ]
+                },
+                {
+                    name: "Master",
+                    controls: [
+                        { id: 'speed', type: 'knob', param: 0, min: 0.5, max: 2.0, val: 1.0, label: 'Speed' },
+                        { id: 'dly', type: 'knob', param: 23, min: 0.0, max: 0.5, val: 0.0, label: 'Delay' }
+                    ]
+                }
+            ]
+        };
+
+        BVST.init(CONFIG);
+
+        // Manual Keyboard for Slices
+        const kbContainer = document.getElementById('keyboard-container');
+        if(kbContainer) {
+            kbContainer.style.display = 'block';
+            kbContainer.innerHTML = '';
+            const kbId = 'piano-kb';
+            const kbDiv = document.createElement('div');
+            kbDiv.id = kbId;
+            kbContainer.appendChild(kbDiv);
+
+            new Keyboard(kbId, {
+                onNoteOn: (n) => {
+                    BVST.sendParam(128, n);
+                    const sliceIdx = (n - 60) % 8;
+                    if (sliceIdx >= 0 && BVST.sampler) {
+                        const startPct = sliceIdx / 8;
+                        BVST.sampler.trigger(startPct);
+                    }
+                },
+                onNoteOff: (n) => {
+                    BVST.sendParam(129, n);
+                    if (BVST.sampler) BVST.sampler.release();
+                }
+            });
+        }
+    </script>
+</body>
+</html>
