@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>ArpOne</title>
+    <style>
+        body { margin: 0; padding: 20px; background: #222; color: #eee; display: flex; justify-content: center; min-height: 100vh; font-family: monospace; }
+    </style>
+</head>
+<body>
+    <div id="app-container"></div>
+
+    <script type="module">
+        import { BVST } from '../../../System/shared/plugin_core.js';
+
+        const CONFIG = {
+            name: "ARP ONE",
+            // MidiMap not needed if we send 128/129 manually in Arp logic? 
+            // SequencerManager.js sends 128/129 for Arp.
+            // But if Arp is OFF, we want standard keyboard. 
+            // ArpOne uses 128/129 natively? Let's check Audio Engine or old GUI.
+            // Old GUI sent 128/129. So standard keyboard should use midiMap if Arp is OFF.
+            midiMap: { note: 128, gate: 129 },
+            keyboard: { startNote: 36, numKeys: 25 },
+            sequencer: { type: 'arp' },
+            modules: [
+                {
+                    name: "Arpeggiator",
+                    controls: [
+                        { type: 'select', id: 'arp_dir', label: 'Mode', param: 990, options: ['up', 'down', 'updown', 'random'], val: 0 },
+                        // Rates: 0=1/8, 1=1/16, 2=1/4. We need values.
+                        // Controls.js Select uses index as value.
+                        // plugin_core sends index to setArpRate. 
+                        // Wait, setArpRate expects float (0.125 etc) OR legacy MS.
+                        // If I use Select, I get 0, 1, 2.
+                        // I should update setArpRate to handle indices or change control type.
+                        // Or I can use 'options' array of values? Controls.js select uses index as value.
+                        // I'll update plugin_core to handle mapping? No, too specific.
+                        // I'll use a knob for rate? Or better:
+                        // I'll update setArpRate in sequencer_core to handle 0,1,2 if I want.
+                        // OR: I can use custom logic in gui.html? No, goal is no custom logic.
+                        
+                        // Let's stick to simple: 
+                        // I'll use a knob for Rate? No, discrete is better.
+                        // I'll update sequencer_core.js to accept 0=1/8, 1=1/16, 2=1/4 mapping?
+                        // Actually, I'll just use a Knob for Rate with step. 
+                        // But ArpOne had specific synced rates.
+                        
+                        // Re-reading sequencer_core.js setArpRate:
+                        // if (val > 1) { legacy ms } else { rate = val }
+                        
+                        // I'll use a Knob that outputs 0.125, 0.25 etc.
+                        { type: 'knob', id: 'arp_rate', label: 'Rate (Note)', param: 991, min: 0.0625, max: 0.5, step: 0.0625, val: 0.125 },
+                        { type: 'knob', id: 'arp_oct', label: 'Octave', param: 992, min: 1, max: 3, step: 1, val: 2 },
+                        { type: 'switch', id: 'arp_enable', label: 'Enable', param: 993, val: 0 }
+                    ]
+                },
+                {
+                    name: "Oscillators",
+                    controls: [
+                        { type: 'knob', id: 'mix', label: 'Saw/Pulse', param: 1, min: 0, max: 1, val: 0.5 },
+                        { type: 'knob', id: 'pw', label: 'Width', param: 2, min: 0.1, max: 0.9, val: 0.5 },
+                        { type: 'knob', id: 'det', label: 'Detune', param: 3, min: 1.0, max: 1.02, val: 1.005 }
+                    ]
+                },
+                {
+                    name: "Filter/Env",
+                    controls: [
+                        { type: 'knob', id: 'cut', label: 'Cutoff', param: 4, min: 50, max: 8000, curve: 'log', val: 1500 },
+                        { type: 'knob', id: 'res', label: 'Res', param: 5, min: 0, max: 8, val: 2 },
+                        { type: 'knob', id: 'env', label: 'Env Amt', param: 6, min: 0, max: 5000, val: 2000 },
+                        { type: 'knob', id: 'dec', label: 'Decay', param: 7, min: 0.05, max: 2.0, val: 0.3 }
+                    ]
+                },
+                {
+                    name: "Effects",
+                    controls: [
+                        { type: 'knob', id: 'd_time', label: 'D.Time', param: 9, min: 0, max: 0.8, val: 0.3 },
+                        { type: 'knob', id: 'd_mix', label: 'D.Mix', param: 10, min: 0, max: 0.6, val: 0.3 },
+                        { type: 'knob', id: 'vol', label: 'Volume', param: 11, min: 0, max: 1, val: 0.6 }
+                    ]
+                }
+            ]
+        };
+
+        BVST.init(CONFIG);
+    </script>
+</body>
+</html>
