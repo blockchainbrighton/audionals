@@ -42,7 +42,7 @@
 </head>
 <body>
 
-    <div id="dropOverlay">Drop Audio Here</div>
+    <div id="dropOverlay">Drop Audio/MIDI Here</div>
 
     <!-- LAUNCHER SECTION -->
     <div class="launcher-container" id="launcher">
@@ -63,23 +63,41 @@
     <!-- HOST SECTION -->
     <div class="host-container" id="host">
         <h1 id="hostTitle">Synth Name</h1>
+        
+        <!-- MIDI PLAYER SECTION -->
+        <div id="midiPlayer" style="display: none; margin: 10px auto; background: #2a2a2a; padding: 10px; border-radius: 4px; width: fit-content; border: 1px solid #444;">
+            <span style="font-weight: bold; margin-right: 10px; color: #aaa;">MIDI File Loaded</span>
+            <button onclick="playMidi()" style="background: #444; color: #fff; padding: 5px 15px;">Play</button>
+            <button onclick="stopMidi()" style="background: #444; color: #fff; padding: 5px 15px;">Stop</button>
+        </div>
+
         <div id="rack"></div>
         <div id="status">Initializing...</div>
         <button onclick="reset()" style="margin-top: 20px; background: #444; color: #ccc;">Back to Menu</button>
     </div>
 
-    <script>
+    <script type="module">
+        import { MidiParser } from './shared/midi_parser.js';
+
         let audioCtx;
         let workletNode;
         let paramListener = null;
         let guiFrame = null;
         let engineReady = false;
+        let analyserInput = null;
+        let analyserOutput = null;
+        
+        // MIDI State
+        let midiEvents = [];
+        let midiPPQ = 96;
+        let midiPlaying = false;
+        let midiTimeouts = [];
 
-        function notifyGuiReady() {
+        window.notifyGuiReady = function() {
             if (guiFrame && guiFrame.contentWindow && engineReady) {
                 guiFrame.contentWindow.postMessage({ type: 'BVST_READY' }, '*');
             }
-        }
+        };
 
         // Allow Enter key
         document.addEventListener('keypress', function (e) {
@@ -88,7 +106,7 @@
             }
         });
 
-        // Populate Dropdown
+        // Initialize Dropdown
         async function populateSynths() {
             const select = document.getElementById('synthName');
             try {
@@ -96,7 +114,7 @@
                 if (!res.ok) throw new Error('Failed to fetch synths');
                 const synths = await res.json();
                 
-                select.innerHTML = ''; // Clear "Loading..."
+                select.innerHTML = ''; 
                 if (!Array.isArray(synths) || synths.length === 0) {
                     const opt = document.createElement('option');
                     opt.text = "No Plugins Found";
@@ -114,19 +132,14 @@
                         select.add(opt);
                     });
                     
-                    // Check for URL param to auto-select
                     const urlParams = new URLSearchParams(window.location.search);
                     const urlSynth = urlParams.get('synth');
                     if (urlSynth) {
-                        // Match either by name or by path
                         const match = Array.from(select.options).find(o => o.dataset.name === urlSynth || o.value === urlSynth);
-                        if (match) {
-                            select.value = match.value;
-                        }
+                        if (match) select.value = match.value;
                     }
                     const selOpt = select.options[select.selectedIndex];
                     if (selOpt) {
-                        // Update button to show context
                         document.querySelector('#launcher button').innerText = `Launch ${selOpt.dataset.name || selOpt.text}`;
                     }
                 }
@@ -135,11 +148,8 @@
                 select.innerHTML = '<option>Error loading synths</option>';
             }
         }
-
-        // Init Dropdown
         populateSynths();
 
-        // Update button text on change
         document.getElementById('synthName').addEventListener('change', function() {
             const opt = this.options[this.selectedIndex];
             const label = opt ? (opt.dataset.name || opt.text) : '';
@@ -148,7 +158,7 @@
             }
         });
 
-        async function launch() {
+        window.launch = async function() {
             const select = document.getElementById('synthName');
             const selected = select.options[select.selectedIndex];
             if (!selected) return;
@@ -157,37 +167,31 @@
             const displayName = selected.dataset.name || selected.text || pluginPath;
             engineReady = false;
 
-            // Disconnect any previous node to avoid layered audio
             if (workletNode) {
                 try { workletNode.disconnect(); } catch (_) {}
                 workletNode = null;
             }
 
-            // 1. UI Transition
             document.getElementById('launcher').classList.add('hidden');
             document.getElementById('host').classList.add('visible');
             document.getElementById('hostTitle').innerText = displayName;
             document.getElementById('status').innerText = "Initializing Audio Engine...";
             document.getElementById('launcherError').style.display = 'none';
 
-            // Path is provided by dropdown (relative to project root)
             const synthPath = `../${pluginPath}`;
 
             try {
-                // 2. Initialize Audio Context (Must be done here to capture user gesture)
                 if (!audioCtx) {
                     audioCtx = new (window.AudioContext || window.webkitAudioContext)();
                 } else if (audioCtx.state === 'suspended') {
                     await audioCtx.resume();
                 }
 
-                // 3. Fetch Manifest
                 const manifestUrl = `${synthPath}/manifest.json?t=${Date.now()}`;
                 const manifestReq = await fetch(manifestUrl);
                 if (!manifestReq.ok) throw new Error(`Manifest not found for '${displayName}'`);
                 const manifest = await manifestReq.json();
 
-                // 4. Load worklet shim + Processor (Generated Artifact)
                 const shimUrl = `scripts/worklet_shim.js`;
                 const glueUrl = `${synthPath}/processor.js?t=` + Date.now();
                 
@@ -198,79 +202,83 @@
                     throw new Error(`Failed to load processor.js: ${e.message}`);
                 }
 
-                // 5. Create Worklet Node
                 try {
                     workletNode = new AudioWorkletNode(audioCtx, 'bvst-processor', {
                         numberOfInputs: 1,
                         numberOfOutputs: 1,
-                        outputChannelCount: [2] // Stereo output
+                        outputChannelCount: [2]
                     });
                 } catch (e) {
                     throw new Error(`Failed to create AudioWorkletNode: ${e.message}`);
                 }
 
-                // 6. Handle Audio Input (If requested)
                 const useMic = document.getElementById('useMic').checked;
                 if (useMic) {
                     try {
                         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
                         const source = audioCtx.createMediaStreamSource(stream);
-                        source.connect(workletNode);
+                        analyserInput = audioCtx.createAnalyser(); 
+                        analyserInput.fftSize = 2048;
+                        source.connect(analyserInput); 
+                        analyserInput.connect(workletNode); 
                         console.log("Microphone connected to plugin.");
                     } catch (err) {
                         console.warn("Microphone access denied or failed:", err);
                         alert("Microphone access failed. Plugin will run without input.");
                     }
+                } else {
+                    analyserInput = audioCtx.createAnalyser();
+                    analyserInput.fftSize = 2048;
                 }
 
-                // 7. Fetch WASM
                 const wasmUrl = `${synthPath}/${manifest.components.audio_engine}?t=${Date.now()}`;
                 const wasmReq = await fetch(wasmUrl);
                 if (!wasmReq.ok) throw new Error(`WASM file not found: ${wasmUrl}`);
                 const wasmBytes = await wasmReq.arrayBuffer();
 
-                // 7. Init WASM
                 workletNode.port.postMessage({ type: 'INIT_WASM', wasmBytes: wasmBytes });
 
-                // 8. Connect to Output & Analyser
-                const analyser = audioCtx.createAnalyser();
-                analyser.fftSize = 2048;
-                workletNode.connect(analyser);
-                analyser.connect(audioCtx.destination);
+                analyserOutput = audioCtx.createAnalyser(); 
+                analyserOutput.fftSize = 2048;
+                workletNode.connect(analyserOutput); 
+                analyserOutput.connect(audioCtx.destination);
 
-                // 9. Load GUI
                 guiFrame = document.createElement('iframe');
-                guiFrame.onload = () => notifyGuiReady();
-                // Cache bust the GUI to ensure updates are seen
+                guiFrame.onload = () => window.notifyGuiReady();
                 guiFrame.src = `${synthPath}/${manifest.components.ui_html}?t=${Date.now()}`;
                 document.getElementById('rack').innerHTML = '';
                 document.getElementById('rack').appendChild(guiFrame);
 
-                // 10. Setup Communication
-                // Visualizer Loop
-                let visMode = 'off'; // off, scope, spectrum
+                let visModes = {}; 
                 let visId = null;
-                const visData = new Float32Array(analyser.frequencyBinCount);
-                const visByteData = new Uint8Array(analyser.frequencyBinCount);
+                const visDataFloat = new Float32Array(analyserInput.frequencyBinCount); 
+                const visDataByte = new Uint8Array(analyserInput.frequencyBinCount);   
 
                 const loop = () => {
-                    if (visMode === 'off') return;
-                    
-                    if (visMode === 'scope') {
-                        analyser.getFloatTimeDomainData(visData);
-                        if (guiFrame && guiFrame.contentWindow) {
-                            guiFrame.contentWindow.postMessage({ type: 'BVST_VIS_DATA', mode: 'scope', data: visData }, '*');
-                        }
-                    } else if (visMode === 'spectrum') {
-                        analyser.getByteFrequencyData(visByteData);
-                        if (guiFrame && guiFrame.contentWindow) {
-                            guiFrame.contentWindow.postMessage({ type: 'BVST_VIS_DATA', mode: 'spectrum', data: visByteData }, '*');
+                    for (const instanceId in visModes) {
+                        const mode = visModes[instanceId];
+                        if (mode === 'off') continue;
+
+                        const analyserNode = (instanceId === 'input' && analyserInput) ? analyserInput : 
+                                             (instanceId === 'output' && analyserOutput) ? analyserOutput : null;
+                        
+                        if (!analyserNode) continue;
+
+                        if (mode === 'scope') {
+                            analyserNode.getFloatTimeDomainData(visDataFloat);
+                            if (guiFrame && guiFrame.contentWindow) {
+                                guiFrame.contentWindow.postMessage({ type: 'BVST_VIS_DATA', instanceId: instanceId, mode: 'scope', data: visDataFloat }, '*');
+                            }
+                        } else if (mode === 'spectrum') {
+                            analyserNode.getByteFrequencyData(visDataByte);
+                            if (guiFrame && guiFrame.contentWindow) {
+                                guiFrame.contentWindow.postMessage({ type: 'BVST_VIS_DATA', instanceId: instanceId, mode: 'spectrum', data: visDataByte }, '*');
+                            }
                         }
                     }
                     visId = requestAnimationFrame(loop);
                 };
 
-                // From UI to Audio
                 if (paramListener) {
                     window.removeEventListener('message', paramListener);
                 }
@@ -279,7 +287,6 @@
                         workletNode.port.postMessage({ type: 'PARAM', id: event.data.id, value: event.data.value });
                     }
                     else if (event.data.type === 'NOTE_ON' && workletNode) {
-                        console.log(`Host: Forwarding NOTE_ON ${event.data.note}`);
                         workletNode.port.postMessage({ type: 'NOTE_ON', note: event.data.note, velocity: event.data.velocity });
                     }
                     else if (event.data.type === 'NOTE_OFF' && workletNode) {
@@ -294,13 +301,25 @@
                         }
                     }
                     else if (event.data.type === 'BVST_VISUALIZER_MODE') {
-                        // Enable/Disable Visualizer
-                        visMode = event.data.mode;
-                        if (visId) cancelAnimationFrame(visId);
-                        if (visMode !== 'off') loop();
+                        const instanceId = event.data.instanceId;
+                        visModes[instanceId] = event.data.mode;
+                        
+                        let anyActive = false;
+                        for (const id in visModes) {
+                            if (visModes[id] !== 'off') {
+                                anyActive = true;
+                                break;
+                            }
+                        }
+
+                        if (anyActive && !visId) {
+                            visId = requestAnimationFrame(loop);
+                        } else if (!anyActive && visId) {
+                            cancelAnimationFrame(visId);
+                            visId = null;
+                        }
                     }
                     else if (event.data.type === 'BVST_LOAD_SAMPLE_FROM_GUI' && workletNode) {
-                        // GUI fetched and decoded a sample (e.g. from URL)
                         workletNode.port.postMessage({
                             type: 'LOAD_SAMPLE',
                             samples: event.data.samples
@@ -310,49 +329,81 @@
                 };
                 window.addEventListener('message', paramListener);
 
-                // From Audio to Host (Status/Errors)
                 workletNode.port.onmessage = (e) => {
                     if (e.data.type === 'READY') {
                         engineReady = true;
                         document.getElementById('status').innerText = `Running: ${displayName}`;
                         document.getElementById('status').style.color = '#0f0';
-                        notifyGuiReady();
+                        window.notifyGuiReady();
                     } else if (e.data.type === 'ERROR') {
                         document.getElementById('status').innerText = "Error: " + e.data.error;
                         document.getElementById('status').style.color = '#f44';
                     }
                 };
                 
-                // Update URL without reloading
                 const newUrl = new URL(window.location);
                 newUrl.searchParams.set('synth', displayName);
                 window.history.pushState({}, '', newUrl);
 
             } catch (e) {
                 console.error(e);
-                // Show error in rack area or go back
                 document.getElementById('status').innerText = "Launch Failed: " + e.message;
                 document.getElementById('status').style.color = '#f44';
             }
-        }
+        };
 
-        function reset() {
-            // Simple reset: reload page to clear audio context and state cleanly
-            // Remove query param to go back to clean state
+        window.reset = function() {
             const newUrl = new URL(window.location);
             newUrl.searchParams.delete('synth');
             window.location.href = newUrl.toString();
-        }
+        };
 
-        // --- DRAG AND DROP DEBUGGING ---
+        // MIDI Playback Logic
+        window.playMidi = function() {
+            if (!midiEvents || midiEvents.length === 0) return alert("No MIDI loaded");
+            if (!workletNode) return alert("Launch a synth first");
+            
+            stopMidi();
+            midiPlaying = true;
+            
+            const now = audioCtx.currentTime;
+            // Default 120 BPM if no tempo event found (simplification)
+            // Time per tick = 60 / (BPM * PPQ).
+            const secondsPerTick = 60.0 / (120.0 * midiPPQ);
+            
+            midiEvents.forEach(evt => {
+                // Ignore ticks < 0?
+                const time = now + (evt.ticks * secondsPerTick);
+                const delayMs = (time - now) * 1000;
+                
+                if (delayMs >= 0) {
+                    const id = setTimeout(() => {
+                        if (!midiPlaying) return;
+                        if (evt.type === 'note_on') {
+                            workletNode.port.postMessage({ type: 'NOTE_ON', note: evt.note, velocity: evt.velocity });
+                        } else if (evt.type === 'note_off') {
+                            workletNode.port.postMessage({ type: 'NOTE_OFF', note: evt.note });
+                        }
+                    }, delayMs);
+                    midiTimeouts.push(id);
+                }
+            });
+            
+            document.getElementById('status').innerText = "Playing MIDI...";
+        };
+
+        window.stopMidi = function() {
+            midiPlaying = false;
+            midiTimeouts.forEach(id => clearTimeout(id));
+            midiTimeouts = [];
+            document.getElementById('status').innerText = "MIDI Stopped";
+        };
+
+        // --- DRAG AND DROP ---
         const dropOverlay = document.getElementById('dropOverlay');
         let dragCounter = 0;
 
-        function preventDefaults(e) {
-            e.preventDefault();
-            e.stopPropagation();
-        }
-
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
         ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
             window.addEventListener(eventName, preventDefaults, false);
             document.body.addEventListener(eventName, preventDefaults, false);
@@ -360,75 +411,62 @@
 
         window.addEventListener('dragenter', (e) => {
             dragCounter++;
-            console.log('DEBUG: dragenter', dragCounter);
             dropOverlay.style.display = 'flex';
         });
 
         window.addEventListener('dragleave', (e) => {
             dragCounter--;
-            console.log('DEBUG: dragleave', dragCounter);
-            if (dragCounter === 0) {
-                dropOverlay.style.display = 'none';
-            }
+            if (dragCounter === 0) dropOverlay.style.display = 'none';
         });
 
         window.addEventListener('drop', async (e) => {
-            console.log('DEBUG: drop event captured');
             dragCounter = 0;
             dropOverlay.style.display = 'none';
 
             const dt = e.dataTransfer;
             const files = dt.files;
 
-            console.log('DEBUG: Files dropped:', files.length);
-
             if (!workletNode || !engineReady) {
-                console.warn('DEBUG: Engine not ready');
                 alert("Please launch a plugin first.");
                 return;
             }
 
             if (files.length > 0) {
                 const file = files[0];
-                console.log(`DEBUG: Processing file: ${file.name} (${file.type})`);
                 
-                // Looser check for file types
-                if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a)$/i)) {
+                if (file.name.match(/\.mid$/i)) {
+                    // MIDI File
+                    try {
+                        const buffer = await file.arrayBuffer();
+                        const parsed = MidiParser.parse(buffer);
+                        midiEvents = parsed.events;
+                        midiPPQ = parsed.timeDivision;
+                        console.log("MIDI Loaded:", parsed);
+                        document.getElementById('midiPlayer').style.display = 'block';
+                        document.getElementById('status').innerText = `MIDI Loaded: ${file.name} (${midiEvents.length} events)`;
+                    } catch (err) {
+                        alert("Error parsing MIDI: " + err.message);
+                    }
+                }
+                else if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a)$/i)) {
+                    // Audio File
                     document.getElementById('status').innerText = "Loading Sample...";
                     try {
                         const arrayBuffer = await file.arrayBuffer();
-                        console.log(`DEBUG: ArrayBuffer loaded (${arrayBuffer.byteLength} bytes). Decoding...`);
-                        
                         const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
-                        console.log("DEBUG: Audio Decoded:", audioBuffer);
-
-                        // Flatten to Mono
                         const channelData = audioBuffer.getChannelData(0);
                         
-                        // Send to Worklet
-                        workletNode.port.postMessage({
-                            type: 'LOAD_SAMPLE',
-                            samples: channelData
-                        });
-                        console.log("DEBUG: Sent to Worklet");
+                        workletNode.port.postMessage({ type: 'LOAD_SAMPLE', samples: channelData });
 
-                        // Send to GUI
                         if (guiFrame && guiFrame.contentWindow) {
-                            guiFrame.contentWindow.postMessage({
-                                type: 'BVST_SAMPLE_DATA',
-                                samples: channelData
-                            }, '*');
-                            console.log("DEBUG: Sent to GUI");
+                            guiFrame.contentWindow.postMessage({ type: 'BVST_SAMPLE_DATA', samples: channelData }, '*');
                         }
-
                         document.getElementById('status').innerText = `Sample Loaded: ${file.name} (${audioBuffer.duration.toFixed(2)}s)`;
                     } catch (err) {
-                        console.error("DEBUG: Load Error:", err);
                         document.getElementById('status').innerText = "Error Loading Sample: " + err.message;
                         alert("Error loading sample: " + err.message);
                     }
                 } else {
-                    console.warn("DEBUG: Unsupported file type:", file.type);
                     alert("Unsupported file type: " + file.type);
                 }
             }

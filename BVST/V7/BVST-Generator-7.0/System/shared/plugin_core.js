@@ -25,6 +25,14 @@ export const BVST = {
                     this.sendParam(parseInt(el.dataset.param), val);
                 }
                 
+                if (id === 'btn-power' && val === 1) {
+                    window.parent.postMessage({ type: 'BVST_POWER' }, '*');
+                    if (this.audioContext && this.audioContext.state === 'suspended') {
+                        this.audioContext.resume();
+                    }
+                    setTimeout(() => controls.setValue('btn-power', 0), 200);
+                }
+
                 if (this.sampler) {
                     if (id === 'speed') this.sampler.updateParam('playSpeed', val);
                     else if (id === 'loop_start') this.sampler.updateParam('loopStart', val);
@@ -37,15 +45,6 @@ export const BVST = {
                     if (config.sampler && config.sampler.onControlChange) {
                         config.sampler.onControlChange(id, val, this.sampler);
                     }
-                }
-
-                if (id === 'btn-power' && val === 1) {
-                    window.parent.postMessage({ type: 'BVST_POWER' }, '*');
-                    if (this.audioContext && this.audioContext.state === 'suspended') {
-                        this.audioContext.resume();
-                    }
-                    // Reset button visual after short delay?
-                    setTimeout(() => controls.setValue('btn-power', 0), 200);
                 }
 
                 if (this.sequencer) {
@@ -111,44 +110,18 @@ export const BVST = {
                 numKeys: numKeys,
                 responsive: true,
                 onNoteOn: (midiVal, freq, vel) => {
-                    console.log(`PluginCore: onNoteOn ${midiVal}`);
                     // Check Arp Interception
                     if (this.sequencer && this.sequencer.type === 'arp' && this.sequencer.arp.active) {
                         this.sequencer.onNoteOn(midiVal);
                         return;
                     }
 
-                    // Standard Logic
-                    // Use explicit message if possible, falling back to params if needed?
-                    // Actually, sending NOTE_ON message is safer for polyphony/velocity.
                     window.parent.postMessage({ 
                         type: 'NOTE_ON', 
                         note: midiVal, 
                         velocity: vel !== undefined ? vel : 1.0 
                     }, '*');
                     
-                    // Legacy Param Fallback (Optional, but keeping for compatibility with old synths?)
-                    // If the synth doesn't handle NOTE_ON message (old build), we still need params.
-                    // But duplicates might trigger twice?
-                    // Let's send params ONLY if we assume legacy.
-                    // BUT, current UniversalSynth handles params too.
-                    // If we send both, we might re-trigger.
-                    // UniversalSynth `note_on` resets envelopes.
-                    // Processor_glue checks `if (typeof this.synth.note_on === 'function')`.
-                    // If it is, it calls it.
-                    // If we ALSO send params, handle_event might call it again.
-                    // Let's stick to NOTE_ON message. It's the modern BVST 7 way.
-                    // But to be safe for old synths that ONLY look at params, we should probably check capabilities?
-                    // We don't know capabilities here.
-                    // Compromise: Send NOTE_ON message. Most new synths will use it.
-                    // Old synths ignore 'NOTE_ON' type in processor?
-                    // Old processor_glue didn't have 'NOTE_ON' handler.
-                    // If using old processor_glue, this message does nothing.
-                    // So we MUST send params for legacy support OR assume new build system.
-                    // Since we updated the build system, all new builds use new glue.
-                    // So NOTE_ON is safe.
-                    
-                    // For Sampler:
                     if (this.sampler) {
                         this.sampler.updateParam('note', midiVal);
                         this.sampler.trigger(); 
@@ -203,8 +176,7 @@ export const BVST = {
 
     destroy: function() {
         if (this.sequencer) this.sequencer.stop();
-        // if (this.midi) this.midi.close(); // MidiManager doesn't expose close yet
-        // Remove global listeners?
+        if (this.visualizer) this.visualizer.stop();
         console.log("BVST Destroyed (Partial)");
     },
 
@@ -224,9 +196,7 @@ export const BVST = {
     },
 
     _initSequencer: function(seqConfig) {
-        // Pass shared AudioContext
         seqConfig.audioContext = this.audioContext;
-        
         this.sequencer = new SequencerManager(
             seqConfig, 
             (id, val) => this.sendParam(id, val),
@@ -247,13 +217,12 @@ export const BVST = {
         if (kbContainer) appRoot.insertBefore(seqContainer, kbContainer);
         else appRoot.appendChild(seqContainer);
         
-        // Pass Element directly
         this.sequencer.init(seqContainer);
     },
 
     _initSampler: function(samplerConfig) {
         this.sampler = new SamplerUI({
-            audioContext: this.audioContext, // Share context
+            audioContext: this.audioContext,
             onSampleLoad: (data) => {
                 window.parent.postMessage({ type: 'BVST_LOAD_SAMPLE_FROM_GUI', samples: data }, '*');
                 if (samplerConfig.onLoad) samplerConfig.onLoad(data);
@@ -271,11 +240,8 @@ export const BVST = {
 
         const appRoot = document.getElementById('bvst-app-root');
         const wrapper = document.createElement('div');
-        
-        // Pass Element directly
         this.sampler.buildUI(wrapper);
         
-        // Insert
         if(appRoot) {
             const topBar = appRoot.querySelector('.bvst-top-bar');
             const viz = document.getElementById('bvst-viz-container');

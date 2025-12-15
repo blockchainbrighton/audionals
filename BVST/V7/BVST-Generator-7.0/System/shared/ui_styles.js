@@ -473,6 +473,7 @@ export const VisualizerCSS = `
         --viz-scope-color: #00f0ff;
         --viz-spectrum-color: #ff0055;
         --viz-trail-color: rgba(0, 0, 0, 0.2);
+        --viz-grid-color: rgba(255, 255, 255, 0.1);
     }
 `;
 

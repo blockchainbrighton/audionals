@@ -37,7 +37,6 @@ export class Visualizer {
 
         this.canvas = document.createElement('canvas');
         this.canvas.className = 'bvst-visualizer';
-        // Inline styles removed, handled by CSS class
         
         container.appendChild(this.canvas);
         
@@ -46,6 +45,7 @@ export class Visualizer {
         this.colors.scope = style.getPropertyValue('--viz-scope-color').trim() || '#00f0ff';
         this.colors.spectrum = style.getPropertyValue('--viz-spectrum-color').trim() || '#ff0055';
         this.colors.trail = style.getPropertyValue('--viz-trail-color').trim() || 'rgba(0,0,0,0.2)';
+        this.colors.grid = style.getPropertyValue('--viz-grid-color').trim() || 'rgba(255,255,255,0.1)';
 
         // Resize observer to handle layout changes
         new ResizeObserver(() => {
@@ -67,20 +67,22 @@ export class Visualizer {
         ctx.fillStyle = this.colors.trail; 
         ctx.fillRect(0, 0, w, h);
         
+        this.drawGrid(ctx, w, h);
+        
         const len = this.data.length;
-        // Optimization: Step skip if data is much larger than screen width
-        const step = Math.ceil(len / w);
 
         if (this.mode === 'scope') {
             ctx.lineWidth = 2;
             ctx.strokeStyle = this.colors.scope;
             ctx.beginPath();
             
+            // Optimization: Step skip
+            const step = Math.max(1, Math.ceil(len / w));
             const sliceWidth = w * 1.0 / (len / step);
             let x = 0;
             
             for(let i = 0; i < len; i += step) {
-                const v = this.data[i] * 0.5 + 0.5; // Norm 0-1 (assuming -1 to 1 input)
+                const v = this.data[i] * 0.5 + 0.5; 
                 const y = v * h;
                 
                 if(i === 0) ctx.moveTo(x, y);
@@ -90,17 +92,50 @@ export class Visualizer {
             }
             ctx.stroke();
         } else if (this.mode === 'spectrum') {
-            const barWidth = (w / (len / step)) * 2.5;
-            let x = 0;
             ctx.fillStyle = this.colors.spectrum;
             
-            for(let i = 0; i < len; i += step) {
-                const v = this.data[i] / 255.0; // 0-1
+            // Logarithmic Scale
+            // Freq range 0 to Nyquist (approx 22050).
+            // We want log x-axis.
+            // Map bin index i to x.
+            // log(i) / log(len) * w ?
+            // Low bins (bass) need more space.
+            
+            for(let i = 0; i < len; i++) {
+                const v = this.data[i] / 255.0; 
+                if (v < 0.01) continue; // Skip silence
+
                 const barHeight = v * h;
                 
+                // Log Map: x = log(i) / log(len) * w
+                // Avoid log(0)
+                const logI = Math.log10(i + 1);
+                const logLen = Math.log10(len + 1);
+                const x = (logI / logLen) * w;
+                
+                // Width depends on next bin's x
+                const logNext = Math.log10(i + 2);
+                const nextX = (logNext / logLen) * w;
+                const barWidth = Math.max(1, nextX - x); // At least 1px
+
                 ctx.fillRect(x, h - barHeight, barWidth, barHeight);
-                x += barWidth + 1;
             }
         }
+    }
+
+    drawGrid(ctx, w, h) {
+        ctx.strokeStyle = this.colors.grid;
+        ctx.lineWidth = 1;
+        ctx.beginPath();
+        
+        // Horizontal (0, +/- 0.5 for scope, or dB lines for spec)
+        ctx.moveTo(0, h/2); ctx.lineTo(w, h/2);
+        
+        // Vertical (Grid lines)
+        for(let i=1; i<4; i++) {
+            const x = (w / 4) * i;
+            ctx.moveTo(x, 0); ctx.lineTo(x, h);
+        }
+        ctx.stroke();
     }
 }

@@ -1,0 +1,283 @@
+// js/player/playerInventory.js
+import * as Weapons from './playerWeapons.js'; // Import for weapon data and types
+
+export const inventoryProperties = {
+    inventory: { items: [], capacity: 10 },
+};
+
+export function initInventory() {
+    this.inventory.items = [];
+    this.inventory.capacity = inventoryProperties.inventory.capacity;
+    
+    const firstAid = this.game.itemManager.createItemById('nanite_repair'); 
+    if (firstAid) this.addItem(firstAid);
+
+    const testPistolItem = this.game.itemManager.createWeaponItem('pistol');
+    if (testPistolItem) this.addItem(testPistolItem);
+    
+    const testAmmoItem = this.game.itemManager.createAmmoItem(Weapons.ammoItemIds.bullet_light, 24);
+    if (testAmmoItem) this.addItem(testAmmoItem);
+}
+
+export function addItem(item) {
+    if (this.inventory.items.length >= this.inventory.capacity && (!item.stackable || !this.inventory.items.find(i => i.id === item.id))) {
+        this.game.utils.addMessage(`[SYS] INVENTORY FULL (10/10). Cannot pick up ${item.name}. Press 'I' to drop items.`);
+        return false;
+    }
+    const existing = this.inventory.items.find(i => i.id === item.id && item.stackable);
+    if (existing) {
+        existing.quantity = (existing.quantity || 1) + (item.quantity || 1);
+    } else {
+        this.inventory.items.push({...item, quantity: item.quantity || 1});
+    }
+
+    if (this.game.soundManager) this.game.soundManager.playPickup();
+
+    this.game.utils.addMessage(`Acquired ${item.name} (x${item.quantity || 1}). Stored.`);
+    this.renderInventory();
+    this.game.hud.update();
+
+    // Show NFT popup if applicable
+    if (item.nftTraits && this.game.hud.showNftPickup) {
+        this.game.hud.showNftPickup(item);
+    }
+    
+    return true;
+}
+
+export function removeItem(itemId, quantity = 1) {
+    const idx = this.inventory.items.findIndex(i => i.id === itemId);
+    if (idx > -1) {
+        const item = this.inventory.items[idx];
+        if (item.quantity && item.quantity > quantity) {
+            item.quantity -= quantity;
+        } else {
+            this.inventory.items.splice(idx, 1);
+        }
+        this.renderInventory();
+        this.game.hud.update();
+        return true;
+    }
+    return false;
+}
+
+export function hasItem(itemId, quantity = 1) {
+    const item = this.inventory.items.find(i => i.id === itemId);
+    return item && (item.quantity || 0) >= quantity;
+}
+
+export function useItem(itemIndex) {
+    // 'this' refers to player object
+    const item = this.inventory.items[itemIndex];
+    if (item) {
+        if (item.type === 'weapon') {
+            this.equipWeaponById(item.weaponId, itemIndex); 
+        } else if (item.effect) {
+            item.effect(this); 
+            if (item.type === 'consumable') {
+                this.removeItem(item.id, 1); 
+            } else {
+                this.game.utils.addMessage(`Activated ${item.name}.`);
+            }
+        } else {
+            this.game.utils.addMessage(`${item.name} has no direct activation routine.`);
+        }
+        this.renderInventory(); 
+        this.game.hud.update();
+    }
+}
+
+export function equipWeaponById(weaponId, itemIndexInInventory = -1) {
+    // 'this' refers to player object
+    const weaponData = Weapons.getWeaponData(weaponId, this.game.config);
+    if (weaponData) {
+        if (this.equippedWeapon && this.equippedWeapon.id !== Weapons.UNARMED_STATS.id && this.equippedWeapon.isInventoryItem) {
+            const oldWeaponItem = {
+                ...this.game.itemManager.createWeaponItem(this.equippedWeapon.id), 
+                ...(this.equippedWeapon.type === Weapons.weaponTypes.RANGED && {
+                    currentAmmo: this.equippedWeapon.currentAmmo,
+                })
+            };
+             if (oldWeaponItem.name === "Unarmed") { /* Do nothing */ }
+             else if (!this.addItem(oldWeaponItem)) { 
+                this.game.utils.addMessage(`Inventory full. Cannot unequip ${this.equippedWeapon.name}. Dropping.`);
+                // Assuming game.itemManager.dropItem exists and can handle this oldWeaponItem structure
+                if (this.game.itemManager && typeof this.game.itemManager.dropItem === 'function') {
+                     this.game.itemManager.dropItem(oldWeaponItem, this.x, this.y);
+                } else {
+                    this.game.utils.addMessage(`Critical: Drop item function missing. ${this.equippedWeapon.name} lost.`);
+                }
+                // Proceed with equipping new, old one is dropped or lost.
+            }
+        }
+        
+        this.equippedWeapon = weaponData;
+        this.equippedWeapon.isInventoryItem = (weaponId !== Weapons.UNARMED_STATS.id); 
+
+        if (itemIndexInInventory > -1 && this.equippedWeapon.isInventoryItem) {
+            const item = this.inventory.items[itemIndexInInventory];
+            if (item.type === 'weapon' && item.weaponId === weaponId && weaponData.type === Weapons.weaponTypes.RANGED) {
+                 this.equippedWeapon.currentAmmo = item.currentAmmo !== undefined ? item.currentAmmo : weaponData.ammoCapacity;
+            }
+            this.inventory.items.splice(itemIndexInInventory, 1);
+        }
+
+        this.game.utils.addMessage(`Equipped ${this.equippedWeapon.name}.`);
+        this.renderInventory(); 
+        this.game.hud.update();   
+        return true;
+    } else {
+        this.game.utils.addMessage(`Weapon data for ID "${weaponId}" not found.`);
+        return false;
+    }
+}
+
+export function unequipWeapon() {
+    // 'this' refers to player object
+    if (this.equippedWeapon && this.equippedWeapon.id !== Weapons.UNARMED_STATS.id) {
+        const currentEquipped = this.equippedWeapon;
+        if (currentEquipped.isInventoryItem) {
+             const itemToReturn = {
+                ...this.game.itemManager.createWeaponItem(currentEquipped.id),
+                ...(currentEquipped.type === Weapons.weaponTypes.RANGED && {
+                    currentAmmo: currentEquipped.currentAmmo,
+                })
+            };
+            if (!this.addItem(itemToReturn)) {
+                this.game.utils.addMessage(`Inventory full. Cannot unequip ${currentEquipped.name}. Dropping.`);
+                if (this.game.itemManager && typeof this.game.itemManager.dropItem === 'function') {
+                    this.game.itemManager.dropItem(itemToReturn, this.x, this.y);
+                } else {
+                     this.game.utils.addMessage(`Critical: Drop item function missing. ${currentEquipped.name} lost.`);
+                }
+            } else {
+                this.game.utils.addMessage(`Unequipped ${currentEquipped.name}, returned to stash.`);
+            }
+        }
+        this.equipWeaponById(Weapons.UNARMED_STATS.id); 
+        this.renderInventory();
+        this.game.hud.update();
+    } else {
+        this.game.utils.addMessage("Nothing to unequip or already unarmed.");
+    }
+}
+
+
+export function pickupItems() {
+    const now = Date.now();
+    // Initialize warning timestamp if needed
+    if (!this.lastFullInventoryWarning) this.lastFullInventoryWarning = 0;
+
+    for (let i = this.game.itemManager.onMapItems.length - 1; i >= 0; i--) {
+        const itemOnMap = this.game.itemManager.onMapItems[i];
+        if (this.game.utils.AABBCollision(this, itemOnMap)) {
+            let itemToAdd = null;
+    
+            if (itemOnMap.type === 'weapon' && itemOnMap.weaponId) {
+                itemToAdd = this.game.itemManager.createWeaponItem(itemOnMap.weaponId);
+                if (itemToAdd && itemOnMap.currentAmmo !== undefined) { 
+                    itemToAdd.currentAmmo = itemOnMap.currentAmmo; 
+                }
+            } else if (itemOnMap.type === 'ammo' && itemOnMap.id) {
+                itemToAdd = this.game.itemManager.createAmmoItem(itemOnMap.id, itemOnMap.quantity);
+            } else if (itemOnMap.id) { 
+                itemToAdd = this.game.itemManager.createItemById(itemOnMap.id, itemOnMap.quantity);
+            }
+            
+            // Pass traits if it's an NFT
+            if (itemToAdd && itemOnMap.nftTraits) {
+                itemToAdd.nftTraits = itemOnMap.nftTraits;
+                itemToAdd.color = itemOnMap.color; // Pass color too
+                itemToAdd.imageUrl = itemOnMap.imageUrl;
+            }
+    
+            if (itemToAdd) {
+                // Check capacity before calling addItem to handle spam prevention logic, 
+                // OR just call addItem and let it return false. 
+                // But addItem logs the message. We want to suppress that message if it's spamming.
+                
+                // Hack: Modifying addItem logic slightly to respect a silent flag is hard without changing signature.
+                // Alternative: Check capacity here first?
+                
+                const isFull = this.inventory.items.length >= this.inventory.capacity && (!itemToAdd.stackable || !this.inventory.items.find(i => i.id === itemToAdd.id));
+                
+                if (isFull) {
+                    // Only log if 2 seconds have passed
+                    if (now - this.lastFullInventoryWarning > 2000) {
+                        this.addItem(itemToAdd); // This triggers the log
+                        this.lastFullInventoryWarning = now;
+                    }
+                    // Else, do nothing (suppress spam)
+                } else {
+                    if (this.addItem(itemToAdd)) { 
+                        this.game.itemManager.onMapItems.splice(i, 1); 
+                    } else {
+                        // Other error (shouldn't happen often if capacity check passed)
+                        console.warn("Could not create item from map object:", itemOnMap);
+                        this.game.itemManager.onMapItems.splice(i, 1); 
+                    }
+                }
+            }
+        }
+    }
+}
+
+export function renderInventory() {
+    const invDiv = document.getElementById('inventoryItems');
+    if (!invDiv) return;
+    invDiv.innerHTML = '';
+
+    let equippedDiv = null; // Declare here
+
+    if (this.equippedWeapon) {
+        equippedDiv = document.createElement('div'); // Assign here
+        equippedDiv.className = 'inventoryItem equippedWeaponDisplay';
+        let equippedContent = `<b>Equipped:</b> ${this.equippedWeapon.name}`;
+        if (this.equippedWeapon.type === Weapons.weaponTypes.RANGED) {
+            equippedContent += ` (${this.equippedWeapon.currentAmmo}/${this.equippedWeapon.ammoCapacity})`;
+        }
+        if (this.equippedWeapon.id !== Weapons.UNARMED_STATS.id) {
+            equippedContent += `<button class="button button-unequip" style="float:right;" onclick="game.player.unequipWeapon()">Unequip</button>`;
+        }
+        equippedDiv.innerHTML = equippedContent;
+        invDiv.appendChild(equippedDiv);
+    }
+
+    if (this.inventory.items.length === 0) {
+        const p = document.createElement('p');
+        p.textContent = 'Stash empty. Go acquire some... assets.';
+        
+        // Check if equippedDiv exists AND if it's a child of invDiv before trying to insertAfter.
+        // If invDiv has no children (meaning equippedDiv wasn't added or doesn't exist), just append p.
+        if (equippedDiv && invDiv.contains(equippedDiv)) {
+            equippedDiv.insertAdjacentElement('afterend', p);
+        } else {
+            invDiv.appendChild(p);
+        }
+        return;
+    }
+
+    this.inventory.items.forEach((item, index) => {
+        const itemDiv = document.createElement('div');
+        itemDiv.className = 'inventoryItem';
+        
+        let imageHtml = '';
+        if (item.imageUrl) {
+            imageHtml = `<img src="${item.imageUrl}" style="width:32px; height:32px; vertical-align:middle; margin-right:8px; border-radius:4px; border:1px solid #444;" loading="lazy">`;
+        }
+
+        let content = `${imageHtml}<b>${item.name}</b> (x${item.quantity || 1})`;
+        if (item.type === 'weapon' && item.weaponId && Weapons.weaponsData[item.weaponId] && Weapons.weaponsData[item.weaponId].type === Weapons.weaponTypes.RANGED) {
+            content += ` [${item.currentAmmo !== undefined ? item.currentAmmo : Weapons.weaponsData[item.weaponId].ammoCapacity}/${Weapons.weaponsData[item.weaponId].ammoCapacity}]`;
+        }
+        content += ` - <i>${item.description || Weapons.getWeaponData(item.weaponId)?.description || 'No description.'}</i>`;
+
+        if (item.type === 'weapon') {
+            content += `<button class="button button-equip" style="float:right;" onclick="game.player.useItem(${index})">Equip</button>`;
+        } else if (item.type === 'consumable' || (item.effect && typeof item.effect === 'function')) {
+            content += `<button class="button button-use" style="float:right;" onclick="game.player.useItem(${index})">Use</button>`;
+        }
+        itemDiv.innerHTML = content;
+        invDiv.appendChild(itemDiv);
+    });
+}
