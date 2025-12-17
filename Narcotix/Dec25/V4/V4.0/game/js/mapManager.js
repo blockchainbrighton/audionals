@@ -93,7 +93,7 @@ export const mapManager = {
         }
 
         // 4. Place Structures
-        const poiLocations = []; // Store {x, y, id} to check distances
+        const poiLocations = []; // Store {x, y, id, type} to check distances
 
         // Helper to find valid spot
         const findSpot = (minDist = 50) => {
@@ -117,9 +117,23 @@ export const mapManager = {
         // Place Safehouse (Center-ish)
         const safehouseX = Math.floor(W/2);
         const safehouseY = Math.floor(H/2);
-        poiLocations.push({x: safehouseX, y: safehouseY, id: 'safehouse'});
+        poiLocations.push({x: safehouseX, y: safehouseY, id: 'safehouse', type: 'xlounge_stash'});
         
-        this.placeBuilding(overworld, safehouseX, safehouseY, 5, 5, TILE_TYPES.XLOUNGE_STASH_ENTRANCE, 'safehouse_interior', TILE_TYPES.XLOUNGE_INTERIOR, 'xlounge_stash');
+        const safehouseSpawnX = Math.floor(12 / 2);
+        const safehouseSpawnY = 10;
+        this.placeBuilding(
+            overworld,
+            safehouseX,
+            safehouseY,
+            5,
+            5,
+            TILE_TYPES.XLOUNGE_STASH_ENTRANCE,
+            'safehouse_interior',
+            TILE_TYPES.XLOUNGE_INTERIOR,
+            'xlounge_stash',
+            safehouseSpawnX,
+            safehouseSpawnY
+        );
         this.generateInterior('safehouse_interior', 12, 12, TILE_TYPES.XLOUNGE_INTERIOR, 'safehouse_stash', 'xlounge_stash', safehouseX, safehouseY);
 
         // Define other POIs
@@ -133,7 +147,7 @@ export const mapManager = {
 
         buildings.forEach(b => {
             const loc = findSpot(60); // Minimum 60 tiles apart
-            poiLocations.push({x: loc.x, y: loc.y, id: b.id});
+            poiLocations.push({x: loc.x, y: loc.y, id: b.id, type: b.type});
             
             // Overworld Footprint
             this.placeBuilding(overworld, loc.x, loc.y, 5, 5, b.door, `${b.id}_interior`, TILE_TYPES.SECURE_DATA_SILO_WALL, b.type);
@@ -159,13 +173,14 @@ export const mapManager = {
         }
 
         this.maps['overworld'] = overworld;
+        this.poiLocations = poiLocations;
         
         // Initial State
         this.data = this.maps['safehouse_interior'];
         this.currentMapId = 'safehouse_interior';
     },
 
-    placeBuilding: function(mapData, x, y, w, h, doorTileType, targetMapId, wallType, interactionType) {
+    placeBuilding: function(mapData, x, y, w, h, doorTileType, targetMapId, wallType, interactionType, spawnTileX = 7, spawnTileY = 12) {
         // Center x,y is the DOOR
         // Determine top-left
         const tlx = x - Math.floor(w/2);
@@ -184,8 +199,8 @@ export const mapManager = {
                 type: doorTileType,
                 isDoor: true,
                 targetMap: targetMapId,
-                targetX: 7, // Center of interior
-                targetY: 12, // Near bottom of interior
+                targetX: spawnTileX, // Interior spawn
+                targetY: spawnTileY, // Interior spawn
                 interactionType: interactionType // Set metadata for Minimap/Compass
             };
         }

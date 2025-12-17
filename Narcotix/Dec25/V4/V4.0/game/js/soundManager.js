@@ -490,13 +490,17 @@ export const soundManager = {
     
     walkmanUserVolume: 0.8, // User setting
     walkmanPaused: false,   // Pause state
+    wasInside: true,
 
-    sources: {
-        safehouse: { x: 5 * 32, y: 6 * 32, radius: 400, profile: 'SAFEHOUSE' },
-        bar: { x: 20 * 32, y: 20 * 32, radius: 400, profile: 'BAR' },
-        shop: { x: 40 * 32, y: 6 * 32, radius: 400, profile: 'SHOP' },
-        casino: { x: 25 * 32, y: 30 * 32, radius: 400, profile: 'CASINO' },
-        armoury: { x: 30 * 32, y: 10 * 32, radius: 400, profile: 'ARMOURY' }
+    poiAudioProfiles: {
+        'xlounge_stash': 'SAFEHOUSE',
+        'safehouse': 'SAFEHOUSE',
+        'exchange_node': 'SHOP',
+        'exchange': 'SHOP',
+        'bar': 'BAR',
+        'armoury': 'ARMOURY',
+        'casino': 'CASINO',
+        'xemist_contact': null
     },
 
     profiles: {
@@ -598,6 +602,9 @@ export const soundManager = {
         let profileKey = 'EXPLORATION';
         let targetEnvVol = 0, targetWalkmanVol = 0;
         let targetFilter = 20000, targetPan = 0;
+        let targetFilterQ = 0.7;
+
+        const lenp = (a, b, t) => a + (b - a) * t;
         let intensity = 0.3;
 
         const mapId = this.game.mapManager.currentMapId;
@@ -641,17 +648,19 @@ export const soundManager = {
             const pX = player.x + player.width/2;
             const pY = player.y + player.height/2;
             
-            for(const key in this.sources) {
-                const src = this.sources[key];
+            const dynamicSources = this.getDynamicSources();
+            dynamicSources.forEach(src => {
                 const d = this.game.utils.distance(pX, pY, src.x, src.y);
                 if(d < src.radius && d < minDist) { minDist = d; nearest = src; }
-            }
+            });
 
             if(nearest) {
                 profileKey = nearest.profile;
-                targetFilter = 800; // Muffled because it's "outside" the building
-                // Volume increases as you get closer, but never fully "dry" like being inside
-                targetEnvVol = Math.max(0, 1 - (minDist/nearest.radius)) * 0.5;
+                const proximity = Math.max(0, 1 - (minDist/nearest.radius));
+                targetFilter = lenp(400, 6000, proximity);
+                targetFilterQ = lenp(2.5, 0.7, proximity);
+                // Low-end bleed ensures bass remains as we step away
+                targetEnvVol = (0.2 + proximity * 0.6);
                 targetPan = Math.max(-1, Math.min(1, (nearest.x - pX)/300));
             } else {
                 // Deep wilderness / City noise (Silence or subtle pad)
@@ -661,7 +670,7 @@ export const soundManager = {
         }
 
         // Apply Logic
-        if (profileKey !== this.music.activeProfile && (targetWalkmanVol > 0 || targetEnvVol > 0)) {
+        if (profileKey !== this.music.activeProfile) {
             this.switchProfile(profileKey);
         }
 
@@ -675,14 +684,36 @@ export const soundManager = {
         // Filter: Instant snap if inside, smooth lerp if outside
         const isInside = ['SHOP_MENU', 'MINIGAME', 'INTERACTION_MODE', 'SAFEHOUSE'].includes(profileKey) || mapId.includes('safehouse');
         if (isInside) {
+            if (!this.wasInside) {
+                if (this.musicFilter) {
+                    this.musicFilter.frequency.value = 20000;
+                    this.musicFilter.Q.value = 0.7;
+                }
+            }
              // Cleaner sound inside
-             if(this.musicFilter) this.musicFilter.frequency.value = lerp(this.musicFilter.frequency.value, 20000, 0.1);
+             if(this.musicFilter) {
+                 this.musicFilter.frequency.value = lerp(this.musicFilter.frequency.value, 20000, 0.1);
+                 this.musicFilter.Q.value = lerp(this.musicFilter.Q.value, 0.7, 0.1);
+             }
              if(this.musicPanner) this.musicPanner.pan.value = lerp(this.musicPanner.pan.value, 0, 0.1); // Center stereo
         } else {
+             if (this.wasInside) {
+                 if (this.musicFilter) {
+                     this.musicFilter.frequency.value = 400;
+                     this.musicFilter.Q.value = 3.0;
+                 }
+                 if (this.musicBus) {
+                     this.musicBus.gain.value = Math.max(0, this.musicBus.gain.value * 0.7);
+                 }
+             }
              // Muffled/Positional outside
-             if(this.musicFilter) this.musicFilter.frequency.value = lerp(this.musicFilter.frequency.value, targetFilter, 0.1);
+             if(this.musicFilter) {
+                 this.musicFilter.frequency.value = lerp(this.musicFilter.frequency.value, targetFilter, 0.1);
+                 this.musicFilter.Q.value = lerp(this.musicFilter.Q.value, targetFilterQ, 0.1);
+             }
              if(this.musicPanner) this.musicPanner.pan.value = lerp(this.musicPanner.pan.value, targetPan, 0.1);
         }
+        this.wasInside = isInside;
 
         if(profileKey === 'WALKMAN') {
             const newTempo = 116 + (this.music.intensity * 20);
@@ -690,11 +721,53 @@ export const soundManager = {
         }
     },
 
+    getDynamicSources: function() {
+        const sources = [];
+        if (!this.game || !this.game.mapManager || !this.game.mapManager.poiLocations) return sources;
+        if (this.game.mapManager.currentMapId !== 'overworld') return sources;
+        const tileSize = this.game.config?.TILE_SIZE || 32;
+        this.game.mapManager.poiLocations.forEach(poi => {
+            const profile = this.profileForPoi(poi);
+            if (!profile) return;
+            sources.push({
+                x: poi.x * tileSize,
+                y: poi.y * tileSize,
+                radius: 520,
+                profile: profile
+            });
+        });
+        return sources;
+    },
+
+    profileForPoi: function(poi) {
+        if (!poi) return null;
+        const typeKey = poi.type || poi.id;
+        if (!typeKey) return null;
+        const lower = String(typeKey).toLowerCase();
+        if (lower.includes('armoury')) return 'ARMOURY';
+        if (lower.includes('casino')) return 'CASINO';
+        if (lower.includes('bar')) return 'BAR';
+        if (lower.includes('exchange')) return 'SHOP';
+        if (lower.includes('stash') || lower.includes('safehouse')) return 'SAFEHOUSE';
+        return this.poiAudioProfiles[typeKey] || null;
+    },
+
+    resolveProfileKey: function(key) {
+        if (!key) return 'EXPLORATION';
+        if (key === 'WORLD') return 'EXPLORATION';
+        if (!this.profiles[key]) {
+            console.warn(`[Audio] Unknown profile "${key}", defaulting to EXPLORATION.`);
+            return 'EXPLORATION';
+        }
+        return key;
+    },
+
     switchProfile: function(key) {
-        console.log(`[Audio] Switching to ${key}`);
-        const p = this.profiles[key];
-        this.music.activeProfile = key;
-        if(key !== 'WALKMAN') this.music.tempo = p.tempo;
+        const resolvedKey = this.resolveProfileKey(key);
+        console.log(`[Audio] Switching to ${resolvedKey}`);
+        const p = this.profiles[resolvedKey] || this.profiles.EXPLORATION;
+        this.music.activeProfile = resolvedKey;
+        if(resolvedKey !== 'WALKMAN') this.music.tempo = p.tempo;
         this.music.rootFreq = p.root;
         this.generateScale(p.scaleType, p.root);
         this.music.chordChangeCounter = 0;
@@ -735,14 +808,14 @@ export const soundManager = {
     },
 
     playTick: function(tick, time) {
-        const prof = this.profiles[this.music.activeProfile];
+        const prof = this.profiles[this.music.activeProfile] || this.profiles.EXPLORATION;
         const isWalkman = (this.music.activeProfile === 'WALKMAN');
         const dest = isWalkman ? this.walkmanBus : this.musicBus;
-        if(!dest) return;
+        if(!dest || !prof) return;
 
         // Get Pattern
         const patternName = prof.pattern || 'CHILL';
-        const pat = this.patterns[patternName];
+        const pat = this.patterns[patternName] || this.patterns.CHILL;
         
         // Intensity Modifiers
         const int = this.music.intensity;
