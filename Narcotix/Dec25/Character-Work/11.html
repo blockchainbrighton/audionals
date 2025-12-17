@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oscilloscope X-11 // Unified</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: 'Courier New', monospace; color: #fff; }
+        canvas { display: block; filter: contrast(1.2) brightness(1.1); }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.9); display: flex; flex-direction: column; justify-content: center; align-items: center; z-index: 10; transition: opacity 0.5s; backdrop-filter: blur(5px); }
+        #overlay.hidden { opacity: 0; pointer-events: none; }
+        
+        .btn { background: rgba(0, 255, 255, 0.1); border: 1px solid #0ff; color: #0ff; padding: 20px 50px; font-size: 20px; cursor: pointer; text-transform: uppercase; letter-spacing: 4px; transition: all 0.3s; }
+        .btn:hover { background: #0ff; color: #000; box-shadow: 0 0 30px #0ff; }
+        
+        #hud { position: absolute; bottom: 30px; left: 30px; pointer-events: none; z-index: 5; text-shadow: 0 2px 2px rgba(0,0,0,0.8); }
+        .hud-row { margin-bottom: 10px; font-size: 14px; letter-spacing: 2px; }
+        .hud-label { color: #888; margin-right: 10px; font-size: 10px; text-transform: uppercase; }
+        .hud-val { font-weight: bold; }
+        .c-vis { color: #0ff; }
+        .c-aud { color: #f0f; }
+        
+        .controls { display: grid; grid-template-columns: 1fr 1fr; gap: 40px; margin-top: 40px; text-align: center; color: #aaa; font-size: 12px; }
+        .key { border: 1px solid #444; padding: 5px 10px; border-radius: 4px; color: #fff; margin: 0 5px; }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <button class="btn" id="startBtn">SYSTEM RESTORED</button>
+        <div class="controls">
+            <div><span class="key">&larr;</span> <span class="key">&rarr;</span> VISUALS</div>
+            <div><span class="key">&uarr;</span> <span class="key">&darr;</span> AUDIO</div>
+        </div>
+    </div>
+
+    <div id="hud">
+        <div class="hud-row"><span class="hud-label">Visual</span><span class="hud-val c-vis" id="h-vis">--</span></div>
+        <div class="hud-row"><span class="hud-label">Audio</span><span class="hud-val c-aud" id="h-aud">--</span></div>
+    </div>
+
+    <canvas id="c"></canvas>
+
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        let w, h, cx, cy, minDim;
+
+        // --- PARTICLES (From v10) ---
+        class Particle {
+            constructor(x, y, color) {
+                this.x = x; this.y = y;
+                const a = Math.random() * Math.PI * 2;
+                const s = 1 + Math.random() * 3;
+                this.vx = Math.cos(a) * s;
+                this.vy = Math.sin(a) * s;
+                this.life = 1.0;
+                this.decay = 0.01 + Math.random() * 0.02;
+                this.color = color;
+            }
+            update() { this.x += this.vx; this.y += this.vy; this.life -= this.decay; }
+            draw(ctx) {
+                ctx.globalAlpha = this.life;
+                ctx.fillStyle = this.color;
+                ctx.beginPath();
+                ctx.arc(this.x, this.y, 2, 0, Math.PI*2);
+                ctx.fill();
+            }
+        }
+        let particles = [];
+
+        // --- MATH HELPERS ---
+        const { PI, sin, cos, abs, pow, min, max, floor, exp, sqrt } = Math;
+        const TWO_PI = 2 * PI;
+
+        function superformula(phi, m, n1, n2, n3) {
+            if (n1 === 0) return 0;
+            const t1 = abs(cos(m * phi / 4));
+            const t2 = pow(t1, n2);
+            const t3 = abs(sin(m * phi / 4));
+            const t4 = pow(t3, n3);
+            return pow(t2 + t4, -1 / n1);
+        }
+
+        function project3D(x, y, z, t) {
+            const rot = t * 0.5;
+            const x1 = x * cos(rot) - z * sin(rot);
+            const z1 = z * cos(rot) + x * sin(rot);
+            const y2 = y * cos(rot*0.5) - z1 * sin(rot*0.5);
+            const z2 = z1 * cos(rot*0.5) + y * sin(rot*0.5);
+            const scale = 400 / (400 + z2);
+            return { x: x1 * scale, y: y2 * scale };
+        }
+
+        // --- DATA (Restored from v7) ---
+        const PALETTES = {
+            'cyan': ['#00FFFF', '#0044FF'], 'neon_red': ['#FF0055', '#FF4400'],
+            'matrix': ['#00FF00', '#005500'], 'gold': ['#FFD700', '#FF8800'],
+            'plasma': ['#9900FF', '#0000FF'], 'white': ['#FFFFFF', '#888888'],
+            'vapor': ['#FF77FF', '#00FFFF'], 'radioactive': ['#CCFF00', '#00FF00'],
+            'sunset': ['#FF00CC', '#FF5500'], 'ice': ['#FFFFFF', '#00FFFF'],
+            'void': ['#4B0082', '#0000FF'], 'fire': ['#FFD700', '#FF0000']
+        };
+
+        const AUDIO_MODES = [
+            { name: "Deep Sub (40Hz)", freq: 40, type: 'sine', modFreq: 0, modDepth: 0 },
+            { name: "Power Hum (100Hz)", freq: 100, type: 'sine', modFreq: 50, modDepth: 5 },
+            { name: "Pure Sine (60Hz)", freq: 60, type: 'sine', modFreq: 0, modDepth: 0 },
+            { name: "Bell Chime", freq: 220, type: 'sine', modFreq: 220 * 1.4, modDepth: 100 },
+            { name: "Growl Bass", freq: 55, type: 'sawtooth', modFreq: 15, modDepth: 50 },
+            { name: "Laser Tremolo", freq: 150, type: 'sine', modFreq: 8, modDepth: 200 },
+            { name: "Telephone", freq: 440, type: 'square', modFreq: 400, modDepth: 200 },
+            { name: "Alien Engine", freq: 80, type: 'triangle', modFreq: 33, modDepth: 300 },
+            { name: "Data Glitch", freq: 1000, type: 'sawtooth', modFreq: 50, modDepth: 900 },
+            { name: "Ethereal Pad", freq: 140, type: 'sine', modFreq: 0.5, modDepth: 10 },
+        ];
+
+        const VISUAL_MODES = [
+            { id: 'cube_slow', name: "Hyper Cube", shape: 'cube3d', color: 'cyan', speed: 0.5, style: 'line', smoothFactor: 0.02 }, 
+            { id: 'cube_fast', name: "Quantum Tesseract", shape: 'cube3d', color: 'plasma', speed: 1.5, style: 'dots', smoothFactor: 0.8 }, 
+            { id: 'hole_slow', name: "Black Hole", shape: 'spiral_hole', color: 'void', speed: 1.0, style: 'web', smoothFactor: 0.05 },
+            { id: 'hole_fast', name: "Wormhole", shape: 'spiral_hole', color: 'white', speed: 4.0, style: 'line', smoothFactor: 1.0 },
+            { id: 'butt_slow', name: "Morpho Butterfly", shape: 'butterfly', color: 'ice', speed: 0.1, style: 'line', smoothFactor: 0.1 },
+            { id: 'butt_fast', name: "Chaos Moth", shape: 'butterfly', color: 'sunset', speed: 0.5, style: 'dots', smoothFactor: 0.6 },
+            { id: 'attr_1', name: "Orbital Attractor", shape: 'attractor', color: 'radioactive', speed: 1.0, style: 'dots', smoothFactor: 0.2 },
+            { id: 'grid_1', name: "Hyper Grid", shape: 'grid_warp', color: 'ice', speed: 0.1, style: 'web', smoothFactor: 0.8 },
+            { id: 'dna', name: "DNA Helix", shape: 'dna', color: 'matrix', speed: 0.3, style: 'dots', smoothFactor: 0.2 },
+            { id: 'heart', name: "Cyber Heart", shape: 'heart', color: 'neon_red', speed: 0.2, style: 'line', smoothFactor: 0.1 },
+            { id: 'flower', name: "Neon Rose", shape: 'rose', k: 6, color: 'vapor', speed: 0.1, style: 'line', smoothFactor: 0.3 },
+            { id: 'atom', name: "Atomic Structure", shape: 'atom', color: 'cyan', speed: 2.0, style: 'line', smoothFactor: 1.0 },
+            { id: 'flare', name: "Solar Flare", shape: 'superformula', m: 18, n1: 0.5, n2: 0.5, n3: 0.5, color: 'gold', speed: 0.1, style: 'line', smoothFactor: 1.0 },
+            { id: 'star_4', name: "Ninja Star", shape: 'superformula', m: 4, n1: 0.1, n2: 1.7, n3: 1.7, color: 'white', speed: 1.5, style: 'line', smoothFactor: 0.8 },
+            { id: 'shield', name: "Energy Shield", shape: 'superformula', m: 4, n1: 10, n2: 10, n3: 10, color: 'cyan', speed: 0.2, style: 'web', smoothFactor: 0.1 },
+            { id: 'oct', name: "Octagon", shape: 'superformula', m: 8, n1: 10, n2: 10, n3: 10, color: 'plasma', speed: 0.1, style: 'line', smoothFactor: 0.5 },
+            { id: 'tri', name: "Hard Triangle", shape: 'superformula', m: 3, n1: 100, n2: 100, n3: 100, color: 'radioactive', speed: 0.5, style: 'line', smoothFactor: 0.5 },
+            { id: 'lis54', name: "Lissajous 5:4", shape: 'lissajous', kX: 5, kY: 4, color: 'gold', speed: 0.1, style: 'line', smoothFactor: 0.5 },
+            { id: 'lis32', name: "Lissajous 3:2", shape: 'lissajous', kX: 3, kY: 2, color: 'vapor', speed: 0.1, style: 'line', smoothFactor: 0.5 },
+            { id: 'lis11', name: "Phase Circle (1:1)", shape: 'lissajous', kX: 1, kY: 1, color: 'white', speed: 0.1, style: 'line', smoothFactor: 0.5 },
+            { id: 'lis98', name: "Harmonic Knot (9:8)", shape: 'lissajous', kX: 9, kY: 8, color: 'neon_red', speed: 0.05, style: 'line', smoothFactor: 0.2 },
+            { id: 'rose3', name: "Trifolium", shape: 'rose', k: 3, color: 'matrix', speed: 0.2, style: 'line', smoothFactor: 0.5 },
+            { id: 'rose4', name: "Quadrifolium", shape: 'rose', k: 4, color: 'ice', speed: 0.2, style: 'web', smoothFactor: 0.5 },
+            { id: 'rose7', name: "Septagram", shape: 'rose', k: 7, color: 'sunset', speed: 0.1, style: 'line', smoothFactor: 0.5 },
+            { id: 'noise', name: "Signal Noise", shape: 'noise_circle', color: 'white', speed: 1.0, style: 'line', smoothFactor: 1.0 },
+            { id: 'glitch', name: "Glitch Storm", shape: 'noise_circle', color: 'matrix', speed: 4.0, style: 'dots', smoothFactor: 1.0 },
+            { id: 'linear', name: "Linear Scope", shape: 'linear', color: 'cyan', speed: 1.0, style: 'line', smoothFactor: 0.9 },
+            { id: 'rain', name: "Digital Rain", shape: 'linear_fill', color: 'matrix', speed: 0.5, style: 'vert', smoothFactor: 0.8 },
+            { id: 'fire', name: "Fire Wall", shape: 'linear_fill', color: 'fire', speed: 0.8, style: 'vert', smoothFactor: 0.5 }
+        ];
+
+        let vIndex = 0, aIndex = 0;
+        let audioCtx, osc, mod, modGain, analyser, dataArray;
+        let smoothedVol = 0;
+        let isRunning = false;
+        let currentGradient = null;
+
+        const resize = () => {
+            w = canvas.width = window.innerWidth;
+            h = canvas.height = window.innerHeight;
+            cx = w/2; cy = h/2;
+            minDim = min(w,h);
+            currentGradient = null;
+        };
+        window.addEventListener('resize', resize);
+        resize();
+
+        // --- AUDIO ENGINE ---
+        async function start() {
+            audioCtx = new AudioContext();
+            osc = audioCtx.createOscillator();
+            mod = audioCtx.createOscillator();
+            modGain = audioCtx.createGain();
+            
+            mod.connect(modGain);
+            modGain.connect(osc.frequency);
+            
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 2048;
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+            
+            const master = audioCtx.createGain();
+            master.gain.value = 0.15;
+            
+            osc.connect(analyser);
+            analyser.connect(master);
+            master.connect(audioCtx.destination);
+            
+            osc.start();
+            mod.start();
+            
+            setAudio(aIndex);
+            loop();
+        }
+
+        function setAudio(idx) {
+            aIndex = (idx + AUDIO_MODES.length) % AUDIO_MODES.length;
+            const m = AUDIO_MODES[aIndex];
+            const t = audioCtx.currentTime;
+            osc.frequency.exponentialRampToValueAtTime(m.freq, t+0.1);
+            osc.type = m.type;
+            mod.frequency.linearRampToValueAtTime(m.modFreq, t+0.1);
+            modGain.gain.linearRampToValueAtTime(m.modDepth, t+0.1);
+            updateHud();
+        }
+
+        function setVisual(idx) {
+            vIndex = (idx + VISUAL_MODES.length) % VISUAL_MODES.length;
+            currentGradient = null;
+            particles = []; // Clear particles on switch
+            updateHud();
+        }
+
+        function updateHud() {
+            const v = VISUAL_MODES[vIndex];
+            const a = AUDIO_MODES[aIndex];
+            document.getElementById('h-vis').innerHTML = `${v.name} <span style="color:#666; font-size:10px">[${vIndex+1}/${VISUAL_MODES.length}]</span>`;
+            document.getElementById('h-aud').innerHTML = `${a.name}`;
+            document.getElementById('h-vis').style.color = PALETTES[v.color][0];
+        }
+
+        document.getElementById('startBtn').onclick = () => {
+            document.getElementById('overlay').classList.add('hidden');
+            isRunning = true;
+            start();
+        };
+
+        document.addEventListener('keydown', e => {
+            if(!isRunning) return;
+            if(e.key === 'ArrowRight') setVisual(vIndex + 1);
+            if(e.key === 'ArrowLeft') setVisual(vIndex - 1);
+            if(e.key === 'ArrowUp') setAudio(aIndex - 1);
+            if(e.key === 'ArrowDown') setAudio(aIndex + 1);
+        });
+
+        function drawShape(ctx, v, segs, vol, t) {
+            ctx.beginPath();
+            const base = minDim * 0.35;
+            
+            // Special 3D Cube
+            if (v.shape === 'cube3d') {
+                const s = base * 0.5 * (1 + vol * 3.0);
+                const pts = [
+                    {x:-s,y:-s,z:-s}, {x:s,y:-s,z:-s}, {x:s,y:s,z:-s}, {x:-s,y:s,z:-s},
+                    {x:-s,y:-s,z:s},  {x:s,y:-s,z:s},  {x:s,y:s,z:s},  {x:-s,y:s,z:s}
+                ].map(p => project3D(p.x, p.y, p.z, t * v.speed));
+                
+                const edges = [[0,1],[1,2],[2,3],[3,0],[4,5],[5,6],[6,7],[7,4],[0,4],[1,5],[2,6],[3,7]];
+                edges.forEach(e => {
+                    ctx.moveTo(cx + pts[e[0]].x, cy + pts[e[0]].y);
+                    ctx.lineTo(cx + pts[e[1]].x, cy + pts[e[1]].y);
+                });
+                return; // Cube done
+            }
+
+            // Standard Loop
+            for(let i=0; i<=segs; i++) {
+                const pct = i/segs;
+                let raw = 0;
+                // Get audio data
+                if (v.shape.includes('linear')) {
+                    raw = (dataArray[floor(pct * (dataArray.length-1))] / 128.0) - 1; 
+                } else {
+                    const mp = 1 - abs((pct*2)-1);
+                    raw = (dataArray[floor(mp * (dataArray.length-1))] / 128.0) - 1; 
+                }
+
+                // Physics Dampening (from v6)
+                if (v.smoothFactor < 0.1) raw *= 0.1; 
+                
+                const amp = 1 + (raw * 0.3) + (smoothedVol * 0.5); // Mix envelope & instant
+                let x=0, y=0;
+                
+                // --- ALGORITHMS ---
+                if (v.shape === 'linear') {
+                    x = w*0.1 + w*0.8*pct;
+                    y = cy + raw * 200;
+                }
+                else if (v.shape === 'linear_fill') {
+                    x = w*0.1 + w*0.8*pct;
+                    y = cy;
+                    const h = raw * 200;
+                    ctx.moveTo(x, cy-h); ctx.lineTo(x, cy+h); continue;
+                }
+                else if (v.shape === 'spiral_hole') {
+                    const ang = pct * TWO_PI * 10 + (t * v.speed);
+                    const r = pct * base * amp;
+                    x = cx + cos(ang)*r; y = cy + sin(ang)*r;
+                }
+                else if (v.shape === 'butterfly') {
+                    const ang = pct * TWO_PI;
+                    const rBase = exp(cos(ang)) - 2*cos(4*ang) + pow(sin(ang/12), 5);
+                    const r = (base * 0.2) * rBase * amp;
+                    const rot = t * v.speed;
+                    x = cx + r*cos(ang+rot); y = cy + r*sin(ang+rot);
+                }
+                else if (v.shape === 'rose') {
+                    const ang = pct * TWO_PI;
+                    const r = base * cos(v.k * ang) * amp;
+                    const rot = t * v.speed;
+                    x = cx + r*cos(ang+rot); y = cy + r*sin(ang+rot);
+                }
+                else if (v.shape === 'superformula') {
+                    const ang = pct * TWO_PI + (t * v.speed);
+                    const r = base * superformula(ang, v.m, v.n1, v.n2, v.n3) * amp;
+                    x = cx + cos(ang)*r; y = cy + sin(ang)*r;
+                }
+                else if (v.shape === 'lissajous') {
+                    const ang = pct * TWO_PI;
+                    const ph = t * v.speed;
+                    x = cx + base * amp * cos(ang * v.kX + ph);
+                    y = cy + base * amp * sin(ang * v.kY);
+                }
+                else { // Default Circle/Noise etc
+                     const ang = pct * TWO_PI;
+                     let r = base * amp;
+                     if(v.shape === 'noise_circle') r *= (1 + sin(ang*50)*0.1);
+                     x = cx + cos(ang)*r; y = cy + sin(ang)*r;
+                }
+
+                if(v.style === 'dots') { ctx.moveTo(x,y); ctx.arc(x,y,2,0,TWO_PI); }
+                else if (v.style === 'web' && i%2===0) { ctx.moveTo(cx,cy); ctx.lineTo(x,y); }
+                else { if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+            }
+        }
+
+        function loop() {
+            if(!isRunning) return;
+            requestAnimationFrame(loop);
+            analyser.getByteTimeDomainData(dataArray);
+
+            // Envelope Physics
+            let sum = 0;
+            for(let i=0; i<dataArray.length; i++) sum += pow((dataArray[i]-128)/128.0, 2);
+            const rms = sqrt(sum/dataArray.length);
+            const v = VISUAL_MODES[vIndex];
+            const sf = v.smoothFactor || 0.5;
+            smoothedVol += (rms - smoothedVol) * sf;
+
+            // Fade (Trail)
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = `rgba(0,0,0,${0.2})`; // Standard fade
+            ctx.fillRect(0,0,w,h);
+
+            // RGB Shift (From v9) - Applied slightly
+            // We draw the main shape in color
+            
+            // Gradient
+            if(!currentGradient) {
+                const cols = PALETTES[v.color];
+                const g = ctx.createLinearGradient(0,0,w,h);
+                cols.forEach((c,i)=>g.addColorStop(i/(cols.length-1), c));
+                currentGradient = g;
+            }
+
+            ctx.globalCompositeOperation = 'lighter';
+            ctx.strokeStyle = currentGradient;
+            ctx.fillStyle = currentGradient;
+            ctx.lineWidth = 2;
+            ctx.shadowColor = PALETTES[v.color][0];
+            ctx.shadowBlur = 10;
+
+            const t = performance.now() * 0.001;
+            drawShape(ctx, v, 1000, smoothedVol, t);
+            if(v.style !== 'dots') ctx.stroke(); else ctx.fill();
+
+            // PARTICLES (From v10) - Emit on loud beats
+            if (rms > 0.4) {
+                for(let i=0; i<2; i++) particles.push(new Particle(cx, cy, PALETTES[v.color][0]));
+            }
+            
+            ctx.globalCompositeOperation = 'source-over'; // Particles blend normally
+            for(let i=particles.length-1; i>=0; i--) {
+                const p = particles[i];
+                p.update();
+                if(p.life<=0) particles.splice(i,1); else p.draw(ctx);
+            }
+        }
+    </script>
+</body>
+</html>

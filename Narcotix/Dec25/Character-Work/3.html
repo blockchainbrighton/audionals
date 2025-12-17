@@ -1,0 +1,612 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oscilloscope X // Optimized</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #050505;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            /* subtle blur for CRT effect */
+            filter: blur(0.6px) contrast(1.2) brightness(1.1); 
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 10;
+            transition: opacity 1.0s ease;
+            backdrop-filter: blur(5px);
+        }
+
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .btn {
+            background: rgba(0, 255, 255, 0.1);
+            color: #0ff;
+            border: 1px solid #0ff;
+            padding: 20px 50px;
+            font-family: inherit;
+            font-size: 18px;
+            letter-spacing: 4px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            text-transform: uppercase;
+            box-shadow: 0 0 10px rgba(0, 255, 255, 0.2);
+            border-radius: 2px;
+        }
+
+        .btn:hover {
+            background: #0ff;
+            color: #000;
+            box-shadow: 0 0 30px rgba(0, 255, 255, 0.6);
+        }
+
+        .subtitle {
+            margin-top: 25px;
+            color: #888;
+            font-size: 12px;
+            letter-spacing: 2px;
+            text-align: center;
+            line-height: 1.6;
+        }
+
+        #hud {
+            position: absolute;
+            bottom: 40px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            color: rgba(255, 255, 255, 0.8);
+            font-family: 'Courier New', monospace;
+            z-index: 5;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.9);
+        }
+
+        .hud-title {
+            font-size: 1.6em;
+            letter-spacing: 4px;
+            font-weight: bold;
+            display: block;
+            margin-bottom: 8px;
+        }
+
+        .hud-detail {
+            font-size: 0.8em;
+            color: #aaa;
+            letter-spacing: 2px;
+            background: rgba(0,0,0,0.5);
+            padding: 4px 12px;
+            border-radius: 10px;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <button class="btn" id="startBtn">ENGAGE SYSTEM</button>
+        <div class="subtitle">
+            HIGH-FIDELITY OSCILLOSCOPE EMULATION<br>
+            <span style="color:#666;">
+                &larr; &rarr; Change Preset &bull; SHIFT + Arrow: Jump 10
+            </span>
+        </div>
+    </div>
+
+    <div id="hud">
+        <span class="hud-detail">SYSTEM STANDBY</span>
+    </div>
+
+    <canvas id="scope"></canvas>
+
+    <script>
+        /**
+         * OPTIMIZED OSCILLOSCOPE VISUALIZER
+         * - Cached gradients
+         * - 'Lighter' composite operation for neon glow
+         * - Harmonic frequencies
+         * - Enhanced shape logic
+         */
+
+        // --- CONFIGURATION ---
+        const CONFIG = {
+            volume: 0.15,       
+            visualGain: 4.0,    
+            segments: 800,      // Increased resolution for smoother curves
+            trailAlpha: 0.25,   // 0.1 = long trails, 0.9 = short trails
+        };
+
+        // --- MATH HELPERS ---
+        const { PI, sin, cos, abs, pow, min, max, floor, sqrt } = Math;
+        const TWO_PI = 2 * PI;
+
+        function superformula(phi, m, n1, n2, n3) {
+            if (n1 === 0) return 0;
+            const a = 1, b = 1;
+            const t1 = abs(cos(m * phi / 4) / a);
+            const t2 = pow(t1, n2);
+            const t3 = abs(sin(m * phi / 4) / b);
+            const t4 = pow(t3, n3);
+            return pow(t2 + t4, -1 / n1);
+        }
+
+        // --- SHAPE DEFINITIONS ---
+        // Curated list for best visual impact
+        const BASE_SHAPES = [
+            // 1. CLASSIC LISSAJOUS (Harmonic Ratios)
+            { id: 'lis_2_1', name: "Infinity (2:1)", shape: 'lissajous', kX: 2, kY: 1, colorKey: 'cyan' },
+            { id: 'lis_3_2', name: "Fifth (3:2)", shape: 'lissajous', kX: 3, kY: 2, colorKey: 'plasma' },
+            { id: 'lis_3_4', name: "Knot (3:4)", shape: 'lissajous', kX: 3, kY: 4, colorKey: 'purple' },
+            { id: 'lis_5_4', name: "Major 3rd (5:4)", shape: 'lissajous', kX: 5, kY: 4, colorKey: 'fire' },
+            
+            // 2. ROSE CURVES
+            { id: 'rose_3', name: "Trifolium", shape: 'rose', k: 3, colorKey: 'forest' },
+            { id: 'rose_4', name: "Quadrifolium", shape: 'rose', k: 4, colorKey: 'mono' },
+            { id: 'rose_7', name: "Septagram", shape: 'rose', k: 7, colorKey: 'hot' },
+
+            // 3. SUPERFORMULA / ORGANIC
+            { id: 'star_sharp', name: "Ninja Star", shape: 'superformula', m: 4, n1: 0.1, n2: 1.7, n3: 1.7, colorKey: 'eth' },
+            { id: 'bloom', name: "Alien Bloom", shape: 'superformula', m: 6, n1: 0.5, n2: 0.5, n3: 0.5, colorKey: 'plasma' },
+            { id: 'shield', name: "Soft Shield", shape: 'superformula', m: 4, n1: 10, n2: 10, n3: 10, colorKey: 'cyan' }, // Soft square
+
+            // 4. CRYPTO / CUSTOM
+            { id: 'btc', name: "Bitcoin Core", shape: 'custom_btc', colorKey: 'btc' },
+            { id: 'eth', name: "Ether Crystal", shape: 'custom_eth', colorKey: 'eth' },
+            { id: 'net', name: "Neural Net", shape: 'custom_net', colorKey: 'purple' },
+
+            // 5. WAVEFORMS
+            { id: 'wave_audio', name: "Oscilloscope", shape: 'linear', waveType: 'audio', colorKey: 'green' },
+            { id: 'spiral', name: "Vortex", shape: 'spiral', turns: 8, colorKey: 'fire' }
+        ];
+
+        const SPEED_TIERS = [
+            { label: "STABLE", val: 0.05 },
+            { label: "DRIFT", val: 0.2 },
+            { label: "RAPID", val: 1.5 }
+        ];
+
+        // Only the best styles
+        const DRAW_STYLES = [
+            { id: 'line', label: "VECTOR" },
+            { id: 'dots', label: "QUANTUM" }, // Dots
+            { id: 'web', label: "MESH" }      // Connected to center
+        ];
+
+        const PALETTE_MAP = {
+            'cyan':   ['#00FFFF', '#0055FF'],
+            'plasma': ['#FF00CC', '#3333FF'],
+            'forest': ['#55FF55', '#008800'],
+            'fire':   ['#FFDD00', '#FF3300'],
+            'purple': ['#CC66FF', '#6600FF'],
+            'mono':   ['#FFFFFF', '#888888'],
+            'hot':    ['#FF0000', '#FF8800'],
+            'btc':    ['#FF9900', '#FFE600'],
+            'eth':    ['#88AAFF', '#EEEEFF'],
+            'green':  ['#00FF00', '#005500']
+        };
+
+        // --- GENERATE PRESETS ---
+        let PRESETS = [];
+        
+        // Helper to mix colors
+        function getPalette(key) {
+            return PALETTE_MAP[key] || PALETTE_MAP['cyan'];
+        }
+
+        BASE_SHAPES.forEach(shape => {
+            SPEED_TIERS.forEach(speed => {
+                DRAW_STYLES.forEach(style => {
+                    // Filter: Don't do 'web' style for linear waves, looks messy
+                    if (shape.shape === 'linear' && style.id === 'web') return;
+                    
+                    // Filter: Static speed for linear waves looks frozen
+                    if (shape.shape === 'linear' && speed.val === 0.05) return;
+
+                    let baseFreq = 60; // Base audio freq
+                    if (shape.shape === 'linear') baseFreq = 100;
+
+                    PRESETS.push({
+                        ...shape,
+                        rotationSpeed: speed.val,
+                        speedLabel: speed.label,
+                        style: style.id,
+                        styleLabel: style.label,
+                        palette: getPalette(shape.colorKey),
+                        freq: baseFreq
+                    });
+                });
+            });
+        });
+
+        // --- GLOBAL VARS ---
+        let ctx, canvas;
+        let w, h, cx, cy, minDim; // Cached dimensions
+        let audioCtx, analyser, dataArray;
+        let osc, modOsc, modGain;
+        let isRunning = false;
+        let currentPresetIndex = 0;
+        let currentGradient = null; // Cache gradient
+
+        // --- INIT ---
+        function init() {
+            canvas = document.getElementById('scope');
+            ctx = canvas.getContext('2d', { alpha: false }); // Optimize
+            
+            window.addEventListener('resize', resize);
+            resize();
+
+            document.getElementById('startBtn').addEventListener('click', async () => {
+                await startAudio();
+                document.getElementById('overlay').classList.add('hidden');
+                isRunning = true;
+                loop();
+                updateHud();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (!isRunning) return;
+                let jump = e.shiftKey ? 10 : 1;
+                if (e.key === 'ArrowRight' || e.key === 'ArrowUp') changePreset(currentPresetIndex + jump);
+                if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') changePreset(currentPresetIndex - jump);
+            });
+        }
+
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            w = window.innerWidth;
+            h = window.innerHeight;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            ctx.scale(dpr, dpr);
+            
+            // Recalculate centers
+            cx = w / 2;
+            cy = h / 2;
+            minDim = min(w, h);
+            
+            // Invalidate gradient to force redraw
+            currentGradient = null;
+        }
+
+        function changePreset(index) {
+            // Wrap index
+            if (index < 0) index = PRESETS.length + (index % PRESETS.length);
+            if (index >= PRESETS.length) index = index % PRESETS.length;
+            
+            currentPresetIndex = index;
+            const p = PRESETS[currentPresetIndex];
+            
+            // Audio update
+            if (audioCtx && osc) {
+                const now = audioCtx.currentTime;
+                osc.frequency.setValueAtTime(osc.frequency.value, now);
+                osc.frequency.exponentialRampToValueAtTime(p.freq, now + 0.1);
+            }
+
+            // Visual update
+            currentGradient = null; // Reset gradient cache
+            updateHud();
+        }
+
+        function updateHud() {
+            const p = PRESETS[currentPresetIndex];
+            const hud = document.getElementById('hud');
+            hud.innerHTML = `
+                <span class="hud-title">${p.name}</span><br>
+                <span class="hud-detail">${p.styleLabel} // ${p.speedLabel}</span>
+                <span class="hud-detail">${currentPresetIndex + 1}/${PRESETS.length}</span>
+            `;
+        }
+
+        async function startAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            // Oscillator setup (Carrier)
+            osc = audioCtx.createOscillator();
+            osc.type = 'sine';
+            
+            // Modulator (for subtle FM texture)
+            modOsc = audioCtx.createOscillator();
+            modOsc.type = 'sine';
+            modOsc.frequency.value = 5; // 5Hz wobble
+            
+            modGain = audioCtx.createGain();
+            modGain.gain.value = 50; 
+            
+            modOsc.connect(modGain);
+            modGain.connect(osc.frequency);
+
+            // Analyser
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 2048; 
+            analyser.smoothingTimeConstant = 0.85; // Snappy but smooth
+            dataArray = new Float32Array(analyser.fftSize);
+
+            // Gains
+            const visualGain = audioCtx.createGain();
+            visualGain.gain.value = CONFIG.visualGain;
+
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.value = CONFIG.volume; 
+
+            // Graph: Osc -> VisualGain -> Analyser -> MasterGain -> Out
+            osc.connect(visualGain);
+            visualGain.connect(analyser);
+            analyser.connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+
+            osc.start();
+            modOsc.start();
+            
+            changePreset(currentPresetIndex);
+        }
+
+        function draw(time) {
+            const t = time * 0.001; // Seconds
+            const p = PRESETS[currentPresetIndex];
+            
+            // 1. Trails / Background
+            // Use 'source-over' for the fade effect
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = `rgba(5, 5, 5, ${CONFIG.trailAlpha})`;
+            ctx.fillRect(0, 0, w, h);
+
+            if (!analyser) return;
+            analyser.getFloatTimeDomainData(dataArray);
+
+            // 2. Setup Style
+            // Use 'lighter' for neon glow effect
+            ctx.globalCompositeOperation = 'lighter';
+            
+            // Create Gradient if needed
+            if (!currentGradient) {
+                const g = ctx.createLinearGradient(0, 0, w, h);
+                const colors = p.palette;
+                colors.forEach((c, i) => {
+                    g.addColorStop(i / (colors.length - 1), c);
+                });
+                currentGradient = g;
+            }
+            
+            ctx.lineWidth = (p.style === 'dots') ? 0 : 2;
+            ctx.strokeStyle = currentGradient;
+            ctx.fillStyle = currentGradient;
+            
+            // Glow
+            ctx.shadowBlur = (p.style === 'dots') ? 4 : 15;
+            ctx.shadowColor = p.palette[0];
+
+            ctx.beginPath();
+
+            const baseSize = minDim * 0.35;
+            const segments = CONFIG.segments;
+            
+            // Pre-calc common values
+            const bufferLen = dataArray.length;
+            const isLinear = p.shape === 'linear';
+
+            for (let i = 0; i <= segments; i++) {
+                const percent = i / segments;
+                
+                // Audio Sample
+                // Linear: map percent to buffer directly
+                // Radial: mirror buffer (0->1->0) for symmetry
+                let audioIdx = 0;
+                if (isLinear) {
+                    audioIdx = floor(percent * (bufferLen - 1));
+                } else {
+                    // Mirrored index for smooth loop
+                    const mp = 1 - abs((percent * 2) - 1);
+                    audioIdx = floor(mp * (bufferLen - 1));
+                }
+                const audioVal = dataArray[audioIdx]; // -1.0 to 1.0
+
+                let x = 0, y = 0;
+                
+                // --- SHAPE LOGIC ---
+                if (isLinear) {
+                    x = (w * 0.1) + (w * 0.8) * percent;
+                    y = cy + (audioVal * 150);
+                    // Add wave carrier
+                    if (p.waveType === 'audio') {
+                        // Just audio
+                    } else {
+                        // Sine wave carrier
+                        y += sin((percent * 20) + (t * 2)) * 50; 
+                    }
+                } 
+                else {
+                    // Radial / Polar
+                    // Add drift rotation
+                    const angle = (percent * TWO_PI) + (t * p.rotationSpeed);
+                    let r = baseSize;
+
+                    // Modulate radius with audio
+                    const amp = 1 + (audioVal * 0.3); // 30% modulation
+
+                    if (p.shape === 'lissajous') {
+                        // Lissajous: x = A sin(at + d), y = B sin(bt)
+                        // Here we map 'percent' to the parametric 't'
+                        const theta = percent * TWO_PI;
+                        x = cx + (r * amp) * sin(theta * p.kX + angle);
+                        y = cy + (r * amp) * cos(theta * p.kY); // Rotation affects X phase usually, or rotate whole context
+                        
+                        // To rotate the whole shape properly:
+                        // First calculate shape centered at 0,0
+                        let lx = r * sin(percent * TWO_PI * p.kX);
+                        let ly = r * cos(percent * TWO_PI * p.kY);
+                        
+                        // Apply audio
+                        lx *= (1 + audioVal * 0.3);
+                        ly *= (1 + audioVal * 0.3);
+
+                        // Rotate
+                        const rot = t * p.rotationSpeed;
+                        x = cx + (lx * cos(rot) - ly * sin(rot));
+                        y = cy + (lx * sin(rot) + ly * cos(rot));
+
+                    } else if (p.shape === 'superformula') {
+                        const sf = superformula(angle, p.m, p.n1, p.n2, p.n3);
+                        r *= sf * amp;
+                        x = cx + cos(angle) * r;
+                        y = cy + sin(angle) * r;
+                    } else if (p.shape === 'rose') {
+                        // Rose: r = cos(k * theta)
+                        // Use angle (which includes rotation) for theta
+                        // But usually rotation is separate. Let's strictly rotate shape.
+                        const theta = percent * TWO_PI; 
+                        let rr = r * cos(p.k * theta);
+                        rr *= amp;
+                        
+                        // Rotate points
+                        const rot = t * p.rotationSpeed;
+                        const rx = rr * cos(theta);
+                        const ry = rr * sin(theta);
+                        
+                        x = cx + (rx * cos(rot) - ry * sin(rot));
+                        y = cy + (rx * sin(rot) + ry * cos(rot));
+
+                    } else if (p.shape === 'custom_btc') {
+                         // Similar to previous BTC but optimized
+                         // Map angle to a B-shape profile
+                         // Simple approximation: 2 circles and a line
+                         // Polar approximation of a B is hard. Let's use the 'parametric' approach from before but cleaner.
+                         // Actually, let's do a simple "Polar B" modulation
+                         // B is roughly symmetric on Y if rotated -90
+                         // Let's stick to the manual stroke logic from before if we want a strict B, 
+                         // or we can use a text path? No, canvas text path is complex to modulate points.
+                         // Let's use the existing logic but smoothed.
+                         
+                         // We'll revert to the Segment Logic from 1.html for BTC/ETH as it was specific
+                         // BUT optimized rotation.
+                         let lx=0, ly=0;
+                         const bw = baseSize * 0.8; 
+                         const bh = baseSize * 1.2;
+                         
+                         if (percent < 0.2) { // Spine
+                             const lp = percent / 0.2;
+                             lx = -(bw * 0.3);
+                             ly = (bh/2) - (lp * bh);
+                         } else if (percent < 0.6) { // Top Loop
+                             const lp = (percent - 0.2) / 0.4;
+                             const la = -PI/2 + (lp * PI);
+                             lx = -(bw * 0.3) + (bw * 0.6) * cos(la);
+                             ly = -(bh * 0.25) + (bh * 0.25) * sin(la);
+                         } else { // Bottom Loop
+                             const lp = (percent - 0.6) / 0.4;
+                             const la = -PI/2 + (lp * PI);
+                             lx = -(bw * 0.3) + (bw * 0.7) * cos(la);
+                             ly = (bh * 0.25) + (bh * 0.25) * sin(la);
+                         }
+                         
+                         // Audio displace
+                         lx += lx * audioVal * 0.5;
+                         ly += ly * audioVal * 0.5;
+
+                         // Rotate
+                         const rot = t * p.rotationSpeed;
+                         x = cx + (lx * cos(rot) - ly * sin(rot));
+                         y = cy + (lx * sin(rot) + ly * cos(rot));
+
+                    } else if (p.shape === 'custom_eth') {
+                        // Octahedron
+                        const phase = (percent * 4) % 4;
+                        const stage = floor(phase);
+                        const tSeg = phase - stage;
+                        const wD = baseSize * 0.7; 
+                        const hD = baseSize * 1.3;
+                        const pts = [{x:0, y:-hD}, {x:wD, y:0}, {x:0, y:hD}, {x:-wD, y:0}, {x:0, y:-hD}];
+                        
+                        const p1 = pts[stage];
+                        const p2 = pts[stage+1];
+                        
+                        let lx = p1.x + (p2.x - p1.x) * tSeg;
+                        let ly = p1.y + (p2.y - p1.y) * tSeg;
+                        
+                        lx += lx * audioVal * 0.5;
+                        ly += ly * audioVal * 0.5;
+
+                        const rot = t * p.rotationSpeed;
+                        x = cx + (lx * cos(rot) - ly * sin(rot));
+                        y = cy + (lx * sin(rot) + ly * cos(rot));
+
+                    } else if (p.shape === 'spiral') {
+                        const spiralAngle = percent * TWO_PI * p.turns;
+                        r = (spiralAngle / (TWO_PI * p.turns)) * baseSize;
+                        r *= amp;
+                        
+                        const totalAngle = spiralAngle + (t * p.rotationSpeed);
+                        x = cx + cos(totalAngle) * r;
+                        y = cy + sin(totalAngle) * r;
+
+                    } else if (p.shape === 'custom_net') {
+                        // Just a circle with webbing style usually
+                        r *= amp;
+                        const rot = t * p.rotationSpeed + (percent * TWO_PI);
+                        x = cx + cos(rot) * r;
+                        y = cy + sin(rot) * r;
+                    } 
+                }
+
+                // --- DRAWING ---
+                if (p.style === 'dots') {
+                    // Draw dot
+                    ctx.moveTo(x, y);
+                    ctx.arc(x, y, 2, 0, TWO_PI);
+                } else if (p.style === 'web') {
+                    if (i % 2 === 0) {
+                        ctx.moveTo(cx, cy);
+                        ctx.lineTo(x, y);
+                    }
+                } else {
+                    // Line / Vector
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+            }
+            
+            // Finish path
+            if (p.style === 'dots') ctx.fill();
+            else ctx.stroke();
+
+            // Reset effects
+            ctx.shadowBlur = 0;
+        }
+
+        function loop() {
+            if (!isRunning) return;
+            draw(performance.now());
+            requestAnimationFrame(loop);
+        }
+
+        init();
+    </script>
+</body>
+</html>

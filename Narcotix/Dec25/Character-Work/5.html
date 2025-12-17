@@ -1,0 +1,616 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Oscilloscope X-3 // Ultra Chaos</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            filter: blur(0.4px) contrast(1.6) brightness(1.1); 
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10;
+            transition: opacity 0.8s ease;
+            backdrop-filter: blur(8px);
+        }
+
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .btn {
+            background: transparent;
+            color: #fff;
+            border: 2px solid #fff;
+            padding: 20px 60px;
+            font-family: inherit;
+            font-size: 24px;
+            font-weight: bold;
+            letter-spacing: 6px;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            text-transform: uppercase;
+            box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+            text-shadow: 0 0 10px rgba(255, 255, 255, 0.5);
+            animation: pulse-border 2s infinite;
+        }
+
+        @keyframes pulse-border {
+            0% { border-color: #fff; box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); }
+            50% { border-color: #f0f; box-shadow: 0 0 25px rgba(255, 0, 255, 0.5); }
+            100% { border-color: #fff; box-shadow: 0 0 15px rgba(255, 255, 255, 0.2); }
+        }
+
+        .btn:hover {
+            background: #fff;
+            color: #000;
+            box-shadow: 0 0 50px rgba(255, 255, 255, 0.8);
+        }
+
+        .controls-info {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 40px;
+            margin-top: 40px;
+            text-align: center;
+        }
+        
+        .control-group h3 {
+            color: #fff;
+            font-size: 14px;
+            border-bottom: 1px solid #333;
+            padding-bottom: 10px;
+            margin-bottom: 15px;
+            letter-spacing: 2px;
+        }
+        
+        .key {
+            display: inline-block;
+            border: 1px solid #666;
+            padding: 5px 10px;
+            border-radius: 4px;
+            color: #aaa;
+            font-size: 12px;
+            margin: 0 5px;
+        }
+
+        #hud {
+            position: absolute;
+            bottom: 40px;
+            left: 40px;
+            pointer-events: none;
+            color: rgba(255, 255, 255, 0.8);
+            z-index: 5;
+            text-align: left;
+        }
+
+        .hud-row {
+            margin-bottom: 15px;
+            display: flex;
+            align-items: center;
+        }
+
+        .hud-label {
+            font-size: 10px;
+            color: #666;
+            width: 80px;
+            letter-spacing: 1px;
+            text-transform: uppercase;
+        }
+
+        .hud-value {
+            font-size: 18px;
+            letter-spacing: 2px;
+            font-weight: bold;
+            text-shadow: 0 0 5px rgba(255,255,255,0.5);
+        }
+
+        .hud-value.visual { color: #0ff; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5); }
+        .hud-value.audio { color: #f0f; text-shadow: 0 0 10px rgba(255, 0, 255, 0.5); }
+
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <button class="btn" id="startBtn">INITIALIZE X-3</button>
+        
+        <div class="controls-info">
+            <div class="control-group">
+                <h3>VISUAL CORE</h3>
+                <span class="key">&larr;</span> <span class="key">&rarr;</span><br>
+                <span style="font-size:12px; color:#888; display:block; margin-top:5px;">Change Shape / Color</span>
+            </div>
+            <div class="control-group">
+                <h3>AUDIO CORE</h3>
+                <span class="key">&uarr;</span> <span class="key">&darr;</span><br>
+                <span style="font-size:12px; color:#888; display:block; margin-top:5px;">Change Freq / Modulation</span>
+            </div>
+        </div>
+    </div>
+
+    <div id="hud">
+        <div class="hud-row">
+            <div class="hud-label">VISUAL</div>
+            <div class="hud-value visual" id="hud-visual">--</div>
+        </div>
+        <div class="hud-row">
+            <div class="hud-label">AUDIO</div>
+            <div class="hud-value audio" id="hud-audio">--</div>
+        </div>
+    </div>
+
+    <canvas id="scope"></canvas>
+
+    <script>
+        // --- CONFIGURATION ---
+        const CONFIG = {
+            visualGain: 6.0,    
+            segments: 1400,      // Very High res for complex curves
+            trailAlpha: 0.18,    // Longer trails
+        };
+
+        const { PI, sin, cos, abs, pow, min, max, floor, exp, random } = Math;
+        const TWO_PI = 2 * PI;
+
+        // --- 1. AUDIO MODEL ---
+        const AUDIO_MODES = [
+            { name: "Pure Sine (60Hz)", freq: 60, type: 'sine', modFreq: 0, modDepth: 0 },
+            { name: "Deep Sub (40Hz)", freq: 40, type: 'sine', modFreq: 0, modDepth: 0 },
+            { name: "Power Hum (100Hz)", freq: 100, type: 'sine', modFreq: 50, modDepth: 5 },
+            
+            // FM Tones
+            { name: "Bell Chime", freq: 220, type: 'sine', modFreq: 220 * 1.4, modDepth: 100 },
+            { name: "Growl Bass", freq: 55, type: 'sawtooth', modFreq: 15, modDepth: 50 },
+            { name: "Laser Tremolo", freq: 150, type: 'sine', modFreq: 8, modDepth: 200 },
+            { name: "Telephone", freq: 440, type: 'square', modFreq: 400, modDepth: 200 },
+            { name: "Alien Engine", freq: 80, type: 'triangle', modFreq: 33, modDepth: 300 },
+            { name: "Data Glitch", freq: 1000, type: 'sawtooth', modFreq: 50, modDepth: 900 },
+            { name: "Ethereal Pad", freq: 140, type: 'sine', modFreq: 0.5, modDepth: 10 },
+        ];
+
+        // --- 2. VISUAL MODEL ---
+        // New Palettes
+        const PALETTES = {
+            'cyan': ['#00FFFF', '#0044FF'],
+            'neon_red': ['#FF0055', '#FF4400'],
+            'matrix': ['#00FF00', '#005500'],
+            'gold': ['#FFD700', '#FF8800'],
+            'plasma': ['#9900FF', '#0000FF'],
+            'white': ['#FFFFFF', '#888888'],
+            'vapor': ['#FF77FF', '#00FFFF'],
+            
+            // NEW
+            'radioactive': ['#CCFF00', '#00FF00'], // Toxic
+            'sunset': ['#FF00CC', '#FF5500'], // Vaporwave 2
+            'ice': ['#FFFFFF', '#00FFFF'], // Cold
+            'void': ['#4B0082', '#0000FF'] // Deep
+        };
+
+        const VISUAL_MODES = [
+            // --- NEW: PARAMETRIC CHAOS ---
+            { id: 'butterfly', name: "Chaos Butterfly", shape: 'butterfly', color: 'sunset', speed: 0.2, style: 'line' },
+            { id: 'attractor', name: "Orbital Attractor", shape: 'attractor', color: 'radioactive', speed: 1.0, style: 'dots' },
+            { id: 'grid', name: "Hyper Grid", shape: 'grid_warp', color: 'ice', speed: 0.1, style: 'web' },
+            
+            // --- EXISTING (Optimized) ---
+            { id: 'cube', name: "Quantum Cube", shape: 'cube3d', color: 'cyan', speed: 0.5, style: 'line' },
+            { id: 'dna', name: "DNA Helix", shape: 'dna', color: 'matrix', speed: 0.3, style: 'dots' },
+            { id: 'heart', name: "Cyber Heart", shape: 'heart', color: 'neon_red', speed: 0.2, style: 'line' },
+            { id: 'hole', name: "Black Hole", shape: 'spiral_hole', color: 'void', speed: 2.0, style: 'web' },
+            
+            // --- NEW: GEOMETRY ---
+            { id: 'flare', name: "Solar Flare", shape: 'superformula', m: 18, n1: 0.5, n2: 0.5, n3: 0.5, color: 'gold', speed: 0.1, style: 'line' },
+            { id: 'flower', name: "Neon Rose", shape: 'rose', k: 6, color: 'vapor', speed: 0.1, style: 'line' },
+            { id: 'noise', name: "Signal Noise", shape: 'noise_circle', color: 'white', speed: 1.0, style: 'line' },
+
+            // --- LISSAJOUS ---
+            { id: 'lis54', name: "Lissajous 5:4", shape: 'lissajous', kX: 5, kY: 4, color: 'gold', speed: 0.1, style: 'line' },
+        ];
+
+
+        // --- STATE ---
+        let vIndex = 0; 
+        let aIndex = 0; 
+        
+        let ctx, canvas, w, h, cx, cy, minDim;
+        let audioCtx, analyser, dataArray, osc, modOsc, modGain, masterGain;
+        let isRunning = false;
+        let currentGradient = null;
+
+        // --- INIT ---
+        function init() {
+            canvas = document.getElementById('scope');
+            ctx = canvas.getContext('2d', { alpha: false });
+            
+            window.addEventListener('resize', resize);
+            resize();
+
+            document.getElementById('startBtn').addEventListener('click', async () => {
+                await startAudio();
+                document.getElementById('overlay').classList.add('hidden');
+                isRunning = true;
+                updateHud();
+                loop();
+            });
+
+            document.addEventListener('keydown', (e) => {
+                if (!isRunning) return;
+                
+                if (e.key === 'ArrowRight') changeVisual(vIndex + 1);
+                if (e.key === 'ArrowLeft') changeVisual(vIndex - 1);
+                
+                if (e.key === 'ArrowUp') changeAudio(aIndex - 1); 
+                if (e.key === 'ArrowDown') changeAudio(aIndex + 1);
+            });
+        }
+
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            w = window.innerWidth;
+            h = window.innerHeight;
+            canvas.width = w * dpr;
+            canvas.height = h * dpr;
+            canvas.style.width = w + 'px';
+            canvas.style.height = h + 'px';
+            ctx.scale(dpr, dpr);
+            cx = w / 2; cy = h / 2;
+            minDim = min(w, h);
+            currentGradient = null;
+        }
+
+        // --- UPDATES ---
+        function changeVisual(idx) {
+            if (idx < 0) idx = VISUAL_MODES.length - 1;
+            if (idx >= VISUAL_MODES.length) idx = 0;
+            vIndex = idx;
+            currentGradient = null;
+            updateHud();
+        }
+
+        function changeAudio(idx) {
+            if (idx < 0) idx = AUDIO_MODES.length - 1;
+            if (idx >= AUDIO_MODES.length) idx = 0;
+            aIndex = idx;
+            
+            const mode = AUDIO_MODES[aIndex];
+            if (audioCtx && osc) {
+                const now = audioCtx.currentTime;
+                osc.frequency.setValueAtTime(osc.frequency.value, now);
+                osc.frequency.exponentialRampToValueAtTime(mode.freq, now + 0.1);
+                osc.type = mode.type;
+
+                modOsc.frequency.setValueAtTime(modOsc.frequency.value, now);
+                modOsc.frequency.linearRampToValueAtTime(mode.modFreq, now + 0.1);
+                
+                modGain.gain.setValueAtTime(modGain.gain.value, now);
+                modGain.gain.linearRampToValueAtTime(mode.modDepth, now + 0.1);
+            }
+            updateHud();
+        }
+
+        function updateHud() {
+            const v = VISUAL_MODES[vIndex];
+            const a = AUDIO_MODES[aIndex];
+            
+            document.getElementById('hud-visual').innerHTML = `${v.name} <span style="font-size:10px; color:#666;">[${vIndex+1}/${VISUAL_MODES.length}]</span>`;
+            document.getElementById('hud-visual').style.color = PALETTES[v.color][0];
+            
+            document.getElementById('hud-audio').innerHTML = `${a.name} <span style="font-size:10px; color:#666;">[${aIndex+1}/${AUDIO_MODES.length}]</span>`;
+        }
+
+        async function startAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            osc = audioCtx.createOscillator();
+            modOsc = audioCtx.createOscillator();
+            modGain = audioCtx.createGain();
+            modOsc.connect(modGain);
+            modGain.connect(osc.frequency);
+            
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 2048;
+            analyser.smoothingTimeConstant = 0.85;
+            dataArray = new Float32Array(analyser.fftSize);
+            
+            const vGain = audioCtx.createGain();
+            vGain.gain.value = CONFIG.visualGain;
+            
+            masterGain = audioCtx.createGain();
+            masterGain.gain.value = 0.15; // Slightly louder
+
+            osc.connect(vGain);
+            vGain.connect(analyser);
+            analyser.connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+
+            osc.start();
+            modOsc.start();
+            changeAudio(aIndex);
+        }
+
+        // --- MATH SHAPES ---
+        function superformula(phi, m, n1, n2, n3) {
+            if (n1 === 0) return 0;
+            const a = 1, b = 1;
+            const t1 = abs(cos(m * phi / 4) / a);
+            const t2 = pow(t1, n2);
+            const t3 = abs(sin(m * phi / 4) / b);
+            const t4 = pow(t3, n3);
+            return pow(t2 + t4, -1 / n1);
+        }
+
+        function project3D(x, y, z, t) {
+            const rotSpeed = 0.5;
+            const ang = t * rotSpeed;
+            // Rotate Y
+            const x1 = x * cos(ang) - z * sin(ang);
+            const z1 = z * cos(ang) + x * sin(ang);
+            // Rotate X
+            const y2 = y * cos(ang*0.5) - z1 * sin(ang*0.5);
+            const z2 = z1 * cos(ang*0.5) + y * sin(ang*0.5);
+            const fov = 350;
+            const scale = fov / (fov + z2);
+            return { x: x1 * scale, y: y2 * scale, s: scale };
+        }
+
+        // --- RENDER LOOP ---
+        function draw(time) {
+            const t = time * 0.001; 
+            const v = VISUAL_MODES[vIndex];
+            
+            // FADE
+            ctx.globalCompositeOperation = 'source-over';
+            ctx.fillStyle = `rgba(0, 0, 0, ${CONFIG.trailAlpha})`;
+            ctx.fillRect(0, 0, w, h);
+
+            if (!analyser) return;
+            analyser.getFloatTimeDomainData(dataArray);
+
+            // STYLE
+            ctx.globalCompositeOperation = 'lighter'; 
+            
+            if (!currentGradient) {
+                const colors = PALETTES[v.color];
+                const g = ctx.createLinearGradient(0, 0, w, h);
+                colors.forEach((c, i) => g.addColorStop(i / (colors.length - 1), c));
+                currentGradient = g;
+            }
+            
+            ctx.strokeStyle = currentGradient;
+            ctx.fillStyle = currentGradient;
+            ctx.lineWidth = v.style === 'dots' ? 0 : 2;
+            ctx.shadowColor = PALETTES[v.color][0];
+            ctx.shadowBlur = 15; // Increased glow
+
+            const bufferLen = dataArray.length;
+            const segs = CONFIG.segments;
+            const baseSize = minDim * 0.35;
+            
+            ctx.beginPath();
+            
+            // --- 3D / SPECIAL MODES ---
+            if (v.shape === 'cube3d') {
+                const audioScale = 1 + dataArray[0] * 0.5;
+                const s = baseSize * 0.5 * audioScale;
+                const verts = [
+                    {x:-s,y:-s,z:-s}, {x:s,y:-s,z:-s}, {x:s,y:s,z:-s}, {x:-s,y:s,z:-s},
+                    {x:-s,y:-s,z:s},  {x:s,y:-s,z:s},  {x:s,y:s,z:s},  {x:-s,y:s,z:s}
+                ];
+                const p = verts.map(pt => project3D(pt.x, pt.y, pt.z, t));
+                const edges = [
+                    [0,1], [1,2], [2,3], [3,0], 
+                    [4,5], [5,6], [6,7], [7,4], 
+                    [0,4], [1,5], [2,6], [3,7]
+                ];
+                ctx.beginPath();
+                edges.forEach(e => {
+                    const p1 = p[e[0]];
+                    const p2 = p[e[1]];
+                    ctx.moveTo(cx + p1.x, cy + p1.y);
+                    ctx.lineTo(cx + p2.x, cy + p2.y);
+                });
+                ctx.stroke();
+                return;
+            }
+
+            // --- STANDARD LOOP ---
+            for (let i = 0; i <= segs; i++) {
+                const pct = i / segs;
+                
+                // Audio Mapping
+                let audioIdx = 0;
+                if (v.shape.includes('linear')) {
+                    audioIdx = floor(pct * (bufferLen - 1));
+                } else {
+                    const mp = 1 - abs((pct * 2) - 1);
+                    audioIdx = floor(mp * (bufferLen - 1));
+                }
+                const rawAudio = dataArray[audioIdx];
+                const amp = 1 + (rawAudio * 0.4);
+
+                let x = 0, y = 0;
+
+                // --- SHAPE ALGORITHMS ---
+                if (v.shape === 'butterfly') {
+                    // Temple H. Fay butterfly curve
+                    const ang = pct * TWO_PI;
+                    // r = exp(cos(t)) - 2cos(4t) + sin^5(t/12)
+                    const rBase = exp(cos(ang)) - 2*cos(4*ang) + pow(sin(ang/12), 5);
+                    const r = (baseSize * 0.2) * rBase * amp;
+                    
+                    const rot = t * v.speed;
+                    x = cx + r * cos(ang + rot);
+                    y = cy + r * sin(ang + rot);
+                }
+                else if (v.shape === 'attractor') {
+                    // Simulated chaos loop (Rossler-ish projection)
+                    // We map percent to 't' along a trajectory
+                    const loopT = pct * TWO_PI * 5; // 5 loops
+                    const rad = baseSize * (0.5 + 0.3 * sin(loopT * 3));
+                    // Add z-axis rotation sim
+                    const z = cos(loopT * 2);
+                    const scale = 1 / (1 - z * 0.2);
+                    
+                    const rot = t * v.speed;
+                    const rX = rad * cos(loopT);
+                    const rY = rad * sin(loopT);
+                    
+                    x = cx + (rX * cos(rot) - rY * sin(rot)) * scale;
+                    y = cy + (rX * sin(rot) + rY * cos(rot)) * scale;
+                    
+                    // Jitter audio
+                    x += rawAudio * 30;
+                    y += rawAudio * 30;
+                }
+                else if (v.shape === 'grid_warp') {
+                    // 3D Grid floor perspective
+                    // We draw lines radiating out
+                    // Just one line strip? No, let's draw a mesh cross section
+                    // Actually, let's do a "Radar" sweep line or "Terrain" line
+                    // Let's do a circular terrain mesh (single scanline)
+                    const ang = pct * TWO_PI;
+                    const noise = sin(ang * 10) * sin(ang * 4 + t); // Fake noise
+                    const r = baseSize * (0.5 + 0.1 * noise + 0.4 * rawAudio);
+                    
+                    // Rotate
+                    const rot = t * v.speed;
+                    x = cx + cos(ang + rot) * r;
+                    y = cy + sin(ang + rot) * r;
+                }
+                else if (v.shape === 'noise_circle') {
+                    const ang = pct * TWO_PI;
+                    // Add randomness to radius
+                    const r = baseSize * (1 + rawAudio * 0.8 + 0.1 * sin(ang * 50));
+                    x = cx + cos(ang) * r;
+                    y = cy + sin(ang) * r;
+                }
+                else if (v.shape === 'rose') {
+                    const ang = pct * TWO_PI;
+                    const k = v.k;
+                    const r = baseSize * cos(k * ang) * amp;
+                    const rot = t * v.speed;
+                    x = cx + r * cos(ang + rot);
+                    y = cy + r * sin(ang + rot);
+                }
+                else if (v.shape === 'linear') {
+                    x = (w * 0.1) + (w * 0.8) * pct;
+                    y = cy + (rawAudio * 200);
+                }
+                else if (v.shape === 'linear_fill') {
+                    x = (w * 0.1) + (w * 0.8) * pct;
+                    y = cy;
+                    const h = rawAudio * 200;
+                    ctx.moveTo(x, cy - h);
+                    ctx.lineTo(x, cy + h);
+                    continue; 
+                }
+                else if (v.shape === 'dna') {
+                    const helixX = (pct - 0.5) * w * 0.8;
+                    const phase = t * v.speed;
+                    const y1 = sin(pct * TWO_PI * 5 + phase) * 100 * amp;
+                    x = cx + helixX;
+                    y = cy + y1;
+                }
+                else if (v.shape === 'heart') {
+                    const ang = pct * TWO_PI;
+                    const scale = baseSize * 0.05 * amp;
+                    const rx = 16 * pow(sin(ang), 3);
+                    const ry = -(13 * cos(ang) - 5 * cos(2*ang) - 2 * cos(3*ang) - cos(4*ang)); 
+                    x = cx + rx * scale;
+                    y = cy + ry * scale;
+                }
+                else if (v.shape === 'lissajous') {
+                    const ang = pct * TWO_PI;
+                    const phase = t * v.speed;
+                    x = cx + cos(ang * v.kX + phase) * baseSize * amp;
+                    y = cy + sin(ang * v.kY) * baseSize * amp;
+                }
+                else if (v.shape === 'superformula') {
+                    const ang = pct * TWO_PI + (t * v.speed);
+                    let r = baseSize * superformula(ang, v.m, v.n1, v.n2, v.n3);
+                    r *= amp;
+                    x = cx + cos(ang) * r;
+                    y = cy + sin(ang) * r;
+                }
+                else if (v.shape === 'atom') {
+                    const ang = pct * TWO_PI * 10;
+                    const r = baseSize * (0.8 + 0.2 * sin(pct * TWO_PI * 3 + t));
+                    const rX = r * cos(ang);
+                    const rY = r * sin(ang);
+                    const rot = t * v.speed;
+                    x = cx + rX * cos(rot) - rY * sin(rot);
+                    y = cy + rX * sin(rot) + rY * cos(rot);
+                    x += rawAudio * 20;
+                    y += rawAudio * 20;
+                }
+                else if (v.shape === 'spiral_hole') {
+                    const ang = pct * TWO_PI * 10 + (t * v.speed);
+                    const r = pct * baseSize * amp;
+                    x = cx + cos(ang) * r;
+                    y = cy + sin(ang) * r;
+                }
+
+                // DRAW POINT
+                if (v.style === 'dots') {
+                    ctx.moveTo(x, y);
+                    ctx.arc(x, y, 2, 0, TWO_PI);
+                }
+                else if (v.style === 'web') {
+                    if (i % 2 === 0) {
+                        ctx.moveTo(cx, cy);
+                        ctx.lineTo(x, y);
+                    }
+                }
+                else {
+                    if (i === 0) ctx.moveTo(x, y);
+                    else ctx.lineTo(x, y);
+                }
+            }
+            
+            if (v.style !== 'dots' && !v.shape.includes('fill')) {
+                ctx.stroke();
+            } else if (v.style === 'dots') {
+                ctx.fill();
+            } else if (v.shape === 'linear_fill') {
+                ctx.stroke();
+            }
+
+            ctx.shadowBlur = 0;
+        }
+
+        function loop() {
+            if (!isRunning) return;
+            draw(performance.now());
+            requestAnimationFrame(loop);
+        }
+
+        init();
+    </script>
+</body>
+</html>
