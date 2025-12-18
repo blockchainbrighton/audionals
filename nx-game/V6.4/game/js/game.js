@@ -3,6 +3,7 @@ import * as config from './config.js';
 import * as utils from './utils.js';
 import { EventBus } from './eventBus.js'; // Import EventBus
 import { Projectile } from './Projectile.js'; // Import Projectile
+import { WorldItem } from './WorldItem.js'; // Import WorldItem
 import { mapManager, TILE_PROPERTIES } from './mapManager.js'; // Import TILE_PROPERTIES
 import { player } from './player/player.js'; // This import remains the same
 import { itemManager } from './itemManager.js';
@@ -186,13 +187,14 @@ export const game = {
         // Spawn Walkman inside Safehouse (5, 7)
         const walkman = this.itemManager.createItemById('walkman');
         if (walkman) {
-            const walkmanItem = {
-                ...walkman,
-                x: 5 * this.config.TILE_SIZE,
-                y: 7 * this.config.TILE_SIZE,
-                width: this.config.TILE_SIZE * 0.8,
-                height: this.config.TILE_SIZE * 0.8
-            };
+            const walkmanItem = new WorldItem(
+                this, 
+                5 * this.config.TILE_SIZE, 
+                7 * this.config.TILE_SIZE, 
+                this.config.TILE_SIZE * 0.8, 
+                this.config.TILE_SIZE * 0.8, 
+                walkman
+            );
             this.itemManager.onMapItems.push(walkmanItem);
             this.entities.push(walkmanItem); // Add to render list
         }
