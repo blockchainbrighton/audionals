@@ -24,7 +24,7 @@ export const imageLoader = {
         if (urlCache.has(cleanId)) {
             return urlCache.get(cleanId);
         }
-        return `https://assets.hiro.so/api/mainnet/token-metadata-api/${CONTRACT}/${cleanId}.png`;
+        return `https://assets.hiro.so/api/mainnet/token-metadata-api/${CONTRACT}/${cleanId}.png?cors=1`;
     },
 
     /**
@@ -39,8 +39,8 @@ export const imageLoader = {
         if (urlCache.has(cleanId) || preloading.has(cleanId)) return;
         preloading.add(cleanId);
 
-        const hiroUrl = `https://assets.hiro.so/api/mainnet/token-metadata-api/${CONTRACT}/${cleanId}.png`;
-        const ipfsUrl = `${IPFS_BASE}/%23${cleanId}.png`;
+        const hiroUrl = `https://assets.hiro.so/api/mainnet/token-metadata-api/${CONTRACT}/${cleanId}.png?cors=1`;
+        const ipfsUrl = `${IPFS_BASE}/%23${cleanId}.png?cors=1`;
 
         // Attempt to load Hiro
         this._checkImage(hiroUrl)
