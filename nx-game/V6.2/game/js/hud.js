@@ -129,6 +129,7 @@ export const hud = {
 
     setupInput: function() {
         window.addEventListener('keydown', (e) => {
+            if (e.repeat) return; // Prevent hold-down repeating
             const key = e.key.toLowerCase();
             
             // ADMIN HOTKEYS
