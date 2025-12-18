@@ -10,6 +10,9 @@ export const GAME_MINUTES_PER_DAY = 24 * 60;
 export const MAX_MESSAGES = 10;
 export const TUTORIAL_DISPLAY_TIME = 5000; // Default
 
+// Game Version - UPDATE THIS ON EVERY NEW VERSION DEPLOYMENT
+export const GAME_VERSION = "V6.3.0";
+
 // Camera Config
 export const CAMERA_ZOOM_DEFAULT = 1.0;
 export const CAMERA_ZOOM_MIN = 0.5;
