@@ -70,11 +70,17 @@ export const imageLoader = {
     _checkImage: function(src) {
         return new Promise((resolve) => {
             const img = new Image();
-            img.onload = () => resolve(true);
-            img.onerror = () => resolve(false);
             img.crossOrigin = 'anonymous'; // Enable CORS for COEP
             img.referrerPolicy = 'no-referrer'; // Important for Hiro/IPFS
             img.src = src;
+            
+            // Use decode() to ensure the image is fully loaded and can be painted
+            img.decode()
+                .then(() => resolve(true))
+                .catch((err) => {
+                    console.warn(`[ImageLoader] Decode failed for ${src}:`, err);
+                    resolve(false);
+                });
         });
     },
 
