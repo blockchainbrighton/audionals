@@ -4,6 +4,7 @@ import { imageLoader } from './imageLoader.js';
 export const hud = {
     game: null,
     activeItemIndex: -1, // Track which item is being inspected
+    showAllPois: false, // Admin flag to show all arrows
 
 // Helper for mapping POI types to display names
     poiNames: {
@@ -47,7 +48,9 @@ export const hud = {
             let newHovered = null;
 
             this.game.minimap.poiCache.forEach(poi => {
-                if (this.game.discovery && !this.game.discovery.shouldShowPoi(poi.type)) return;
+                // Respect discovery logic OR Admin override
+                if (!this.showAllPois && this.game.discovery && !this.game.discovery.shouldShowPoi(poi.type)) return;
+                
                 const targetPos = this.calculateArrowPosition(poi);
                 if (!targetPos) return; // POI is on screen
 
@@ -126,9 +129,16 @@ export const hud = {
 
     setupInput: function() {
         window.addEventListener('keydown', (e) => {
+            const key = e.key.toLowerCase();
+            
+            // ADMIN HOTKEYS
+            if (key === 'a') {
+                this.showAllPois = !this.showAllPois;
+                this.game.utils.addMessage(`[ADMIN] Show All POIs: ${this.showAllPois ? 'ON' : 'OFF'}`);
+            }
+
             const detailView = document.getElementById('itemDetailView');
             if (detailView && detailView.style.display === 'block') {
-                const key = e.key.toLowerCase();
                 const index = this.activeItemIndex;
                 const inInventory = index > -1;
 
@@ -236,7 +246,9 @@ export const hud = {
         const screenH = this.game.canvas.height;
 
         this.game.minimap.poiCache.forEach(poi => {
-            if (this.game.discovery && !this.game.discovery.shouldShowPoi(poi.type)) return;
+            // Respect discovery logic OR Admin override
+            if (!this.showAllPois && this.game.discovery && !this.game.discovery.shouldShowPoi(poi.type)) return;
+            
             const targetPos = this.calculateArrowPosition(poi);
             if (!targetPos) return; // POI is on screen
 
