@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Liquid Rings (Ultra-Low Frequencies)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.85);
+            z-index: 10;
+            transition: opacity 0.8s ease;
+        }
+
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .btn {
+            padding: 15px 40px;
+            font-size: 20px;
+            font-family: inherit;
+            color: #fff;
+            background: transparent;
+            border: 1px solid #fff;
+            border-radius: 50px;
+            cursor: pointer;
+            transition: all 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 3px;
+        }
+
+        .btn:hover {
+            background: #fff;
+            color: #000;
+            box-shadow: 0 0 30px rgba(255, 255, 255, 0.3);
+        }
+
+        .controls-hint {
+            margin-top: 30px;
+            text-align: center;
+            color: #666;
+            font-size: 0.8em;
+            line-height: 1.8em;
+        }
+
+        /* Status Indicator */
+        #status {
+            position: absolute;
+            bottom: 40px;
+            left: 50%;
+            transform: translateX(-50%);
+            color: #aaa;
+            font-size: 14px;
+            letter-spacing: 2px;
+            pointer-events: none;
+            opacity: 0;
+            transition: opacity 1s;
+            text-align: center;
+        }
+        
+        #status.visible {
+            opacity: 1;
+        }
+
+        .key {
+            border: 1px solid #444;
+            padding: 2px 8px;
+            border-radius: 4px;
+            background: #000;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <button class="btn" id="startBtn">Initialize Flow</button>
+        <div class="controls-hint">
+            <p>Use <span class="key">←</span> <span class="key">→</span> or <span class="key">1</span>-<span class="key">5</span> to tune frequency.</p>
+        </div>
+    </div>
+
+    <div id="status">INITIALIZING...</div>
+
+    <canvas id="scope"></canvas>
+
+    <script>
+        // --- Constants ---
+        const TWO_PI = 2 * Math.PI;
+        // Even slower global movement for that "liquid" feel
+        const speedFactor = 0.02;         
+
+        // --- Low Frequency Presets ---
+        const presets = [
+            { freq: 40, label: "40Hz - Deep Hum" },
+            { freq: 20, label: "20Hz - Infrasound Edge" },
+            { freq: 10, label: "10Hz - Alpha Throbs" }, 
+            { freq: 4,  label: "4Hz - Theta Rhythm" },
+            { freq: 1,  label: "1Hz - Slow Breath" } 
+        ];
+        
+        // Start at 20Hz
+        let currentPresetIndex = 1; 
+
+        // --- Global State ---
+        let ctx, canvas;
+        let audioCtx, analyser, dataArray;
+        // We add a separate array to store the "smoothed" visual state
+        // This prevents jitter when the audio buffer updates
+        let visualBuffer = []; 
+        
+        let oscillatorNode = null;
+        let isRunning = false;
+        let uiTimeout;
+
+        function init() {
+            canvas = document.getElementById('scope');
+            ctx = canvas.getContext('2d');
+            
+            window.addEventListener('resize', resize);
+            resize();
+            window.addEventListener('keydown', handleInput);
+
+            document.getElementById('startBtn').addEventListener('click', async () => {
+                await startAudio();
+                document.getElementById('overlay').classList.add('hidden');
+                isRunning = true;
+                changePreset(currentPresetIndex); // Trigger initial status
+                loop();
+            });
+        }
+
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            ctx.scale(dpr, dpr);
+        }
+
+        function handleInput(e) {
+            if (!isRunning) return;
+
+            if (e.key >= '1' && e.key <= '5') {
+                const idx = parseInt(e.key) - 1;
+                if (idx < presets.length) changePreset(idx);
+            }
+            else if (e.key === 'ArrowRight') {
+                let newIdx = currentPresetIndex + 1;
+                if (newIdx >= presets.length) newIdx = 0;
+                changePreset(newIdx);
+            }
+            else if (e.key === 'ArrowLeft') {
+                let newIdx = currentPresetIndex - 1;
+                if (newIdx < 0) newIdx = presets.length - 1;
+                changePreset(newIdx);
+            }
+        }
+
+        function changePreset(index) {
+            currentPresetIndex = index;
+            const p = presets[index];
+
+            if (audioCtx && oscillatorNode) {
+                const now = audioCtx.currentTime;
+                // Longer ramp time (0.5s) for smoother frequency transitions
+                oscillatorNode.frequency.exponentialRampToValueAtTime(p.freq, now + 0.5);
+            }
+
+            const statusEl = document.getElementById('status');
+            statusEl.innerText = p.label;
+            statusEl.classList.add('visible');
+            
+            clearTimeout(uiTimeout);
+            uiTimeout = setTimeout(() => {
+                statusEl.classList.remove('visible');
+            }, 3000);
+        }
+
+        async function startAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            analyser = audioCtx.createAnalyser();
+            
+            // Max FFT size for highest resolution of low frequencies
+            analyser.fftSize = 2048; 
+            // High smoothing on the audio node itself
+            analyser.smoothingTimeConstant = 0.9; 
+            
+            dataArray = new Float32Array(analyser.fftSize);
+            // Initialize visual buffer with zeros
+            visualBuffer = new Array(analyser.fftSize).fill(0);
+
+            oscillatorNode = audioCtx.createOscillator();
+            oscillatorNode.type = 'sine';
+            oscillatorNode.frequency.value = presets[currentPresetIndex].freq;
+
+            const gainVisual = audioCtx.createGain();
+            gainVisual.gain.value = 1.0; 
+
+            // Extremely quiet audio path (1% volume)
+            const gainAudio = audioCtx.createGain();
+            gainAudio.gain.value = 0.01; 
+
+            oscillatorNode.connect(gainVisual);
+            gainVisual.connect(analyser);
+
+            oscillatorNode.connect(gainAudio);
+            gainAudio.connect(audioCtx.destination);
+
+            oscillatorNode.start();
+        }
+
+        function draw(rawTime) {
+            const time = rawTime * speedFactor;
+            
+            const width = window.innerWidth;
+            const height = window.innerHeight;
+            
+            // Subtle trail effect (drawing black with low opacity)
+            // This blurs movement slightly, adding to smoothness
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.2)';
+            ctx.fillRect(0, 0, width, height);
+
+            if (analyser) {
+                analyser.getFloatTimeDomainData(dataArray);
+            }
+
+            const centerX = width / 2;
+            const centerY = height / 2;
+            const baseSize = Math.min(width, height) / 2.5; 
+
+            // Base Breathing (Independent of audio)
+            const r0 = 0.33 * baseSize + 5 * Math.sin(0.0002 * time);
+
+            // --- 1. Inner Ghost Circle ---
+            ctx.save();
+            ctx.globalAlpha = 0.1 + 0.05 * Math.sin(0.0003 * time);
+            ctx.beginPath();
+            ctx.arc(centerX, centerY, r0 * 0.85, 0, TWO_PI);
+            ctx.strokeStyle = '#fff'; 
+            ctx.lineWidth = 1;
+            ctx.stroke();
+            ctx.restore();
+
+            // --- 2. The Main Ring ---
+            ctx.strokeStyle = 'hsl(195, 70%, 60%)';
+            ctx.lineWidth = 3; // Slightly thicker
+            ctx.lineJoin = 'round';
+            // Heavy glow for "Neon/Liquid" look
+            ctx.shadowBlur = 20;
+            ctx.shadowColor = 'rgba(100, 200, 255, 0.5)';
+            ctx.globalAlpha = 0.9;
+            
+            ctx.beginPath();
+
+            // We use fewer visual segments than audio data to keep lines smooth
+            const segments = 180; 
+            
+            for (let i = 0; i <= segments; i++) {
+                const angle = (i / segments) * TWO_PI;
+
+                // --- A. Procedural Liquid Warp ---
+                // Slower math for "heavy liquid" feel
+                const warp = 15 * Math.sin(2 * angle + 0.0003 * time) + 
+                             8  * Math.cos(4 * angle - 0.0002 * time);
+
+                // --- B. Smoothed Audio Reactivity ---
+                const audioIdx = Math.floor(i * (dataArray.length / segments));
+                const rawAudioVal = dataArray[audioIdx] || 0;
+
+                // INTERPOLATION STEP (The Smoothness Fix):
+                // Instead of setting visualBuffer = rawAudioVal immediately,
+                // we move visualBuffer 10% towards rawAudioVal. 
+                // This removes jagged jumps.
+                visualBuffer[i] = visualBuffer[i] + (rawAudioVal - visualBuffer[i]) * 0.1;
+
+                // Scaling: Lower frequencies (like 1Hz) move the wave very slowly.
+                // We boost the visual height so even 1Hz is visible.
+                const amplitude = 40; 
+                const audioOffset = amplitude * visualBuffer[i];
+
+                const radius = r0 + warp + audioOffset;
+                const x = centerX + Math.cos(angle) * radius;
+                const y = centerY + Math.sin(angle) * radius;
+
+                if (i === 0) {
+                    ctx.moveTo(x, y);
+                } else {
+                    ctx.lineTo(x, y);
+                }
+            }
+
+            ctx.closePath();
+            ctx.stroke();
+            ctx.shadowBlur = 0; 
+        }
+
+        function loop() {
+            if (!isRunning) return;
+            draw(performance.now());
+            requestAnimationFrame(loop);
+        }
+
+        init();
+    </script>
+</body>
+</html>

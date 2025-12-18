@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Ocean Wave Simulation</title>
+  <style>
+    :root{
+      --panel:rgba(10,16,28,.52);
+      --panel2:rgba(10,16,28,.36);
+      --border:rgba(255,255,255,.12);
+      --text:rgba(255,255,255,.9);
+      --muted:rgba(255,255,255,.7);
+      --accent:rgba(140,200,255,.9);
+      --shadow: 0 12px 40px rgba(0,0,0,.35);
+      --blur: 16px;
+      --radius: 18px;
+    }
+    html,body{height:100%;margin:0;background:radial-gradient(1200px 900px at 55% 30%, #0b1730 0%, #060a11 55%, #05070d 100%); color:var(--text); font:14px/1.35 system-ui,-apple-system,Segoe UI,Roboto,Arial;}
+    #wrap{position:relative;height:100%;overflow:hidden;}
+    canvas{position:absolute;inset:0;width:100%;height:100%;display:block;}
+    .hud{position:absolute;left:18px;top:18px;right:18px;display:flex;gap:14px;align-items:flex-start;justify-content:space-between;pointer-events:none;}
+    .card{pointer-events:auto;background:linear-gradient(180deg,var(--panel),var(--panel2));border:1px solid var(--border);box-shadow:var(--shadow);backdrop-filter: blur(var(--blur));border-radius:var(--radius);}
+    .title{padding:14px 16px 12px 16px;max-width:min(520px, calc(100vw - 36px));}
+    .title h1{margin:0;font-size:15px;letter-spacing:.3px;font-weight:600;display:flex;gap:10px;align-items:center;}
+    .dot{width:10px;height:10px;border-radius:999px;background:radial-gradient(circle at 30% 30%, #d7f3ff 0%, var(--accent) 35%, rgba(140,200,255,.15) 70%);box-shadow: 0 0 18px rgba(140,200,255,.35);flex:0 0 auto;}
+    .title p{margin:6px 0 0 0;color:var(--muted);font-size:12.5px;}
+    .controls{padding:12px 14px 12px 14px;width:min(400px, calc(100vw - 36px));}
+    .row{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:9px 0;}
+    .row label{color:var(--muted);font-size:12.5px;user-select:none;}
+    .val{font-variant-numeric:tabular-nums;color:rgba(255,255,255,.85);font-size:12.5px;min-width:52px;text-align:right;}
+    .stack{display:flex;flex-direction:column;gap:4px;flex:1;}
+    input[type="range"]{width:100%; accent-color: rgba(160,210,255,.95); height: 18px; background: transparent;}
+    .footerHint{
+      position:absolute;left:18px;bottom:16px;padding:10px 12px;border-radius:999px;
+      background:rgba(10,16,28,.35);border:1px solid rgba(255,255,255,.10);
+      color:rgba(255,255,255,.62);backdrop-filter: blur(10px);pointer-events:none;font-size:12px;
+    }
+    .kbd{padding:.1em .45em;border-radius:8px;border:1px solid rgba(255,255,255,.16);background:rgba(255,255,255,.06);color:rgba(255,255,255,.75);}
+    .miniRow{display:flex;align-items:center;justify-content:space-between;gap:10px;margin:10px 0 2px;}
+    select{
+      width:100%;padding:8px 10px;border-radius:12px;border:1px solid rgba(255,255,255,.14);
+      background:rgba(0,0,0,.18);color:rgba(255,255,255,.85);outline:none;
+    }
+    @media (max-width: 760px){ .hud{flex-direction:column;align-items:stretch;} .controls{width:auto;} }
+  </style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="c"></canvas>
+
+  <div class="hud">
+    <div class="card title">
+      <h1><span class="dot"></span>Ocean Wave Simulation</h1>
+      <p>More realistic swells + foam + specular reflection (GPU-rendered for smooth performance).</p>
+    </div>
+
+    <div class="card controls" id="panel">
+      <div class="row">
+        <div class="stack">
+          <label for="wind">Wind speed</label>
+          <input id="wind" type="range" min="0" max="100" value="55" />
+        </div>
+        <div class="val" id="windVal">0.55</div>
+      </div>
+
+      <div class="row">
+        <div class="stack">
+          <label for="height">Wave height</label>
+          <input id="height" type="range" min="0" max="100" value="45" />
+        </div>
+        <div class="val" id="heightVal">0.45</div>
+      </div>
+
+      <div class="row">
+        <div class="stack">
+          <label for="light">Lighting</label>
+          <input id="light" type="range" min="0" max="100" value="60" />
+        </div>
+        <div class="val" id="lightVal">0.60</div>
+      </div>
+
+      <div class="miniRow">
+        <label style="color:rgba(255,255,255,.7);font-size:12.5px;">Quality</label>
+      </div>
+      <select id="quality">
+        <option value="1">High (native)</option>
+        <option value="1.25">Balanced</option>
+        <option value="1.5" selected>Fast</option>
+        <option value="2">Very fast</option>
+      </select>
+    </div>
+  </div>
+
+  <div class="footerHint">
+    Tip: press <span class="kbd">H</span> to hide/show controls.
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('c');
+
+  // UI
+  const panel = document.getElementById('panel');
+  const wind = document.getElementById('wind');
+  const height = document.getElementById('height');
+  const light = document.getElementById('light');
+  const qualitySel = document.getElementById('quality');
+  const windVal = document.getElementById('windVal');
+  const heightVal = document.getElementById('heightVal');
+  const lightVal = document.getElementById('lightVal');
+
+  let UI = { w:0.55, a:0.45, l:0.60, q:1.5 };
+  function readUI(){
+    UI.w = wind.value/100;
+    UI.a = height.value/100;
+    UI.l = light.value/100;
+    UI.q = parseFloat(qualitySel.value || "1.5");
+    windVal.textContent   = UI.w.toFixed(2);
+    heightVal.textContent = UI.a.toFixed(2);
+    lightVal.textContent  = UI.l.toFixed(2);
+  }
+  [wind,height,light,qualitySel].forEach(el => el.addEventListener('input', () => { readUI(); resize(); }, { passive:true }));
+  readUI();
+
+  addEventListener('keydown', (e)=>{
+    if ((e.key||"").toLowerCase()==='h'){
+      panel.style.display = (panel.style.display==='none') ? '' : 'none';
+    }
+  });
+
+  // WebGL
+  const gl = canvas.getContext('webgl', { antialias:false, alpha:false, depth:false, stencil:false, premultipliedAlpha:false });
+  if (!gl) {
+    document.body.innerHTML = '<div style="padding:24px;color:#fff;font:14px system-ui">WebGL not available in this browser.</div>';
+    return;
+  }
+
+  const vertSrc = `
+    attribute vec2 aPos;
+    varying vec2 vUv;
+    void main(){
+      vUv = aPos * 0.5 + 0.5;
+      gl_Position = vec4(aPos, 0.0, 1.0);
+    }
+  `;
+
+  // More realistic: multi-direction Gerstner-like swells + small wind ripples, normals from analytic derivatives.
+  const fragSrc = `
+    precision mediump float;
+    varying vec2 vUv;
+    uniform vec2 uRes;
+    uniform float uTime;
+    uniform float uWind;
+    uniform float uAmp;
+    uniform float uLight;
+
+    #define PI 3.14159265359
+
+    float sat(float x){ return clamp(x, 0.0, 1.0); }
+
+    // cheap hash/noise (for tiny ripples / foam breakup)
+    float hash(vec2 p){
+      p = fract(p*vec2(123.34, 456.21));
+      p += dot(p, p + 45.32);
+      return fract(p.x*p.y);
+    }
+    float noise(vec2 p){
+      vec2 i = floor(p), f = fract(p);
+      float a = hash(i);
+      float b = hash(i+vec2(1.0,0.0));
+      float c = hash(i+vec2(0.0,1.0));
+      float d = hash(i+vec2(1.0,1.0));
+      vec2 u = f*f*(3.0-2.0*f);
+      return mix(mix(a,b,u.x), mix(c,d,u.x), u.y);
+    }
+
+    // One Gerstner component: returns height contribution and adds to gradient (dh/dx, dh/dy)
+    void gerstner(in vec2 p, in vec2 dir, in float k, in float a, in float w, in float t, inout float h, inout vec2 grad){
+      // phase
+      float ph = dot(dir, p) * k + w * t;
+
+      // Height: a * sin(ph)
+      float s = sin(ph);
+      float c = cos(ph);
+      h += a * s;
+
+      // dh/dp = a * k * cos(ph) * dir
+      grad += (a * k * c) * dir;
+    }
+
+    void ocean(in vec2 p, in float t, out float h, out vec2 grad, out float chop){
+      h = 0.0; grad = vec2(0.0); chop = 0.0;
+
+      // Controls map
+      float wind = mix(0.35, 2.2, uWind);
+      float amp  = mix(0.10, 1.35, uAmp);
+
+      // "Gravity waves" angular freq approx: w ~ sqrt(g*k) (scaled)
+      // We'll use a tuned constant instead of real g units to keep it stable.
+      float g = 1.2;
+
+      // Multiple swells: longer wavelengths dominate (ocean-like).
+      // Directions are slightly spread (wind-aligned + some cross swell).
+      vec2 d0 = normalize(vec2(0.90, 0.44));
+      vec2 d1 = normalize(vec2(0.60, 0.80));
+      vec2 d2 = normalize(vec2(-0.35, 0.94));
+      vec2 d3 = normalize(vec2(0.98, -0.18));
+
+      // base frequency ladder (k = 2pi / wavelength)
+      float k0 = 1.2;
+      float k1 = 2.1;
+      float k2 = 3.6;
+      float k3 = 6.0;
+
+      float a0 = 0.18 * amp;
+      float a1 = 0.10 * amp;
+      float a2 = 0.06 * amp;
+      float a3 = 0.035 * amp;
+
+      // speed up with wind
+      float w0 = sqrt(g*k0) * (0.70*wind);
+      float w1 = sqrt(g*k1) * (0.85*wind);
+      float w2 = sqrt(g*k2) * (1.00*wind);
+      float w3 = sqrt(g*k3) * (1.15*wind);
+
+      // Add components (slight phase offsets)
+      gerstner(p, d0, k0, a0, w0, t, h, grad);
+      gerstner(p, d1, k1, a1, w1, t + 1.7, h, grad);
+      gerstner(p, d2, k2, a2, w2, t + 3.1, h, grad);
+      gerstner(p, d3, k3, a3, w3, t + 5.4, h, grad);
+
+      // Small wind ripples: higher freq, low amp, noisy direction
+      float rk = mix(10.0, 18.0, uWind);
+      float ra = mix(0.006, 0.020, uWind) * amp;
+      vec2 rd = normalize(vec2(0.7,0.3) + vec2(noise(p*0.6), noise(p*0.6+11.0))*0.8);
+      float rw = sqrt(g*rk) * (1.4*wind);
+      gerstner(p, rd, rk, ra, rw, t, h, grad);
+
+      // A "chop" metric tied to slope (used for foam)
+      chop = length(grad);
+    }
+
+    // Fresnel Schlick approx
+    float fresnel(float cosTheta, float f0){
+      return f0 + (1.0 - f0) * pow(1.0 - cosTheta, 5.0);
+    }
+
+    void main(){
+      vec2 uv = vUv;
+      vec2 frag = uv * uRes;
+
+      // Horizon + sky
+      float horizon = 0.34;
+      vec3 skyT = vec3(12.0, 24.0, 54.0)/255.0;
+      vec3 skyB = vec3(4.0, 8.0, 20.0)/255.0;
+      float skyMix = sat(uv.y / max(horizon, 1e-3));
+      vec3 sky = mix(skyT, skyB, skyMix);
+
+      // subtle stars
+      float st = step(0.994, hash(floor(frag*0.055)));
+      sky += st * 0.16;
+
+      // If above horizon: output sky
+      if (uv.y < horizon){
+        gl_FragColor = vec4(sky, 1.0);
+        return;
+      }
+
+      // Perspective mapping for ocean plane
+      float py = (uv.y - horizon) / (1.0 - horizon);
+      py = sat(py);
+
+      // Farther away => compressed detail (prevents "busy" look)
+      float persp = mix(0.10, 1.25, py);
+      vec2 p = vec2((uv.x - 0.5) * 2.2, py * 2.0) * persp;
+
+      float h; vec2 grad; float chop;
+      ocean(p, uTime, h, grad, chop);
+
+      // Calm the far field (real oceans are smoother near the horizon)
+      float farCalm = mix(0.55, 1.0, pow(py, 0.65));
+      h *= farCalm;
+      grad *= farCalm;
+      chop *= farCalm;
+
+      // Normal from gradient (dh/dx, dh/dy)
+      vec3 N = normalize(vec3(-grad.x, -grad.y, 1.0));
+
+      // View direction approx (camera looking down the screen)
+      vec3 V = normalize(vec3(0.0, 0.10, 1.0));
+
+      // Sun/light direction controlled by slider
+      float az = mix(0.12, 0.88, uLight) * 2.0*PI;
+      float el = mix(0.20, 0.60, uLight) * PI;
+      vec3 L = normalize(vec3(cos(az)*cos(el), sin(az)*cos(el), sin(el)));
+
+      // Base water color by depth
+      vec3 deep = vec3(6.0, 20.0, 44.0)/255.0;
+      vec3 mid  = vec3(16.0, 58.0, 92.0)/255.0;
+      float depthMix = sat(py*0.92 + 0.08);
+      vec3 waterBase = mix(mid, deep, depthMix);
+
+      // Diffuse (kept subtle; real water is mostly spec + reflection)
+      float ndl = max(0.0, dot(N, L));
+      float diffuse = 0.10 + 0.20 * ndl;
+
+      // Specular (Blinn-Phong-ish, tuned)
+      vec3 H = normalize(L + V);
+      float ndh = max(0.0, dot(N, H));
+      float specPow = mix(80.0, 260.0, uLight);
+      float spec = pow(ndh, specPow) * mix(0.25, 1.25, uLight);
+
+      // Fresnel reflection
+      float cosNV = sat(dot(N, V));
+      float F = fresnel(cosNV, 0.02); // water F0 ~ 0.02
+      vec3 refl = sky;
+
+      // Slight horizon tint in reflections
+      refl = mix(refl, vec3(0.65,0.80,0.95), 0.06 * (1.0 - py));
+
+      // Foam: based on slope/chop + crestiness; broken up with noise
+      float crest = sat((h + 0.25) * 0.9);
+      float foam = sat((chop - mix(0.35, 0.85, uWind)) * 1.8);
+      foam *= sat((crest - 0.52) * 2.0);
+
+      // Foam breakup pattern (wind streaks)
+      float fN = noise(p*2.2 + vec2(uTime*0.35, -uTime*0.22));
+      foam *= mix(0.55, 1.10, fN);
+
+      vec3 foamCol = vec3(210.0, 240.0, 255.0)/255.0;
+
+      // Combine: mostly reflection + spec, with some base absorption
+      vec3 col = waterBase * diffuse;
+      col = mix(col, refl, F * 0.80);
+      col += spec;
+
+      // Add subsurface-ish brightening around crests (very subtle)
+      col += (0.02 + 0.05*uAmp) * crest * vec3(0.25,0.50,0.60);
+
+      // Apply foam
+      col = mix(col, foamCol, foam);
+
+      // Horizon haze (atmospheric)
+      float haze = smoothstep(horizon, horizon + 0.12, uv.y) * (1.0 - smoothstep(horizon + 0.01, horizon + 0.22, uv.y));
+      col = mix(col, col + vec3(0.10,0.12,0.14)*haze, 0.55);
+
+      // Vignette
+      vec2 v = vec2(uv.x-0.5, uv.y-0.55);
+      float vig = 1.0 - sat(dot(v*v, vec2(0.9, 1.2)) * 1.15);
+      col *= mix(0.90, 1.05, vig);
+
+      // Gentle tonemap
+      col = col / (col + vec3(1.0));
+      col = pow(col, vec3(0.98));
+
+      gl_FragColor = vec4(col, 1.0);
+    }
+  `;
+
+  function compile(type, src){
+    const s = gl.createShader(type);
+    gl.shaderSource(s, src);
+    gl.compileShader(s);
+    if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)){
+      console.error(gl.getShaderInfoLog(s));
+      throw new Error("Shader compile failed");
+    }
+    return s;
+  }
+
+  const vs = compile(gl.VERTEX_SHADER, vertSrc);
+  const fs = compile(gl.FRAGMENT_SHADER, fragSrc);
+  const prog = gl.createProgram();
+  gl.attachShader(prog, vs);
+  gl.attachShader(prog, fs);
+  gl.linkProgram(prog);
+  if (!gl.getProgramParameter(prog, gl.LINK_STATUS)){
+    console.error(gl.getProgramInfoLog(prog));
+    throw new Error("Program link failed");
+  }
+  gl.useProgram(prog);
+
+  // Fullscreen quad
+  const buf = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buf);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+    -1,-1,  1,-1, -1, 1,
+    -1, 1,  1,-1,  1, 1
+  ]), gl.STATIC_DRAW);
+
+  const aPos = gl.getAttribLocation(prog, "aPos");
+  gl.enableVertexAttribArray(aPos);
+  gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+  const uRes   = gl.getUniformLocation(prog, "uRes");
+  const uTime  = gl.getUniformLocation(prog, "uTime");
+  const uWind  = gl.getUniformLocation(prog, "uWind");
+  const uAmp   = gl.getUniformLocation(prog, "uAmp");
+  const uLight = gl.getUniformLocation(prog, "uLight");
+
+  let W=0,H=0;
+
+  function resize(){
+    const dpr = Math.max(1, Math.min(2, window.devicePixelRatio || 1));
+    const q = Math.max(1, UI.q || 1.5);
+    const w = Math.floor(innerWidth * dpr / q);
+    const h = Math.floor(innerHeight * dpr / q);
+
+    canvas.width = w; canvas.height = h;
+    canvas.style.width = innerWidth + "px";
+    canvas.style.height = innerHeight + "px";
+
+    W = w; H = h;
+    gl.viewport(0, 0, W, H);
+  }
+  addEventListener('resize', resize, { passive:true });
+  resize();
+
+  let t0 = performance.now();
+  function frame(now){
+    const t = (now - t0) * 0.001;
+
+    gl.uniform2f(uRes, W, H);
+    gl.uniform1f(uTime, t);
+    gl.uniform1f(uWind, UI.w);
+    gl.uniform1f(uAmp, UI.a);
+    gl.uniform1f(uLight, UI.l);
+
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    requestAnimationFrame(frame);
+  }
+  requestAnimationFrame(frame);
+})();
+</script>
+</body>
+</html>

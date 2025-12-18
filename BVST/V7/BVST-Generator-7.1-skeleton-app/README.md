@@ -1,0 +1,31 @@
+# BVST Generator 6.0
+
+**Blockchain Virtual Studio Tools (BVST)** is a framework for building "Universal" audio plugins (Instruments & Effects) using **Rust** and **WebAssembly**.
+
+This workspace is designed for the development, testing, and optimization of audio plugins intended for the **Bitcoin Ordinals** ecosystem via recursion.
+
+
+
+## Project Structure
+
+*   **`Plugins/`**: The standard location for categorized plugins (Dynamics, Effects, Instruments, etc.).
+*   **`System/`**: Shared core components:
+    *   `host.html`: The browser-based DAW for testing.
+    *   `scripts/`: Build tools (`build.py`) and generic runtime (`processor_glue.js`).
+    *   `bvst_lib/`: Shared Rust DSP library.
+    *   `shared/`: Shared JavaScript UI controls.
+
+## Quick Start
+
+1.  **Install Prerequisites:** Rust, `wasm-pack`, Python 3.
+2.  **Build the Universal Engine (Template):**
+    ```bash
+    python3 System/scripts/build.py UniversalEngine
+    ```
+3.  **Start the Dev Server:**
+    ```bash
+    python3 start_server.py
+    ```
+4.  **Test in Browser:**
+    Open [http://localhost:8000/System/host.html](http://localhost:8000/System/host.html).
+

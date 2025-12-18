@@ -1,0 +1,1604 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audiobook Studio // Gen-3 (Fixed Playback)</title>
+    <style>
+        :root {
+            --bg-dark: #121214;
+            --bg-panel: #1e1e24;
+            --bg-input: #2a2a35;
+            --accent: #6c5ce7;
+            --accent-hover: #5649c0;
+            --text-main: #e1e1e6;
+            --text-dim: #a8a8b3;
+            --success: #04d361;
+            --warning: #f1c40f;
+            --danger: #ff4757;
+            --border: #323238;
+            --font-mono: 'Fira Code', 'Courier New', monospace;
+            --font-sans: 'Inter', system-ui, sans-serif;
+        }
+
+        * { box-sizing: border-box; outline: none; }
+
+        body {
+            margin: 0; padding: 0;
+            background-color: var(--bg-dark);
+            color: var(--text-main);
+            font-family: var(--font-sans);
+            height: 100vh;
+            display: grid;
+            grid-template-rows: 60px 1fr 200px;
+            overflow: hidden;
+        }
+
+        /* --- Header --- */
+        header {
+            background: var(--bg-panel);
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0 20px;
+        }
+
+        .brand { font-weight: 700; font-size: 1.2rem; letter-spacing: -0.5px; display: flex; align-items: center; gap: 10px; }
+        .brand span { color: var(--accent); }
+        .receipt { font-family: var(--font-mono); font-size: 0.9rem; color: var(--success); background: rgba(4, 211, 97, 0.1); padding: 5px 10px; border-radius: 4px; border: 1px solid var(--success); }
+
+        /* --- Main Layout --- */
+        main {
+            display: grid;
+            grid-template-columns: 350px 1fr 300px;
+            overflow: hidden;
+        }
+
+        /* --- Panels --- */
+        .panel {
+            border-right: 1px solid var(--border);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+            background: var(--bg-panel);
+        }
+        
+        .panel-header {
+            padding: 15px;
+            background: var(--bg-panel);
+            font-weight: 600;
+            border-bottom: 1px solid var(--border);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* --- Sidebar Tabs --- */
+        .sidebar-tabs { display: flex; border-bottom: 1px solid var(--border); background: #18181b; }
+        .tab { flex: 1; padding: 12px; text-align: center; cursor: pointer; font-size: 0.85rem; color: var(--text-dim); border-bottom: 2px solid transparent; }
+        .tab:hover { background: #222; }
+        .tab.active { color: var(--accent); border-bottom-color: var(--accent); background: var(--bg-panel); }
+
+        .settings-content { padding: 20px; overflow-y: auto; flex: 1; display: none; }
+        .settings-content.active { display: block; }
+
+        /* --- Forms --- */
+        .form-group { margin-bottom: 20px; }
+        .form-group label { display: block; margin-bottom: 8px; color: var(--text-dim); font-size: 0.85rem; }
+        select, input[type="text"], input[type="password"] {
+            width: 100%;
+            background: var(--bg-input);
+            border: 1px solid var(--border);
+            color: var(--text-main);
+            padding: 10px;
+            border-radius: 6px;
+            font-size: 0.9rem;
+        }
+        select:focus, input:focus { border-color: var(--accent); }
+
+        /* --- Connection Status Card --- */
+        .connection-card {
+            background: rgba(0,0,0,0.2);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .status-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+        .status-dot { width: 10px; height: 10px; border-radius: 50%; background: #444; display: inline-block; margin-right: 5px; box-shadow: 0 0 5px rgba(0,0,0,0.5); transition: 0.3s; }
+        .status-dot.active { background: var(--success); box-shadow: 0 0 8px var(--success); }
+        .status-dot.error { background: var(--danger); box-shadow: 0 0 8px var(--danger); }
+        .status-indicator { display:flex; align-items:center; gap:8px; font-size:0.75rem; color: var(--text-dim); text-transform: uppercase; letter-spacing: 0.05em; }
+
+        /* --- Middle: Manuscript Editor --- */
+        .editor-container { flex: 1; display: flex; flex-direction: column; position: relative; background: var(--bg-dark); }
+        textarea#manuscript {
+            flex: 1;
+            background: transparent;
+            color: var(--text-main);
+            border: none;
+            padding: 40px;
+            font-size: 1.1rem;
+            line-height: 1.6;
+            resize: none;
+            font-family: 'Georgia', serif;
+        }
+
+        /* --- Right: Timeline --- */
+        .timeline-scroll { overflow-y: auto; padding: 10px; flex: 1; background: var(--bg-dark); }
+        .chapter-card {
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 15px;
+            overflow: hidden;
+            transition: 0.2s;
+        }
+        .chapter-header {
+            padding: 10px 15px;
+            background: rgba(255,255,255,0.05);
+            font-size: 0.9rem;
+            font-weight: 600;
+            display: flex; justify-content: space-between;
+            align-items: flex-start;
+        }
+        .chunk-item {
+            display: flex; align-items: center;
+            font-size: 0.8rem; padding: 8px; margin: 4px 0;
+            background: var(--bg-input);
+            border-radius: 4px;
+            border-left: 3px solid var(--border);
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .chunk-item:hover { background: #3a3a45; }
+        .chunk-item.status-done { border-left-color: var(--success); background: rgba(4, 211, 97, 0.05); }
+        .chunk-item.status-processing { border-left-color: var(--warning); animation: pulse 1s infinite; }
+        .chunk-item.status-playing { border-left-color: #61dafb; background: rgba(97, 218, 251, 0.1); }
+        .chunk-item.status-error { border-left-color: var(--danger); background: rgba(255, 71, 87, 0.05); }
+        
+        .generated-icon { margin-left: auto; color: var(--success); font-size: 1rem; opacity: 0; transition: opacity 0.3s; }
+        .status-done .generated-icon { opacity: 1; }
+
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.6; } 100% { opacity: 1; } }
+
+        /* --- Controls --- */
+        .control-bar {
+            position: absolute; bottom: 20px; left: 50%; transform: translateX(-50%);
+            background: var(--bg-panel); border: 1px solid var(--border);
+            padding: 10px 20px; border-radius: 30px; display: flex; gap: 15px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5); z-index: 100;
+        }
+
+        button {
+            background: var(--bg-input); color: var(--text-main);
+            border: 1px solid var(--border); padding: 8px 16px; border-radius: 4px;
+            cursor: pointer; font-weight: 500; transition: 0.2s;
+        }
+        button:hover { background: var(--border); }
+        button.primary { background: var(--accent); border-color: var(--accent); color: white; }
+        button.danger { background: var(--danger); border-color: var(--danger); color: white; margin-top: 10px; }
+        button.danger:hover { background: #ff6b6b; }
+        button.play-btn { border-radius: 50%; width: 40px; height: 40px; padding: 0; display: flex; align-items: center; justify-content: center; font-size: 1.2rem; }
+
+        /* Small Buttons for Timeline */
+        .sm-btn {
+            padding: 4px 10px;
+            font-size: 0.7rem;
+            background: rgba(255,255,255,0.05);
+            border: 1px solid var(--border);
+            color: var(--text-dim);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: 0.2s;
+        }
+        .sm-btn:hover { background: var(--accent); color: white; border-color: var(--accent); }
+
+        .chunk-actions {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-left: auto;
+            padding-left: 10px;
+        }
+
+        .action-btn {
+            padding: 4px;
+            font-size: 0.9rem;
+            cursor: pointer;
+            color: var(--text-dim);
+            border-radius: 4px;
+            line-height: 1;
+            opacity: 0.5;
+            transition: 0.2s;
+        }
+        .action-btn:hover { opacity: 1; color: var(--text-main); background: rgba(255,255,255,0.1); }
+
+
+        /* --- Console --- */
+        #console-panel {
+            background: #000; border-top: 1px solid var(--border);
+            padding: 10px; font-family: var(--font-mono); font-size: 0.8rem;
+            color: var(--text-dim); overflow-y: auto; display: flex; flex-direction: column-reverse;
+        }
+        .log-entry { margin: 2px 0; border-bottom: 1px solid #222; padding-bottom: 2px; }
+        .log-success { color: var(--success); }
+        .log-error { color: var(--danger); }
+        .log-info { color: #61dafb; }
+        
+        .badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 4px; background: #333; margin-left: 5px; vertical-align: middle;}
+
+        .voice-tag {
+            font-size: 0.7rem;
+            color: var(--accent);
+            background: rgba(108, 92, 231, 0.1);
+            border: 1px solid rgba(108, 92, 231, 0.3);
+            padding: 2px 6px;
+            border-radius: 4px;
+            margin-left: auto;
+            margin-right: 10px;
+            display: none;
+        }
+        .status-done .voice-tag { display: inline-block; }
+        .chunk-content { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+        /* --- Custom Voice Dropdown --- */
+        .voice-select-container { position: relative; width: 100%; }
+        .voice-select-btn {
+            width: 100%; background: var(--bg-input); border: 1px solid var(--border);
+            color: var(--text-main); padding: 10px; border-radius: 6px; font-size: 0.9rem;
+            text-align: left; cursor: pointer; display: flex; justify-content: space-between; align-items: center;
+        }
+        .voice-select-btn:hover { border-color: var(--accent); }
+        .voice-dropdown {
+            display: none; 
+            position: fixed; 
+            background: var(--bg-panel);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            z-index: 1000;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.8);
+            max-height: 500px;
+            overflow-y: auto;
+            padding: 15px;
+        
+            /* Positioning for full width, centered */
+            width: calc(100vw - 40px); /* 100vw minus 20px padding on each side */
+            left: 50%; /* Center horizontally */
+            transform: translateX(-50%); /* Adjust for left:50% to truly center */
+            max-width: 1400px; /* Cap overall width */
+        }        .voice-dropdown.show { display: grid; grid-template-columns: repeat(5, 1fr); gap: 15px; }
+        
+        @media (max-width: 1200px) {
+            .voice-dropdown.show { grid-template-columns: repeat(3, 1fr); } /* 3 cols for smaller screens */
+        }
+        @media (max-width: 800px) {
+            .voice-dropdown.show { grid-template-columns: 1fr; width: 100%; }
+        }
+
+        .voice-col { display: flex; flex-direction: column; gap: 5px; }
+        .voice-col-header {
+            font-weight: 700; color: var(--accent); border-bottom: 1px solid var(--border);
+            padding-bottom: 8px; margin-bottom: 8px; font-size: 0.8rem;
+            text-transform: uppercase; letter-spacing: 1px;
+        }
+        .voice-option {
+            padding: 8px 10px; border-radius: 4px; cursor: pointer; font-size: 0.85rem;
+            color: var(--text-dim); transition: 0.2s; display: flex; align-items: center; gap: 8px;
+        }
+        .voice-option:hover { background: rgba(255,255,255,0.05); color: var(--text-main); }
+        .voice-option.selected { background: var(--accent); color: white; }
+        .voice-flag { font-size: 0.7rem; padding: 1px 4px; background: #333; border-radius: 3px; opacity: 0.7; }
+    </style>
+</head>
+<body>
+
+<header>
+    <div class="brand">
+        
+<!-- SVG Waveform -->
+<svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+<path d="M12 3V21" stroke="#6c5ce7" stroke-width="2" stroke-linecap="round"/>
+<path d="M8 8V16" stroke="#6c5ce7" stroke-width="2" stroke-linecap="round"/>
+<path d="M16 8V16" stroke="#6c5ce7" stroke-width="2" stroke-linecap="round"/>
+<path d="M4 11V13" stroke="#6c5ce7" stroke-width="2" stroke-linecap="round"/>
+<path d="M20 11V13" stroke="#6c5ce7" stroke-width="2" stroke-linecap="round"/>
+</svg>
+ <span>Narrate.AI</span> Studio
+    </div>
+    <div class="header-controls">
+        <span id="live-receipt" class="receipt">$0.00 Est. Cost</span>
+    </div>
+</header>
+
+<main>
+    <section class="panel">
+        <div class="sidebar-tabs">
+            <div class="tab active" onclick="switchTab('project')">Project</div>
+            <div class="tab" onclick="switchTab('connections')">Connections</div>
+        </div>
+
+        <div id="tab-project" class="settings-content active">
+            <div class="form-group">
+                <label>Narration Mode</label>
+                <select id="project-mode" onchange="toggleDualMode()">
+                    <option value="single">Single Voice</option>
+                    <option value="dual">Dual Voice</option>
+                </select>
+            </div>
+
+            <div class="form-group">
+                <label>Primary Voice (Voice 1)</label>
+                <div class="voice-select-container">
+                    <button id="voice-select-btn-1" class="voice-select-btn" type="button" onclick="openVoiceDropdown(1, event)">
+                        <span>Select Voice 1...</span>
+                        <span>▼</span>
+                    </button>
+                </div>
+                <input type="text" id="voice-name-1" placeholder="Character Name (e.g. Narrator)" style="margin-top:5px; font-size: 0.8rem; padding: 6px;">
+            </div>
+
+            <div class="form-group" id="group-voice-2" style="display:none; border-left: 2px solid var(--accent); padding-left: 10px;">
+                <label>Secondary Voice (Voice 2)</label>
+                <div class="voice-select-container">
+                    <button id="voice-select-btn-2" class="voice-select-btn" type="button" onclick="openVoiceDropdown(2, event)">
+                        <span>Select Voice 2...</span>
+                        <span>▼</span>
+                    </button>
+                </div>
+                <input type="text" id="voice-name-2" placeholder="Character Name (e.g. Hero)" style="margin-top:5px; font-size: 0.8rem; padding: 6px;">
+            </div>
+
+            <div class="form-group" id="group-token" style="display:none">
+                <label>Voice Switch Token</label>
+                <input type="text" id="voice-token" value="* * *" placeholder="e.g. * * *">
+                <div style="font-size:0.75rem; color:var(--text-dim); margin-top:3px;">
+                    Paste this token in your text to switch voices.
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label>ElevenLabs Model</label>
+                <select id="el-model">
+                    <option value="eleven_multilingual_v2">Multilingual v2 (Best for Storytelling)</option>
+                    <option value="eleven_multilingual_v3">Multilingual v3 (Latest)</option>
+                    <option value="eleven_turbo_v2_5">Turbo v2.5 (Fastest, English)</option>
+                    <option value="eleven_turbo_v2" selected>Turbo v2 (Fast, English)</option>
+                    <option value="eleven_flash_v2_5">Flash v2.5 (Ultra Fast, Cost Effective)</option>
+                    <option value="eleven_flash_v2">Flash v2 (Previous Gen)</option>
+                    <option value="eleven_monolingual_v1">Monolingual v1 (Legacy)</option>
+                </select>
+            </div>
+            
+            <div class="form-group">
+                <label>Split Strategy (Max Chars)</label>
+                <input type="text" id="chunk-size" value="1000">
+            </div>
+
+            <div id="project-summary" style="display:none; background:rgba(255,255,255,0.05); padding:15px; border-radius:8px; margin-top:20px; font-size:0.85rem; border:1px solid var(--border);">
+                <div style="font-weight:700; color:var(--accent); margin-bottom:10px; border-bottom:1px solid var(--border); padding-bottom:5px;">PROJECT SUMMARY</div>
+                <div style="display:grid; grid-template-columns: 1fr 1fr; gap:10px;">
+                    <div><strong>Title:</strong> <span id="sum-title">-</span></div>
+                    <div><strong>Author:</strong> <span id="sum-author">-</span></div>
+                    <div><strong>Language:</strong> <span id="sum-lang">-</span></div>
+                    <div><strong>Chapters:</strong> <span id="sum-chapters">0</span></div>
+                    <div><strong>Chars:</strong> <span id="sum-chars">0</span></div>
+                    <div><strong>Est. Cost:</strong> <span id="sum-cost" style="color:var(--success)">$0.00</span></div>
+                </div>
+                <div style="margin-top:10px; font-style:italic; color:var(--text-dim);" id="sum-model">-</div>
+            </div>
+
+            <hr style="border: 0; border-top: 1px solid var(--border); margin: 20px 0;">
+            
+            <div class="form-group">
+                <button id="btn-analyze" style="width:100%">1. Analyze & Parse</button>
+            </div>
+            <div class="form-group">
+                <button id="btn-generate" class="primary" style="width:100%" disabled>2. Generate Audio</button>
+            </div>
+        </div>
+
+        <div id="tab-connections" class="settings-content">
+            <div class="connection-card">
+                <div class="status-header">
+                    <div style="font-weight:600; font-size:0.9rem;">ElevenLabs API</div>
+                    <div class="status-indicator">
+                        <span id="el-status-text">Not Connected</span>
+                        <div id="el-status-dot" class="status-dot"></div>
+                    </div>
+                </div>
+                <form onsubmit="event.preventDefault(); connectElevenLabs()">
+                    <div class="form-group">
+                        <label>Connection Name</label>
+                        <input type="text" id="el-name" placeholder="e.g. My Pro Account" autocomplete="off">
+                    </div>
+                    <div class="form-group">
+                        <label>API Key</label>
+                        <input type="password" id="el-key" placeholder="Paste xi-api-key here..." autocomplete="new-password">
+                    </div>
+                    <button type="submit" id="btn-connect-el" style="width:100%">Connect & Fetch Voices</button>
+                    <button type="button" id="btn-disconnect-el" class="danger" style="width:100%; display:none;" onclick="disconnectElevenLabs()">Disconnect API</button>
+                </form>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel" style="border-right: 1px solid var(--border);">
+        <div class="panel-header">
+            Manuscript
+            <span class="badge">Markdown Supported</span>
+        </div>
+        <div class="editor-container">
+            <textarea id="manuscript" placeholder="Paste your book text here. Use # for Chapters..."></textarea>
+        </div>
+        
+        <div class="control-bar">
+            <button class="play-btn" id="btn-play-all">▶</button>
+            <div style="display:flex; flex-direction:column; justify-content:center;">
+                <span style="font-size:0.8rem; color:var(--text-dim)">Master Output</span>
+                <progress id="master-progress" value="0" max="100" style="width: 150px; height: 5px;"></progress>
+            </div>
+        </div>
+    </section>
+
+    <section class="panel">
+        <div class="panel-header">Studio Timeline</div>
+        <div class="timeline-scroll" id="timeline-container">
+            <div style="padding:20px; text-align:center; color: var(--text-dim); font-style:italic;">
+                No chapters detected. <br>Paste text and click "Analyze".
+            </div>
+        </div>
+    </section>
+</main>
+
+<div id="voice-dropdown" class="voice-dropdown">
+    <!-- Populated by JS -->
+</div>
+<div id="console-panel">
+    <div class="log-entry">System ready. Configure API keys in "Connections" tab for premium voices.</div>
+</div>
+
+<script>
+/**
+ * AUDIOBOOK GENERATOR v3 (Restored Playback & Fixed Split & Interaction & Regeneration)
+ */
+
+// --- 1. STATE & STORAGE ---
+
+const STATE = {
+    chapters: [],
+    voices: [],
+    project: {
+        mode: 'single', // 'single' or 'dual'
+        voiceIds: [null, null], // [Voice 1, Voice 2]
+        voiceNames: ['', ''],
+        token: '* * *'
+    },
+    // Deprecated but kept for compatibility during refactor if needed, though we will try to use project.voiceIds[0]
+    selectedVoiceId: null, 
+    activeVoiceSlot: 1, // 1 or 2, for the dropdown
+    isProcessing: false,
+    isPlaying: false,
+    api: {
+        elevenLabs: { 
+            key: '',
+            name: '',
+            voices: [],
+            connected: false
+        }
+    }
+};
+
+// UI Helpers
+const LOG = {
+    add: (msg, type = 'info') => {
+        const panel = document.getElementById('console-panel');
+        const div = document.createElement('div');
+        div.className = `log-entry log-${type}`;
+        div.innerText = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        panel.prepend(div);
+    }
+};
+
+function switchTab(tabName) {
+    document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+    document.querySelectorAll('.settings-content').forEach(c => c.classList.remove('active'));
+    
+    const index = tabName === 'project' ? 0 : 1;
+    document.querySelectorAll('.tab')[index].classList.add('active');
+    document.getElementById(`tab-${tabName}`).classList.add('active');
+}
+
+// --- TEXT PARSER (Dual Voice & Multi-Language Logic) ---
+
+const LANG_CONFIG = [
+  ['en', 'English', ['Chapter'], ['By', 'Written by', 'Narrated by']],
+  ['de', 'German', ['Kapitel'], ['Von', 'Geschrieben von']],
+  ['es', 'Spanish', ['Capítulo', 'Capitulo'], ['Por', 'Escrito por']],
+  ['fr', 'French', ['Chapitre'], ['Par', 'Écrit par']],
+  ['it', 'Italian', ['Capitolo'], ['Di', 'Scritto da']],
+  ['pt', 'Portuguese', ['Capítulo', 'Capitulo'], ['Por', 'Escrito por']],
+  ['nl', 'Dutch', ['Hoofdstuk'], ['Door', 'Geschreven door']],
+  ['pl', 'Polish', ['Rozdział'], ['Przez', 'Napisał']],
+  ['ru', 'Russian', ['Глава'], ['Автор']],
+  ['tr', 'Turkish', ['Bölüm'], ['Yazan']],
+  ['fi', 'Finnish', ['Luku'], ['Kirjoittanut']],
+  ['hu', 'Hungarian', ['Fejezet'], ['Írta']],
+  ['cs', 'Czech', ['Kapitola'], ['Napsal']],
+  ['el', 'Greek', ['Κεφάλαιο'], ['Από']],
+  ['id', 'Indonesian', ['Bab'], ['Oleh']],
+  ['unk', 'Unknown', ['Part', 'Parte', 'Partie', 'Teil', 'Livre', 'Libro', 'Buch'], []]
+];
+
+const TextParser = {
+    escapeRegex: (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+
+    getChapterHeadingRegex: () => {
+        const kw = LANG_CONFIG.flatMap(l => l[2]).sort((a, b) => b.length - a.length);
+        const escapeRegex = (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        // Matches: # Heading, or Keyword (Chapter) followed by something
+        // FIX APPLIED: Wrapped in capturing group (...) so split() retains the delimiter
+        return new RegExp(`(^\\s*(?:#{1,6}\\s+[^\\n#]+|(?:${kw.map(escapeRegex).join('|')})(?:\\s+[^\\n]+)?)\\s*$)`, 'gmi');
+    },
+
+    normalize: (text) => {
+        return text ? text.toLowerCase().replace(/[^\w]/g, '') : '';
+    },
+
+    parseDualVoiceSegments: (text, delim = '* * *', initVoiceIndex = 0) => {
+        const segs = [];
+        const token = delim.trim() || '* * *';
+        const escToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        
+        // Split by token
+        const parts = text.split(new RegExp(escToken, 'g'));
+        
+        let currentVoice = initVoiceIndex % 2; // 0 or 1
+        
+        parts.forEach(part => {
+            const content = part.trim();
+            if(content) {
+                segs.push({
+                    text: content,
+                    voiceIndex: currentVoice
+                });
+            }
+            // Toggle voice for next part
+            currentVoice = (currentVoice + 1) % 2;
+        });
+
+        return segs;
+    },
+
+    detectProjectMetadata: (manuscript, preamble) => {
+        let lang = 'English';
+        let title = 'Untitled Book';
+        let author = 'Unknown Author';
+
+        // Detect Language
+        for (const l of LANG_CONFIG) {
+            if (l[0] === 'unk') continue;
+            // Check keywords in first 1000 chars
+            const sample = manuscript.substring(0, 1000);
+            for (const kw of l[2]) {
+                const re = new RegExp(`^\\s*${TextParser.escapeRegex(kw)}\\s+`, 'mi');
+                if (re.test(sample)) { lang = l[1]; break; }
+            }
+            if (lang !== 'English') break;
+        }
+
+        // Detect Title/Author in Preamble
+        if (preamble && preamble.trim()) {
+            const lines = preamble.split('\n').map(l => l.trim()).filter(Boolean);
+            if (lines.length) {
+                // Heuristic: First line is often title
+                title = lines[0];
+                
+                // Look for "By [Author]"
+                const lc = LANG_CONFIG.find(l => l[1] === lang) || LANG_CONFIG[0];
+                const byKw = [...(lc[3] || []), 'By', 'Author', 'Written by'];
+                
+                for (const line of lines) {
+                    for (const bk of byKw) {
+                        const m = line.match(new RegExp(`^${TextParser.escapeRegex(bk)}[:\\s]+\\s*(.+)`, 'i'));
+                        if (m) { author = m[1].trim(); break; }
+                    }
+                    if (author !== 'Unknown Author') break;
+                }
+                
+                // Fallback: 2nd line if short
+                if (author === 'Unknown Author' && lines.length > 1 && lines[1].length < 50) {
+                    author = lines[1];
+                }
+            }
+        }
+        
+        return { language: lang, title, author };
+    },
+
+    getModelCreditMultiplier: (modelId) => {
+        switch(modelId) {
+            case 'eleven_multilingual_v3':
+            case 'eleven_multilingual_v2':
+                return 1.0;
+            case 'eleven_turbo_v2_5':
+            case 'eleven_turbo_v2':
+            case 'eleven_flash_v2_5':
+            case 'eleven_flash_v2':
+            case 'eleven_monolingual_v1':
+            case 'eleven_monolingual_v2':
+                return 0.5;
+            default:
+                return 1.0; // Default to highest cost if unknown model
+        }
+    },
+
+    detectStartingVoice: (chapterText, chapterTitle, voiceNames = []) => {
+        // Simple heuristic: check if Title or First Line contains a voice name
+        const candidates = voiceNames.map((n, i) => ({ name: TextParser.normalize(n), index: i })).filter(c => c.name);
+        
+        const check = (str) => {
+            const norm = TextParser.normalize(str);
+            for(const c of candidates) {
+                if(norm.includes(c.name)) return c.index;
+            }
+            return null;
+        };
+
+        let res = check(chapterTitle);
+        if(res !== null) return res;
+
+        // Check first few lines
+        const lines = chapterText.split('\n').slice(0, 3);
+        for(const line of lines) {
+            res = check(line);
+            if(res !== null) return res;
+        }
+
+        return 0; // Default to Voice 1
+    }
+};
+
+// --- 2. API SERVICE (ElevenLabs) ---
+
+class APIService {
+    static async fetchVoices(apiKey) {
+        try {
+            const response = await fetch('https://api.elevenlabs.io/v1/voices', {
+                method: 'GET',
+                headers: { 'xi-api-key': apiKey }
+            });
+            
+            if(!response.ok) throw new Error("Invalid API Key");
+            
+            const data = await response.json();
+            return data.voices.map(v => ({
+                id: v.voice_id,
+                name: v.name,
+                labels: v.labels || {}, 
+                lang: 'en-US',
+                type: 'premium',
+                source: 'ElevenLabs',
+                preview_url: v.preview_url
+            }));
+        } catch (e) {
+            throw e;
+        }
+    }
+
+    static async generateAudio(text, voiceId, apiKey, modelId = 'eleven_multilingual_v2') {
+        const response = await fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voiceId}`, {
+            method: 'POST',
+            headers: { 
+                'xi-api-key': apiKey,
+                'Content-Type': 'application/json',
+                'Accept': 'audio/mpeg'
+            },
+            body: JSON.stringify({
+                text,
+                model_id: modelId,
+                voice_settings: {
+                    stability: 0.45,
+                    similarity_boost: 0.7
+                }
+            })
+        });
+        
+        if(!response.ok) {
+            const message = await response.text();
+            throw new Error(`ElevenLabs error (${response.status}): ${message}`);
+        }
+
+        const blob = await response.blob();
+        const audioUrl = URL.createObjectURL(blob);
+        return { 
+            duration: Math.ceil(text.length / 15), 
+            audioUrl 
+        };
+    }
+}
+
+// --- 3. AUDIO ENGINE ---
+
+class AudioEngine {
+    constructor() {
+        this.synth = ('speechSynthesis' in window) ? window.speechSynthesis : null;
+        this.activeAudio = null;
+    }
+
+    async getVoices() {
+        // 1. Get Browser Voices
+        let browserVoices = [];
+        if(this.synth) {
+            browserVoices = await new Promise((resolve) => {
+                const v = this.synth.getVoices();
+                if(v.length) resolve(v);
+                else {
+                    this.synth.onvoiceschanged = () => resolve(this.synth.getVoices());
+                }
+            });
+        }
+
+        const formattedBrowser = browserVoices.map((v, i) => ({
+            id: `sys_${i}`,
+            name: v.name,
+            lang: v.lang,
+            type: 'standard',
+            ref: v
+        }));
+
+        // 2. Get API Voices (Safe Check)
+        const apiVoices = (STATE.api.elevenLabs && STATE.api.elevenLabs.voices) ? STATE.api.elevenLabs.voices : [];
+
+        return [...formattedBrowser, ...apiVoices];
+    }
+
+    async generateChunk(text, voiceId, modelId) {
+        const voice = STATE.voices.find(v => v.id === voiceId);
+        if(!voice) throw new Error('Select a voice before generating.');
+
+        if (voice.type === 'premium') {
+            if(!STATE.api.elevenLabs.connected || !STATE.api.elevenLabs.key) {
+                throw new Error('ElevenLabs is not connected.');
+            }
+            return await APIService.generateAudio(text, voiceId, STATE.api.elevenLabs.key, modelId);
+        }
+
+        return new Promise((resolve) => {
+            setTimeout(() => resolve({ 
+                duration: Math.ceil(text.length / 15)
+            }), 200);
+        });
+    }
+
+    playChunk(chunk, overrideVoiceId = null) {
+        if(chunk.audioUrl) {
+            return this.playAudioBuffer(chunk.audioUrl);
+        }
+
+        // Fallback to Voice 1 if not specified
+        const desiredVoiceId = overrideVoiceId || chunk.voiceId || STATE.project.voiceIds[0];
+        const voice = STATE.voices.find(v => v.id === desiredVoiceId);
+
+        if(voice && voice.type === 'premium') {
+            return Promise.reject(new Error('Premium audio not generated yet for this chunk.'));
+        }
+
+        if(voice && voice.ref) {
+            if(!this.synth) return Promise.reject(new Error('Browser voice playback is not supported in this browser.'));
+            return new Promise((resolve, reject) => {
+                const utterance = new SpeechSynthesisUtterance(chunk.text);
+                utterance.voice = voice.ref;
+                utterance.onend = resolve;
+                utterance.onerror = () => reject(new Error('Playback failed.'));
+                this.synth.speak(utterance);
+            });
+        }
+
+        return Promise.reject(new Error('Selected voice is unavailable.'));
+    }
+
+    playAudioBuffer(url) {
+        return new Promise((resolve, reject) => {
+            const audio = new Audio(url);
+            this.activeAudio = audio;
+            audio.onended = () => {
+                this.activeAudio = null;
+                resolve();
+            };
+            audio.onerror = () => {
+                this.activeAudio = null;
+                reject(new Error('Unable to play generated audio.'));
+            };
+            audio.play().catch((err) => {
+                this.activeAudio = null;
+                reject(err);
+            });
+        });
+    }
+
+    stopPlayback() {
+        if(this.synth) this.synth.cancel();
+        if(this.activeAudio) {
+            this.activeAudio.pause();
+            this.activeAudio.currentTime = 0;
+            this.activeAudio = null;
+        }
+    }
+}
+
+// --- 4. APP LOGIC ---
+
+const engine = new AudioEngine();
+const dom = {
+    manuscript: document.getElementById('manuscript'),
+    timeline: document.getElementById('timeline-container'),
+    voiceDropdown: document.getElementById('voice-dropdown'),
+    chunkSize: document.getElementById('chunk-size'),
+    btnGenerate: document.getElementById('btn-generate'),
+    btnPlay: document.getElementById('btn-play-all'),
+    masterProgress: document.getElementById('master-progress'),
+    elKey: document.getElementById('el-key'),
+    elName: document.getElementById('el-name'),
+    elDot: document.getElementById('el-status-dot'),
+    elStatusText: document.getElementById('el-status-text'),
+    receipt: document.getElementById('live-receipt'),
+    elModel: document.getElementById('el-model'), // Added
+    
+    // New UI
+    projectMode: document.getElementById('project-mode'),
+    voiceBtn1: document.getElementById('voice-select-btn-1'),
+    voiceBtn2: document.getElementById('voice-select-btn-2'),
+    voiceName1: document.getElementById('voice-name-1'),
+    voiceName2: document.getElementById('voice-name-2'),
+    groupVoice2: document.getElementById('group-voice-2'),
+    groupToken: document.getElementById('group-token'),
+    voiceToken: document.getElementById('voice-token')
+};
+
+function setElevenLabsStatus(state, label) {
+    if(dom.elStatusText) dom.elStatusText.innerText = label;
+    if(!dom.elDot) return;
+    dom.elDot.className = 'status-dot';
+    if(state === 'active') dom.elDot.classList.add('active');
+    else if(state === 'error') dom.elDot.classList.add('error');
+}
+
+async function init() {
+    await refreshVoiceList();
+
+    // Load Saved Keys
+    const savedAPI = localStorage.getItem('ab_api_el');
+    if(savedAPI) {
+        try {
+            const parsed = JSON.parse(savedAPI);
+            STATE.api.elevenLabs.key = parsed.key;
+            STATE.api.elevenLabs.name = parsed.name;
+            dom.elKey.value = parsed.key;
+            dom.elName.value = parsed.name;
+            
+            LOG.add(`Found saved key for "${parsed.name}". Connecting...`);
+            connectElevenLabs(true); // true = silent mode
+        } catch(e) {
+            console.error("Error loading saved keys", e);
+        }
+    }
+
+    const savedText = localStorage.getItem('ab_manuscript');
+    if(savedText) dom.manuscript.value = savedText;
+    updateReceipt();
+}
+
+async function connectElevenLabs(silent = false) {
+    const key = dom.elKey.value.trim();
+    const name = dom.elName.value.trim() || "My ElevenLabs";
+    
+    if(!key) return;
+
+    STATE.api.elevenLabs.connected = false;
+    setElevenLabsStatus('idle', 'Connecting...');
+    if(!silent) document.getElementById('btn-connect-el').innerText = "Connecting...";
+
+    try {
+        const voices = await APIService.fetchVoices(key);
+        
+        STATE.api.elevenLabs.connected = true;
+        STATE.api.elevenLabs.key = key;
+        STATE.api.elevenLabs.name = name;
+        STATE.api.elevenLabs.voices = voices;
+
+        localStorage.setItem('ab_api_el', JSON.stringify({ key, name }));
+        
+        setElevenLabsStatus('active', 'Connected');
+        if(!silent) document.getElementById('btn-connect-el').innerText = "Connected & Saved";
+        document.getElementById('btn-disconnect-el').style.display = 'block';
+        LOG.add(`Connected to ElevenLabs as "${name}". Loaded ${voices.length} voices.`, 'success');
+        
+        refreshVoiceList();
+
+    } catch(e) {
+        STATE.api.elevenLabs.connected = false;
+        STATE.api.elevenLabs.key = '';
+        STATE.api.elevenLabs.name = '';
+        STATE.api.elevenLabs.voices = [];
+        if(silent) localStorage.removeItem('ab_api_el');
+        setElevenLabsStatus('error', 'Not Connected');
+        LOG.add(`Failed to connect to ElevenLabs. ${e.message || 'Check API Key.'}`, 'error');
+        document.getElementById('btn-disconnect-el').style.display = 'none';
+        if(!silent) document.getElementById('btn-connect-el').innerText = "Connect & Fetch Voices";
+        refreshVoiceList();
+    }
+}
+
+function disconnectElevenLabs() {
+    localStorage.removeItem('ab_api_el');
+    STATE.api.elevenLabs = { key: '', name: '', voices: [], connected: false };
+    
+    dom.elKey.value = '';
+    dom.elName.value = '';
+    setElevenLabsStatus('idle', 'Not Connected');
+    document.getElementById('btn-connect-el').innerText = "Connect & Fetch Voices";
+    document.getElementById('btn-disconnect-el').style.display = 'none';
+    
+    refreshVoiceList();
+    LOG.add("Disconnected from ElevenLabs.", 'info');
+}
+
+async function playSingleChunk(chunkId) {
+    engine.stopPlayback();
+    if(STATE.isPlaying) {
+        STATE.isPlaying = false;
+        dom.btnPlay.innerText = "▶";
+    }
+
+    let chunk = null;
+    for(const c of STATE.chapters) {
+        const found = c.chunks.find(k => k.id === chunkId);
+        if(found) { chunk = found; break; }
+    }
+    
+    if(!chunk) return;
+
+    // Display text from selected segment
+    dom.manuscript.value = chunk.text;
+
+    const el = document.getElementById(`chunk-${chunkId}`);
+    if(el) el.classList.add('status-playing');
+
+    LOG.add(`Playing single clip: "${chunk.text.substring(0,20)}..."`);
+    
+    const targetVoiceId = chunk.voiceId || STATE.project.voiceIds[0];
+
+    try {
+        await engine.playChunk(chunk, targetVoiceId);
+    } catch (err) {
+        LOG.add(err.message, 'error');
+    }
+
+    if(el) el.classList.remove('status-playing');
+}
+
+// Display entire chapter
+function displayChapter(idx) {
+    const ch = STATE.chapters[idx];
+    if(ch) {
+        dom.manuscript.value = ch.chunks.map(c => c.text).join('\n\n');
+    }
+}
+
+// --- NEW GENERATION LOGIC ---
+
+// Shared helper to generate a specific chunk's audio
+async function processChunkGeneration(chunk) {
+    // Check voice connection first
+    const v = STATE.voices.find(vo => vo.id === chunk.voiceId);
+    if(v && v.type === 'premium' && !STATE.api.elevenLabs.connected) {
+        throw new Error("Premium voice requires API connection.");
+    }
+
+    chunk.status = 'processing';
+    updateChunkUI(chunk.id, 'processing');
+
+    try {
+        if(chunk.audioUrl) {
+            URL.revokeObjectURL(chunk.audioUrl);
+            chunk.audioUrl = null;
+        }
+
+        const modelId = document.getElementById('el-model').value || 'eleven_multilingual_v2';
+        const targetVoice = chunk.voiceId || STATE.project.voiceIds[0];
+        
+        const result = await engine.generateChunk(chunk.text, targetVoice, modelId);
+        
+        chunk.duration = result.duration;
+        chunk.audioUrl = result.audioUrl; 
+        chunk.status = 'done';
+        updateChunkUI(chunk.id, 'done');
+        return true;
+    } catch(err) {
+        console.error(err);
+        chunk.status = 'error';
+        updateChunkUI(chunk.id, 'error');
+        LOG.add(`Error generating chunk: ${err.message}`, 'error');
+        return false;
+    }
+}
+
+function updateChunkUI(chunkId, status) {
+    const el = document.getElementById(`chunk-${chunkId}`);
+    if(!el) return;
+    
+    // Remove all status classes
+    el.classList.remove('status-pending', 'status-processing', 'status-done', 'status-error');
+    el.classList.add(`status-${status}`);
+}
+
+async function generateSingleChunk(chunkId, event) {
+    if(event) event.stopPropagation();
+    
+    let chunk;
+    for(const ch of STATE.chapters) {
+        chunk = ch.chunks.find(c => c.id === chunkId);
+        if(chunk) break;
+    }
+    
+    if(!chunk) return;
+    LOG.add(`Regenerating single segment...`);
+    await processChunkGeneration(chunk);
+}
+
+async function generateChapter(chapterIdx, event) {
+    if(event) event.stopPropagation();
+    
+    const chapter = STATE.chapters[chapterIdx];
+    if(!chapter) return;
+
+    LOG.add(`Generating all segments in "${chapter.title}"...`);
+    
+    // Process sequentially to avoid rate limits
+    for(const chunk of chapter.chunks) {
+        await processChunkGeneration(chunk);
+    }
+    LOG.add(`Chapter generation complete.`);
+}
+
+function renderTimeline() {
+    dom.timeline.innerHTML = '';
+    
+    if(!STATE.chapters.length) {
+        dom.timeline.innerHTML = `<div style="padding:20px; text-align:center; color: var(--text-dim); font-style:italic;">
+            No chapters detected. <br>Paste text and click "Analyze".
+        </div>`;
+        return;
+    }
+
+    STATE.chapters.forEach((ch, idx) => {
+        const uniqueVoices = new Set(ch.chunks.map(c => c.voiceName)).size;
+        const segmentCount = ch.chunks.length;
+        
+        const div = document.createElement('div');
+        div.className = 'chapter-card';
+        
+        // Chapter Header with Generate Button
+        div.innerHTML = `
+        <div class="chapter-header">
+            <div onclick="displayChapter(${idx})" style="flex:1; cursor:pointer;">
+                <div style="display:flex; justify-content:space-between; align-items:center;">
+                    <span style="font-size:1rem; font-weight:700; color:var(--accent);">${ch.title}</span>
+                    <span style="font-size:0.75rem; background:rgba(255,255,255,0.1); padding:2px 8px; border-radius:12px;">
+                        ${segmentCount} Segments
+                    </span>
+                </div>
+                <div style="font-size:0.8rem; color:var(--text-dim); display:flex; gap:10px;">
+                    <span>🗣️ ${uniqueVoices} Voices</span>
+                    <span>⏱️ Est. ${(segmentCount * 15 / 60).toFixed(1)} min</span>
+                </div>
+            </div>
+            <div style="margin-left:15px;">
+                <button class="sm-btn" onclick="generateChapter(${idx}, event)">⚡ Gen Chapter</button>
+            </div>
+        </div>`;
+        
+        // Segments with Individual Regenerate Buttons
+        ch.chunks.forEach((ck, cIdx) => {
+            const vName = ck.voiceName || 'Voice';
+            const bgStyle = cIdx % 2 === 0 ? 'background:rgba(255,255,255,0.02);' : '';
+            
+            div.innerHTML += `<div id="chunk-${ck.id}" class="chunk-item status-${ck.status}" onclick="playSingleChunk('${ck.id}')" style="${bgStyle}">
+                <div style="display:flex; align-items:center; gap:10px; width:100%;">
+                    <span style="font-family:var(--font-mono); font-size:0.7rem; color:var(--text-dim); width:20px;">#${cIdx + 1}</span>
+                    <span class="voice-tag" style="display:inline-block; margin:0; width:80px; text-align:center;">${vName}</span>
+                    <span class="chunk-content" style="flex:1;">${ck.text.substring(0,60)}...</span>
+                    
+                    <div class="chunk-actions">
+                         <span class="action-btn" title="Regenerate Audio" onclick="generateSingleChunk('${ck.id}', event)">↺</span>
+                         <span class="generated-icon">✓</span>
+                    </div>
+                </div>
+            </div>`;
+        });
+        dom.timeline.appendChild(div);
+    });
+}
+
+// --- UI LOGIC ---
+
+function toggleDualMode() {
+    const mode = dom.projectMode.value;
+    STATE.project.mode = mode;
+    
+    if(mode === 'dual') {
+        dom.groupVoice2.style.display = 'block';
+        dom.groupToken.style.display = 'block';
+    } else {
+        dom.groupVoice2.style.display = 'none';
+        dom.groupToken.style.display = 'none';
+    }
+}
+
+function openVoiceDropdown(slot, event) {
+    event.stopPropagation();
+    STATE.activeVoiceSlot = slot;
+    dom.voiceDropdown.classList.add('show');
+    
+    // Position
+    const btn = slot === 1 ? dom.voiceBtn1 : dom.voiceBtn2;
+    const rect = btn.getBoundingClientRect();
+    dom.voiceDropdown.style.top = `${rect.bottom + 5}px`;
+    
+    refreshVoiceList(); // Re-render to show selected
+}
+
+async function refreshVoiceList() {
+    STATE.voices = await engine.getVoices();
+    const dd = dom.voiceDropdown;
+    dd.innerHTML = '';
+
+    if(STATE.voices.length === 0) {
+        dd.innerHTML = '<div style="padding:15px;color:var(--text-dim)">No voices available.</div>';
+        return;
+    }
+
+    const getStandardVoiceGender = (name) => {
+        name = name.toLowerCase();
+        if (name.includes('female') || name.includes('samantha')) return 'female';
+        if (name.includes('male') || name.includes('daniel')) return 'male';
+        return 'other';
+    };
+
+    // Columns
+    const cols = {
+        stdMale: document.createElement('div'),
+        stdFemale: document.createElement('div'),
+        stdOther: document.createElement('div'),
+        premMale: document.createElement('div'),
+        premFemale: document.createElement('div')
+    };
+    
+    Object.keys(cols).forEach(k => {
+        cols[k].className = 'voice-col';
+        let label = '';
+        if(k === 'stdMale') label = '💻 Standard - Male';
+        if(k === 'stdFemale') label = '💻 Standard - Female';
+        if(k === 'stdOther') label = '💻 Standard - Other';
+        if(k === 'premMale') label = '☁️ Premium - Male';
+        if(k === 'premFemale') label = '☁️ Premium - Female';
+        cols[k].innerHTML = `<div class="voice-col-header">${label}</div>`;
+        dd.appendChild(cols[k]);
+    });
+
+    const currentSelectedId = STATE.project.voiceIds[STATE.activeVoiceSlot - 1];
+
+    STATE.voices.forEach(v => {
+        const el = document.createElement('div');
+        el.className = 'voice-option';
+        if(v.id === currentSelectedId) el.classList.add('selected');
+        el.onclick = () => selectVoice(v.id);
+        
+        let meta = v.type === 'premium' ? 
+            (v.labels.accent || v.labels.age || 'Premium') : v.lang;
+        
+        el.innerHTML = `<span>${v.name}</span> <span class="voice-meta">${meta}</span>`;
+
+        if(v.type === 'premium') {
+            const g = (v.labels.gender || '').toLowerCase();
+            if(g === 'female') cols.premFemale.appendChild(el);
+            else cols.premMale.appendChild(el); 
+        } else { 
+            const g = getStandardVoiceGender(v.name);
+            if(g === 'male') cols.stdMale.appendChild(el);
+            else if(g === 'female') cols.stdFemale.appendChild(el);
+            else cols.stdOther.appendChild(el);
+        }
+    });
+    
+    updateDropdownButtons();
+}
+
+function selectVoice(id) {
+    const slot = STATE.activeVoiceSlot - 1; // 0 or 1
+    STATE.project.voiceIds[slot] = id;
+    
+    // Auto-fill name if empty
+    const v = STATE.voices.find(vo => vo.id === id);
+    const nameInput = slot === 0 ? dom.voiceName1 : dom.voiceName2;
+    if(v && !nameInput.value.trim()) {
+        nameInput.value = v.name.split(' ')[0]; // Just first name
+    }
+
+    updateDropdownButtons();
+    dom.voiceDropdown.classList.remove('show');
+    updateReceipt();
+}
+
+function updateDropdownButtons() {
+    [0, 1].forEach(slot => {
+        const id = STATE.project.voiceIds[slot];
+        const v = STATE.voices.find(vo => vo.id === id);
+        const btn = slot === 0 ? dom.voiceBtn1 : dom.voiceBtn2;
+        const label = btn.querySelector('span');
+        if(v) label.innerText = v.name;
+        else label.innerText = "Select Voice...";
+    });
+}
+
+window.addEventListener('click', (e) => {
+    // Close dropdown if clicked outside
+    if(!dom.voiceDropdown.contains(e.target) && 
+       !dom.voiceBtn1.contains(e.target) && 
+       !dom.voiceBtn2.contains(e.target)) {
+        dom.voiceDropdown.classList.remove('show');
+    }
+});
+
+function sanitizeChunkSize(value) {
+    const parsed = parseInt(value, 10);
+    if(Number.isNaN(parsed)) return 1000;
+    const clamped = Math.min(Math.max(parsed, 200), 4000);
+    return clamped;
+}
+
+function splitTextIntoChunks(text, maxChars) {
+    const result = [];
+    let remaining = text.trim();
+    while(remaining.length) {
+        if(remaining.length <= maxChars) {
+            result.push(remaining);
+            break;
+        }
+        let splitIndex = remaining.lastIndexOf(' ', maxChars);
+        if(splitIndex <= maxChars * 0.5) {
+            splitIndex = remaining.lastIndexOf('\n', maxChars);
+        }
+        if(splitIndex <= 0) splitIndex = maxChars;
+        const chunkText = remaining.slice(0, splitIndex).trim();
+        if(chunkText.length) result.push(chunkText);
+        remaining = remaining.slice(splitIndex).trimStart();
+        if(!remaining.length) break;
+    }
+    return result;
+}
+
+// --- EVENT HANDLERS ---
+
+
+dom.manuscript.addEventListener('input', () => {
+    localStorage.setItem('ab_manuscript', dom.manuscript.value);
+    updateReceipt();
+});
+
+document.getElementById('btn-analyze').addEventListener('click', () => {
+    const raw = dom.manuscript.value;
+    if(!raw.trim()) return;
+    
+    // Reset
+    STATE.chapters.forEach(ch => {
+        ch.chunks.forEach(chunk => {
+            if(chunk.audioUrl) URL.revokeObjectURL(chunk.audioUrl);
+        });
+    });
+    STATE.chapters = [];
+    
+    // Update State from UI
+    STATE.project.names = [dom.voiceName1.value, dom.voiceName2.value];
+    STATE.project.token = dom.voiceToken.value;
+
+    const chunkLimit = sanitizeChunkSize(dom.chunkSize.value);
+    dom.chunkSize.value = chunkLimit;
+    
+    // 1. Split Chapters (Improved Regex with Multi-Language Support)
+    const chapterRegex = TextParser.getChapterHeadingRegex();
+    
+    // Split but keep delimiters
+    const parts = raw.split(chapterRegex).filter(p => p.trim().length > 0);
+    
+    let currentTitle = "Start";
+    let preamble = "";
+    
+    // Check for preamble (text before first chapter)
+    if(parts.length > 0 && !parts[0].match(chapterRegex)) {
+        preamble = parts[0];
+    }
+    
+    const isDual = STATE.project.mode === 'dual';
+
+    // Iterate
+    let chapterCounter = 0;
+    for(let i=0; i<parts.length; i++) {
+        const p = parts[i];
+        const pClean = p.trim();
+        
+        // Use trimmed string for header check to avoid whitespace issues
+        // We use the same regex used for splitting, which enforces ^ and $ anchors
+        if(pClean.match(chapterRegex)) {
+            // Found a header
+            currentTitle = pClean.replace(/^[#\s]+/, '').trim();
+            chapterCounter++;
+        } else {
+             // Found content
+             let segments = [];
+             
+             if(isDual) {
+                 // Pass original p (with formatting) or clean? Original is safer for context.
+                 const startVoice = TextParser.detectStartingVoice(p, currentTitle, STATE.project.names);
+                 segments = TextParser.parseDualVoiceSegments(p, STATE.project.token, startVoice);
+             } else {
+                 segments = [{ text: p, voiceIndex: 0 }];
+             }
+
+             const chapterChunks = [];
+             
+             segments.forEach(seg => {
+                 const textChunks = splitTextIntoChunks(seg.text, chunkLimit);
+                 textChunks.forEach(txt => {
+                     const assignedVoiceId = STATE.project.voiceIds[seg.voiceIndex] || STATE.project.voiceIds[0];
+                     const assignedName = STATE.project.names[seg.voiceIndex] || (seg.voiceIndex === 0 ? "Voice 1" : "Voice 2");
+
+                     chapterChunks.push({
+                        text: txt,
+                        status: 'pending',
+                        id: Math.random().toString(36).substr(2,9),
+                        audioUrl: null,
+                        voiceId: assignedVoiceId,
+                        voiceName: assignedName, 
+                        voiceIndex: seg.voiceIndex,
+                        duration: 0
+                     });
+                 });
+             });
+
+             if(chapterChunks.length > 0) {
+                let finalChapterTitle;
+                if (chapterCounter === 0) {
+                    finalChapterTitle = "Titles";
+                } else {
+                    let cleanHeading = currentTitle.replace(/^(Chapter|Part|Book|Kapitel|Prologue|Epilogue)\s+\d*[:\.]?\s*/i, '');
+                    if (cleanHeading === "Start") cleanHeading = "";
+                    finalChapterTitle = `Chapter ${chapterCounter}${cleanHeading ? ': ' + cleanHeading : ''}`;
+                }
+
+                 STATE.chapters.push({
+                     title: finalChapterTitle,
+                     chunks: chapterChunks
+                 });
+             }
+        }
+    }
+    
+    // --- METADATA & SUMMARY ---
+    const meta = TextParser.detectProjectMetadata(raw, preamble);
+    const modelId = dom.elModel.value; // Get model from dom.elModel
+    const creditMultiplier = TextParser.getModelCreditMultiplier(modelId);
+    
+    // The base rate for 1 character is $165 / 1,000,000 = $0.000165
+    const costPerCharBase = 0.000165; 
+
+    // Total cost = totalChars * creditMultiplier * costPerCharBase
+    const totalChars = STATE.chapters.reduce((acc, ch) => acc + ch.chunks.reduce((c, ck) => c + ck.text.length, 0), 0);
+    const estCost = totalChars * creditMultiplier * costPerCharBase;
+
+    // Update UI Summary
+    document.getElementById('project-summary').style.display = 'block';
+    document.getElementById('sum-title').innerText = meta.title.substring(0,20);
+    document.getElementById('sum-author').innerText = meta.author.substring(0,20);
+    document.getElementById('sum-lang').innerText = meta.language;
+    document.getElementById('sum-chapters').innerText = STATE.chapters.length;
+    document.getElementById('sum-chars').innerText = totalChars.toLocaleString();
+    document.getElementById('sum-cost').innerText = `$${estCost.toFixed(2)}`;
+    document.getElementById('sum-model').innerText = `Model: ${dom.elModel.options[dom.elModel.selectedIndex].text}`;
+
+
+    // Render Timeline via helper
+    renderTimeline();
+
+    if(!STATE.chapters.length) {
+        dom.timeline.innerHTML = `<div style="padding:20px; text-align:center; color: var(--text-dim); font-style:italic;">
+            Unable to detect chapters. Ensure your manuscript uses headings (e.g. "Chapter 1", "# Title").
+        </div>`;
+    }
+    
+    const hasChunks = STATE.chapters.some(ch => ch.chunks.length > 0);
+    dom.btnGenerate.disabled = !hasChunks;
+    dom.btnGenerate.innerText = "2. Generate Audio";
+    LOG.add(`Analyzed: ${meta.title} by ${meta.author}. ${STATE.chapters.length} chapters.`);
+    updateReceipt();
+});
+
+document.getElementById('btn-generate').addEventListener('click', async () => {
+    // Validate Voices
+    if(!STATE.project.voiceIds[0]) {
+        alert("Please select at least Voice 1.");
+        return;
+    }
+    if(STATE.project.mode === 'dual' && !STATE.project.voiceIds[1]) {
+        alert("Please select Voice 2 for Dual Mode.");
+        return;
+    }
+
+    // Check Connections for Premium Voices
+    const usedVoiceIds = new Set();
+    STATE.chapters.forEach(ch => ch.chunks.forEach(ck => usedVoiceIds.add(ck.voiceId)));
+    
+    let needsAPI = false;
+    usedVoiceIds.forEach(id => {
+        const v = STATE.voices.find(vo => vo.id === id);
+        if(v && v.type === 'premium') needsAPI = true;
+    });
+
+    if (needsAPI && !STATE.api.elevenLabs.connected) {
+        alert("One or more selected voices are Premium. Please connect ElevenLabs API.");
+        return;
+    }
+
+    // 1. Pre-check status
+    let total = 0;
+    let pending = 0;
+    STATE.chapters.forEach(ch => {
+        ch.chunks.forEach(ck => {
+            total++;
+            if(ck.status !== 'done') pending++;
+        });
+    });
+
+    if (pending === 0 && total > 0) {
+        LOG.add("All sections already generated.", 'success');
+        alert("All sections are already generated!");
+        return;
+    }
+
+    STATE.isProcessing = true;
+    dom.btnGenerate.disabled = true;
+    dom.btnGenerate.innerText = `Generating (${pending} remaining)...`;
+    
+    let processedCount = 0;
+
+    for(let ch of STATE.chapters) {
+        for(let chunk of ch.chunks) {
+            // SAFETY: Skip if already done
+            if(chunk.status === 'done') continue;
+            
+            const success = await processChunkGeneration(chunk);
+            if(success) processedCount++;
+            
+            dom.btnGenerate.innerText = `Generating (${pending - processedCount} remaining)...`;
+        }
+    }
+    STATE.isProcessing = false;
+    dom.btnGenerate.disabled = false;
+    dom.btnGenerate.innerText = "Generation Complete"; 
+    
+    setTimeout(() => {
+        if(!STATE.isProcessing) dom.btnGenerate.innerText = "2. Generate Audio";
+    }, 2000);
+
+    LOG.add(`Generation finished. Processed ${processedCount} new sections.`);
+});
+
+// --- RESTORED PLAYBACK LOGIC ---
+
+dom.btnPlay.addEventListener('click', async () => {
+    if(STATE.isPlaying) {
+        // Stop Logic
+        engine.stopPlayback();
+        STATE.isPlaying = false;
+        dom.btnPlay.innerText = "▶";
+        LOG.add("Playback stopped.");
+        return;
+    }
+
+    STATE.isPlaying = true;
+    dom.btnPlay.innerText = "⬛"; // Stop Icon
+    dom.masterProgress.value = 0;
+    
+    // Flatten chunks for easy iteration
+    let queue = [];
+    STATE.chapters.forEach(ch => queue = [...queue, ...ch.chunks]);
+    
+    const total = queue.length;
+
+    for(let i=0; i<total; i++) {
+        if(!STATE.isPlaying) break; // Exit if stopped
+
+        const chunk = queue[i];
+        
+        // Update Progress Bar
+        dom.masterProgress.value = ((i + 1) / total) * 100;
+        
+        // Visual Highlight
+        const el = document.getElementById(`chunk-${chunk.id}`);
+        if(el) {
+            el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            el.classList.add('status-playing');
+        }
+
+        LOG.add(`Playing segment ${i+1}/${total}`);
+        
+        // Use the Engine to play real audio or synth
+        try {
+            await engine.playChunk(chunk);
+        } catch (err) {
+            LOG.add(err.message, 'error');
+        }
+        
+        if(el) el.classList.remove('status-playing');
+    }
+
+    STATE.isPlaying = false;
+    dom.btnPlay.innerText = "▶";
+    dom.masterProgress.value = 100;
+    LOG.add("Playback Finished.");
+});
+
+function updateReceipt() {
+    let cost = 0;
+    const totalChars = dom.manuscript.value.length;
+    const modelId = dom.elModel.value; // Get current model from UI
+    const costPerCharBase = 0.000165; 
+
+    // If we have parsed chapters, calculate exactly based on assigned chunks
+    if(STATE.chapters.length > 0) {
+        STATE.chapters.forEach(ch => {
+            ch.chunks.forEach(ck => {
+                const vid = ck.voiceId || STATE.project.voiceIds[0];
+                const v = STATE.voices.find(vo => vo.id === vid);
+                // Only premium voices from ElevenLabs incur cost
+                if(v && v.type === 'premium') {
+                    const creditMultiplier = TextParser.getModelCreditMultiplier(modelId);
+                    cost += ck.text.length * creditMultiplier * costPerCharBase;
+                }
+            });
+        });
+    } else {
+        // Estimate based on configuration (before analysis)
+        const v1 = STATE.voices.find(vo => vo.id === STATE.project.voiceIds[0]);
+        const v2 = STATE.voices.find(vo => vo.id === STATE.project.voiceIds[1]);
+        
+        let costRate1 = 0;
+        if (v1 && v1.type === 'premium') {
+            costRate1 = TextParser.getModelCreditMultiplier(modelId) * costPerCharBase;
+        }
+
+        let costRate2 = 0;
+        if (v2 && v2.type === 'premium') {
+            costRate2 = TextParser.getModelCreditMultiplier(modelId) * costPerCharBase;
+        }
+        
+        if(STATE.project.mode === 'dual') {
+            // Assume rough 50/50 split for estimation
+            cost = (totalChars * 0.5 * costRate1) + (totalChars * 0.5 * costRate2);
+        } else {
+            cost = totalChars * costRate1;
+        }
+    }
+    
+    dom.receipt.innerText = `$${cost.toFixed(2)} Est. Cost`;
+}
+
+// Run
+init();
+</script>
+
+
+</body>
+</html>

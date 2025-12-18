@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ocean Wave Simulation</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { margin: 0; overflow: hidden; background-color: #000; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #canvas-container { width: 100vw; height: 100vh; position: absolute; top: 0; left: 0; z-index: 0; }
+        
+        /* Custom slider styling for a calming feel */
+        input[type=range] {
+            -webkit-appearance: none;
+            width: 100%;
+            background: transparent;
+        }
+        input[type=range]::-webkit-slider-thumb {
+            -webkit-appearance: none;
+            height: 16px;
+            width: 16px;
+            border-radius: 50%;
+            background: #ffffff;
+            cursor: pointer;
+            margin-top: -6px;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.3);
+        }
+        input[type=range]::-webkit-slider-runnable-track {
+            width: 100%;
+            height: 4px;
+            cursor: pointer;
+            background: rgba(255,255,255,0.3);
+            border-radius: 2px;
+        }
+        .glass-panel {
+            background: rgba(15, 23, 42, 0.4);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="canvas-container"></div>
+
+    <!-- UI Overlay -->
+    <div class="absolute top-0 right-0 p-6 z-10 w-full md:w-80 transition-opacity duration-500">
+        <div class="glass-panel rounded-2xl p-6 text-white shadow-xl">
+            <h1 class="text-xl font-light mb-1 tracking-wide text-cyan-100">Ocean Simulation</h1>
+            <p class="text-xs text-cyan-200/60 mb-6 font-mono">GERSTNER WAVE MODEL</p>
+
+            <div class="space-y-6">
+                <!-- Wind Speed Control -->
+                <div class="group">
+                    <div class="flex justify-between text-sm mb-2 text-cyan-50/80">
+                        <span>Wind Speed</span>
+                        <span id="speed-val" class="font-mono text-xs opacity-70">1.0</span>
+                    </div>
+                    <input type="range" id="speed-slider" min="0" max="3" step="0.1" value="1.0">
+                </div>
+
+                <!-- Wave Height Control -->
+                <div class="group">
+                    <div class="flex justify-between text-sm mb-2 text-cyan-50/80">
+                        <span>Wave Choppiness</span>
+                        <span id="height-val" class="font-mono text-xs opacity-70">1.0</span>
+                    </div>
+                    <input type="range" id="height-slider" min="0" max="2.0" step="0.1" value="0.8">
+                </div>
+
+                <!-- Lighting Control -->
+                <div class="group">
+                    <div class="flex justify-between text-sm mb-2 text-cyan-50/80">
+                        <span>Sun Position</span>
+                        <span id="light-val" class="font-mono text-xs opacity-70">Day</span>
+                    </div>
+                    <input type="range" id="light-slider" min="0" max="1" step="0.01" value="0.4">
+                </div>
+                
+                 <!-- Color Tone -->
+                 <div class="group">
+                    <div class="flex justify-between text-sm mb-2 text-cyan-50/80">
+                        <span>Water Hue</span>
+                        <span id="hue-val" class="font-mono text-xs opacity-70">Deep Blue</span>
+                    </div>
+                    <input type="range" id="hue-slider" min="0" max="1" step="0.01" value="0.6">
+                </div>
+            </div>
+            
+            <div class="mt-8 pt-4 border-t border-white/10 text-xs text-center text-cyan-200/40">
+                Click & Drag to Rotate • Scroll to Zoom
+            </div>
+        </div>
+    </div>
+
+    <!-- Vertex Shader -->
+    <script type="x-shader/x-vertex" id="vertexShader">
+        uniform float uTime;
+        uniform float uSpeed;
+        uniform float uChoppiness;
+        
+        // Varyings to pass to fragment shader
+        varying vec3 vWorldPosition;
+        varying vec3 vViewPosition;
+        varying vec3 vNormal;
+        varying float vElevation;
+
+        // Gerstner Wave Calculation
+        // Returns the displacement and modifies the normal
+        vec3 gerstnerWave(vec4 wave, vec3 p, inout vec3 tangent, inout vec3 binormal) {
+            float steepness = wave.z;
+            float wavelength = wave.w;
+            float k = 2.0 * 3.14159 / wavelength;
+            float c = sqrt(9.8 / k);
+            vec2 d = normalize(wave.xy);
+            
+            float f = k * (dot(d, p.xy) - c * uTime * uSpeed);
+            float a = steepness / k; // Amplitude
+            
+            // Apply choppiness factor globally to amplitude
+            a *= uChoppiness;
+
+            float cosf = cos(f);
+            float sinf = sin(f);
+
+            // Displacement
+            float x = d.x * (a * cosf);
+            float y = d.y * (a * cosf);
+            float z = a * sinf;
+
+            // Derivatives for Normal calculation
+            float wa = k * a; // Maximum slope
+            float d_cosf = -sinf; // Derivative of cos
+            float d_sinf = cosf;  // Derivative of sin
+
+            // Tangent (partial derivative with respect to x)
+            tangent.x -= d.x * d.x * (wa * sinf);
+            tangent.y -= d.x * d.y * (wa * sinf);
+            tangent.z += d.x * (wa * cosf);
+
+            // Binormal (partial derivative with respect to y)
+            binormal.x -= d.y * d.x * (wa * sinf);
+            binormal.y -= d.y * d.y * (wa * sinf);
+            binormal.z += d.y * (wa * cosf);
+
+            return vec3(x, y, z);
+        }
+
+        void main() {
+            vec3 gridPoint = position;
+            vec3 tangent = vec3(1.0, 0.0, 0.0);
+            vec3 binormal = vec3(0.0, 1.0, 0.0);
+            vec3 p = gridPoint;
+
+            // Accumulate multiple waves
+            // format: direction X, direction Y, steepness, wavelength
+            p += gerstnerWave(vec4(1.0, 1.0, 0.25, 60.0), gridPoint, tangent, binormal);
+            p += gerstnerWave(vec4(1.0, 0.6, 0.25, 31.0), gridPoint, tangent, binormal);
+            p += gerstnerWave(vec4(0.8, 1.3, 0.25, 18.0), gridPoint, tangent, binormal);
+            p += gerstnerWave(vec4(-0.5, 1.0, 0.25, 12.0), gridPoint, tangent, binormal); // Counter-swell
+            p += gerstnerWave(vec4(-0.4, -0.6, 0.25, 7.0), gridPoint, tangent, binormal);
+
+            // Construct Normal
+            vec3 normal = normalize(cross(binormal, tangent));
+            vNormal = normal;
+            vElevation = p.z;
+
+            vec4 worldPosition = modelMatrix * vec4(p, 1.0);
+            vWorldPosition = worldPosition.xyz;
+            
+            vec4 viewPos = modelViewMatrix * vec4(p, 1.0);
+            vViewPosition = viewPos.xyz;
+
+            gl_Position = projectionMatrix * viewPos;
+        }
+    </script>
+
+    <!-- Fragment Shader -->
+    <script type="x-shader/x-fragment" id="fragmentShader">
+        uniform vec3 uSunPosition;
+        uniform vec3 uBaseColor;
+        uniform vec3 uShallowColor;
+        uniform vec3 uSkyColor;
+        uniform float uChoppiness;
+
+        varying vec3 vWorldPosition;
+        varying vec3 vViewPosition;
+        varying vec3 vNormal;
+        varying float vElevation;
+
+        void main() {
+            vec3 viewDirection = normalize(cameraPosition - vWorldPosition);
+            vec3 normal = normalize(vNormal);
+            vec3 sunDir = normalize(uSunPosition);
+
+            // Fresnel Effect (reflection intensity based on viewing angle)
+            float fresnel = dot(viewDirection, normal);
+            fresnel = clamp(1.0 - fresnel, 0.0, 1.0);
+            fresnel = pow(fresnel, 3.0);
+
+            // Specular Highlight (Sun reflection)
+            vec3 reflection = reflect(-sunDir, normal);
+            float specular = max(dot(viewDirection, reflection), 0.0);
+            specular = pow(specular, 100.0); // Shininess
+            
+            // Mix Colors based on elevation (foam/shallow vs deep)
+            // Adjusted range to make waves more defined even at lower heights
+            vec3 waterColor = mix(uBaseColor, uShallowColor, smoothstep(-1.5, 2.0, vElevation));
+            
+            // Mix water color with sky reflection based on Fresnel
+            vec3 finalColor = mix(waterColor, uSkyColor, fresnel * 0.6);
+            
+            // Add sun specular highlight
+            finalColor += vec3(1.0) * specular * 0.8;
+            
+            // Foam tips
+            // Foam now depends on choppiness. It won't show if choppiness < 0.6
+            float foamTrigger = smoothstep(0.6, 1.2, uChoppiness);
+            float foam = smoothstep(1.0, 2.5, vElevation) * foamTrigger;
+            finalColor += vec3(0.95) * foam * 0.5;
+
+            // Simple atmospheric fog
+            float dist = length(vViewPosition);
+            float fogFactor = smoothstep(100.0, 400.0, dist);
+            finalColor = mix(finalColor, uSkyColor, fogFactor);
+
+            gl_FragColor = vec4(finalColor, 1.0);
+        }
+    </script>
+
+    <script>
+        // --- Configuration ---
+        const CONFIG = {
+            fov: 55,
+            planeSize: 600,
+            planeSegments: 256, // Optimized for MacBook Air (balance between detail and perf)
+            bgColor: 0x050510
+        };
+
+        // --- Init Three.js ---
+        const container = document.getElementById('canvas-container');
+        const scene = new THREE.Scene();
+        scene.fog = new THREE.FogExp2(CONFIG.bgColor, 0.002);
+
+        const camera = new THREE.PerspectiveCamera(CONFIG.fov, window.innerWidth / window.innerHeight, 0.1, 1000);
+        // Position camera for a "ship deck" view
+        camera.position.set(0, -60, 20); 
+        camera.lookAt(0, 50, 0);
+
+        const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: false });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2)); // Cap pixel ratio for performance
+        container.appendChild(renderer.domElement);
+
+        // --- Geometry & Shader ---
+        // Using PlaneBufferGeometry for efficiency
+        const geometry = new THREE.PlaneBufferGeometry(CONFIG.planeSize, CONFIG.planeSize, CONFIG.planeSegments, CONFIG.planeSegments);
+        
+        const uniforms = {
+            uTime: { value: 0 },
+            uSpeed: { value: 1.0 },
+            uChoppiness: { value: 0.8 },
+            uSunPosition: { value: new THREE.Vector3(10, 10, 10) },
+            uBaseColor: { value: new THREE.Color('#004a7c') },
+            uShallowColor: { value: new THREE.Color('#006994') },
+            uSkyColor: { value: new THREE.Color('#87CEEB') } // Default Day
+        };
+
+        const material = new THREE.ShaderMaterial({
+            vertexShader: document.getElementById('vertexShader').textContent,
+            fragmentShader: document.getElementById('fragmentShader').textContent,
+            uniforms: uniforms,
+            side: THREE.FrontSide,
+            wireframe: false
+        });
+
+        const water = new THREE.Mesh(geometry, material);
+        scene.add(water);
+
+        // --- Mouse Interaction (Orbit Controls Lite) ---
+        // Implementing simple drag rotation manually to avoid extra dependencies
+        let isDragging = false;
+        let previousMousePosition = { x: 0, y: 0 };
+        let rotationTarget = { x: 1.2, y: 0 }; // Initial rotation (tilted up slightly)
+
+        // Rotate plane instead of camera for simpler math in this specific setup
+        water.rotation.x = -Math.PI / 2.5; 
+
+        document.addEventListener('mousedown', () => isDragging = true);
+        document.addEventListener('mouseup', () => isDragging = false);
+        document.addEventListener('mousemove', (e) => {
+            if (isDragging) {
+                const deltaMove = {
+                    x: e.offsetX - previousMousePosition.x,
+                    y: e.offsetY - previousMousePosition.y
+                };
+                
+                // Rotate the mesh slightly based on drag
+                // We limit the rotation to keep the horizon sane
+                water.rotation.z -= deltaMove.x * 0.002;
+                water.rotation.x -= deltaMove.y * 0.002;
+            }
+            previousMousePosition = { x: e.offsetX, y: e.offsetY };
+        });
+
+        // Zoom/Scroll
+        document.addEventListener('wheel', (e) => {
+             camera.position.z += e.deltaY * 0.05;
+             camera.position.z = Math.max(5, Math.min(100, camera.position.z));
+        });
+
+
+        // --- UI Logic ---
+        const speedSlider = document.getElementById('speed-slider');
+        const heightSlider = document.getElementById('height-slider');
+        const lightSlider = document.getElementById('light-slider');
+        const hueSlider = document.getElementById('hue-slider');
+        
+        const speedVal = document.getElementById('speed-val');
+        const heightVal = document.getElementById('height-val');
+        const lightVal = document.getElementById('light-val');
+        const hueVal = document.getElementById('hue-val');
+
+        function updateSimulation() {
+            // Speed
+            uniforms.uSpeed.value = parseFloat(speedSlider.value);
+            speedVal.innerText = speedSlider.value;
+
+            // Height/Choppiness
+            uniforms.uChoppiness.value = parseFloat(heightSlider.value);
+            heightVal.innerText = heightSlider.value;
+
+            // Lighting / Time of Day
+            const t = parseFloat(lightSlider.value);
+            
+            // Sun Position calculation (arc over the sky)
+            // 0 = Dawn, 0.5 = Noon, 1 = Dusk
+            const sunX = Math.cos(t * Math.PI) * 100;
+            const sunY = Math.sin(t * Math.PI) * 100; // Height
+            const sunZ = -50;
+            uniforms.uSunPosition.value.set(sunX, sunY, sunZ);
+
+            // Interpolate Sky Color
+            const daySky = new THREE.Color('#87CEEB');
+            const sunsetSky = new THREE.Color('#FF7F50');
+            const nightSky = new THREE.Color('#050510');
+            
+            let currentSky;
+            let currentWaterBase;
+            
+            if (t < 0.2) { // Night to Day
+                 currentSky = nightSky.clone().lerp(daySky, t * 5);
+                 lightVal.innerText = "Dawn";
+            } else if (t < 0.7) { // Day
+                 currentSky = daySky;
+                 lightVal.innerText = "Day";
+            } else { // Sunset to Night
+                 currentSky = daySky.clone().lerp(sunsetSky, (t - 0.7) * 3.33);
+                 lightVal.innerText = "Sunset";
+            }
+            
+            // Update Colors
+            uniforms.uSkyColor.value.copy(currentSky);
+            scene.background = currentSky;
+            scene.fog.color = currentSky;
+            
+            // Hue Shift
+            const hue = parseFloat(hueSlider.value);
+            const deepBlue = new THREE.Color('#002b4d');
+            const tropicalGreen = new THREE.Color('#006994');
+            const purpleHaze = new THREE.Color('#2E004F');
+            
+            let baseColor = deepBlue.clone().lerp(tropicalGreen, hue);
+            if(t > 0.8) baseColor.lerp(purpleHaze, 0.5); // Add purple tint at sunset
+            
+            uniforms.uBaseColor.value.copy(baseColor);
+            
+            // Calculate shallow color (lighter version of base)
+            const shallow = baseColor.clone().offsetHSL(0, 0, 0.2);
+            uniforms.uShallowColor.value.copy(shallow);
+            
+            hueVal.innerText = hue < 0.3 ? "Deep Ocean" : (hue > 0.7 ? "Tropical" : "Coastal");
+        }
+
+        // Event Listeners for UI
+        speedSlider.addEventListener('input', updateSimulation);
+        heightSlider.addEventListener('input', updateSimulation);
+        lightSlider.addEventListener('input', updateSimulation);
+        hueSlider.addEventListener('input', updateSimulation);
+
+        // Resize Handler
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+        // --- Animation Loop ---
+        const clock = new THREE.Clock();
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const delta = clock.getDelta();
+            uniforms.uTime.value += delta;
+
+            renderer.render(scene, camera);
+        }
+
+        // Start
+        updateSimulation(); // Initial state
+        animate();
+
+    </script>
+</body>
+</html>
