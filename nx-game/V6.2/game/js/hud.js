@@ -18,6 +18,7 @@ export const hud = {
     },
     
     init: function(gameInstance) {
+        console.log("[HUD] init called");
         this.game = gameInstance;
         this.setupInput();
 
@@ -128,12 +129,14 @@ export const hud = {
     },
 
     setupInput: function() {
+        console.log("[HUD] setupInput called - adding keydown listener");
         window.addEventListener('keydown', (e) => {
             if (e.repeat) return; // Prevent hold-down repeating
             const key = e.key.toLowerCase();
             
             // ADMIN HOTKEYS
             if (key === 'a') {
+                console.log(`[HUD Input] 'A' pressed. Current state: ${this.showAllPois}`);
                 this.showAllPois = !this.showAllPois;
                 this.game.utils.addMessage(`[ADMIN] Show All POIs: ${this.showAllPois ? 'ON' : 'OFF'}`);
             }
