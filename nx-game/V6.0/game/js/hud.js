@@ -358,24 +358,21 @@ export const hud = {
             const sideEffect = traits.sideEffect || traits['sideEffect.'] || 'None';
 
             console.log(`[HUD NFT] Initial item.imageUrl for ${item.name} (ID: ${id}): ${item.imageUrl}`);
-            const CONTRACT = 'SP8HMQP4Q63V3E6SXXPXZ4WJXA263HBD95QY2AM3.narcotix';
-            let cacheUrl = item.imageUrl;
             
-            if (!cacheUrl || cacheUrl === 'undefined') { // Check for explicit 'undefined' string which might come from CSV
-                cacheUrl = `https://assets.hiro.so/api/mainnet/token-metadata-api/${CONTRACT}/${id}.png`;
-                console.log(`[HUD NFT] Using fallback cacheUrl for ${item.name} (ID: ${id}): ${cacheUrl}`);
-            } else {
-                console.log(`[HUD NFT] Using direct item.imageUrl for ${item.name} (ID: ${id}): ${cacheUrl}`);
-            }
+            // Use imageLoader to get the correct, CORS-ready URL (or fallback)
+            const cacheUrl = imageLoader.getUrl(id) || item.imageUrl || `https://assets.hiro.so/api/mainnet/token-metadata-api/SP8HMQP4Q63V3E6SXXPXZ4WJXA263HBD95QY2AM3.narcotix/${id}.png?cors=1`;
 
-            // IPFS Fallback URL
-            const ipfsUrl = `https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images/%23${id}.png`;
+            console.log(`[HUD NFT] Resolved URL for ${item.name} (ID: ${id}): ${cacheUrl}`);
+
+            // IPFS Fallback URL (also needs cors=1)
+            const ipfsUrl = `https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images/%23${id}.png?cors=1`;
 
             content = `
                 <h3 style="margin: 0 0 10px 0; color: #fff; text-shadow: 0 0 5px ${hex1}; border-bottom: 1px solid ${hex1}; padding-bottom: 5px;">${item.name}</h3>
                 
                 <div style="text-align: center; margin-bottom: 10px;">
                     <img src="${cacheUrl}" alt="${item.name}" 
+                         crossorigin="anonymous"
                          referrerpolicy="no-referrer"
                          style="width: 100%; max-width: 200px; border: 1px solid #333; box-shadow: 0 0 10px rgba(0,0,0,0.5);"
                          onerror="
@@ -431,6 +428,7 @@ export const hud = {
                                 
                                 <div style="text-align: center; margin-bottom: 20px;">
                                     <img src="${imageUrl}" alt="${item.name}" 
+                                         crossorigin="anonymous"
                                          style="width: 128px; height: 128px; image-rendering: pixelated; border: 1px solid ${color}; background: rgba(0,0,0,0.5); padding: 10px;"
                                          onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHRleHQgeD0iNSIgeT0iMTIiIGZpbGw9IiNGRkYiPj88L3RleHQ+PC9zdmc+';">
                                 </div>
@@ -461,6 +459,7 @@ export const hud = {
                                 
                                 <div style="text-align: center; margin-bottom: 20px;">
                                     <img src="${imageUrl}" alt="${item.name}" 
+                                         crossorigin="anonymous"
                                          style="width: 128px; height: 128px; image-rendering: pixelated; border: 1px solid #FFD700; background: rgba(0,0,0,0.5); padding: 10px;"
                                          onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHRleHQgeD0iNSIgeT0iMTIiIGZpbGw9IiNGRkYiPj88L3RleHQ+PC9zdmc+';">
                                 </div>
@@ -482,6 +481,7 @@ export const hud = {
                 
                 <div style="text-align: center; margin-bottom: 20px;">
                     <img src="${imageUrl}" alt="${item.name}" 
+                         crossorigin="anonymous"
                          style="width: 128px; height: 128px; image-rendering: pixelated; border: 1px solid ${color}; background: rgba(0,0,0,0.5); padding: 10px;"
                          onerror="this.onerror=null; this.src='data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAxNiAxNiI+PHRleHQgeD0iNSIgeT0iMTIiIGZpbGw9IiNGRkYiPj88L3RleHQ+PC9zdmc+';">
                 </div>
