@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Oscilloscope v8 // Architecture</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; font-family: monospace; }
+        canvas { display: block; filter: contrast(1.2) brightness(1.1); }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.8); display: flex; justify-content: center; align-items: center; z-index: 10; transition: opacity 0.5s; }
+        #overlay.hidden { opacity: 0; pointer-events: none; }
+        button { background: transparent; border: 1px solid #0f0; color: #0f0; padding: 20px 40px; font-size: 18px; cursor: pointer; text-transform: uppercase; letter-spacing: 4px; }
+        button:hover { background: #0f0; color: #000; box-shadow: 0 0 20px #0f0; }
+        #hud { position: absolute; bottom: 20px; left: 20px; color: #0f0; pointer-events: none; }
+    </style>
+</head>
+<body>
+    <div id="overlay"><button id="btn">Initialize v8</button></div>
+    <div id="hud">Waiting...</div>
+    <canvas id="c"></canvas>
+    <script>
+        // --- ASSETS ---
+        const PALETTES = {
+            cyan: ['#00FFFF', '#0044FF'],
+            plasma: ['#FF00CC', '#3300FF'],
+            gold: ['#FFD700', '#FF4400'],
+            matrix: ['#00FF00', '#005500']
+        };
+
+        const SHAPES = [
+            { id: 'cube', name: 'Hyper Cube', type: '3d_cube', speed: 0.5 },
+            { id: 'hole', name: 'Black Hole', type: 'spiral', speed: 2.0 },
+            { id: 'wave', name: 'Sine Wave', type: 'linear', speed: 1.0 }
+        ];
+
+        // --- CLASSES ---
+        class Starfield {
+            constructor(count) {
+                this.stars = [];
+                for(let i=0; i<count; i++) {
+                    this.stars.push({
+                        x: Math.random() * window.innerWidth,
+                        y: Math.random() * window.innerHeight,
+                        z: Math.random() * 2,
+                        size: Math.random() * 2
+                    });
+                }
+            }
+            draw(ctx, w, h, speed) {
+                ctx.fillStyle = '#fff';
+                this.stars.forEach(s => {
+                    s.z += speed;
+                    if(s.z > 2) { s.z = 0.1; s.x = Math.random()*w; s.y = Math.random()*h; }
+                    const k = 128.0 / s.z;
+                    const px = (s.x - w/2) * k + w/2;
+                    const py = (s.y - h/2) * k + h/2;
+                    if (px >= 0 && px <= w && py >= 0 && py <= h) {
+                        const size = (1 - s.z / 2) * s.size;
+                        ctx.globalAlpha = 1 - s.z/2;
+                        ctx.fillRect(px, py, size, size);
+                    }
+                });
+                ctx.globalAlpha = 1;
+            }
+        }
+
+        class Oscilloscope {
+            constructor() {
+                this.canvas = document.getElementById('c');
+                this.ctx = this.canvas.getContext('2d');
+                this.audio = null;
+                this.stars = new Starfield(200);
+                this.modeIdx = 0;
+                this.resize();
+                window.addEventListener('resize', () => this.resize());
+                
+                document.addEventListener('keydown', e => {
+                    if(e.key === 'ArrowRight') this.modeIdx = (this.modeIdx + 1) % SHAPES.length;
+                    this.updateHud();
+                });
+            }
+
+            resize() {
+                this.w = this.canvas.width = window.innerWidth;
+                this.h = this.canvas.height = window.innerHeight;
+            }
+
+            async start() {
+                this.audio = new AudioContext();
+                this.osc = this.audio.createOscillator();
+                this.gain = this.audio.createGain();
+                this.analyser = this.audio.createAnalyser();
+                
+                this.osc.connect(this.gain);
+                this.gain.connect(this.analyser);
+                this.analyser.connect(this.audio.destination);
+                
+                this.osc.start();
+                this.loop();
+                this.updateHud();
+            }
+
+            updateHud() {
+                document.getElementById('hud').innerText = `MODE: ${SHAPES[this.modeIdx].name}`;
+            }
+
+            loop() {
+                requestAnimationFrame(() => this.loop());
+                const time = performance.now() * 0.001;
+                const data = new Uint8Array(this.analyser.frequencyBinCount);
+                this.analyser.getByteTimeDomainData(data);
+                
+                // Audio Level
+                let sum = 0;
+                for(let i=0; i<data.length; i++) sum += Math.abs(data[i] - 128);
+                const level = sum / data.length;
+
+                // Clear
+                this.ctx.fillStyle = 'rgba(0,0,0,0.2)';
+                this.ctx.fillRect(0, 0, this.w, this.h);
+
+                // Stars
+                this.stars.draw(this.ctx, this.w, this.h, 0.005 + level * 0.001);
+
+                // Shape
+                this.ctx.strokeStyle = '#0f0';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                
+                const mode = SHAPES[this.modeIdx];
+                const cx = this.w/2, cy = this.h/2;
+                
+                for(let i=0; i<data.length; i+=2) {
+                    const v = (data[i] / 128.0) - 1.0; // -1 to 1
+                    const t = i / data.length * Math.PI * 2;
+                    
+                    let x, y;
+                    if (mode.type === 'linear') {
+                        x = i / data.length * this.w;
+                        y = cy + v * 200;
+                    } else if (mode.type === 'spiral') {
+                        const r = (i/data.length) * (Math.min(this.w,this.h)/2);
+                        x = cx + Math.cos(t * 10 + time) * r * (1+v);
+                        y = cy + Math.sin(t * 10 + time) * r * (1+v);
+                    } else {
+                         // Cube projection simulation
+                         const s = 100 * (1 + v);
+                         // Simple square loop
+                         x = cx + Math.cos(t) * s;
+                         y = cy + Math.sin(t) * s;
+                    }
+                    if(i===0) this.ctx.moveTo(x,y); else this.ctx.lineTo(x,y);
+                }
+                this.ctx.stroke();
+            }
+        }
+
+        const app = new Oscilloscope();
+        document.getElementById('btn').onclick = () => {
+            document.getElementById('overlay').classList.add('hidden');
+            app.start();
+        };
+    </script>
+</body>
+</html>

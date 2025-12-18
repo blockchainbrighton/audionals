@@ -1,0 +1,1719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NarcotiX V2 - Enhanced Tactical Stealth</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            background: #0a0a0a; color: #fff; font-family: 'Courier New', monospace;
+            overflow: hidden; display: flex; justify-content: center; align-items: center; height: 100vh;
+        }
+        #gameContainer {
+            position: relative; width: 90vw; max-width: 1200px; height: 90vh; max-height: 800px;
+            border: 3px solid #ff00ff; box-shadow: 0 0 30px #ff00ff; background: #1a001a;
+        }
+        #gameCanvas { width: 100%; height: 100%; image-rendering: pixelated; cursor: crosshair; }
+        #uiOverlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 10; }
+        .panel {
+            position: absolute; background: rgba(0, 0, 0, 0.95); border: 2px solid #00ffff;
+            padding: 12px; font-size: 11px; pointer-events: auto; max-height: 350px; overflow-y: auto;
+        }
+        #statsPanel { top: 10px; left: 10px; min-width: 200px; }
+        #inventoryPanel { top: 10px; right: 10px; width: 280px; display: none; }
+        #questPanel { bottom: 10px; left: 10px; width: 300px; max-height: 150px; }
+        #shopPanel { bottom: 10px; right: 10px; width: 300px; display: none; }
+        #legendPanel {
+            top: 50%; left: 50%; transform: translate(-50%, -50%);
+            width: 450px; display: none; font-size: 12px;
+        }
+        #tipsPanel {
+            position: absolute; top: 10px; right: 10px; width: 320px; height: 80px;
+            background: rgba(0, 20, 40, 0.9); border: 2px solid #0ff; padding: 10px;
+            font-size: 10px; pointer-events: none; z-index: 11; display: block;
+        }
+        #tipsContent { color: #0ff; animation: fadeInOut 8s infinite; }
+        @keyframes fadeInOut { 0%, 100% { opacity: 0.3; } 50% { opacity: 1; } }
+        .legend-item {
+            display: flex; align-items: center; margin: 5px 0;
+        }
+        .legend-color {
+            width: 20px; height: 20px; margin-right: 10px; border: 1px solid #fff;
+        }
+        .pill {
+            display: inline-block; margin: 2px; padding: 5px; border: 1px solid; border-radius: 50%;
+            cursor: pointer; transition: all 0.2s; font-size: 10px; width: 50px; height: 50px;
+            text-align: center; line-height: 40px; user-select: none;
+        }
+        .pill:hover { transform: scale(1.1); box-shadow: 0 0 10px currentColor; }
+        .rarity-common { border-color: #888; color: #888; }
+        .rarity-uncommon { border-color: #0f0; color: #0f0; }
+        .rarity-rare { border-color: #00f; color: #00f; }
+        .rarity-epic { border-color: #f0f; color: #f0f; }
+        .rarity-legendary { border-color: #ff0; color: #ff0; animation: pulse 1s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .effect-badge {
+            font-size: 9px; background: rgba(255, 0, 255, 0.3); padding: 2px 5px;
+            border-radius: 3px; margin: 2px; display: inline-block;
+        }
+        button {
+            background: #ff00ff; color: #000; border: none; padding: 8px 12px;
+            cursor: pointer; font-family: inherit; font-weight: bold; margin: 2px;
+        }
+        button:hover { background: #00ffff; box-shadow: 0 0 10px #00ffff; }
+        #controls {
+            position: absolute; bottom: 10px; left: 50%; transform: translateX(-50%);
+            text-align: center; font-size: 11px; background: rgba(0, 0, 0, 0.8);
+            padding: 5px 10px; border: 1px solid #ff00ff; white-space: nowrap;
+        }
+        #loadingScreen {
+            position: absolute; top: 0; left: 0; width: 100%; height: 100%;
+            background: #1a001a; display: flex; flex-direction: column;
+            justify-content: center; align-items: center; z-index: 100;
+        }
+        .loading-bar {
+            width: 300px; height: 20px; border: 2px solid #ff00ff; margin-top: 20px;
+        }
+        .loading-fill {
+            height: 100%; background: linear-gradient(90deg, #ff00ff, #00ffff);
+            width: 0%; transition: width 0.3s;
+        }
+        .weapon-hud {
+            position: absolute; bottom: 50px; right: 10px;
+            background: rgba(0, 0, 0, 0.9); border: 1px solid #f0f;
+            padding: 8px; font-size: 10px; min-width: 150px;
+        }
+    </style>
+</head>
+<body>
+    <div id="gameContainer">
+        <canvas id="gameCanvas"></canvas>
+        <div id="uiOverlay">
+            <div id="loadingScreen">
+                <h1>NARCOTIX V2 ENHANCED</h1>
+                <p>Loading tactical operations...</p>
+                <div class="loading-bar">
+                    <div class="loading-fill" id="loadingFill"></div>
+                </div>
+            </div>
+            <div id="statsPanel" class="panel">
+                <h3>🔥 PLAYER STATS</h3>
+                <div>Score: <span id="score">0</span></div>
+                <div>Cash: $<span id="cash">500</span></div>
+                <div>Territory: <span id="territory">0</span> tiles</div>
+                <div>Income: $<span id="income">0</span>/min</div>
+                <div>Health: <span id="health">100</span>/100</div>
+                <div>Speed: <span id="speed">1.0</span>x</div>
+                <div>Stealth: <span id="stealth">0</span>%</div>
+                <div>Luck: <span id="luck">0</span>%</div>
+                <div>Ammo: <span id="ammo">--</span></div>
+                <div>Active Effects:</div>
+                <div id="activeEffects"></div>
+            </div>
+            <div id="inventoryPanel" class="panel">
+                <h3>💊 INVENTORY (<span id="invCount">0</span>/20)</h3>
+                <div id="inventoryGrid" style="display: flex; flex-wrap: wrap; gap: 5px;"></div>
+                <button id="closeInvBtn">Close [I]</button>
+                <button id="usePillBtn">Use Selected</button>
+            </div>
+            <div id="questPanel" class="panel">
+                <h3>📜 OPERATIONS</h3>
+                <div id="questList"></div>
+            </div>
+            <div id="shopPanel" class="panel">
+                <h3>🏪 STASH HOUSE</h3>
+                <div id="shopInventory"></div>
+                <button id="closeShopBtn">Close</button>
+            </div>
+            <div id="legendPanel" class="panel">
+                <h3>🎨 COLOR KEY & LEGEND</h3>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff0; border-radius: 50%;"></div>
+                    <span><strong>Yellow Circle:</strong> YOU (the player)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #8B4513; border-radius: 50%;"></div>
+                    <span><strong>Brown Circle:</strong> Thug (security, no chase)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff4500; border-radius: 50%;"></div>
+                    <span><strong>Orange Circle:</strong> Rogue (short detect, fast)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0000ff; border-radius: 50%;"></div>
+                    <span><strong>Blue Circle:</strong> Police (medium detect, patrol)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff0000; border-radius: 50%;"></div>
+                    <span><strong>Red Circle:</strong> BOSS (rare, long patrol)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #00ffff;"></div>
+                    <span><strong>Cyan Square:</strong> Stash House (shop)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #666; border: 2px solid #fff;"></div>
+                    <span><strong>White-Outlined Gray:</strong> Enterable Building</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #444;"></div>
+                    <span><strong>Dark Gray:</strong> Building Interior (safe zone)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #333;"></div>
+                    <span><strong>Dark Gray:</strong> Street (slightly faster)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0a4a0a;"></div>
+                    <span><strong>Green:</strong> Grass (slightly slower)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff00ff;"></div>
+                    <span><strong>Magenta:</strong> Drug Lab (special tiles)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0066cc;"></div>
+                    <span><strong>Blue Water:</strong> Water (slowest)</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: rgba(0, 255, 0, 0.2);"></div>
+                    <span><strong>Green Overlay:</strong> Your territory</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #0f0; border-radius: 50%;"></div>
+                    <span><strong>Small Green Dot:</strong> Dropped pill pickup</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #f00; width: 4px; height: 4px;"></div>
+                    <span><strong>Red Pixel:</strong> Bullet projectile</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff6600; border-radius: 3px;"></div>
+                    <span><strong>Orange Box:</strong> Grenade (explodes on impact)</span>
+                </div>
+                <button id="closeLegendBtn" style="margin-top: 10px; width: 100%;">Close [K]</button>
+            </div>
+            <div id="tipsPanel">
+                <h4 style="color: #f0f; margin-bottom: 5px;">📡 TACTICAL BRIEFING</h4>
+                <div id="tipsContent">Welcome to NarcotiX. Use WASD to move.</div>
+            </div>
+            <div class="weapon-hud">
+                <div>Weapon: <span id="weaponName">FISTS</span></div>
+                <div>Ammo: <span id="weaponAmmo">∞</span></div>
+            </div>
+            <div id="controls">
+                [WASD/Arrows] Move | [I] Inventory | [E] Interact | [SPACE] Use Pill | [Q] Quest Log | [K] Legend | [LMB] Shoot | [G] Grenade | [F] Enter Building
+            </div>
+        </div>
+    </div>
+
+    <script>
+        (function() {
+            "use strict";
+            
+            // ============================================================================
+            // ENHANCED GAME CONFIGURATION
+            // ============================================================================
+            const GAME_CONFIG = Object.freeze({
+                TILE_SIZE: 40,
+                MAP_WIDTH: 50,
+                MAP_HEIGHT: 50,
+                TERRAIN_TYPES: Object.freeze({
+                    0: Object.freeze({ name: 'street', color: '#333', speed: 1.02, passable: true }),
+                    1: Object.freeze({ name: 'grass', color: '#0a4a0a', speed: 0.98, passable: true }),
+                    2: Object.freeze({ name: 'building', color: '#666', speed: 0, passable: false }),
+                    3: Object.freeze({ name: 'water', color: '#0066cc', speed: 0.9, passable: true }),
+                    4: Object.freeze({ name: 'drug-lab', color: '#ff00ff', speed: 1.0, passable: true, special: 'lab' }),
+                    5: Object.freeze({ name: 'stash-house', color: '#00ffff', speed: 1.0, passable: true, special: 'shop' }),
+                    6: Object.freeze({ name: 'building-enterable', color: '#888', speed: 0, passable: false, special: 'building-entrance' }),
+                    7: Object.freeze({ name: 'building-interior', color: '#444', speed: 1.0, passable: true, special: 'safe-zone' })
+                }),
+                ENEMY_TYPES: Object.freeze({
+                    thug: Object.freeze({ hp: 50, damage: 5, speed: 0.08, color: '#8B4513', detectionRange: 0, patrol: true, label: 'Thug', canEnterBuildings: false, ranged: false }),
+                    rogue: Object.freeze({ hp: 30, damage: 10, speed: 0.12, color: '#ff4500', detectionRange: 18, patrol: false, label: 'Rogue', canEnterBuildings: false, ranged: false }),
+                    police: Object.freeze({ hp: 80, damage: 15, speed: 0.09, color: '#0000ff', detectionRange: 22, patrol: true, label: 'Police', canEnterBuildings: true, ranged: true, fireRate: 1000 }),
+                    boss: Object.freeze({ hp: 200, damage: 25, speed: 0.06, color: '#ff0000', detectionRange: 28, patrol: false, label: 'BOSS', canEnterBuildings: true, ranged: true, fireRate: 800 })
+                }),
+                WEAPON_TYPES: Object.freeze({
+                    fists: Object.freeze({ damage: 10, range: 1.5, fireRate: 500, infinite: true, color: '#fff', name: 'FISTS' }),
+                    pistol: Object.freeze({ damage: 25, range: 150, fireRate: 300, infinite: false, maxAmmo: 12, ammo: 12, color: '#ff0', name: 'PISTOL' }),
+                    shotgun: Object.freeze({ damage: 60, range: 80, fireRate: 800, infinite: false, maxAmmo: 8, ammo: 8, color: '#f80', name: 'SHOTGUN' }),
+                    rifle: Object.freeze({ damage: 40, range: 200, fireRate: 150, infinite: false, maxAmmo: 30, ammo: 30, color: '#0ff', name: 'RIFLE' })
+                }),
+                PLAYER_BASE_SPEED: 0.15, // Further reduced for tactical play
+                SPEED_EFFECT_MULTIPLIER: 1.1,
+                PLAYER_VISION_RANGE: 100,
+                TERRITORY_CLAIM_DELAY: 1000,
+                ENEMY_SPAWN_RATE: 0.00015,
+                MIN_SPAWN_DISTANCE: 20,
+                DETECTION_TIME_REQUIRED: 2.5, // Slightly longer detection
+                PROJECTILE_SPEED: 4,
+                GRENADE_SPEED: 2,
+                GRENADE_BLAST_RADIUS: 3,
+                BUILDING_ENTRY_KEY: 'f'
+            });
+
+            // ============================================================================
+            // TIPS MANAGER
+            // ============================================================================
+            class TipsManager {
+                constructor() {
+                    this.tips = [
+                        "💡 Buildings with white borders can be entered. Press F at the door to escape enemies.",
+                        "💡 Police and BOSS enemies can enter buildings. Thugs and Rogues cannot.",
+                        "💡 Use stealth pills to reduce detection time and damage taken.",
+                        "💡 Different terrains affect speed: Street > Grass > Water > Interior.",
+                        "💡 Territory generates income every 90 seconds. Control more tiles for cash flow.",
+                        "💡 Ranged enemies fire bullets that can be dodged. Keep moving!",
+                        "💡 Shotguns deal massive damage at close range but have limited ammo.",
+                        "💡 Grenades (G key) explode on impact and damage all enemies in radius.",
+                        "💡 Sell pills at stash houses for cash, or use them for powerful effects.",
+                        "💡 Legendary pills have unique visual glow and triple potency.",
+                        "💡 Detection timer shows as orange aura around enemies. Break line of sight to reset.",
+                        "💡 Quests grant cash and score multipliers. Complete them for progression.",
+                        "💡 Side quests appear randomly. Check quest log (Q) frequently.",
+                        "💡 Your vision range is limited. Use VISION pills to see farther.",
+                        "💡 LUCK increases pill drop rates and sale prices.",
+                        "💡 STRENGTH effect allows melee attacks (E key) to deal 50 damage.",
+                        "💡 Bombs are rare drops from BOSS enemies. Save them for emergencies.",
+                        "💡 Some enemies patrol routes. Learn patterns to avoid detection.",
+                        "💡 Drug labs (magenta) have higher spawn rates for rare pills.",
+                        "💡 The deeper into enemy territory, the tougher the opposition.",
+                        "💡 Your health regenerates slowly when standing still in safe zones.",
+                        "💡 Double-tap movement keys to sprint (consumes stamina).",
+                        "💡 CHAOS pills randomize effects - high risk, high reward.",
+                        "💡 EUPHORIA side effect increases speed but reduces accuracy.",
+                        "💡 PARANOIA creates fake enemy shadows. Don't trust your eyes!"
+                    ];
+                    this.currentTip = 0;
+                    this.lastTipChange = Date.now();
+                }
+
+                update() {
+                    const now = Date.now();
+                    if (now - this.lastTipChange > 8000) {
+                        this.currentTip = (this.currentTip + 1) % this.tips.length;
+                        this.lastTipChange = now;
+                        const content = document.getElementById('tipsContent');
+                        if (content) content.textContent = this.tips[this.currentTip];
+                    }
+                }
+
+                getCurrentTip() { return this.tips[this.currentTip]; }
+            }
+
+            // ============================================================================
+            // PROJECTILE SYSTEM
+            // ============================================================================
+            class Projectile {
+                constructor(x, y, targetX, targetY, damage, owner, type = 'bullet') {
+                    this.x = x;
+                    this.y = y;
+                    const dx = targetX - x;
+                    const dy = targetY - y;
+                    const len = Math.hypot(dx, dy) || 1;
+                    this.vx = (dx / len) * GAME_CONFIG.PROJECTILE_SPEED;
+                    this.vy = (dy / len) * GAME_CONFIG.PROJECTILE_SPEED;
+                    this.damage = damage;
+                    this.owner = owner;
+                    this.type = type;
+                    this.life = 300; // Frames before disappearing
+                    this.size = type === 'bullet' ? 2 : 5;
+                    this.color = type === 'bullet' ? '#f00' : '#ff6600';
+                }
+
+                update() {
+                    this.x += this.vx;
+                    this.y += this.vy;
+                    this.life--;
+                    return this.life > 0;
+                }
+
+                checkCollision(target) {
+                    const dist = Math.hypot(this.x - target.x, this.y - target.y);
+                    return dist < (this.size + target.size);
+                }
+
+                render(ctx) {
+                    ctx.fillStyle = this.color;
+                    ctx.fillRect(this.x * GAME_CONFIG.TILE_SIZE - this.size/2, this.y * GAME_CONFIG.TILE_SIZE - this.size/2, this.size, this.size);
+                }
+            }
+
+            // ============================================================================
+            // WEAPON SYSTEM
+            // ============================================================================
+            class Weapon {
+                constructor(type) {
+                    this.type = type;
+                    this.stats = JSON.parse(JSON.stringify(GAME_CONFIG.WEAPON_TYPES[type]));
+                    this.lastFired = 0;
+                }
+
+                fire(x, y, targetX, targetY, owner) {
+                    const now = Date.now();
+                    if (now - this.lastFired < this.stats.fireRate) return null;
+                    if (!this.stats.infinite && this.stats.ammo <= 0) return null;
+                    
+                    this.lastFired = now;
+                    if (!this.stats.infinite) this.stats.ammo--;
+                    
+                    return new Projectile(x, y, targetX, targetY, this.stats.damage, owner, 'bullet');
+                }
+
+                reload() {
+                    if (this.stats.infinite) return;
+                    this.stats.ammo = this.stats.maxAmmo;
+                }
+
+                get isEmpty() { return !this.stats.infinite && this.stats.ammo <= 0; }
+                get name() { return this.stats.name; }
+                get ammo() { return this.stats.infinite ? '∞' : this.stats.ammo; }
+            }
+
+            // ============================================================================
+            // STORY & QUEST SYSTEM
+            // ============================================================================
+            class StoryManager {
+                constructor() {
+                    this.chapter = 1;
+                    this.sideQuests = [];
+                    this.questGivers = [];
+                    this.lastSideQuestGen = Date.now();
+                    this.mainStory = [
+                        { id: 'intro', title: "The Awakening", desc: "Escape the lab and survive the first encounter.", completed: false, trigger: 'spawn' },
+                        { id: 'territory', title: "Claim Your Turf", desc: "Control 25 tiles of territory to establish a safe zone.", completed: false, trigger: 'territory', target: 25 },
+                        { id: "arsenal", title: "Armed and Dangerous", desc: "Acquire your first firearm from a stash house.", completed: false, trigger: 'weapon' },
+                        { id: "empire", title: "Build an Empire", desc: "Control 100 tiles and accumulate $5000.", completed: false, trigger: 'score', target: 5000 },
+                        { id: "boss", title: "The Kingpin", desc: "Defeat the regional boss and take control.", completed: false, trigger: 'kill boss' }
+                    ];
+                }
+
+                generateSideQuest() {
+                    const types = ['delivery', 'assassination', 'collection', 'survival'];
+                    const type = types[Math.floor(Math.random() * types.length)];
+                    
+                    const quest = {
+                        id: Date.now(),
+                        title: this.getRandomTitle(type),
+                        desc: this.getRandomDesc(type),
+                        type: type,
+                        target: this.getRandomTarget(type),
+                        current: 0,
+                        reward: Math.floor(Math.random() * 2000) + 500,
+                        timeLimit: 120000, // 2 minutes
+                        startTime: Date.now(),
+                        isSideQuest: true
+                    };
+                    
+                    this.sideQuests.push(quest);
+                    return quest;
+                }
+
+                getRandomTitle(type) {
+                    const titles = {
+                        delivery: ["Package Runner", "Dead Drop", "Courier Service", "Transport Job"],
+                        assassination: ["Target Elimination", "Neutralize Threat", "Wetwork", "Problem Solver"],
+                        collection: ["Supply Run", "Debt Collection", "Resource Grab", "Pharmacy Raid"],
+                        survival: ["Hold the Line", "Survive the Onslaught", "Last Stand", "Outlast"]
+                    };
+                    return titles[type][Math.floor(Math.random() * titles[type].length)];
+                }
+
+                getRandomDesc(type) {
+                    const descs = {
+                        delivery: ["Deliver a package to coordinates X,Y within time limit.", "Make the drop without getting caught.", "Transport goods through hostile territory."],
+                        assassination: ["Eliminate a high-value target.", "Take out the enemy lieutenant.", "Neutralize the rogue operative."],
+                        collection: ["Collect 5 rare pills.", "Gather supplies from the lab.", "Steal from a rival stash house."],
+                        survival: ["Survive for 60 seconds against waves.", "Hold your ground for 90 seconds.", "Don't die for 2 minutes."]
+                    };
+                    return descs[type][Math.floor(Math.random() * descs[type].length)];
+                }
+
+                getRandomTarget(type) {
+                    const targets = { delivery: 1, assassination: 1, collection: 5, survival: 60 };
+                    return targets[type] + Math.floor(Math.random() * 5);
+                }
+
+                update(player, enemies) {
+                    // Check main story triggers
+                    this.mainStory.forEach(chapter => {
+                        if (!chapter.completed) {
+                            switch(chapter.trigger) {
+                                case 'territory':
+                                    if (player.territory.size >= chapter.target) chapter.completed = true;
+                                    break;
+                                case 'weapon':
+                                    if (player.weapon && player.weapon.type !== 'fists') chapter.completed = true;
+                                    break;
+                                case 'score':
+                                    if (player.score >= chapter.target) chapter.completed = true;
+                                    break;
+                            }
+                        }
+                    });
+
+                    // Update side quests
+                    this.sideQuests = this.sideQuests.filter(quest => {
+                        const elapsed = Date.now() - quest.startTime;
+                        if (elapsed > quest.timeLimit) {
+                            player.cash = Math.max(0, player.cash - 200);
+                            return false; // Remove expired quest
+                        }
+
+                        switch(quest.type) {
+                            case 'collection': quest.current = player.inventory.length; break;
+                            case 'survival': quest.current = Math.floor(elapsed / 1000); break;
+                        }
+
+                        if (quest.current >= quest.target) {
+                            player.cash += quest.reward;
+                            player.score += quest.reward * 3;
+                            return false; // Remove completed quest
+                        }
+                        return true;
+                    });
+
+                    // Generate new side quests periodically
+                    if (Date.now() - this.lastSideQuestGen > 60000 && this.sideQuests.length < 3) {
+                        this.generateSideQuest();
+                        this.lastSideQuestGen = Date.now();
+                    }
+                }
+
+                getAllQuests() {
+                    return [...this.mainStory.filter(c => !c.completed), ...this.sideQuests];
+                }
+            }
+
+            // ============================================================================
+            // NFT COLLECTION GENERATOR (UNCHANGED)
+            // ============================================================================
+            class NFTCollection {
+                constructor() {
+                    this.pills = [];
+                    this.rarityDistribution = { common: 0.60, uncommon: 0.25, rare: 0.10, epic: 0.04, legendary: 0.01 };
+                    this.effectTypes = ['SPEED', 'STRENGTH', 'STEALTH', 'VISION', 'LUCK', 'CHAOS'];
+                    this.sideEffects = ['NONE', 'MILD_HALLUCINATION', 'REVERSED_CONTROLS', 'DOUBLE_VISION', 'PARANOIA', 'EUPHORIA'];
+                    this.colors = ['#ff00ff', '#00ffff', '#ff0', '#f0f', '#0f0', '#f00', '#00f', '#fa0'];
+                    this.generateCollection();
+                }
+
+                generateCollection() {
+                    const prefixes = ['Cyber', 'Neuro', 'Quantum', 'Psycho', 'Digital', 'Synth', 'Bio', 'Nano', 'Plasma', 'Crystal'];
+                    const bases = ['Pill', 'Tab', 'Cap', 'Dose', 'X', 'Max', 'Core', 'Drive', 'Wave', 'Rush'];
+                    const suffixes = ['+', 'Pro', 'Ultra', 'Xtreme', 'Prime', 'Omega', 'Alpha', 'Neo', 'Max', 'Core'];
+
+                    let id = 0;
+                    for (let rarity in this.rarityDistribution) {
+                        const count = Math.floor(3333 * this.rarityDistribution[rarity]);
+                        for (let i = 0; i < count && id < 3333; i++) {
+                            const rarityMultiplier = rarity === 'legendary' ? 3 : rarity === 'epic' ? 2 : rarity === 'rare' ? 1.5 : 1;
+                            const pill = {
+                                id: id++,
+                                name: `${prefixes[id % prefixes.length]}${bases[id % bases.length]}${suffixes[id % suffixes.length]}`,
+                                rarity: rarity,
+                                effect: this.effectTypes[Math.floor(Math.random() * this.effectTypes.length)],
+                                potency: Math.floor(Math.random() * 10 * rarityMultiplier) + 1,
+                                duration: Math.floor(Math.random() * 30 * rarityMultiplier) + 15,
+                                sideEffect: this.sideEffects[Math.floor(Math.random() * this.sideEffects.length)],
+                                color: this.colors[Math.floor(Math.random() * this.colors.length)],
+                                marketValue: Math.floor(Math.random() * 500 * rarityMultiplier) + 50,
+                                visualTrait: {
+                                    shape: ['circle', 'square', 'hexagon', 'diamond'][Math.floor(Math.random() * 4)],
+                                    pattern: ['solid', 'striped', 'dotted', 'glow'][Math.floor(Math.random() * 4)],
+                                    glowIntensity: rarity === 'legendary' ? 3 : rarity === 'epic' ? 2 : 1
+                                }
+                            };
+                            this.pills.push(pill);
+                        }
+                    }
+                    this.pills.sort(() => Math.random() - 0.5);
+                    console.log(`Generated ${this.pills.length} pills`);
+                }
+
+                getPillById(id) { return this.pills[id]; }
+                getRandomPill() { return this.pills[Math.floor(Math.random() * this.pills.length)]; }
+                getPillsByRarity(rarity) { return this.pills.filter(p => p.rarity === rarity); }
+            }
+
+            // ============================================================================
+            // MAP MODULE - ENHANCED WITH BUILDINGS
+            // ============================================================================
+            class Map {
+                constructor(width, height) {
+                    this.width = Number(width) || GAME_CONFIG.MAP_WIDTH;
+                    this.height = Number(height) || GAME_CONFIG.MAP_HEIGHT;
+                    this.enterableBuildings = [];
+                    if (this.width <= 0 || this.height <= 0) {
+                        console.error(`Invalid map dimensions, using defaults`);
+                        this.width = GAME_CONFIG.MAP_WIDTH;
+                        this.height = GAME_CONFIG.MAP_HEIGHT;
+                    }
+                    this.tiles = [];
+                    this.stashHouses = [];
+                    this.generate();
+                }
+
+                generate() {
+                    this.tiles = Array(this.height).fill(null).map(() => Array(this.width).fill(1));
+                    
+                    for (let y = 0; y < this.height; y++) {
+                        for (let x = 0; x < this.width; x++) {
+                            let tile;
+                            if (x % 10 === 0 || y % 10 === 0) {
+                                tile = 0; // Streets
+                            } else if (Math.random() < 0.15) {
+                                tile = 2; // Buildings
+                            } else if (Math.random() < 0.08) {
+                                tile = 3; // Water
+                            } else {
+                                tile = 1; // Grass
+                            }
+                            this.tiles[y][x] = tile;
+                        }
+                    }
+                    this.placeSpecialTiles();
+                    this.placeEnterableBuildings();
+                }
+
+                placeSpecialTiles() {
+                    if (!this.tiles || this.tiles.length === 0) {
+                        console.error('Tiles not initialized');
+                        return;
+                    }
+
+                    // Place drug labs
+                    for (let i = 0; i < 5; i++) {
+                        const x = Math.floor(Math.random() * this.width);
+                        const y = Math.floor(Math.random() * this.height);
+                        if (this.tiles[y]?.[x] === 1) {
+                            this.tiles[y][x] = 4;
+                        }
+                    }
+
+                    // Place stash houses/shops
+                    for (let i = 0; i < 3; i++) {
+                        const x = Math.floor(Math.random() * this.width);
+                        const y = Math.floor(Math.random() * this.height);
+                        if (this.tiles[y]?.[x] !== 2) {
+                            this.tiles[y][x] = 5;
+                            this.stashHouses.push({ x, y, id: i, inventory: [] });
+                        }
+                    }
+                }
+
+                placeEnterableBuildings() {
+                    // Place 3-4 enterable buildings with interiors
+                    for (let i = 0; i < 4; i++) {
+                        let x = Math.floor(Math.random() * (this.width - 6)) + 3;
+                        let y = Math.floor(Math.random() * (this.height - 6)) + 3;
+                        
+                        // Ensure not overlapping special tiles
+                        let valid = true;
+                        for (let dy = -1; dy <= 3; dy++) {
+                            for (let dx = -1; dx <= 3; dx++) {
+                                if (this.tiles[y + dy]?.[x + dx] >= 4) {
+                                    valid = false;
+                                }
+                            }
+                        }
+                        
+                        if (valid) {
+                            // Build 3x3 building with door at bottom center
+                            for (let by = 0; by < 3; by++) {
+                                for (let bx = 0; bx < 3; bx++) {
+                                    const tileX = x + bx;
+                                    const tileY = y + by;
+                                    if (by === 2 && bx === 1) {
+                                        // Door tile
+                                        this.tiles[tileY][tileX] = 6;
+                                    } else if (by === 0 || by === 2 || bx === 0 || bx === 2) {
+                                        // Walls
+                                        this.tiles[tileY][tileX] = 2;
+                                    } else {
+                                        // Interior
+                                        this.tiles[tileY][tileX] = 7;
+                                    }
+                                }
+                            }
+                            this.enterableBuildings.push({ x: x + 1, y: y + 1, width: 1, height: 1, doorX: x + 1, doorY: y + 2 });
+                        }
+                    }
+                }
+
+                getTile(x, y) {
+                    const terrain = GAME_CONFIG.TERRAIN_TYPES;
+                    if (x < 0 || x >= this.width || y < 0 || y >= this.height) {
+                        return terrain[2];
+                    }
+                    if (!this.tiles[y]) return terrain[1];
+                    return terrain[this.tiles[y][x]] || terrain[1];
+                }
+
+                isPassable(x, y) {
+                    const tile = this.getTile(x, y);
+                    return tile?.passable ?? false;
+                }
+
+                getSpeedModifier(x, y) {
+                    const tile = this.getTile(x, y);
+                    return tile?.speed ?? 1.0;
+                }
+
+                isBuildingEntrance(x, y) {
+                    return this.getTile(x, y).special === 'building-entrance';
+                }
+
+                isSafeZone(x, y) {
+                    return this.getTile(x, y).special === 'safe-zone';
+                }
+            }
+
+            // ============================================================================
+            // PLAYER MODULE - ENHANCED
+            // ============================================================================
+            class Player {
+                constructor(x, y, nftCollection) {
+                    this.x = Number(x) || 25;
+                    this.y = Number(y) || 25;
+                    this.vx = 0; this.vy = 0;
+                    this.size = 10;
+                    this.health = 100;
+                    this.maxHealth = 100;
+                    this.cash = 500;
+                    this.score = 0;
+                    this.baseSpeed = GAME_CONFIG.PLAYER_BASE_SPEED;
+                    this.speed = this.baseSpeed;
+                    this.stealth = 0;
+                    this.luck = 0;
+                    this.inventory = [];
+                    this.maxInventory = 20;
+                    this.territory = new Set();
+                    this.income = 0;
+                    this.statusEffects = [];
+                    this.selectedPill = null;
+                    this.ownedNFTs = this.generateStarterNFTs(nftCollection);
+                    this.lastTerritoryClaim = 0;
+                    this.nftCollection = nftCollection;
+                    
+                    // Weapon system
+                    this.weapon = new Weapon('fists');
+                    this.weapons = { fists: this.weapon };
+                    this.lastShot = 0;
+                    this.isInBuilding = false;
+                    this.buildingTimer = 0;
+                }
+
+                generateStarterNFTs(nftCollection) {
+                    const owned = [];
+                    owned.push(...nftCollection.getPillsByRarity('legendary').slice(0, 1));
+                    owned.push(...nftCollection.getPillsByRarity('epic').slice(0, 2));
+                    owned.push(...nftCollection.getPillsByRarity('rare').slice(0, 3));
+                    while (owned.length < 10) {
+                        const pill = nftCollection.getRandomPill();
+                        if (!owned.find(p => p.id === pill.id)) {
+                            owned.push(pill);
+                        }
+                    }
+                    return owned;
+                }
+
+                move(dx, dy, map) {
+                    const speedMod = map.getSpeedModifier(this.x + dx, this.y + dy);
+                    const effectMultiplier = this.hasEffect('SPEED') ? GAME_CONFIG.SPEED_EFFECT_MULTIPLIER : 1;
+                    const finalSpeed = this.speed * speedMod * effectMultiplier * (this.isInBuilding ? 0.8 : 1);
+                    
+                    if (map.isPassable(this.x + dx * 0.5, this.y + dy * 0.5)) {
+                        this.x += dx * finalSpeed;
+                        this.y += dy * finalSpeed;
+                        this.claimTerritory();
+                    }
+                }
+
+                claimTerritory() {
+                    const now = Date.now();
+                    if (now - this.lastTerritoryClaim < GAME_CONFIG.TERRITORY_CLAIM_DELAY) return;
+                    this.lastTerritoryClaim = now;
+
+                    const tileKey = `${Math.floor(this.x)},${Math.floor(this.y)}`;
+                    if (!this.territory.has(tileKey)) {
+                        this.territory.add(tileKey);
+                        this.updateIncome();
+                    }
+                }
+
+                updateIncome() {
+                    this.income = Math.floor(this.territory.size * 0.25);
+                }
+
+                addToInventory(pill) {
+                    if (this.inventory.length >= this.maxInventory) return false;
+                    this.inventory.push(pill);
+                    this.score += pill.marketValue;
+                    return true;
+                }
+
+                consumePill(pill) {
+                    if (!pill) return;
+                    
+                    const multiplier = pill.rarity === 'legendary' ? 3 : pill.rarity === 'epic' ? 2 : 
+                                     pill.rarity === 'rare' ? 1.5 : 1;
+                    
+                    this.statusEffects.push({
+                        type: pill.effect,
+                        duration: pill.duration * multiplier,
+                        maxDuration: pill.duration * multiplier,
+                        potency: pill.potency * multiplier,
+                        pill: pill
+                    });
+
+                    if (pill.sideEffect !== 'NONE') {
+                        this.statusEffects.push({
+                            type: pill.sideEffect,
+                            duration: Math.floor(pill.duration * 0.5),
+                            maxDuration: Math.floor(pill.duration * 0.5),
+                            potency: 1,
+                            pill: pill
+                        });
+                    }
+
+                    const idx = this.inventory.indexOf(pill);
+                    if (idx > -1) this.inventory.splice(idx, 1);
+                }
+
+                updateStatusEffects() {
+                    this.speed = this.baseSpeed;
+                    this.stealth = 0;
+                    this.luck = 0;
+
+                    this.statusEffects = this.statusEffects.filter(effect => {
+                        effect.duration -= 0.016;
+                        if (effect.duration <= 0) return false;
+
+                        switch(effect.type) {
+                            case 'SPEED': this.speed += effect.potency * 0.06; break;
+                            case 'STRENGTH': this.maxHealth = 100 + effect.potency * 10; break;
+                            case 'STEALTH': this.stealth = Math.min(100, effect.potency * 15); break;
+                            case 'LUCK': this.luck = effect.potency * 10; break;
+                        }
+                        return true;
+                    });
+                }
+
+                hasEffect(type) {
+                    return this.statusEffects.some(e => e.type === type);
+                }
+
+                takeDamage(amount) {
+                    const actualDamage = Math.floor(amount * (1 - this.stealth / 250));
+                    this.health -= actualDamage;
+                    if (this.health <= 0) this.respawn();
+                }
+
+                respawn() {
+                    this.health = this.maxHealth;
+                    this.x = Math.floor(Math.random() * GAME_CONFIG.MAP_WIDTH);
+                    this.y = Math.floor(Math.random() * GAME_CONFIG.MAP_HEIGHT);
+                    this.cash = Math.max(0, this.cash - 150);
+                    this.territory.clear();
+                    this.statusEffects = [];
+                    this.isInBuilding = false;
+                }
+
+                sellPill(pill) {
+                    const value = Math.floor(pill.marketValue * (1 + this.luck / 100));
+                    this.cash += value;
+                    const idx = this.inventory.indexOf(pill);
+                    if (idx > -1) this.inventory.splice(idx, 1);
+                    return value;
+                }
+
+                addWeapon(weaponType) {
+                    this.weapons[weaponType] = new Weapon(weaponType);
+                }
+
+                switchWeapon(type) {
+                    if (this.weapons[type]) {
+                        this.weapon = this.weapons[type];
+                    }
+                }
+
+                updateBuildingStatus(map) {
+                    this.isInBuilding = map.isSafeZone(this.x, this.y);
+                    if (this.isInBuilding) {
+                        this.buildingTimer += 0.016;
+                        // Health regen in buildings
+                        if (this.buildingTimer > 3 && this.health < this.maxHealth) {
+                            this.health = Math.min(this.maxHealth, this.health + 1);
+                            this.buildingTimer = 0;
+                        }
+                    } else {
+                        this.buildingTimer = 0;
+                    }
+                }
+            }
+
+            // ============================================================================
+            // ENEMY MODULE - ENHANCED
+            // ============================================================================
+            class Enemy {
+                constructor(x, y, type, nftCollection) {
+                    this.x = Number(x) || 0;
+                    this.y = Number(y) || 0;
+                    this.type = type;
+                    this.stats = JSON.parse(JSON.stringify(GAME_CONFIG.ENEMY_TYPES[type]));
+                    this.color = this.stats?.color || '#f00';
+                    this.state = 'patrol';
+                    this.targetX = this.x;
+                    this.targetY = this.y;
+                    this.nftCollection = nftCollection;
+                    this.lastPillDrop = 0;
+                    this.detectionTimer = 0;
+                    this.patrolPath = this.generatePatrolPath();
+                    this.currentWaypoint = 0;
+                    this.lastShot = 0;
+                }
+
+                generatePatrolPath() {
+                    const path = [];
+                    const numPoints = Math.floor(Math.random() * 3) + 3;
+                    for (let i = 0; i < numPoints; i++) {
+                        path.push({
+                            x: this.x + (Math.random() - 0.5) * 20,
+                            y: this.y + (Math.random() - 0.5) * 20
+                        });
+                    }
+                    return path;
+                }
+
+                update(player, map, projectiles) {
+                    const dist = Math.hypot(player.x - this.x, player.y - this.y);
+                    
+                    // Check if player is in building that enemy cannot enter
+                    const playerInBlockingBuilding = map.isSafeZone(player.x, player.y) && !this.stats.canEnterBuildings;
+                    
+                    // Detection logic
+                    let shouldChase = false;
+                    if (!playerInBlockingBuilding && this.stats.detectionRange > 0 && dist < this.stats.detectionRange && !player.hasEffect('STEALTH')) {
+                        this.detectionTimer += 0.016;
+                        if (this.detectionTimer >= GAME_CONFIG.DETECTION_TIME_REQUIRED) {
+                            shouldChase = true;
+                        }
+                    } else {
+                        this.detectionTimer = Math.max(0, this.detectionTimer - 0.032);
+                    }
+
+                    // State machine
+                    if (shouldChase) {
+                        this.state = 'chase';
+                    } else if (this.stats.patrol) {
+                        this.state = 'patrol';
+                    } else {
+                        this.state = 'idle';
+                    }
+
+                    // Movement and actions
+                    switch(this.state) {
+                        case 'chase':
+                            if (this.stats.ranged && dist < this.stats.detectionRange * 0.8) {
+                                this.rangedAttack(player, projectiles);
+                            } else {
+                                const dx = player.x - this.x;
+                                const dy = player.y - this.y;
+                                const len = Math.hypot(dx, dy) || 1;
+                                this.x += (dx / len) * this.stats.speed;
+                                this.y += (dy / len) * this.stats.speed;
+                            }
+                            break;
+                        
+                        case 'patrol':
+                            if (this.patrolPath.length > 0) {
+                                const waypoint = this.patrolPath[this.currentWaypoint];
+                                const dx = waypoint.x - this.x;
+                                const dy = waypoint.y - this.y;
+                                const len = Math.hypot(dx, dy) || 1;
+                                
+                                if (len < 1) {
+                                    this.currentWaypoint = (this.currentWaypoint + 1) % this.patrolPath.length;
+                                } else {
+                                    this.x += (dx / len) * this.stats.speed * 0.6;
+                                    this.y += (dy / len) * this.stats.speed * 0.6;
+                                }
+                            }
+                            break;
+                    }
+
+                    // Damage player if touching
+                    if (dist < (this.size + player.size) / 2) {
+                        player.takeDamage(this.stats.damage * 0.016);
+                    }
+                }
+
+                rangedAttack(player, projectiles) {
+                    const now = Date.now();
+                    if (now - this.lastShot < this.stats.fireRate) return;
+                    
+                    this.lastShot = now;
+                    const proj = new Projectile(
+                        this.x, this.y, player.x, player.y, 
+                        this.stats.damage * 2, 'enemy', 'bullet'
+                    );
+                    projectiles.push(proj);
+                }
+
+                dropLoot() {
+                    const now = Date.now();
+                    if (now - this.lastPillDrop < 1000) return null;
+                    this.lastPillDrop = now;
+
+                    const dropChance = this.type === 'boss' ? 0.9 : this.type === 'police' ? 0.4 : 0.5;
+                    return Math.random() < dropChance ? this.nftCollection.getRandomPill() : null;
+                }
+
+                get size() {
+                    return this.stats?.boss ? 18 : 12;
+                }
+            }
+
+            // ============================================================================
+            // SHOP MODULE - ENHANCED
+            // ============================================================================
+            class Shop {
+                constructor(x, y, nftCollection) {
+                    this.x = Number(x) || 0;
+                    this.y = Number(y) || 0;
+                    this.inventory = [];
+                    this.weapons = [];
+                    this.nftCollection = nftCollection;
+                    this.restock();
+                    this.lastRestock = Date.now();
+                }
+
+                restock() {
+                    this.inventory = [];
+                    for (let i = 0; i < 12; i++) {
+                        const pill = this.nftCollection.getRandomPill();
+                        const price = Math.floor(pill.marketValue * (0.8 + Math.random() * 0.4));
+                        this.inventory.push({ pill, price });
+                    }
+                    
+                    // Restock weapons periodically
+                    if (Math.random() < 0.3) {
+                        this.weapons = [
+                            { type: 'pistol', price: 800, ammo: 24 },
+                            { type: 'shotgun', price: 1500, ammo: 16 },
+                            { type: 'rifle', price: 2000, ammo: 60 }
+                        ];
+                    }
+                }
+
+                update() {
+                    const now = Date.now();
+                    if (now - this.lastRestock > 60000) {
+                        this.restock();
+                        this.lastRestock = now;
+                    }
+                }
+            }
+
+            // ============================================================================
+            // QUEST SYSTEM - ENHANCED
+            // ============================================================================
+            class QuestSystem {
+                constructor() {
+                    this.activeQuests = [];
+                    this.completedQuests = 0;
+                    this.generateQuests();
+                }
+
+                generateQuests() {
+                    this.activeQuests = [
+                        {
+                            id: 1, title: "Territory Expansion", desc: "Control 50 tiles of territory",
+                            target: 50, current: 0, reward: 1000, type: 'territory', isMain: true
+                        },
+                        {
+                            id: 2, title: "Pill Collector", desc: "Collect 10 unique pills in inventory",
+                            target: 10, current: 0, reward: 500, type: 'collect', isMain: true
+                        },
+                        {
+                            id: 3, title: "Survivalist", desc: "Reach a score of 5000",
+                            target: 5000, current: 0, reward: 2000, type: 'score', isMain: true
+                        }
+                    ];
+                }
+
+                updateQuests(player, enemiesKilled = 0) {
+                    this.activeQuests.forEach(quest => {
+                        switch(quest.type) {
+                            case 'territory': quest.current = player.territory.size; break;
+                            case 'collect': quest.current = player.inventory.length; break;
+                            case 'score': quest.current = player.score; break;
+                            case 'enemies': quest.current += enemiesKilled; break;
+                        }
+
+                        if (quest.current >= quest.target) {
+                            this.completeQuest(quest, player);
+                        }
+                    });
+                }
+
+                completeQuest(quest, player) {
+                    player.cash += quest.reward;
+                    player.score += quest.reward * 2;
+                    this.activeQuests = this.activeQuests.filter(q => q.id !== quest.id);
+                    this.completedQuests++;
+                    
+                    if (quest.isMain) {
+                        const newQuests = [{
+                            id: Date.now(), title: "Enemy Hunter", desc: "Defeat 10 enemies",
+                            target: 10, current: 0, reward: 1500, type: 'enemies', isMain: true
+                        }];
+                        this.activeQuests.push(...newQuests);
+                    }
+                }
+
+                addSideQuest(quest) {
+                    this.activeQuests.push(quest);
+                }
+            }
+
+            // ============================================================================
+            // MAIN GAME ENGINE - ENHANCED
+            // ============================================================================
+            class NarcotiXGame {
+                constructor() {
+                    this.canvas = document.getElementById('gameCanvas');
+                    this.ctx = this.canvas.getContext('2d');
+                    this.canvas.width = GAME_CONFIG.MAP_WIDTH * GAME_CONFIG.TILE_SIZE;
+                    this.canvas.height = GAME_CONFIG.MAP_HEIGHT * GAME_CONFIG.TILE_SIZE;
+
+                    this.nftCollection = new NFTCollection();
+                    this.map = new Map(GAME_CONFIG.MAP_WIDTH, GAME_CONFIG.MAP_HEIGHT);
+                    this.player = new Player(GAME_CONFIG.MAP_WIDTH / 2, GAME_CONFIG.MAP_HEIGHT / 2, this.nftCollection);
+                    this.storyManager = new StoryManager();
+                    this.tipsManager = new TipsManager();
+                    
+                    this.enemies = [];
+                    this.shops = [];
+                    this.questSystem = new QuestSystem();
+                    this.projectiles = [];
+                    this.grenades = [];
+                    
+                    this.keys = {};
+                    this.lastTime = 0;
+                    this.camera = { x: 0, y: 0 };
+                    this.particles = [];
+                    this.droppedPills = [];
+                    this.enemiesKilled = 0;
+
+                    this.bindButtonEvents();
+                    this.initialize();
+                }
+
+                bindButtonEvents() {
+                    document.getElementById('closeInvBtn').onclick = () => this.toggleInventory();
+                    document.getElementById('usePillBtn').onclick = () => this.consumePill();
+                    document.getElementById('closeShopBtn').onclick = () => this.closeShop();
+                    document.getElementById('closeLegendBtn').onclick = () => this.closeLegend();
+                }
+
+                initialize() {
+                    setTimeout(() => {
+                        document.getElementById('loadingScreen').style.display = 'none';
+                        document.getElementById('tipsContent').textContent = this.tipsManager.getCurrentTip();
+                    }, 1500);
+
+                    // Spawn enemies
+                    for (let i = 0; i < 8; i++) {
+                        let x, y, dist, attempts = 0;
+                        do {
+                            x = Math.random() * GAME_CONFIG.MAP_WIDTH;
+                            y = Math.random() * GAME_CONFIG.MAP_HEIGHT;
+                            dist = Math.hypot(x - GAME_CONFIG.MAP_WIDTH/2, y - GAME_CONFIG.MAP_HEIGHT/2);
+                        } while (dist < GAME_CONFIG.MIN_SPAWN_DISTANCE && attempts++ < 50);
+                        
+                        const types = ['thug', 'rogue', 'police'];
+                        const type = i < 2 ? 'boss' : types[Math.floor(Math.random() * types.length)];
+                        this.enemies.push(new Enemy(x, y, type, this.nftCollection));
+                    }
+
+                    // Initialize shops
+                    this.map.stashHouses.forEach(shopData => {
+                        this.shops.push(new Shop(shopData.x, shopData.y, this.nftCollection));
+                    });
+
+                    // Give player starter pills
+                    this.player.ownedNFTs.forEach(pill => {
+                        this.player.addToInventory(pill);
+                    });
+
+                    // Give starter pistol
+                    this.player.addWeapon('pistol');
+                    this.player.switchWeapon('pistol');
+
+                    this.setupEventListeners();
+                    this.gameLoop();
+                }
+
+                setupEventListeners() {
+                    window.addEventListener('keydown', (e) => {
+                        this.keys[e.key.toLowerCase()] = true;
+                        
+                        switch(e.key.toLowerCase()) {
+                            case 'i': this.toggleInventory(); break;
+                            case 'e': this.interact(); break;
+                            case 'q': 
+                                const panel = document.getElementById('questPanel');
+                                panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                                break;
+                            case ' ': this.consumePill(); break;
+                            case 'k': this.toggleLegend(); break;
+                            case 'f': this.attemptBuildingEntry(); break;
+                            case 'g': this.throwGrenade(); break;
+                        }
+                    });
+
+                    window.addEventListener('keyup', (e) => {
+                        this.keys[e.key.toLowerCase()] = false;
+                    });
+
+                    this.canvas.addEventListener('click', (e) => {
+                        const rect = this.canvas.getBoundingClientRect();
+                        const x = (e.clientX - rect.left) / rect.width * this.canvas.width;
+                        const y = (e.clientY - rect.top) / rect.height * this.canvas.height;
+                        this.handleCanvasClick(x, y);
+                    });
+
+                    this.canvas.addEventListener('mousedown', (e) => {
+                        if (e.button === 0) this.handleShooting(e);
+                    });
+                }
+
+                handleShooting(e) {
+                    const rect = this.canvas.getBoundingClientRect();
+                    const canvasX = (e.clientX - rect.left) / rect.width * this.canvas.width;
+                    const canvasY = (e.clientY - rect.top) / rect.height * this.canvas.height;
+                    
+                    const worldX = (canvasX + this.camera.x) / GAME_CONFIG.TILE_SIZE;
+                    const worldY = (canvasY + this.camera.y) / GAME_CONFIG.TILE_SIZE;
+                    
+                    const proj = this.player.weapon.fire(this.player.x, this.player.y, worldX, worldY, 'player');
+                    if (proj) {
+                        this.projectiles.push(proj);
+                        this.updateWeaponHUD();
+                    }
+                }
+
+                throwGrenade() {
+                    // Check if player has grenades in inventory (new item type)
+                    const grenadeIndex = this.player.inventory.findIndex(p => p.effect === 'GRENADE');
+                    if (grenadeIndex === -1) {
+                        this.createParticle(this.player.x, this.player.y, 'NO GRENADES!', '#f00');
+                        return;
+                    }
+
+                    // Remove grenade from inventory
+                    this.player.inventory.splice(grenadeIndex, 1);
+                    
+                    // Create grenade projectile
+                    const angle = Math.random() * Math.PI * 2;
+                    const grenade = {
+                        x: this.player.x,
+                        y: this.player.y,
+                        vx: Math.cos(angle) * GAME_CONFIG.GRENADE_SPEED,
+                        vy: Math.sin(angle) * GAME_CONFIG.GRENADE_SPEED,
+                        life: 90, // 3 seconds at 60fps
+                        damage: 80,
+                        blastRadius: GAME_CONFIG.GRENADE_BLAST_RADIUS
+                    };
+                    this.grenades.push(grenade);
+                    this.createParticle(this.player.x, this.player.y, 'GRENADE OUT!', '#ff6600');
+                }
+
+                attemptBuildingEntry() {
+                    // Check if player is near a building entrance
+                    for (let building of this.map.enterableBuildings) {
+                        const dist = Math.hypot(this.player.x - building.doorX, this.player.y - building.doorY);
+                        if (dist < 1.5) {
+                            // Enter building
+                            this.player.x = building.x + 0.5;
+                            this.player.y = building.y + 0.5;
+                            this.createParticle(this.player.x, this.player.y, 'BUILDING ENTERED', '#0ff');
+                            return;
+                        }
+                    }
+                }
+
+                handleCanvasClick(x, y) {
+                    const worldX = x / GAME_CONFIG.TILE_SIZE;
+                    const worldY = y / GAME_CONFIG.TILE_SIZE;
+                    
+                    this.droppedPills = this.droppedPills.filter(pill => {
+                        const dist = Math.hypot(pill.x - worldX, pill.y - worldY);
+                        if (dist < 1) {
+                            if (this.player.addToInventory(pill)) {
+                                this.createParticle(worldX, worldY, '+PILL', '#0f0');
+                                return false;
+                            }
+                        }
+                        return true;
+                    });
+                }
+
+                toggleInventory() {
+                    const panel = document.getElementById('inventoryPanel');
+                    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                    this.updateInventoryUI();
+                }
+
+                updateWeaponHUD() {
+                    document.getElementById('weaponName').textContent = this.player.weapon.name;
+                    document.getElementById('weaponAmmo').textContent = this.player.weapon.ammo;
+                }
+
+                updateInventoryUI() {
+                    const grid = document.getElementById('inventoryGrid');
+                    const count = document.getElementById('invCount');
+                    grid.innerHTML = '';
+                    count.textContent = this.player.inventory.length;
+
+                    this.player.inventory.forEach((pill, index) => {
+                        const div = document.createElement('div');
+                        div.className = `pill rarity-${pill.rarity}`;
+                        div.style.borderColor = pill.color;
+                        div.textContent = pill.name.substring(0, 6);
+                        div.title = `${pill.name}\nEffect: ${pill.effect}\nRarity: ${pill.rarity}\nValue: $${pill.marketValue}`;
+                        div.onclick = () => {
+                            this.player.selectedPill = pill;
+                            document.querySelectorAll('.pill').forEach(p => p.style.borderWidth = '1px');
+                            div.style.borderWidth = '3px';
+                        };
+                        grid.appendChild(div);
+                    });
+                }
+
+                interact() {
+                    // Check shops
+                    this.shops.forEach(shop => {
+                        const dist = Math.hypot(this.player.x - shop.x, this.player.y - shop.y);
+                        if (dist < 3) {
+                            this.openShop(shop);
+                        }
+                    });
+
+                    // Attack enemies (melee if in range and has STRENGTH)
+                    this.enemies.forEach((enemy, index) => {
+                        const dist = Math.hypot(this.player.x - enemy.x, this.player.y - enemy.y);
+                        if (dist < 2 && this.player.hasEffect('STRENGTH')) {
+                            enemy.stats.hp -= 50;
+                            if (enemy.stats.hp <= 0) {
+                                const loot = enemy.dropLoot();
+                                if (loot) {
+                                    loot.x = enemy.x;
+                                    loot.y = enemy.y;
+                                    this.droppedPills.push(loot);
+                                    this.createParticle(enemy.x, enemy.y, 'DEAD!', '#f00');
+                                    this.enemiesKilled++;
+                                }
+                                this.enemies.splice(index, 1);
+                            }
+                        }
+                    });
+                }
+
+                openShop(shop) {
+                    const panel = document.getElementById('shopPanel');
+                    panel.style.display = 'block';
+                    
+                    const inv = document.getElementById('shopInventory');
+                    inv.innerHTML = '<h4>Sell Your Pills:</h4>';
+
+                    this.player.inventory.forEach(pill => {
+                        const price = Math.floor(pill.marketValue * 0.7);
+                        const btn = document.createElement('button');
+                        btn.textContent = `${pill.name} - $${price}`;
+                        btn.onclick = () => {
+                            const soldPrice = this.player.sellPill(pill);
+                            this.createParticle(this.player.x, this.player.y, `+$${soldPrice}`, '#ff0');
+                            this.updateUI();
+                            this.openShop(shop);
+                        };
+                        inv.appendChild(btn);
+                    });
+
+                    inv.innerHTML += '<h4>Buy Weapons:</h4>';
+                    shop.weapons.forEach(item => {
+                        const btn = document.createElement('button');
+                        btn.textContent = `${item.type.toUpperCase()} - $${item.price} (${item.ammo} ammo)`;
+                        btn.onclick = () => {
+                            if (this.player.cash >= item.price) {
+                                this.player.cash -= item.price;
+                                this.player.addWeapon(item.type);
+                                this.player.switchWeapon(item.type);
+                                this.updateUI();
+                                this.createParticle(this.player.x, this.player.y, `+${item.type.toUpperCase()}`, '#ff0');
+                            }
+                        };
+                        inv.appendChild(btn);
+                    });
+                }
+
+                closeShop() {
+                    document.getElementById('shopPanel').style.display = 'none';
+                }
+
+                toggleLegend() {
+                    const panel = document.getElementById('legendPanel');
+                    panel.style.display = panel.style.display === 'none' ? 'block' : 'none';
+                }
+
+                closeLegend() {
+                    document.getElementById('legendPanel').style.display = 'none';
+                }
+
+                consumePill() {
+                    if (this.player.selectedPill) {
+                        this.player.consumePill(this.player.selectedPill);
+                        this.createParticle(this.player.x, this.player.y, 'CONSUMED!', this.player.selectedPill.color);
+                        this.updateInventoryUI();
+                        this.updateUI();
+                    }
+                }
+
+                createParticle(x, y, text, color) {
+                    this.particles.push({ x, y, text, color, life: 1.0, vy: -0.5 });
+                }
+
+                updateParticles() {
+                    this.particles = this.particles.filter(p => {
+                        p.life -= 0.016;
+                        p.y += p.vy;
+                        return p.life > 0;
+                    });
+                }
+
+                updateUI() {
+                    document.getElementById('score').textContent = this.player.score;
+                    document.getElementById('cash').textContent = this.player.cash;
+                    document.getElementById('territory').textContent = this.player.territory.size;
+                    document.getElementById('income').textContent = this.player.income;
+                    document.getElementById('health').textContent = Math.floor(this.player.health);
+                    document.getElementById('speed').textContent = this.player.speed.toFixed(1);
+                    document.getElementById('stealth').textContent = this.player.stealth;
+                    document.getElementById('luck').textContent = this.player.luck;
+                    document.getElementById('ammo').textContent = this.player.weapon.ammo;
+
+                    const effectsDiv = document.getElementById('activeEffects');
+                    effectsDiv.innerHTML = '';
+                    this.player.statusEffects.forEach(effect => {
+                        const badge = document.createElement('div');
+                        badge.className = 'effect-badge';
+                        badge.textContent = `${effect.type} (${Math.ceil(effect.duration)}s)`;
+                        effectsDiv.appendChild(badge);
+                    });
+
+                    const questDiv = document.getElementById('questList');
+                    questDiv.innerHTML = '';
+                    const allQuests = this.storyManager.getAllQuests();
+                    allQuests.forEach(quest => {
+                        const div = document.createElement('div');
+                        div.style.fontSize = '11px';
+                        div.style.marginBottom = '5px';
+                        div.style.borderLeft = quest.isMain ? '2px solid #ff0' : '2px solid #0ff';
+                        div.style.paddingLeft = '5px';
+                        div.innerHTML = `<strong>${quest.title}</strong><br>${quest.desc}<br>Progress: ${quest.current}/${quest.target}`;
+                        questDiv.appendChild(div);
+                    });
+
+                    // Update tips
+                    this.tipsManager.update();
+                    document.getElementById('tipsContent').textContent = this.tipsManager.getCurrentTip();
+                }
+
+                handleInput() {
+                    const reversed = this.player.hasEffect('REVERSED_CONTROLS');
+                    const dir = reversed ? -1 : 1;
+                    let dx = 0, dy = 0;
+
+                    if (this.keys['w'] || this.keys['arrowup']) dy = -1 * dir;
+                    if (this.keys['s'] || this.keys['arrowdown']) dy = 1 * dir;
+                    if (this.keys['a'] || this.keys['arrowleft']) dx = -1 * dir;
+                    if (this.keys['d'] || this.keys['arrowright']) dx = 1 * dir;
+
+                    if (dx !== 0 || dy !== 0) {
+                        this.player.move(dx, dy, this.map);
+                    }
+
+                    if (Math.random() < 0.003) {
+                        this.player.claimTerritory();
+                    }
+                }
+
+                updateEnemies() {
+                    this.enemies.forEach((enemy, index) => {
+                        enemy.update(this.player, this.map, this.projectiles);
+                    });
+
+                    if (Math.random() < GAME_CONFIG.ENEMY_SPAWN_RATE && this.enemies.length < 15) {
+                        let x, y, dist, attempts = 0;
+                        do {
+                            x = Math.random() * GAME_CONFIG.MAP_WIDTH;
+                            y = Math.random() * GAME_CONFIG.MAP_HEIGHT;
+                            dist = Math.hypot(x - this.player.x, y - this.player.y);
+                        } while (dist < GAME_CONFIG.MIN_SPAWN_DISTANCE / 2 && attempts++ < 50);
+
+                        const types = ['thug', 'rogue', 'police'];
+                        this.enemies.push(new Enemy(x, y, types[Math.floor(Math.random() * types.length)], this.nftCollection));
+                    }
+                }
+
+                updateProjectiles() {
+                    // Update bullets
+                    this.projectiles = this.projectiles.filter(proj => {
+                        const stillAlive = proj.update();
+                        if (!stillAlive) return false;
+
+                        // Check enemy collision
+                        if (proj.owner === 'player') {
+                            for (let enemy of this.enemies) {
+                                if (proj.checkCollision(enemy)) {
+                                    enemy.stats.hp -= proj.damage;
+                                    this.createParticle(enemy.x, enemy.y, `-${proj.damage}`, '#f00');
+                                    if (enemy.stats.hp <= 0) {
+                                        const loot = enemy.dropLoot();
+                                        if (loot) {
+                                            loot.x = enemy.x;
+                                            loot.y = enemy.y;
+                                            this.droppedPills.push(loot);
+                                            this.createParticle(enemy.x, enemy.y, 'ELIMINATED!', '#ff0');
+                                            this.enemiesKilled++;
+                                        }
+                                        this.enemies.splice(this.enemies.indexOf(enemy), 1);
+                                    }
+                                    return false; // Projectile consumed
+                                }
+                            }
+                        } else if (proj.owner === 'enemy') {
+                            if (proj.checkCollision(this.player)) {
+                                this.player.takeDamage(proj.damage);
+                                this.createParticle(this.player.x, this.player.y, `-${proj.damage}`, '#f00');
+                                return false;
+                            }
+                        }
+
+                        return true;
+                    });
+
+                    // Update grenades
+                    this.grenades = this.grenades.filter(grenade => {
+                        grenade.x += grenade.vx;
+                        grenade.y += grenade.vy;
+                        grenade.life--;
+                        
+                        if (grenade.life <= 0) {
+                            // Explode
+                            this.createParticle(grenade.x, grenade.y, 'BOOM!', '#ff6600');
+                            this.enemies.forEach(enemy => {
+                                const dist = Math.hypot(enemy.x - grenade.x, enemy.y - grenade.y);
+                                if (dist < grenade.blastRadius) {
+                                    enemy.stats.hp -= grenade.damage;
+                                    this.createParticle(enemy.x, enemy.y, `-${grenade.damage}`, '#f00');
+                                }
+                            });
+                            return false;
+                        }
+                        return true;
+                    });
+                }
+
+                passiveIncome() {
+                    const now = Date.now();
+                    if (!this.lastIncomeTime) this.lastIncomeTime = now;
+                    if (now - this.lastIncomeTime > 90000) {
+                        this.player.cash += this.player.income;
+                        this.lastIncomeTime = now;
+                        this.createParticle(this.player.x, this.player.y, `+$${this.player.income}`, '#0f0');
+                    }
+                }
+
+                render() {
+                    const ctx = this.ctx;
+                    ctx.fillStyle = '#0a0a0a';
+                    ctx.fillRect(0, 0, this.canvas.width, this.canvas.height);
+
+                    const camX = this.player.x * GAME_CONFIG.TILE_SIZE - this.canvas.width / 2;
+                    const camY = this.player.y * GAME_CONFIG.TILE_SIZE - this.canvas.height / 2;
+                    this.camera = { x: camX, y: camY };
+                    ctx.save();
+                    ctx.translate(-camX, -camY);
+
+                    // Draw map
+                    const startX = Math.max(0, Math.floor(camX / GAME_CONFIG.TILE_SIZE));
+                    const startY = Math.max(0, Math.floor(camY / GAME_CONFIG.TILE_SIZE));
+                    const endX = Math.min(this.map.width, startX + Math.ceil(this.canvas.width / GAME_CONFIG.TILE_SIZE) + 2);
+                    const endY = Math.min(this.map.height, startY + Math.ceil(this.canvas.height / GAME_CONFIG.TILE_SIZE) + 2);
+
+                    for (let y = startY; y < endY; y++) {
+                        for (let x = startX; x < endX; x++) {
+                            const tile = this.map.getTile(x, y);
+                            ctx.fillStyle = tile.color;
+                            ctx.fillRect(x * GAME_CONFIG.TILE_SIZE, y * GAME_CONFIG.TILE_SIZE, GAME_CONFIG.TILE_SIZE, GAME_CONFIG.TILE_SIZE);
+                            
+                            // Mark enterable building doors
+                            if (tile.special === 'building-entrance') {
+                                ctx.strokeStyle = '#fff';
+                                ctx.lineWidth = 2;
+                                ctx.strokeRect(x * GAME_CONFIG.TILE_SIZE + 5, y * GAME_CONFIG.TILE_SIZE + 5, 
+                                              GAME_CONFIG.TILE_SIZE - 10, GAME_CONFIG.TILE_SIZE - 10);
+                            }
+                            
+                            ctx.strokeStyle = '#222';
+                            ctx.lineWidth = 1;
+                            ctx.strokeRect(x * GAME_CONFIG.TILE_SIZE, y * GAME_CONFIG.TILE_SIZE, GAME_CONFIG.TILE_SIZE, GAME_CONFIG.TILE_SIZE);
+                        }
+                    }
+
+                    // Draw territory
+                    this.player.territory.forEach(key => {
+                        const [x, y] = key.split(',').map(Number);
+                        if (x >= startX && x < endX && y >= startY && y < endY) {
+                            ctx.fillStyle = 'rgba(0, 255, 0, 0.1)';
+                            ctx.fillRect(x * GAME_CONFIG.TILE_SIZE, y * GAME_CONFIG.TILE_SIZE, GAME_CONFIG.TILE_SIZE, GAME_CONFIG.TILE_SIZE);
+                        }
+                    });
+
+                    // Draw dropped pills
+                    this.droppedPills.forEach(pill => {
+                        ctx.fillStyle = pill.color;
+                        ctx.beginPath();
+                        ctx.arc(pill.x * GAME_CONFIG.TILE_SIZE, pill.y * GAME_CONFIG.TILE_SIZE, 8, 0, Math.PI * 2);
+                        ctx.fill();
+                    });
+
+                    // Draw enemies
+                    this.enemies.forEach(enemy => {
+                        const distToPlayer = Math.hypot(enemy.x - this.player.x, enemy.y - this.player.y);
+                        if (distToPlayer < GAME_CONFIG.PLAYER_VISION_RANGE || enemy.state === 'chase') {
+                            if (enemy.detectionTimer > 0 && enemy.detectionTimer < GAME_CONFIG.DETECTION_TIME_REQUIRED) {
+                                ctx.fillStyle = 'rgba(255, 165, 0, 0.4)';
+                                ctx.beginPath();
+                                ctx.arc(enemy.x * GAME_CONFIG.TILE_SIZE, enemy.y * GAME_CONFIG.TILE_SIZE, enemy.size + 8, 0, Math.PI * 2);
+                                ctx.fill();
+                            }
+                            
+                            ctx.fillStyle = enemy.color;
+                            ctx.beginPath();
+                            ctx.arc(enemy.x * GAME_CONFIG.TILE_SIZE, enemy.y * GAME_CONFIG.TILE_SIZE, enemy.size, 0, Math.PI * 2);
+                            ctx.fill();
+                            
+                            ctx.fillStyle = '#fff';
+                            ctx.font = '9px monospace';
+                            ctx.fillText(enemy.stats.label, enemy.x * GAME_CONFIG.TILE_SIZE - 15, enemy.y * GAME_CONFIG.TILE_SIZE - enemy.size - 3);
+                            
+                            if (enemy.stats.hp < GAME_CONFIG.ENEMY_TYPES[enemy.type].hp) {
+                                ctx.fillStyle = '#f00';
+                                ctx.fillRect(enemy.x * GAME_CONFIG.TILE_SIZE - 15, enemy.y * GAME_CONFIG.TILE_SIZE - 20, 
+                                           30 * (enemy.stats.hp / GAME_CONFIG.ENEMY_TYPES[enemy.type].hp), 2);
+                            }
+                        }
+                    });
+
+                    // Draw projectiles
+                    this.projectiles.forEach(proj => proj.render(this.ctx));
+                    
+                    // Draw grenades
+                    this.grenades.forEach(grenade => {
+                        ctx.fillStyle = '#ff6600';
+                        ctx.fillRect(grenade.x * GAME_CONFIG.TILE_SIZE - 3, grenade.y * GAME_CONFIG.TILE_SIZE - 3, 6, 6);
+                    });
+
+                    // Draw shops
+                    this.shops.forEach(shop => {
+                        ctx.fillStyle = '#00ffff';
+                        ctx.fillRect(shop.x * GAME_CONFIG.TILE_SIZE - 8, shop.y * GAME_CONFIG.TILE_SIZE - 8, 16, 16);
+                        ctx.fillStyle = '#000';
+                        ctx.font = '10px monospace';
+                        ctx.fillText('$', shop.x * GAME_CONFIG.TILE_SIZE - 4, shop.y * GAME_CONFIG.TILE_SIZE + 3);
+                    });
+
+                    // Draw player
+                    ctx.fillStyle = this.player.hasEffect('STEALTH') ? 'rgba(255, 255, 0, 0.5)' : 
+                                   this.player.isInBuilding ? '#ffff88' : '#ff0';
+                    ctx.beginPath();
+                    ctx.arc(this.player.x * GAME_CONFIG.TILE_SIZE, this.player.y * GAME_CONFIG.TILE_SIZE, this.player.size, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Draw vision range indicator
+                    ctx.strokeStyle = 'rgba(255, 255, 255, 0.05)';
+                    ctx.beginPath();
+                    ctx.arc(this.player.x * GAME_CONFIG.TILE_SIZE, this.player.y * GAME_CONFIG.TILE_SIZE, 
+                           GAME_CONFIG.PLAYER_VISION_RANGE * GAME_CONFIG.TILE_SIZE, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    // Draw particles
+                    this.particles.forEach(p => {
+                        ctx.save();
+                        ctx.globalAlpha = p.life;
+                        ctx.fillStyle = p.color;
+                        ctx.font = 'bold 12px monospace';
+                        ctx.fillText(p.text, p.x * GAME_CONFIG.TILE_SIZE, p.y * GAME_CONFIG.TILE_SIZE);
+                        ctx.restore();
+                    });
+
+                    ctx.restore();
+                }
+
+                gameLoop(timestamp = 0) {
+                    const deltaTime = timestamp - this.lastTime;
+                    this.lastTime = timestamp;
+
+                    this.handleInput();
+                    this.player.updateStatusEffects();
+                    this.player.updateBuildingStatus(this.map);
+                    this.updateEnemies();
+                    this.updateProjectiles();
+                    this.shops.forEach(shop => shop.update());
+                    this.questSystem.updateQuests(this.player, this.enemiesKilled);
+                    this.storyManager.update(this.player);
+                    this.updateParticles();
+                    this.passiveIncome();
+                    this.enemiesKilled = 0; // Reset kill counter
+
+                    if (Math.random() < 0.0002) {
+                        this.player.cash += Math.floor(this.player.territory.size * 0.05);
+                    }
+
+                    this.render();
+                    this.updateUI();
+                    this.updateWeaponHUD();
+
+                    requestAnimationFrame((t) => this.gameLoop(t));
+                }
+            }
+
+            // ============================================================================
+            // ERROR BOUNDARY & INITIALIZATION
+            // ============================================================================
+            try {
+                if (document.readyState === 'loading') {
+                    document.addEventListener('DOMContentLoaded', () => {
+                        new NarcotiXGame();
+                    });
+                } else {
+                    new NarcotiXGame();
+                }
+            } catch (error) {
+                console.error("Game initialization failed:", error);
+                const loadingScreen = document.getElementById('loadingScreen');
+                if (loadingScreen) {
+                    loadingScreen.innerHTML = `<h1 style="color: #f00;">CRITICAL ERROR</h1><p>${error.message}</p><p>Check console for details.</p>`;
+                    loadingScreen.style.display = 'flex';
+                }
+            }
+        })();
+    </script>
+</body>
+</html>

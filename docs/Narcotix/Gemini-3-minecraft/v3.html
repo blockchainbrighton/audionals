@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>NarcotiX Miner</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        
+        /* UI OVERLAYS */
+        #ui-layer {
+            position: absolute; width: 100%; height: 100%; pointer-events: none;
+            display: flex; flex-direction: column; justify-content: space-between;
+        }
+
+        /* TOP: HUD */
+        #hud-top {
+            padding: 20px; text-align: center; color: white;
+            text-shadow: 2px 2px 0 #000;
+        }
+        #notification-area {
+            height: 30px; font-weight: bold; color: #ffff00; font-size: 1.2em;
+            transition: opacity 0.5s; opacity: 0;
+        }
+
+        /* CENTER: Instructions */
+        #instructions {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center; color: white;
+            background: rgba(0,0,0,0.8); padding: 30px;
+            border: 2px solid white; border-radius: 5px;
+            pointer-events: auto; cursor: pointer;
+        }
+
+        /* BOTTOM: Inventory & Effects */
+        #hud-bottom {
+            padding: 20px; display: flex; gap: 20px; align-items: flex-end;
+            background: linear-gradient(to top, rgba(0,0,0,0.8), transparent);
+        }
+        #drug-effect-box {
+            flex-grow: 1; color: white; padding: 15px;
+            background: rgba(0, 0, 0, 0.6); border-radius: 8px;
+            display: none; border-left: 5px solid white;
+        }
+        #inventory-box {
+            min-width: 200px; color: white; text-align: right;
+        }
+        .pill-count { font-size: 2em; font-weight: bold; }
+
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            transform: translate(-50%, -50%);
+            mix-blend-mode: difference;
+        }
+        #crosshair::before { content: ''; position: absolute; top: 9px; left: 0; width: 20px; height: 2px; background: white; }
+        #crosshair::after { content: ''; position: absolute; top: 0; left: 9px; width: 2px; height: 20px; background: white; }
+    </style>
+    
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="ui-layer">
+        <div id="hud-top">
+            <h1>NARCOTIX MINER</h1>
+            <div id="notification-area"></div>
+        </div>
+        <div id="hud-bottom">
+            <div id="drug-effect-box">
+                <h2 id="drug-name" style="margin:0; color:#ff00ff;">PILL NAME</h2>
+                <p id="drug-effect" style="font-style:italic;">Effect text goes here...</p>
+                <p id="drug-side-effect" style="color:#ff6666; font-size:0.9em;">WARNING: Side effect text...</p>
+            </div>
+            <div id="inventory-box">
+                <div>STASH</div>
+                <div class="pill-count" id="pill-counter">0</div>
+                <div>Press 'Q' to Consume</div>
+            </div>
+        </div>
+    </div>
+
+    <div id="instructions">
+        <h1>CLICK TO START</h1>
+        <p><b>WASD</b> Move | <b>SPACE</b> Jump</p>
+        <p><b>Left Click</b> Break Blocks (Find Pills)</p>
+        <p><b>Right Click</b> Place Blocks</p>
+        <p><b>Q</b> Eat Pill (Hallucinate)</p>
+    </div>
+    <div id="crosshair"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- 1. NARCOTIX DATA (Sampled from your CSV) ---
+        const RARITY_MAP = {
+            '#9900ff': 'Very Common', '#ff00ff': 'Very Common',
+            '#38761d': 'Common',
+            '#ff9900': 'Uncommon', '#cb97ff': 'Uncommon',
+            '#ffd966': 'Moderate',
+            '#ffff00': 'Rare', '#0000ff': 'Rare',
+            '#741b47': 'Very Rare', '#00ffff': 'Very Rare',
+            '#000000': 'Extremely Rare',
+            '#00ff00': 'Ultra Rare', '#7f6000': 'Ultra Rare',
+            '#ea9999': 'Mythic', '#b4a7d6': 'Mythic',
+            '#999999': 'Legendary'
+        };
+
+        const PILL_DB = [
+            { name: "Sponza", color: "#7f6000", effect: "Ability to speak to fire and convince it to stop burning things.", side: "Mild heartburn." },
+            { name: "Gangles", color: "#ffff00", effect: "Power to resist laughing at puns.", side: "Hallucinatory experiences with a lopsided chicken." },
+            { name: "Numinousex", color: "#38761d", effect: "Ability to split skateboards with your index finger.", side: "Preference for wonky lines." },
+            { name: "Rondeaux16", color: "#9900ff", effect: "Feel fulfilled at the start of every weekend.", side: "Temptation to set fire to own legs." },
+            { name: "Sylph", color: "#ff00ff", effect: "Feel like you're riding a unicycle across a tightrope.", side: "Obsession with alibis." },
+            { name: "Cherimoya", color: "#ff9900", effect: "Make the user amazing at cycling.", side: "Proclivity for deep dives into heavy topics." },
+            { name: "Jeeveless", color: "#38761d", effect: "Create disorder by playing crying baby sounds.", side: "Rash in reaction to iPhone users." },
+            { name: "Astragenix", color: "#ffff00", effect: "Prevents you from overwatering your plants.", side: "Bewildered body language." },
+            { name: "Mageia", color: "#38761d", effect: "Ability to expand jewellery with thoughts.", side: "Extreme sad face." },
+            { name: "Fummeze", color: "#ff00ff", effect: "Picnic wearing nothing on lower half without alarm.", side: "Inability to stop quoting Bob Dylan." },
+            { name: "Cynilical", color: "#ff9900", effect: "Power to develop gradually over time.", side: "Attraction to anyone parked near an Audi." },
+            { name: "Flingtonite", color: "#b4a7d6", effect: "Stretch bottom lip over head.", side: "Fascination with Binance Coin." },
+            { name: "Bureau", color: "#38761d", effect: "Feel despondent when on first dates.", side: "Overuse of the word 'sautéed'." },
+            { name: "Snealthy", color: "#ff00ff", effect: "Memories of Emperor Norton in a rainbow-lit glen.", side: "Becoming an expert in statistics." },
+            { name: "Celestitox", color: "#9900ff", effect: "Feel compassion while copulating.", side: "Disgust towards philanthropists." },
+            { name: "Dillyitinol", color: "#38761d", effect: "Disintegrate scooters with thoughts.", side: "Moving to The Hague." },
+            { name: "Harbor", color: "#ffff00", effect: "Unwavering willpower to achieve goals.", side: "Fear of being alone in the library." },
+            { name: "Xzipp", color: "#741b47", effect: "Make the user an expert in histonomy.", side: "Frequent time-travel daydreams." },
+            { name: "Pyrique", color: "#b4a7d6", effect: "Dumbfound yeomen with stamp collecting.", side: "Fear of hand sanitiser." },
+            { name: "Chlorophylle", color: "#ff00ff", effect: "Uncontrolled joy while swimming.", side: "Refusal to acknowledge tails." },
+            { name: "Klimzona", color: "#0000ff", effect: "Strength of an iguana.", side: "Temporary colour blindness." },
+            { name: "Foreficent", color: "#ff00ff", effect: "Experience of attending crowning of Queen Elizabeth I.", side: "Pathological hatred of eggs." },
+            { name: "Blinkletoes", color: "#9900ff", effect: "Alleviate pain by blinking.", side: "Inability to taste cheese." }
+        ];
+
+        // --- 2. GAME SETUP ---
+        const scene = new THREE.Scene();
+        const baseColor = new THREE.Color(0x87CEEB);
+        scene.background = baseColor.clone();
+        scene.fog = new THREE.Fog(baseColor, 10, 60);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        document.body.appendChild(renderer.domElement);
+
+        // Lighting
+        scene.add(new THREE.AmbientLight(0xffffff, 0.6));
+        const sun = new THREE.DirectionalLight(0xffffff, 0.8);
+        sun.position.set(50, 80, 50);
+        scene.add(sun);
+
+        // --- 3. INVENTORY & DROPS ---
+        const stash = [];
+        const droppedItems = []; // Floating meshes
+        
+        function spawnPill(pos) {
+            // 30% chance to drop a pill
+            if (Math.random() > 0.3) return;
+
+            const pillData = PILL_DB[Math.floor(Math.random() * PILL_DB.length)];
+            const rarity = RARITY_MAP[pillData.color] || "Unknown";
+            
+            // Create visual mesh
+            const geo = new THREE.CapsuleGeometry(0.1, 0.3, 4, 8);
+            const mat = new THREE.MeshBasicMaterial({ color: pillData.color });
+            const mesh = new THREE.Mesh(geo, mat);
+            
+            mesh.position.copy(pos);
+            mesh.userData = { ...pillData, rarity: rarity }; // Store data in mesh
+            
+            scene.add(mesh);
+            droppedItems.push(mesh);
+        }
+
+        function collectPill(index) {
+            const mesh = droppedItems[index];
+            const data = mesh.userData;
+            
+            stash.push(data);
+            document.getElementById('pill-counter').innerText = stash.length;
+            
+            showNotification(`Found: ${data.name} (${data.rarity})`);
+            
+            scene.remove(mesh);
+            droppedItems.splice(index, 1);
+        }
+
+        function consumePill() {
+            if (stash.length === 0) {
+                showNotification("Stash Empty!");
+                return;
+            }
+            const pill = stash.pop(); // Take last
+            document.getElementById('pill-counter').innerText = stash.length;
+
+            // UI Update
+            const box = document.getElementById('drug-effect-box');
+            box.style.display = 'block';
+            box.style.borderColor = pill.color;
+            document.getElementById('drug-name').innerText = pill.name;
+            document.getElementById('drug-name').style.color = pill.color;
+            document.getElementById('drug-effect').innerText = pill.effect;
+            document.getElementById('drug-side-effect').innerText = "SIDE EFFECT: " + pill.side;
+
+            // Visual Hallucination
+            scene.background.set(pill.color);
+            scene.fog.color.set(pill.color);
+            scene.fog.near = 1; 
+            scene.fog.far = 20; // Close in the fog
+
+            // Reset after 5 seconds
+            setTimeout(() => {
+                scene.background.set(0x87CEEB);
+                scene.fog.color.set(0x87CEEB);
+                scene.fog.near = 10; 
+                scene.fog.far = 60;
+                box.style.display = 'none';
+            }, 8000);
+        }
+
+        function showNotification(msg) {
+            const el = document.getElementById('notification-area');
+            el.innerText = msg;
+            el.style.opacity = 1;
+            setTimeout(() => el.style.opacity = 0, 3000);
+        }
+
+        // --- 4. WORLD ---
+        const objects = [];
+        const blockGeo = new THREE.BoxGeometry(1,1,1);
+        const matGrass = new THREE.MeshStandardMaterial({ color: 0x5da130 });
+        const matDirt = new THREE.MeshStandardMaterial({ color: 0x754d29 });
+
+        // Generate Floor
+        for(let x=-10; x<10; x++) {
+            for(let z=-10; z<10; z++) {
+                const mesh = new THREE.Mesh(blockGeo, Math.random()>0.2 ? matGrass : matDirt);
+                mesh.position.set(x, 0, z);
+                scene.add(mesh);
+                objects.push(mesh);
+                
+                // Add some pillars
+                if(Math.random() < 0.05) {
+                    const h = 1 + Math.floor(Math.random()*3);
+                    for(let y=1; y<=h; y++) {
+                        const p = new THREE.Mesh(blockGeo, matDirt);
+                        p.position.set(x,y,z);
+                        scene.add(p);
+                        objects.push(p);
+                    }
+                }
+            }
+        }
+
+        // --- 5. CONTROLS ---
+        const controls = new PointerLockControls(camera, document.body);
+        const instructions = document.getElementById('instructions');
+        instructions.onclick = () => controls.lock();
+        controls.addEventListener('lock', () => instructions.style.display = 'none');
+        controls.addEventListener('unlock', () => instructions.style.display = 'block');
+
+        const move = { f:false, b:false, l:false, r:false };
+        document.addEventListener('keydown', (e) => {
+            if(e.code === 'KeyW') move.f = true;
+            if(e.code === 'KeyS') move.b = true;
+            if(e.code === 'KeyA') move.l = true;
+            if(e.code === 'KeyD') move.r = true;
+            if(e.code === 'Space') velocity.y = 10;
+            if(e.code === 'KeyQ') consumePill();
+        });
+        document.addEventListener('keyup', (e) => {
+            if(e.code === 'KeyW') move.f = false;
+            if(e.code === 'KeyS') move.b = false;
+            if(e.code === 'KeyA') move.l = false;
+            if(e.code === 'KeyD') move.r = false;
+        });
+
+        // Breaking/Placing
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(0,0);
+
+        document.addEventListener('mousedown', (e) => {
+            if(!controls.isLocked) return;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objects);
+
+            if(intersects.length > 0 && intersects[0].distance < 6) {
+                const obj = intersects[0].object;
+                if(e.button === 0) { // Left Click Break
+                    spawnPill(obj.position.clone()); // Chance to spawn item
+                    scene.remove(obj);
+                    objects.splice(objects.indexOf(obj), 1);
+                } else if (e.button === 2) { // Right Click Place
+                    const pos = obj.position.clone().add(intersects[0].face.normal);
+                    const b = new THREE.Mesh(blockGeo, matGrass);
+                    b.position.copy(pos);
+                    scene.add(b);
+                    objects.push(b);
+                }
+            }
+        });
+
+        // --- 6. ANIMATION ---
+        const velocity = new THREE.Vector3();
+        let prevTime = performance.now();
+        camera.position.y = 5;
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            if(controls.isLocked) {
+                velocity.y -= 25.0 * delta; // Gravity
+                
+                const dir = new THREE.Vector3();
+                camera.getWorldDirection(dir);
+                const right = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
+                
+                const fwd = Number(move.f) - Number(move.b);
+                const strafe = Number(move.r) - Number(move.l);
+
+                camera.position.addScaledVector(dir, fwd * 6.0 * delta);
+                camera.position.addScaledVector(right, strafe * 6.0 * delta);
+                camera.position.y += velocity.y * delta;
+
+                if(camera.position.y < 1.6) { // Simple floor collision
+                    camera.position.y = 1.6;
+                    velocity.y = 0;
+                }
+            }
+
+            // Item Physics (Float & Rotate)
+            for(let i=droppedItems.length-1; i>=0; i--) {
+                const item = droppedItems[i];
+                item.rotation.y += 2 * delta;
+                item.rotation.z += 1 * delta;
+                
+                // Check pickup
+                if(camera.position.distanceTo(item.position) < 1.5) {
+                    collectPill(i);
+                }
+            }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+
+        window.onresize = () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,352 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Minecraft Clone with Physics</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Courier New', Courier, monospace; }
+        #instructions {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center; color: white;
+            background: rgba(0,0,0,0.8); padding: 30px;
+            border: 2px solid white;
+            border-radius: 5px; cursor: pointer;
+            user-select: none;
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none;
+            mix-blend-mode: difference; /* Ensures visibility on any background */
+        }
+        #crosshair::before, #crosshair::after {
+            content: ''; position: absolute; background: white;
+        }
+        #crosshair::before { top: 9px; left: 0; width: 20px; height: 2px; }
+        #crosshair::after { top: 0; left: 9px; width: 2px; height: 20px; }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="instructions">
+        <h1>MINECRAFT JS</h1>
+        <p>CLICK TO START</p>
+        <p>----------------</p>
+        <p><b>WASD</b> to Walk</p>
+        <p><b>SPACE</b> to Jump</p>
+        <p><b>Left Click</b>: Break Block</p>
+        <p><b>Right Click</b>: Place Block</p>
+    </div>
+    <div id="crosshair"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- CONFIGURATION ---
+        const GRAVITY = 30.0;
+        const JUMP_FORCE = 12.0;
+        const SPEED = 6.0;
+        const PLAYER_HEIGHT = 1.6;
+        const PLAYER_RADIUS = 0.3; // For collision width
+
+        // --- 1. SCENE SETUP ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 0, 60);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true; // Enable shadows
+        document.body.appendChild(renderer.domElement);
+
+        // --- 2. TEXTURE GENERATOR ---
+        // Function to create a pixelated texture on the fly
+        function createBlockTexture(color1, color2) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const context = canvas.getContext('2d');
+            context.fillStyle = color1;
+            context.fillRect(0,0,64,64);
+            context.fillStyle = color2;
+            // Draw random noise
+            for(let i=0; i<200; i++) {
+                const x = Math.floor(Math.random() * 64);
+                const y = Math.floor(Math.random() * 64);
+                context.fillRect(x, y, 4, 4); // Big pixels
+            }
+            const texture = new THREE.CanvasTexture(canvas);
+            texture.magFilter = THREE.NearestFilter; // Keeps it pixelated
+            return texture;
+        }
+
+        const grassTex = createBlockTexture('#5da130', '#4b8226');
+        const dirtTex = createBlockTexture('#754d29', '#5c3a1e');
+        const stoneTex = createBlockTexture('#888888', '#666666');
+
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+        const materials = {
+            grass: new THREE.MeshStandardMaterial({ map: grassTex }),
+            dirt: new THREE.MeshStandardMaterial({ map: dirtTex }),
+            stone: new THREE.MeshStandardMaterial({ map: stoneTex })
+        };
+
+        // --- 3. LIGHTING ---
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+
+        const sunLight = new THREE.DirectionalLight(0xffffff, 0.8);
+        sunLight.position.set(50, 100, 50);
+        sunLight.castShadow = true;
+        sunLight.shadow.camera.left = -50;
+        sunLight.shadow.camera.right = 50;
+        sunLight.shadow.camera.top = 50;
+        sunLight.shadow.camera.bottom = -50;
+        scene.add(sunLight);
+
+        // --- 4. WORLD GENERATION ---
+        const objects = []; // Blocks for collision
+        
+        function addBlock(x, y, z, mat) {
+            const block = new THREE.Mesh(geometry, mat);
+            block.position.set(x, y, z);
+            block.castShadow = true;
+            block.receiveShadow = true;
+            scene.add(block);
+            objects.push(block);
+            return block;
+        }
+
+        // Create Floor
+        const floorSize = 20;
+        for (let x = -floorSize; x < floorSize; x++) {
+            for (let z = -floorSize; z < floorSize; z++) {
+                // Add bedrock at y=0
+                addBlock(x, 0, z, materials.stone);
+                // Add grass on top
+                if (Math.random() > 0.1) {
+                    addBlock(x, 1, z, materials.grass);
+                }
+            }
+        }
+
+        // Add some random pillars to test collision
+        for(let i=0; i<20; i++) {
+            const x = Math.floor(Math.random() * 20) - 10;
+            const z = Math.floor(Math.random() * 20) - 10;
+            addBlock(x, 2, z, materials.dirt);
+            addBlock(x, 3, z, materials.dirt);
+            addBlock(x, 4, z, materials.stone);
+        }
+
+        // --- 5. PLAYER & CONTROLS ---
+        const controls = new PointerLockControls(camera, document.body);
+        const instructions = document.getElementById('instructions');
+
+        instructions.addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => instructions.style.display = 'none');
+        controls.addEventListener('unlock', () => instructions.style.display = 'block');
+
+        // Movement State
+        const moveState = { fwd: false, bwd: false, left: false, right: false, jump: false };
+        
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'KeyW': moveState.fwd = true; break;
+                case 'KeyS': moveState.bwd = true; break;
+                case 'KeyA': moveState.left = true; break;
+                case 'KeyD': moveState.right = true; break;
+                case 'Space': if(canJump) velocity.y = JUMP_FORCE; canJump = false; break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': moveState.fwd = false; break;
+                case 'KeyS': moveState.bwd = false; break;
+                case 'KeyA': moveState.left = false; break;
+                case 'KeyD': moveState.right = false; break;
+            }
+        });
+
+        // --- 6. PHYSICS & COLLISION LOGIC ---
+        const velocity = new THREE.Vector3();
+        let canJump = false;
+
+        // Helper: Get player bounding box
+        function getPlayerBox(pos) {
+            return new THREE.Box3(
+                new THREE.Vector3(pos.x - PLAYER_RADIUS, pos.y - 1.5, pos.z - PLAYER_RADIUS),
+                new THREE.Vector3(pos.x + PLAYER_RADIUS, pos.y + 0.5, pos.z + PLAYER_RADIUS)
+            );
+        }
+
+        function checkCollision(playerPos) {
+            const playerBox = getPlayerBox(playerPos);
+            
+            // We only check blocks close to the player to save performance
+            for (const block of objects) {
+                // Quick distance check
+                if (block.position.distanceToSquared(playerPos) > 10) continue;
+
+                const blockBox = new THREE.Box3().setFromObject(block);
+                if (playerBox.intersectsBox(blockBox)) {
+                    return true;
+                }
+            }
+            return false;
+        }
+
+        // --- 7. INTERACTION (Place/Break) ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(0,0);
+        
+        // Selection Box (Wireframe)
+        const selectorGeo = new THREE.BoxGeometry(1.01, 1.01, 1.01);
+        const selectorMat = new THREE.MeshBasicMaterial({ color: 0x000000, wireframe: true, transparent: true, opacity: 0.5 });
+        const selector = new THREE.Mesh(selectorGeo, selectorMat);
+        scene.add(selector);
+
+        document.addEventListener('mousedown', (event) => {
+            if (!controls.isLocked) return;
+            
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objects);
+
+            if (intersects.length > 0) {
+                const intersect = intersects[0];
+                
+                // Ensure we are close enough to interact
+                if(intersect.distance > 6) return;
+
+                // Left Click (0) = Break
+                if (event.button === 0) {
+                    scene.remove(intersect.object);
+                    objects.splice(objects.indexOf(intersect.object), 1);
+                }
+                // Right Click (2) = Place
+                else if (event.button === 2) {
+                    const pos = intersect.object.position.clone().add(intersect.face.normal);
+                    
+                    // Don't place block inside player
+                    const playerBox = getPlayerBox(camera.position);
+                    const newBlockBox = new THREE.Box3(
+                        new THREE.Vector3(pos.x - 0.5, pos.y - 0.5, pos.z - 0.5),
+                        new THREE.Vector3(pos.x + 0.5, pos.y + 0.5, pos.z + 0.5)
+                    );
+
+                    if (!playerBox.intersectsBox(newBlockBox)) {
+                        addBlock(pos.x, pos.y, pos.z, materials.stone);
+                    }
+                }
+            }
+        });
+
+        // Prevent context menu on right click
+        document.addEventListener('contextmenu', event => event.preventDefault());
+
+        // --- 8. GAME LOOP ---
+        let prevTime = performance.now();
+        
+        // Initialize Player Position
+        camera.position.set(0, 5, 0);
+
+        function animate() {
+            requestAnimationFrame(animate);
+
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            if (controls.isLocked) {
+                
+                // 1. Apply Gravity
+                velocity.y -= GRAVITY * delta;
+
+                // 2. Handle Input (X/Z movement)
+                const inputVector = new THREE.Vector3();
+                inputVector.z = Number(moveState.fwd) - Number(moveState.bwd);
+                inputVector.x = Number(moveState.right) - Number(moveState.left);
+                inputVector.normalize();
+
+                // Convert input to camera direction
+                const direction = new THREE.Vector3();
+                camera.getWorldDirection(direction);
+                direction.y = 0; direction.normalize(); // Keep it flat
+                const right = new THREE.Vector3();
+                right.crossVectors(camera.up, direction).normalize(); // Get right vector
+
+                const moveX = (direction.x * inputVector.z - right.x * inputVector.x) * SPEED * delta;
+                const moveZ = (direction.z * inputVector.z - right.z * inputVector.x) * SPEED * delta;
+
+                // 3. Collision Handling (Axis separation)
+                
+                // Try moving X
+                camera.position.x += moveX;
+                if (checkCollision(camera.position)) {
+                    camera.position.x -= moveX; // Undo if hit
+                }
+
+                // Try moving Z
+                camera.position.z += moveZ;
+                if (checkCollision(camera.position)) {
+                    camera.position.z -= moveZ; // Undo if hit
+                }
+
+                // Try moving Y (Gravity/Jump)
+                camera.position.y += velocity.y * delta;
+                if (checkCollision(camera.position)) {
+                    // Hit something (Floor or Ceiling)
+                    camera.position.y -= velocity.y * delta; // Undo
+                    
+                    if (velocity.y < 0) {
+                        // We hit the floor
+                        canJump = true;
+                        velocity.y = 0;
+                    } else {
+                        // We hit a ceiling
+                        velocity.y = 0;
+                    }
+                }
+
+                // Death floor (reset if fall too far)
+                if (camera.position.y < -10) {
+                    camera.position.set(0, 10, 0);
+                    velocity.y = 0;
+                }
+            }
+
+            // Update Selector Box
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objects);
+            if (intersects.length > 0 && intersects[0].distance < 6) {
+                selector.visible = true;
+                selector.position.copy(intersects[0].object.position);
+            } else {
+                selector.visible = false;
+            }
+
+            renderer.render(scene, camera);
+        }
+
+        animate();
+
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
+
+    </script>
+</body>
+</html>

@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Minecraft JS - V3</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Segoe UI', Tahoma, sans-serif; }
+        
+        /* UI OVERLAY */
+        #ui-container {
+            position: absolute; bottom: 20px; left: 50%;
+            transform: translateX(-50%);
+            display: flex; gap: 10px;
+            background: rgba(0,0,0,0.5);
+            padding: 10px; border-radius: 10px;
+        }
+        .slot {
+            width: 50px; height: 50px;
+            border: 4px solid #555;
+            background-size: cover; image-rendering: pixelated;
+            cursor: pointer; opacity: 0.8;
+        }
+        .active { border-color: white; opacity: 1; transform: scale(1.1); }
+
+        #instructions {
+            position: absolute; top: 50%; left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center; color: white;
+            background: rgba(0,0,0,0.8); padding: 30px;
+            border: 2px solid white; border-radius: 5px;
+            user-select: none;
+        }
+        #crosshair {
+            position: absolute; top: 50%; left: 50%;
+            width: 20px; height: 20px;
+            transform: translate(-50%, -50%);
+            pointer-events: none; mix-blend-mode: difference;
+        }
+        #crosshair::before { content: ''; position: absolute; top: 9px; left: 0; width: 20px; height: 2px; background: white; }
+        #crosshair::after { content: ''; position: absolute; top: 0; left: 9px; width: 2px; height: 20px; background: white; }
+    </style>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.150.1/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.150.1/examples/jsm/"
+            }
+        }
+    </script>
+</head>
+<body>
+
+    <div id="instructions">
+        <h1>MINECRAFT V3</h1>
+        <p>CLICK TO START</p>
+        <p>WASD to Walk | SPACE to Jump</p>
+        <p>1-5 to Select Block</p>
+        <p>Left Click: Break | Right Click: Place</p>
+    </div>
+    <div id="crosshair"></div>
+    
+    <div id="ui-container">
+        <div class="slot active" id="slot-1" style="background-color: #5da130;"></div> <div class="slot" id="slot-2" style="background-color: #754d29;"></div> <div class="slot" id="slot-3" style="background-color: #888;"></div>    <div class="slot" id="slot-4" style="background-color: #8B4513;"></div> <div class="slot" id="slot-5" style="background-color: #228B22;"></div> </div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+
+        // --- CONFIG ---
+        const GRAVITY = 30.0;
+        const SPEED = 6.0;
+        const JUMP = 12.0;
+
+        // --- SCENE ---
+        const scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x87CEEB);
+        scene.fog = new THREE.Fog(0x87CEEB, 10, 60);
+
+        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.shadowMap.enabled = true;
+        document.body.appendChild(renderer.domElement);
+
+        // --- TEXTURES ---
+        function createTexture(c1, c2) {
+            const canvas = document.createElement('canvas');
+            canvas.width = 64; canvas.height = 64;
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = c1; ctx.fillRect(0,0,64,64);
+            ctx.fillStyle = c2;
+            for(let i=0; i<300; i++) ctx.fillRect(Math.random()*64, Math.random()*64, 2, 2);
+            const tex = new THREE.CanvasTexture(canvas);
+            tex.magFilter = THREE.NearestFilter;
+            return tex;
+        }
+
+        const mats = {
+            grass: new THREE.MeshStandardMaterial({ map: createTexture('#5da130', '#4b8226') }),
+            dirt: new THREE.MeshStandardMaterial({ map: createTexture('#754d29', '#5c3a1e') }),
+            stone: new THREE.MeshStandardMaterial({ map: createTexture('#888888', '#666666') }),
+            wood: new THREE.MeshStandardMaterial({ map: createTexture('#8B4513', '#5C4033') }),
+            leaves: new THREE.MeshStandardMaterial({ map: createTexture('#228B22', '#006400') })
+        };
+
+        // --- WORLD GENERATION ---
+        const objects = [];
+        const geometry = new THREE.BoxGeometry(1, 1, 1);
+
+        function addBlock(x, y, z, type) {
+            if(!mats[type]) return;
+            const mesh = new THREE.Mesh(geometry, mats[type]);
+            mesh.position.set(x, y, z);
+            mesh.castShadow = true; mesh.receiveShadow = true;
+            scene.add(mesh);
+            objects.push(mesh);
+            mesh.name = type; // Store type for later logic
+        }
+
+        // Generate Terrain
+        for(let x=-15; x<15; x++) {
+            for(let z=-15; z<15; z++) {
+                addBlock(x, 0, z, 'stone'); // Bedrock
+                
+                // Random Height Map
+                const height = Math.floor(Math.random() * 2) + 1;
+                for(let y=1; y<=height; y++) {
+                   addBlock(x, y, z, y === height ? 'grass' : 'dirt');
+                }
+
+                // Trees (1 in 40 chance)
+                if(x > -12 && x < 12 && z > -12 && z < 12) { // Keep away from edge
+                    if(Math.random() < 0.025) {
+                        const treeH = 3 + Math.floor(Math.random() * 2);
+                        // Trunk
+                        for(let ty=1; ty<=treeH; ty++) {
+                            addBlock(x, height + ty, z, 'wood');
+                        }
+                        // Leaves
+                        for(let lx=-1; lx<=1; lx++) {
+                            for(let lz=-1; lz<=1; lz++) {
+                                for(let ly=0; ly<=1; ly++) {
+                                    if (lx===0 && lz===0 && ly===0) continue; // Skip trunk top
+                                    addBlock(x+lx, height+treeH+ly, z+lz, 'leaves');
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // --- LIGHTS ---
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const dirLight = new THREE.DirectionalLight(0xffffff, 0.7);
+        dirLight.position.set(50, 50, 50);
+        dirLight.castShadow = true;
+        dirLight.shadow.mapSize.width = 2048;
+        dirLight.shadow.mapSize.height = 2048;
+        scene.add(dirLight);
+
+        // --- PLAYER & CONTROLS ---
+        const controls = new PointerLockControls(camera, document.body);
+        const instructions = document.getElementById('instructions');
+        
+        instructions.addEventListener('click', () => controls.lock());
+        controls.addEventListener('lock', () => instructions.style.display = 'none');
+        controls.addEventListener('unlock', () => instructions.style.display = 'block');
+
+        const move = { fwd: false, bwd: false, l: false, r: false, jump: false };
+        
+        document.addEventListener('keydown', (e) => {
+            switch(e.code) {
+                case 'KeyW': move.fwd = true; break;
+                case 'KeyS': move.bwd = true; break;
+                case 'KeyA': move.l = true; break;
+                case 'KeyD': move.r = true; break;
+                case 'Space': if(canJump) velocity.y = JUMP; canJump = false; break;
+                case 'Digit1': selectBlock(1); break;
+                case 'Digit2': selectBlock(2); break;
+                case 'Digit3': selectBlock(3); break;
+                case 'Digit4': selectBlock(4); break;
+                case 'Digit5': selectBlock(5); break;
+            }
+        });
+        document.addEventListener('keyup', (e) => {
+            switch(e.code) {
+                case 'KeyW': move.fwd = false; break;
+                case 'KeyS': move.bwd = false; break;
+                case 'KeyA': move.l = false; break;
+                case 'KeyD': move.r = false; break;
+            }
+        });
+
+        // --- INVENTORY LOGIC ---
+        const blockTypes = ['grass', 'dirt', 'stone', 'wood', 'leaves'];
+        let currentBlock = 'grass';
+        
+        function selectBlock(index) {
+            currentBlock = blockTypes[index-1];
+            document.querySelectorAll('.slot').forEach(el => el.classList.remove('active'));
+            document.getElementById(`slot-${index}`).classList.add('active');
+        }
+
+        // --- PHYSICS ---
+        const velocity = new THREE.Vector3();
+        let canJump = false;
+        camera.position.set(0, 10, 0);
+
+        function checkCollision(pos) {
+            const pBox = new THREE.Box3(
+                new THREE.Vector3(pos.x-0.3, pos.y-1.5, pos.z-0.3),
+                new THREE.Vector3(pos.x+0.3, pos.y+0.5, pos.z+0.3)
+            );
+            for(let obj of objects) {
+                if(obj.position.distanceToSquared(pos) > 16) continue; 
+                if(pBox.intersectsBox(new THREE.Box3().setFromObject(obj))) return true;
+            }
+            return false;
+        }
+
+        // --- INTERACTION ---
+        const raycaster = new THREE.Raycaster();
+        const mouse = new THREE.Vector2(0,0);
+        const selector = new THREE.Mesh(
+            new THREE.BoxGeometry(1.01,1.01,1.01), 
+            new THREE.MeshBasicMaterial({ color:0x000000, wireframe:true, opacity:0.5, transparent:true })
+        );
+        scene.add(selector);
+
+        document.addEventListener('mousedown', (e) => {
+            if(!controls.isLocked) return;
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objects);
+            if(intersects.length && intersects[0].distance < 6) {
+                const hit = intersects[0];
+                if(e.button === 0) { // Break
+                    scene.remove(hit.object);
+                    objects.splice(objects.indexOf(hit.object), 1);
+                } else if(e.button === 2) { // Place
+                    const pos = hit.object.position.clone().add(hit.face.normal);
+                    // Prevent placing inside self
+                    const pBox = new THREE.Box3(
+                        new THREE.Vector3(camera.position.x-0.3, camera.position.y-1.5, camera.position.z-0.3),
+                        new THREE.Vector3(camera.position.x+0.3, camera.position.y+0.5, camera.position.z+0.3)
+                    );
+                    const bBox = new THREE.Box3(
+                        new THREE.Vector3(pos.x-0.5, pos.y-0.5, pos.z-0.5),
+                        new THREE.Vector3(pos.x+0.5, pos.y+0.5, pos.z+0.5)
+                    );
+                    if(!pBox.intersectsBox(bBox)) addBlock(pos.x, pos.y, pos.z, currentBlock);
+                }
+            }
+        });
+        document.addEventListener('contextmenu', e => e.preventDefault());
+
+        // --- LOOP ---
+        let prevTime = performance.now();
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const time = performance.now();
+            const delta = (time - prevTime) / 1000;
+            prevTime = time;
+
+            if(controls.isLocked) {
+                velocity.y -= GRAVITY * delta;
+
+                const dir = new THREE.Vector3();
+                camera.getWorldDirection(dir);
+                dir.y = 0; dir.normalize();
+                const right = new THREE.Vector3().crossVectors(camera.up, dir).normalize();
+                
+                const inputZ = Number(move.fwd) - Number(move.bwd);
+                const inputX = Number(move.r) - Number(move.l);
+
+                const moveX = (dir.x*inputZ - right.x*inputX) * SPEED * delta;
+                const moveZ = (dir.z*inputZ - right.z*inputX) * SPEED * delta;
+
+                camera.position.x += moveX;
+                if(checkCollision(camera.position)) camera.position.x -= moveX;
+
+                camera.position.z += moveZ;
+                if(checkCollision(camera.position)) camera.position.z -= moveZ;
+
+                camera.position.y += velocity.y * delta;
+                if(checkCollision(camera.position)) {
+                    camera.position.y -= velocity.y * delta;
+                    if(velocity.y < 0) canJump = true;
+                    velocity.y = 0;
+                }
+                if(camera.position.y < -20) { camera.position.set(0,15,0); velocity.set(0,0,0); }
+            }
+
+            raycaster.setFromCamera(mouse, camera);
+            const intersects = raycaster.intersectObjects(objects);
+            if(intersects.length && intersects[0].distance < 6) {
+                selector.visible = true;
+                selector.position.copy(intersects[0].object.position);
+            } else { selector.visible = false; }
+
+            renderer.render(scene, camera);
+        }
+        animate();
+        window.onresize = () => {
+            camera.aspect = window.innerWidth/window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        };
+    </script>
+</body>
+</html>

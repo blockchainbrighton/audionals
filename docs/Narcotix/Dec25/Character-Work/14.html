@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Oscilloscope X-14 // Interaction</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; cursor: crosshair; }
+        canvas { display: block; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; display: flex; justify-content: center; align-items: center; background: #000; color: #fff; z-index: 10; font-family: sans-serif; }
+    </style>
+</head>
+<body>
+    <div id="overlay">CLICK TO START v14 (MOUSE CONTROL)</div>
+    <canvas id="c"></canvas>
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        let w, h, cx, cy;
+        const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; cx=w/2; cy=h/2; };
+        window.addEventListener('resize', resize); resize();
+
+        let mouseX = 0, mouseY = 0;
+        window.addEventListener('mousemove', e => {
+            mouseX = (e.clientX / w) - 0.5; // -0.5 to 0.5
+            mouseY = (e.clientY / h) - 0.5;
+        });
+
+        let audioCtx, analyser, dataArray;
+        async function start() {
+            audioCtx = new AudioContext();
+            const osc = audioCtx.createOscillator();
+            analyser = audioCtx.createAnalyser();
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+            osc.connect(analyser);
+            analyser.connect(audioCtx.destination);
+            osc.start();
+            loop();
+        }
+        document.getElementById('overlay').onclick = function() { this.style.display='none'; start(); };
+
+        function project(x, y, z) {
+            // Rotate Y (Mouse X)
+            const ry = mouseX * 4;
+            let x1 = x * Math.cos(ry) - z * Math.sin(ry);
+            let z1 = z * Math.cos(ry) + x * Math.sin(ry);
+            
+            // Rotate X (Mouse Y)
+            const rx = mouseY * 4;
+            let y2 = y * Math.cos(rx) - z1 * Math.sin(rx);
+            let z2 = z1 * Math.cos(rx) + y * Math.sin(rx);
+            
+            const scale = 500 / (500 + z2);
+            return { x: x1 * scale + cx, y: y2 * scale + cy };
+        }
+
+        function loop() {
+            requestAnimationFrame(loop);
+            analyser.getByteTimeDomainData(dataArray);
+            
+            ctx.fillStyle = 'rgba(0,0,0,0.2)';
+            ctx.fillRect(0,0,w,h);
+            
+            ctx.strokeStyle = '#0ff';
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            
+            const r = 200;
+            const segments = 100;
+            for(let i=0; i<=segments; i++) { // Latitudes
+                const lat = (i/segments)*Math.PI - Math.PI/2;
+                const raw = (dataArray[i%dataArray.length] / 128.0) - 1;
+                const rMod = r + raw * 50;
+                
+                // Draw a simple ring
+                for(let j=0; j<=30; j++) {
+                    const lon = (j/30)*Math.PI*2;
+                    const x = rMod * Math.cos(lat) * Math.cos(lon);
+                    const y = rMod * Math.sin(lat);
+                    const z = rMod * Math.cos(lat) * Math.sin(lon);
+                    
+                    const p = project(x,y,z);
+                    if(j===0) ctx.moveTo(p.x, p.y); else ctx.lineTo(p.x, p.y);
+                }
+            }
+            ctx.stroke();
+        }
+    </script>
+</body>
+</html>

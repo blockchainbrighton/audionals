@@ -1,0 +1,630 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Evolving Warp Rings (The Propeller Project)</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #020202;
+            color: #fff;
+            font-family: 'Courier New', monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        canvas {
+            display: block;
+            filter: blur(0.5px); 
+        }
+
+        #overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.9);
+            z-index: 10;
+            transition: opacity 1.5s ease;
+        }
+
+        #overlay.hidden {
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        .btn {
+            background: transparent;
+            color: #fff;
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            padding: 20px 40px;
+            font-family: inherit;
+            font-size: 18px;
+            letter-spacing: 2px;
+            cursor: pointer;
+            transition: all 0.4s ease;
+            text-transform: uppercase;
+        }
+
+        .btn:hover {
+            border-color: #fff;
+            background: rgba(255, 255, 255, 0.1);
+            box-shadow: 0 0 20px rgba(255, 255, 255, 0.1);
+        }
+
+        .subtitle {
+            margin-top: 20px;
+            color: #888;
+            font-size: 14px;
+            letter-spacing: 1px;
+            text-align: center;
+            line-height: 1.5;
+        }
+
+        #hud {
+            position: absolute;
+            bottom: 30px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            pointer-events: none;
+            color: rgba(255, 255, 255, 0.6);
+            font-size: 14px;
+            letter-spacing: 2px;
+            text-transform: uppercase;
+            transition: opacity 0.5s;
+            z-index: 5;
+            text-shadow: 0 0 10px rgba(0,0,0,0.8);
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <button class="btn" id="startBtn">Initialize Sequence</button>
+        <div class="subtitle">
+            AUDIO REACTIVE SYSTEM<br>
+            <span style="font-size:12px; color:#555;">
+                <b>Arrow Keys:</b> Change Preset<br>
+                <b>Shift + Arrow:</b> Jump 50 Presets
+            </span>
+        </div>
+    </div>
+
+    <div id="hud">Waiting for initialization...</div>
+
+    <canvas id="scope"></canvas>
+
+    <script>
+        // --- CONFIGURATION ---
+        const CONFIG = {
+            volume: 0.05,       
+            visualGain: 3.5,    
+            segments: 600,  // Higher resolution for paths
+        };
+
+        // --- MATH HELPERS ---
+        const TWO_PI = 2 * Math.PI;
+        const PI = Math.PI;
+        const sin = Math.sin;
+        const cos = Math.cos;
+        const abs = Math.abs;
+        const pow = Math.pow;
+
+        function superformula(phi, m, n1, n2, n3) {
+            const a = 1, b = 1;
+            if (n1 === 0) return 0;
+            const t1 = abs(cos(m * phi / 4) / a);
+            const t2 = pow(t1, n2);
+            const t3 = abs(sin(m * phi / 4) / b);
+            const t4 = pow(t3, n3);
+            return pow(t2 + t4, -1 / n1);
+        }
+
+        // --- PRESET GENERATION LOGIC ---
+        
+        // 1. Shapes
+        const BASE_SHAPES = [
+            // --- CRYPTO / BLOCKCHAIN SHAPES ---
+            { id: 'btc', name: "Bitcoin Symbol", shape: 'custom_btc', colorKey: 'btc' },
+            { id: 'eth', name: "Ethereum Crystal", shape: 'custom_eth', colorKey: 'eth' },
+            { id: 'block', name: "Genesis Block", shape: 'superformula', m: 4, n1: 100, n2: 100, n3: 100, colorKey: 'mono' }, // Hard Square
+            { id: 'chain', name: "Blockchain Link", shape: 'lissajous', kX: 2, kY: 1, colorKey: 'forest' }, // Infinity/Link
+            { id: 'node', name: "Decentralized", shape: 'custom_net', colorKey: 'plasma' }, // Network style
+
+            // --- GEOMETRIC PRIMITIVES (Hard Edges) ---
+            { id: 'tri', name: "Hard Triangle", shape: 'superformula', m: 3, n1: 100, n2: 100, n3: 100 },
+            { id: 'pent', name: "Hard Pentagon", shape: 'superformula', m: 5, n1: 100, n2: 100, n3: 100 },
+            { id: 'hex', name: "Hard Hexagon", shape: 'superformula', m: 6, n1: 100, n2: 100, n3: 100 },
+            
+            // --- LINEAR WAVES ---
+            { id: 'wave_sin', name: "Sine Wave", shape: 'linear', waveType: 'sine' },
+            { id: 'wave_audio', name: "Audio Wave", shape: 'linear', waveType: 'audio' },
+            { id: 'wave_chaos', name: "Chaos Wave", shape: 'linear', waveType: 'noise' },
+
+            // --- DISTINCT CURVES ---
+            { id: 'fig8', name: "Figure 8", shape: 'lissajous', kX: 1, kY: 2 },
+            { id: 'spiral', name: "Golden Spiral", shape: 'spiral', turns: 5 },
+            
+            // --- STARS (Sharp) ---
+            { id: 'star4', name: "Ninja Star", shape: 'superformula', m: 4, n1: 0.1, n2: 1.7, n3: 1.7 },
+            { id: 'star5', name: "Star (5-pt)", shape: 'superformula', m: 5, n1: 0.2, n2: 1.7, n3: 1.7 },
+            
+            // --- ORGANIC ---
+            { id: 'burst', name: "Sun Burst", shape: 'superformula', m: 16, n1: 0.3, n2: 0.3, n3: 0.3 },
+            { id: 'atom', name: "Atomic", shape: 'rose', k: 4 },
+        ];
+
+        // 2. Speed Variations
+        const SPEED_TIERS = [
+            { label: "STATIC", val: 0.0, desc: "Frozen" },
+            { label: "SLOW", val: 0.1, desc: "Drifting" },
+            { label: "FAST", val: 1.0, desc: "Spinning" },
+            { label: "TURBO", val: 3.0, desc: "Blurring" },
+            { label: "STROBE", val: 15.0, desc: "Illusion" } 
+        ];
+
+        // 3. Draw Styles
+        const DRAW_STYLES = [
+            { id: 'line', label: "LINE", desc: "Standard" },
+            { id: 'dots', label: "DOTS", desc: "Particles" },
+            { id: 'web', label: "WEB", desc: "Radial Connect" },
+            { id: 'vert', label: "MATRIX", desc: "Vertical Drop" }
+        ];
+
+        // 4. Palettes
+        const PALETTE_MAP = {
+            'cyan': ['#00FFFF', '#0000FF'],
+            'plasma': ['#FF00CC', '#3333FF'],
+            'forest': ['#00FF7F', '#006400'],
+            'fire': ['#FFD700', '#FF4500'],
+            'purple': ['#8A2BE2', '#FF69B4'],
+            'mono': ['#FFFFFF', '#444444'],
+            'hot': ['#FF0000', '#FFFF00'],
+            'btc': ['#F7931A', '#FFD700'], // Bitcoin Orange/Gold
+            'eth': ['#627EEA', '#FFFFFF']  // Ethereum Blue/White
+        };
+        const PALETTES_ARRAY = Object.values(PALETTE_MAP);
+
+        // 5. Generate Master Preset List
+        
+        // --- A. THE CLASSICS (Manually inserted) ---
+        const PRESETS = [
+             { freq: 0.01, name: "Classic Pulse (0.01Hz)", shape: 'circle', rotationSpeed: 0, baseColor: '#00FFFF', type: 'sine', drawMode: 'radial', style: 'line' },
+             { freq: 0.1, name: "Classic Pulse (0.1Hz)", shape: 'circle', rotationSpeed: 0, baseColor: '#00FFFF', type: 'sine', drawMode: 'radial', style: 'line' },
+             { freq: 0.25, name: "Classic Pulse (0.25Hz)", shape: 'circle', rotationSpeed: 0, baseColor: '#00FFFF', type: 'sine', drawMode: 'radial', style: 'line' },
+             { freq: 0.5, name: "Classic Pulse (0.5Hz)", shape: 'circle', rotationSpeed: 0, baseColor: '#00FFFF', type: 'sine', drawMode: 'radial', style: 'line' },
+             { freq: 1.0, name: "Classic Pulse (1Hz)", shape: 'circle', rotationSpeed: 0, baseColor: '#00FFFF', type: 'sine', drawMode: 'radial', style: 'line' },
+             { freq: 2.5, name: "Classic Pulse (2.5Hz)", shape: 'circle', rotationSpeed: 0, baseColor: '#00FFFF', type: 'sine', drawMode: 'radial', style: 'line' },
+             { freq: 5.0, name: "Classic Pulse (5Hz)", shape: 'circle', rotationSpeed: 0, baseColor: '#00FFFF', type: 'sine', drawMode: 'radial', style: 'line' },
+             { freq: 10.0, name: "Classic Pulse (10Hz)", shape: 'circle', rotationSpeed: 0, baseColor: '#00FFFF', type: 'sine', drawMode: 'radial', style: 'line' }
+        ];
+
+        let pIndex = PRESETS.length;
+
+        // --- B. PROCEDURAL GENERATION ---
+        BASE_SHAPES.forEach((shapeConfig, shapeIdx) => {
+            // Determine palette: Use specific key if present, else cycle
+            let familyPalette;
+            if (shapeConfig.colorKey && PALETTE_MAP[shapeConfig.colorKey]) {
+                familyPalette = PALETTE_MAP[shapeConfig.colorKey];
+            } else {
+                familyPalette = PALETTES_ARRAY[shapeIdx % PALETTES_ARRAY.length];
+            }
+
+            SPEED_TIERS.forEach((speedConfig) => {
+                DRAW_STYLES.forEach((styleConfig) => {
+                    // Determine audio freq
+                    let baseFreq = 55; 
+                    if (shapeConfig.shape === 'linear') baseFreq = 40; 
+                    if (shapeConfig.shape === 'custom_btc') baseFreq = 30; // Deep hum for BTC
+
+                    // Determine draw mode
+                    let mode = 'radial';
+                    if (shapeConfig.shape === 'linear') mode = 'linear';
+                    
+                    // Add preset
+                    PRESETS.push({
+                        ...shapeConfig,
+                        
+                        name: `${shapeConfig.name}`,
+                        rotationSpeed: speedConfig.val,
+                        speedLabel: speedConfig.label,
+                        
+                        colorMode: 'gradient',
+                        palette: familyPalette,
+                        
+                        drawMode: mode,
+                        style: styleConfig.id,
+                        styleLabel: styleConfig.label,
+                        
+                        freq: baseFreq + (Math.random() * 5), 
+                        type: (speedConfig.label === 'STROBE') ? 'square' : 'sine',
+                        
+                        _idx: pIndex++
+                    });
+                });
+            });
+        });
+
+
+        // --- Global State ---
+        let ctx, canvas;
+        let audioCtx, analyser, dataArray;
+        let osc, modOsc, modGain; 
+        let isRunning = false;
+        
+        // START AT 0.25Hz (Index 2)
+        let currentPresetIndex = 2; 
+        
+        // --- Initialization ---
+        function init() {
+            canvas = document.getElementById('scope');
+            ctx = canvas.getContext('2d');
+            
+            window.addEventListener('resize', resize);
+            resize();
+
+            const startBtn = document.getElementById('startBtn');
+            const overlay = document.getElementById('overlay');
+            
+            startBtn.addEventListener('click', async () => {
+                await startAudio();
+                overlay.classList.add('hidden');
+                isRunning = true;
+                loop();
+                updateHud();
+            });
+
+            // Navigation Controls
+            document.addEventListener('keydown', (e) => {
+                if (!isRunning) return;
+
+                let jump = 1;
+                if (e.shiftKey) jump = 50; // JUMP 50
+
+                if (e.key === 'ArrowRight' || e.key === 'ArrowUp') {
+                    changePreset(currentPresetIndex + jump);
+                } else if (e.key === 'ArrowLeft' || e.key === 'ArrowDown') {
+                    changePreset(currentPresetIndex - jump);
+                }
+            });
+        }
+
+        function resize() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = window.innerWidth * dpr;
+            canvas.height = window.innerHeight * dpr;
+            canvas.style.width = window.innerWidth + 'px';
+            canvas.style.height = window.innerHeight + 'px';
+            ctx.scale(dpr, dpr);
+        }
+
+        function changePreset(index) {
+            // Wrap logic
+            if (index < 0) {
+                index = PRESETS.length + (index % PRESETS.length);
+            }
+            if (index >= PRESETS.length) {
+                index = index % PRESETS.length;
+            }
+            
+            currentPresetIndex = index;
+            const p = PRESETS[currentPresetIndex];
+            
+            if (audioCtx && osc) {
+                const now = audioCtx.currentTime;
+                
+                osc.frequency.setValueAtTime(osc.frequency.value, now);
+                const targetFreq = Math.max(0.01, p.freq);
+                osc.frequency.exponentialRampToValueAtTime(targetFreq, now + 0.1);
+                
+                osc.type = p.type || 'sine';
+
+                modGain.gain.setValueAtTime(modGain.gain.value, now);
+                modGain.gain.linearRampToValueAtTime(0, now + 0.1);
+            }
+
+            updateHud();
+        }
+
+        function updateHud() {
+            const hud = document.getElementById('hud');
+            const p = PRESETS[currentPresetIndex];
+            
+            // Build complex title string
+            let title = p.name;
+            if (p.speedLabel) title += ` [${p.speedLabel}]`;
+            
+            let details = `PRESET ${currentPresetIndex + 1} / ${PRESETS.length} | `;
+            if (p.styleLabel) details += `STYLE: ${p.styleLabel}`;
+            else details += `SHAPE: ${(p.shape || 'Unknown').toUpperCase()}`;
+
+            hud.innerHTML = `
+                <span style="font-size: 1.4em; color: #fff; letter-spacing: 3px;">${title}</span><br>
+                <span style="font-size: 0.9em; color: #aaa; margin-top:5px; display:inline-block;">
+                    ${details}
+                </span>
+            `;
+            hud.style.opacity = '1';
+        }
+
+        // --- Audio Engine ---
+        async function startAudio() {
+            audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+            
+            osc = audioCtx.createOscillator();
+            modOsc = audioCtx.createOscillator();
+            modGain = audioCtx.createGain();
+            
+            modOsc.connect(modGain);
+            modGain.connect(osc.frequency);
+
+            analyser = audioCtx.createAnalyser();
+            analyser.fftSize = 2048; 
+            analyser.smoothingTimeConstant = 0.85;
+            dataArray = new Float32Array(analyser.fftSize);
+
+            const analyzerGain = audioCtx.createGain();
+            analyzerGain.gain.value = CONFIG.visualGain;
+
+            const masterGain = audioCtx.createGain();
+            masterGain.gain.value = CONFIG.volume; 
+
+            osc.connect(analyzerGain);
+            analyzerGain.connect(analyser);
+            analyser.connect(masterGain);
+            masterGain.connect(audioCtx.destination);
+
+            changePreset(currentPresetIndex); 
+            
+            osc.start();
+            modOsc.start();
+        }
+
+        // --- Visualizer Logic ---
+        function draw(time) {
+            const t = time * 0.0005; // Base Time
+            const p = PRESETS[currentPresetIndex];
+            
+            const w = window.innerWidth;
+            const h = window.innerHeight;
+            const cx = w / 2;
+            const cy = h / 2;
+            const baseSize = Math.min(w, h) * 0.35; 
+
+            // Trails
+            ctx.fillStyle = 'rgba(2, 2, 2, 0.25)'; 
+            ctx.fillRect(0, 0, w, h);
+
+            if (analyser) {
+                analyser.getFloatTimeDomainData(dataArray);
+            } else {
+                dataArray = new Float32Array(2048).fill(0);
+            }
+
+            // --- 1. Draw Setup ---
+            ctx.beginPath();
+            
+            // Color Handling
+            if (p.colorMode === 'gradient' && p.palette) {
+                const gradient = ctx.createLinearGradient(0, 0, w, h);
+                p.palette.forEach((col, i) => {
+                    gradient.addColorStop(i / (p.palette.length - 1), col);
+                });
+                ctx.strokeStyle = gradient;
+                ctx.fillStyle = gradient; // For dots
+                ctx.shadowColor = p.palette[0];
+            } else {
+                ctx.strokeStyle = p.baseColor || '#00FFFF';
+                ctx.fillStyle = p.baseColor || '#00FFFF';
+                ctx.shadowColor = p.baseColor || '#00FFFF';
+            }
+            
+            ctx.lineWidth = 1.5;
+            ctx.shadowBlur = (p.style === 'dots') ? 2 : 10;
+
+            const loopMax = (p.shape === 'lissajous' || p.shape === 'rose') ? CONFIG.segments * 2 : CONFIG.segments;
+
+            for (let i = 0; i <= loopMax; i++) {
+                const percent = i / loopMax;
+                let x = 0, y = 0, scale = 1;
+
+                // --- AUDIO MAPPING ---
+                let audioVal = 0;
+                if (p.drawMode === 'linear') {
+                    const idx = Math.floor(percent * (dataArray.length - 1));
+                    audioVal = dataArray[idx] * 150; 
+                } else {
+                    const mirroredPercent = 1 - abs((percent * 2) - 1);
+                    const idx = Math.floor(mirroredPercent * (dataArray.length - 1));
+                    audioVal = dataArray[idx] * 100;
+                }
+
+                // --- LINEAR MODE ---
+                if (p.drawMode === 'linear') {
+                    x = (w * 0.1) + (w * 0.8) * percent; 
+                    let yOffset = 0;
+                    if (p.waveType === 'sine') yOffset = sin((percent * 10) + (t * p.rotationSpeed * 5)) * 50;
+                    else if (p.waveType === 'noise') yOffset = sin(percent * 50 + t) * 20;
+                    y = cy + yOffset + audioVal;
+                }
+                
+                // --- RADIAL / 2D MODE ---
+                else {
+                    let angle = percent * TWO_PI;
+                    const drift = t * p.rotationSpeed; 
+                    let effAngle = angle + drift;
+                    let r = baseSize;
+
+                    // --- SHAPE ALGORITHMS ---
+                    if (p.shape === 'custom_btc') {
+                        // Parametric "B" approximation
+                        // Shift center for B effect
+                        const bWidth = baseSize * 0.8;
+                        const bHeight = baseSize * 1.2;
+                        
+                        // Split path into segments: 
+                        // 0.0-0.2: Spine (Vertical Line)
+                        // 0.2-0.6: Top Loop
+                        // 0.6-1.0: Bottom Loop
+                        
+                        if (percent < 0.2) {
+                            // Vertical Spine: Goes up
+                            const localP = percent / 0.2;
+                            x = cx - (bWidth * 0.3);
+                            y = cy + (bHeight/2) - (localP * bHeight);
+                        } else if (percent < 0.6) {
+                            // Top Loop (Semi Circle)
+                            const localP = (percent - 0.2) / 0.4;
+                            const loopAngle = -PI/2 + (localP * PI); // -90 to +90
+                            const loopCx = cx - (bWidth * 0.3);
+                            const loopCy = cy - (bHeight * 0.25);
+                            x = loopCx + (bWidth * 0.6) * cos(loopAngle);
+                            y = loopCy + (bHeight * 0.25) * sin(loopAngle);
+                        } else {
+                            // Bottom Loop (Semi Circle)
+                            const localP = (percent - 0.6) / 0.4;
+                            const loopAngle = -PI/2 + (localP * PI);
+                            const loopCx = cx - (bWidth * 0.3);
+                            const loopCy = cy + (bHeight * 0.25);
+                            x = loopCx + (bWidth * 0.7) * cos(loopAngle);
+                            y = loopCy + (bHeight * 0.25) * sin(loopAngle);
+                        }
+                        
+                        // Apply audio to B shape
+                        // We do this manually to keep shape integrity but pulse it
+                        r = 1; // Used for calculating displacement direction
+                        
+                    } 
+                    else if (p.shape === 'custom_eth') {
+                        // Diamond / Octahedron profile
+                        // 4 points: Top, Right, Bottom, Left
+                        // We use a custom linear interpolation for sharp lines
+                        const phase = (percent * 4) % 4;
+                        const stage = Math.floor(phase); // 0, 1, 2, 3
+                        const tSeg = phase - stage;
+                        
+                        const wD = baseSize * 0.7;
+                        const hD = baseSize * 1.2;
+                        
+                        // Points: Top(0,-h), Right(w,0), Bottom(0,h), Left(-w,0)
+                        const pts = [
+                            {x:0, y:-hD}, {x:wD, y:0}, {x:0, y:hD}, {x:-wD, y:0}, {x:0, y:-hD}
+                        ];
+                        
+                        const p1 = pts[stage];
+                        const p2 = pts[stage+1];
+                        
+                        x = cx + p1.x + (p2.x - p1.x) * tSeg;
+                        y = cy + p1.y + (p2.y - p1.y) * tSeg;
+                        
+                        // Rotate the whole shape
+                        const rx = x - cx; const ry = y - cy;
+                        x = cx + rx*cos(effAngle) - ry*sin(effAngle);
+                        y = cy + rx*sin(effAngle) + ry*cos(effAngle);
+                        
+                    } else if (p.shape === 'custom_net') {
+                         // Similar to circle but we will use 'web' style mostly
+                         // Just a circle base
+                         x = cx + cos(effAngle) * r;
+                         y = cy + sin(effAngle) * r;
+                    }
+                    else if (p.shape === 'superformula') {
+                        r = r * superformula(effAngle, p.m, p.n1, p.n2, p.n3);
+                        x = cx + cos(effAngle) * r;
+                        y = cy + sin(effAngle) * r;
+                    } 
+                    else if (p.shape === 'rose') {
+                        r = baseSize * cos(p.k * effAngle); 
+                        x = cx + cos(effAngle) * r;
+                        y = cy + sin(effAngle) * r;
+                    } 
+                    else if (p.shape === 'lissajous') {
+                        x = cx + cos(effAngle * p.kX) * r;
+                        y = cy + sin(effAngle * p.kY) * r;
+                    } 
+                    else if (p.shape === 'spiral') {
+                        const spiralAngle = percent * TWO_PI * (p.turns || 5) + drift;
+                        r = (spiralAngle / (TWO_PI * 5)) * baseSize; 
+                        x = cx + cos(spiralAngle) * r;
+                        y = cy + sin(spiralAngle) * r;
+                    } 
+                    else { // Circle
+                        x = cx + cos(effAngle) * r;
+                        y = cy + sin(effAngle) * r;
+                    }
+
+                    // Displacement
+                    const dx = x - cx;
+                    const dy = y - cy;
+                    const dist = Math.sqrt(dx*dx + dy*dy);
+                    if (dist > 0.001) {
+                        x += (dx / dist) * audioVal;
+                        y += (dy / dist) * audioVal;
+                    }
+                }
+
+                // --- DRAWING STYLES ---
+                if (p.style === 'dots') {
+                    // Only draw dots, don't connect
+                    ctx.beginPath();
+                    const dotSize = (p.drawMode === '3d') ? 2 * scale : 2;
+                    ctx.arc(x, y, Math.max(0.5, dotSize), 0, TWO_PI);
+                    ctx.fill();
+                } 
+                else if (p.style === 'web') {
+                    // Connect to center AND previous point
+                    if (i % 2 === 0) { // Optimize web drawing
+                        ctx.beginPath();
+                        ctx.moveTo(cx, cy);
+                        ctx.lineTo(x, y);
+                        ctx.stroke();
+                    }
+                } 
+                else if (p.style === 'vert') {
+                    // Matrix rain drop
+                    ctx.beginPath();
+                    ctx.moveTo(x, y);
+                    ctx.lineTo(x, y + 20 + abs(audioVal));
+                    ctx.stroke();
+                }
+                else {
+                    // Standard Line
+                    if (i === 0) {
+                        ctx.beginPath(); 
+                        ctx.moveTo(x, y);
+                    } else {
+                        ctx.lineTo(x, y);
+                    }
+                }
+            }
+            
+            // For standard line style, we stroke once at the end
+            if (!p.style || p.style === 'line') {
+                ctx.stroke();
+            }
+            
+            ctx.shadowBlur = 0;
+        }
+
+        function loop() {
+            if (!isRunning) return;
+            draw(performance.now());
+            requestAnimationFrame(loop);
+        }
+
+        init();
+    </script>
+</body>
+</html>

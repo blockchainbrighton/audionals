@@ -1,0 +1,220 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CSV to NFT JSON Converter</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            margin: 0;
+            padding: 2em;
+            background-color: #f4f4f9;
+            color: #333;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        .container {
+            max-width: 900px;
+            width: 100%;
+            background: #fff;
+            padding: 2em;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        h1, h2 {
+            text-align: center;
+            color: #4a4a4a;
+        }
+        p {
+            line-height: 1.6;
+            color: #5a5a5a;
+        }
+        textarea {
+            width: 100%;
+            height: 250px;
+            padding: 10px;
+            box-sizing: border-box;
+            border-radius: 4px;
+            border: 1px solid #ddd;
+            font-family: "Courier New", Courier, monospace;
+            font-size: 14px;
+            margin-bottom: 1em;
+        }
+        button {
+            display: block;
+            width: 100%;
+            padding: 15px;
+            font-size: 16px;
+            font-weight: bold;
+            color: #fff;
+            background-color: #007bff;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 1em;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        label {
+            display: block;
+            margin-bottom: 0.5em;
+            font-weight: bold;
+        }
+        .error {
+            color: red;
+            font-weight: bold;
+            text-align: center;
+            margin-top: 1em;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>NarcotiX CSV to JSON Converter</h1>
+        <p>This tool will convert your specific CSV data into the correct JSON format for NFT metadata.</p>
+        
+        <!-- Step 1: Input Area -->
+        <label for="csvInput">1. Paste your CSV data here:</label>
+        <textarea id="csvInput" placeholder="Paste the full content of your CSV file here..."></textarea>
+
+        <!-- Step 2: Conversion Button -->
+        <button id="convertBtn">2. Convert to JSON</button>
+
+        <!-- Step 3: Output Area -->
+        <label for="jsonOutput">3. Copy the JSON output from here:</label>
+        <textarea id="jsonOutput" readonly placeholder="Your JSON output will appear here..."></textarea>
+        
+        <div id="error-message" class="error"></div>
+    </div>
+
+    <script>
+        /**
+         * Parses a single line of CSV text, respecting quoted fields.
+         * This is a simple parser specifically for the provided format.
+         * @param {string} text The CSV line to parse.
+         * @returns {string[]} An array of the fields.
+         */
+        function parseCsvLine(text) {
+            const result = [];
+            let currentField = '';
+            let inQuotes = false;
+
+            for (let i = 0; i < text.length; i++) {
+                const char = text[i];
+                if (char === '"' && (i === 0 || text[i-1] !== '\\')) { // Handle quotes, ignoring escaped ones
+                    inQuotes = !inQuotes;
+                } else if (char === ',' && !inQuotes) {
+                    result.push(currentField.trim());
+                    currentField = '';
+                } else {
+                    currentField += char;
+                }
+            }
+            result.push(currentField.trim()); // Add the last field
+            return result;
+        }
+
+        // Get references to the HTML elements
+        const csvInput = document.getElementById('csvInput');
+        const convertBtn = document.getElementById('convertBtn');
+        const jsonOutput = document.getElementById('jsonOutput');
+        const errorMessage = document.getElementById('error-message');
+
+        // Add a click event listener to the button
+        convertBtn.addEventListener('click', () => {
+            errorMessage.textContent = ''; // Clear previous errors
+            const csvText = csvInput.value.trim();
+
+            if (!csvText) {
+                errorMessage.textContent = 'Input area is empty. Please paste your CSV data.';
+                return;
+            }
+
+            const lines = csvText.split('\n');
+            const jsonArray = [];
+            let processedCount = 0;
+
+            for (const line of lines) {
+                // Basic validation: skip empty lines and lines that don't look like data rows
+                if (!line.trim() || !line.startsWith(',')) {
+                    continue;
+                }
+                
+                try {
+                    const fields = parseCsvLine(line);
+
+                    // We expect 7 fields: empty, id, name, color1, color2, effect, sideEffect
+                    if (fields.length < 7) {
+                        console.warn('Skipping malformed line:', line);
+                        continue;
+                    }
+
+                    // Remove quotes from fields that were parsed inside them
+                    const cleanFields = fields.map(field => {
+                        if (field.startsWith('"') && field.endsWith('"')) {
+                            return field.substring(1, field.length - 1);
+                        }
+                        return field;
+                    });
+                    
+                    const id = parseInt(cleanFields[1], 10);
+                    
+                    // Further validation
+                    if (isNaN(id)) {
+                        console.warn('Skipping line with invalid ID:', line);
+                        continue;
+                    }
+
+                    const nftObject = {
+                        id: id,
+                        name: cleanFields[2],
+                        attributes: [
+                            {
+                                trait_type: "Effect",
+                                value: cleanFields[5]
+                            },
+                            {
+                                trait_type: "Side Effect",
+                                value: cleanFields[6]
+                            },
+                            {
+                                trait_type: "Color 1",
+                                value: cleanFields[3]
+                            },
+                            {
+                                trait_type: "Color 2",
+                                value: cleanFields[4]
+                            }
+                        ]
+                    };
+                    
+                    jsonArray.push(nftObject);
+                    processedCount++;
+
+                } catch (error) {
+                    errorMessage.textContent = `An error occurred while processing the file. Check the console for details.`;
+                    console.error('Error processing line:', line, error);
+                    return; // Stop processing on error
+                }
+            }
+            
+            if (processedCount === 0) {
+                 errorMessage.textContent = 'No valid data rows were found. Please check the CSV format.';
+                 return;
+            }
+
+            // Convert the array of objects to a pretty-printed JSON string
+            const jsonString = JSON.stringify(jsonArray, null, 2);
+            
+            // Display the output
+            jsonOutput.value = jsonString;
+        });
+    </script>
+
+</body>
+</html>

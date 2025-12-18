@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Oscilloscope X-13 // Textures</title>
+    <style>
+        body { margin: 0; background: #000; overflow: hidden; }
+        canvas { display: block; }
+        #overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; background: #000; display: flex; justify-content: center; align-items: center; z-index: 20; color: #0f0; font-family: monospace; cursor: pointer; }
+    </style>
+</head>
+<body>
+    <div id="overlay">CLICK TO INITIALIZE v13 (TEXTURES)</div>
+    <canvas id="c"></canvas>
+    <script>
+        const canvas = document.getElementById('c');
+        const ctx = canvas.getContext('2d');
+        let w, h;
+        const resize = () => { w = canvas.width = window.innerWidth; h = canvas.height = window.innerHeight; };
+        window.addEventListener('resize', resize); resize();
+
+        let audioCtx, analyser, dataArray;
+        
+        // --- TEXTURE GENERATION ---
+        // Pre-render static noise to an offscreen canvas for performance
+        const noiseCanvas = document.createElement('canvas');
+        noiseCanvas.width = 200; noiseCanvas.height = 200;
+        const nCtx = noiseCanvas.getContext('2d');
+        for(let i=0; i<200*200; i++) {
+            const x = i%200; const y = Math.floor(i/200);
+            nCtx.fillStyle = `rgba(255,255,255,${Math.random()*0.05})`;
+            nCtx.fillRect(x,y,1,1);
+        }
+
+        async function start() {
+            audioCtx = new AudioContext();
+            const osc = audioCtx.createOscillator();
+            analyser = audioCtx.createAnalyser();
+            dataArray = new Uint8Array(analyser.frequencyBinCount);
+            osc.connect(analyser);
+            analyser.connect(audioCtx.destination);
+            osc.start();
+            loop();
+        }
+        
+        document.getElementById('overlay').onclick = function() {
+            this.style.display = 'none';
+            start();
+        };
+
+        function drawGrid(ctx, w, h) {
+            ctx.strokeStyle = 'rgba(0, 255, 0, 0.1)';
+            ctx.lineWidth = 1;
+            const step = 50;
+            ctx.beginPath();
+            for(let x=0; x<=w; x+=step) { ctx.moveTo(x,0); ctx.lineTo(x,h); }
+            for(let y=0; y<=h; y+=step) { ctx.moveTo(0,y); ctx.lineTo(w,y); }
+            ctx.stroke();
+        }
+
+        function loop() {
+            requestAnimationFrame(loop);
+            analyser.getByteTimeDomainData(dataArray);
+
+            ctx.fillStyle = '#000';
+            ctx.fillRect(0,0,w,h);
+
+            // 1. Draw Grid Layer
+            drawGrid(ctx, w, h);
+
+            // 2. Draw Waveform
+            ctx.strokeStyle = '#0f0';
+            ctx.lineWidth = 2;
+            ctx.shadowBlur = 10;
+            ctx.shadowColor = '#0f0';
+            ctx.beginPath();
+            const slice = w / dataArray.length;
+            let x = 0;
+            for(let i=0; i<dataArray.length; i++) {
+                const v = dataArray[i]/128.0;
+                const y = v * h/2;
+                if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+                x += slice;
+            }
+            ctx.stroke();
+            ctx.shadowBlur = 0;
+
+            // 3. Draw Scanlines
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            for(let i=0; i<h; i+=4) ctx.fillRect(0,i,w,2);
+
+            // 4. Draw Static Noise Overlay
+            const pattern = ctx.createPattern(noiseCanvas, 'repeat');
+            ctx.fillStyle = pattern;
+            ctx.globalCompositeOperation = 'add';
+            ctx.fillRect(0,0,w,h);
+            ctx.globalCompositeOperation = 'source-over';
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,889 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NarcotiX Game V2 - NFT Prototype</title>
+<style>
+  body {
+    margin: 0;
+    padding: 0;
+    background: #0a0a0a;
+    color: #0f0;
+    font-family: 'Courier New', monospace;
+    overflow: hidden;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    height: 100vh;
+  }
+  #gameContainer {
+    position: relative;
+    border: 2px solid #0f0;
+    box-shadow: 0 0 20px #0f0;
+  }
+  canvas {
+    display: block;
+    background: #000;
+  }
+  #ui {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    padding: 10px;
+    background: rgba(0,0,0,0.7);
+    pointer-events: none;
+    font-size: 12px;
+  }
+  #binder {
+    position: absolute;
+    bottom: 10px;
+    left: 50%;
+    transform: translateX(-50%);
+    display: flex;
+    gap: 10px;
+    pointer-events: all;
+  }
+  .pillSlot {
+    width: 80px;
+    height: 80px;
+    border: 2px solid #444;
+    background: rgba(0,0,0,0.8);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .pillSlot:hover {
+    border-color: #0f0;
+    transform: scale(1.05);
+  }
+  .pillSlot.active {
+    border-color: #ff0;
+    box-shadow: 0 0 10px #ff0;
+  }
+  .pillIcon {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    margin-bottom: 4px;
+  }
+  .pillKey {
+    font-size: 10px;
+    color: #888;
+  }
+  #walletPanel {
+    position: absolute;
+    right: 10px;
+    top: 50px;
+    width: 250px;
+    max-height: 300px;
+    overflow-y: auto;
+    background: rgba(0,0,0,0.9);
+    border: 1px solid #0f0;
+    padding: 10px;
+    pointer-events: all;
+    display: none;
+  }
+  .walletPill {
+    display: flex;
+    align-items: center;
+    padding: 5px;
+    margin: 2px 0;
+    background: rgba(20,20,20,0.8);
+    cursor: pointer;
+  }
+  .walletPill:hover {
+    background: rgba(0,255,0,0.2);
+  }
+  .walletPillEquipped {
+    border-left: 3px solid #ff0;
+  }
+  #shopPanel {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 400px;
+    background: rgba(0,0,0,0.95);
+    border: 2px solid #0f0;
+    padding: 15px;
+    display: none;
+    pointer-events: all;
+  }
+  .shopItem {
+    display: flex;
+    justify-content: space-between;
+    padding: 8px;
+    margin: 5px 0;
+    background: rgba(20,20,20,0.8);
+  }
+  .shopItem button {
+    background: #0f0;
+    border: none;
+    color: #000;
+    padding: 4px 8px;
+    cursor: pointer;
+  }
+  .shopItem button:disabled {
+    background: #444;
+    color: #666;
+    cursor: not-allowed;
+  }
+  #devConsole {
+    position: absolute;
+    bottom: 10px;
+    right: 10px;
+    width: 300px;
+    height: 100px;
+    background: rgba(0,0,0,0.8);
+    border: 1px solid #0f0;
+    padding: 5px;
+    font-size: 10px;
+    overflow-y: auto;
+    display: none;
+  }
+  .effectOverlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    pointer-events: none;
+    z-index: 100;
+  }
+  .inverted {
+    filter: hue-rotate(180deg) invert(1);
+  }
+  .shake {
+    animation: shake 0.1s infinite;
+  }
+  @keyframes shake {
+    0% { transform: translate(1px, 1px); }
+    50% { transform: translate(-1px, -1px); }
+    100% { transform: translate(1px, -1px); }
+  }
+  button {
+    background: #0a0a0a;
+    color: #0f0;
+    border: 1px solid #0f0;
+    padding: 5px 10px;
+    cursor: pointer;
+  }
+  button:hover {
+    background: #0f0;
+    color: #000;
+  }
+</style>
+</head>
+<body>
+<div id="gameContainer">
+  <canvas id="gameCanvas" width="800" height="600"></canvas>
+  
+  <div id="ui">
+    <div>HEALTH: <span id="health">100</span> | SCORE: <span id="score">0</span> | CASH: $<span id="cash">500</span></div>
+    <div>LOCATION: <span id="location">Neutral Zone</span></div>
+    <div>ACTIVE EFFECTS: <span id="activeEffects">None</span></div>
+    <button onclick="toggleWallet()" style="pointer-events:all; float:right;">WALLET (W)</button>
+    <button onclick="toggleDevConsole()" style="pointer-events:all; float:right; margin-right:5px;">DEV</button>
+  </div>
+
+  <div id="binder">
+    <div class="pillSlot" data-slot="0">
+      <div class="pillIcon" id="pillIcon0"></div>
+      <div class="pillKey">Q</div>
+    </div>
+    <div class="pillSlot" data-slot="1">
+      <div class="pillIcon" id="pillIcon1"></div>
+      <div class="pillKey">E</div>
+    </div>
+    <div class="pillSlot" data-slot="2">
+      <div class="pillIcon" id="pillIcon2"></div>
+      <div class="pillKey">R</div>
+    </div>
+  </div>
+
+  <div id="walletPanel"></div>
+  
+  <div id="shopPanel">
+    <h3>STASH HOUSE - VOIDPHARMA OUTPOST</h3>
+    <div id="shopItems"></div>
+    <button onclick="closeShop()">CLOSE</button>
+  </div>
+
+  <div id="devConsole"></div>
+  
+  <div class="effectOverlay" id="effectOverlay"></div>
+</div>
+
+<script>
+// ===== MOCK NFT GENERATION ENGINE =====
+const PILLS_COUNT = 3333;
+const manufacturers = ['VoidPharma', 'NeuroCorp', 'Chaos Labs', 'Biohazrd', 'TripWare', 'SynapseX', 'DreamWeaver', 'Chemical X'];
+const effectClasses = ['Stimulant', 'Depressant', 'Psychedelic', 'Hallucinogen', 'Nootropic', 'Dissociative', 'Exotic'];
+const effectStrengths = ['Minor', 'Moderate', 'Major', 'Extreme'];
+const rarityTiers = { Common: 1500, Uncommon: 900, Rare: 500, Epic: 180, Legendary: 43 };
+const sideEffectsList = ['inverted_controls', 'screen_shake', 'random_teleport', 'laughter_sfx', 'color_shift', 'slow_mo', 'fast_mo', 'control_swap'];
+
+function generateMockPills() {
+  const pills = [];
+  let id = 0;
+  for (const [rarity, count] of Object.entries(rarityTiers)) {
+    for (let i = 0; i < count; i++) {
+      const strength = rarity === 'Legendary' ? 'Extreme' : 
+                       rarity === 'Epic' ? (Math.random() > 0.5 ? 'Extreme' : 'Major') :
+                       rarity === 'Rare' ? effectStrengths[Math.floor(Math.random() * 3)] :
+                       effectStrengths[Math.floor(Math.random() * 2)];
+      const effectClass = effectClasses[Math.floor(Math.random() * effectClasses.length)];
+      const manufacturer = manufacturers[Math.floor(Math.random() * manufacturers.length)];
+      const purity = Math.floor(60 + Math.random() * 40);
+      const sideEffects = [];
+      const seCount = strength === 'Extreme' ? 3 : strength === 'Major' ? 2 : 1;
+      for (let j = 0; j < seCount; j++) {
+        sideEffects.push(sideEffectsList[Math.floor(Math.random() * sideEffectsList.length)]);
+      }
+      
+      pills.push({
+        tokenId: id++,
+        name: `${manufacturer.split(' ')[0]}_${effectClass}_${strength}_${id}`,
+        rarity,
+        type: ['Capsule', 'Tablet', 'Gelcap', 'Liquid', 'Powder', 'Crystal', 'Vial'][Math.floor(Math.random() * 7)],
+        effectClass,
+        effectStrength: strength,
+        baseStat: ['speed', 'stealth', 'health', 'attack', 'defense', 'luck'][Math.floor(Math.random() * 6)],
+        statModifier: 1 + Math.random() * 3,
+        sideEffects: [...new Set(sideEffects)],
+        purity,
+        manufacturer,
+        color: '#' + Math.floor(Math.random()*16777215).toString(16).padStart(6, '0'),
+        glow: Math.random(),
+        floorPrice: (rarity === 'Common' ? 0.01 : 
+                    rarity === 'Uncommon' ? 0.05 : 
+                    rarity === 'Rare' ? 0.2 : 
+                    rarity === 'Epic' ? 0.5 : 2.0) * (purity / 100)
+      });
+    }
+  }
+  return pills;
+}
+
+const ALL_PILLS = generateMockPills();
+const PLAYER_WALLET = ALL_PILLS.slice(0, 10); // Player starts with 10 random pills
+
+// ===== PILL INTERPRETER MODULE =====
+function generateGameplayStats(pill) {
+  const strengthMulti = { Minor: 1, Moderate: 1.5, Major: 2.2, Extreme: 3.5 };
+  const rarityMulti = { Common: 1, Uncommon: 1.5, Rare: 2.5, Epic: 4, Legendary: 10 };
+  
+  return {
+    statBonus: pill.statModifier * strengthMulti[pill.effectStrength] * (pill.purity / 100),
+    duration: 5000 + (pill.purity * 80),
+    sideEffectChance: pill.effectStrength === 'Extreme' ? 0.8 : 
+                      pill.effectStrength === 'Major' ? 0.5 : 0.25,
+    screenShake: pill.glow * (pill.effectStrength === 'Extreme' ? 2 : 1),
+    aggroRadius: 100 + (pill.glow * 50),
+    scoreValue: rarityMulti[pill.rarity] * (1 + pill.purity / 100) * 10,
+    synergyTags: [pill.effectClass, pill.manufacturer, pill.type],
+    sideEffects: pill.sideEffects
+  };
+}
+
+// ===== GAME STATE =====
+const canvas = document.getElementById('gameCanvas');
+const ctx = canvas.getContext('2d');
+const TILE_SIZE = 20;
+const MAP_WIDTH = 50;
+const MAP_HEIGHT = 30;
+
+const game = {
+  player: {
+    x: 25,
+    y: 15,
+    health: 100,
+    maxHealth: 100,
+    speed: 2,
+    baseSpeed: 2,
+    cash: 500,
+    score: 0,
+    inventory: PLAYER_WALLET,
+    equipped: [null, null, null],
+    activeEffects: [],
+    tolerance: new Map(),
+    territory: new Map()
+  },
+  camera: { x: 0, y: 0 },
+  keys: {},
+  enemies: [],
+  shops: [],
+  particles: [],
+  map: [],
+  time: 0,
+  frame: 0,
+  shopOpen: false,
+  walletOpen: false
+};
+
+// ===== MAP GENERATION =====
+function generateMap() {
+  const map = [];
+  for (let y = 0; y < MAP_HEIGHT; y++) {
+    const row = [];
+    for (let x = 0; x < MAP_WIDTH; x++) {
+      const noise = Math.random();
+      let type = 'grass';
+      let speedMod = 0.7;
+      let blocked = false;
+      
+      if (noise < 0.02) { type = 'road'; speedMod = 1.5; }
+      else if (noise < 0.05) { type = 'mud'; speedMod = 0.4; }
+      else if (noise < 0.08) { type = 'wall'; blocked = true; }
+      else if (noise < 0.09) { type = 'shop'; }
+      
+      row.push({ type, speedMod, blocked, owner: null, faction: null });
+    }
+    map.push(row);
+  }
+  // Place a shop
+  map[5][5].type = 'shop';
+  map[5][5].blocked = false;
+  game.shops.push({ x: 5, y: 5, name: 'VoidPharma Outpost', inventory: generateShopInventory() });
+  
+  return map;
+}
+
+function generateShopInventory() {
+  return ALL_PILLS.slice(100, 110).map(pill => ({
+    pill,
+    price: Math.floor(pill.floorPrice * 1000)
+  }));
+}
+
+game.map = generateMap();
+
+// ===== ENEMY SPAWNING =====
+function spawnEnemy() {
+  const types = ['Thug', 'Narc', 'Junkie', 'Rogue'];
+  const type = types[Math.floor(Math.random() * types.length)];
+  const x = Math.floor(Math.random() * MAP_WIDTH);
+  const y = Math.floor(Math.random() * MAP_HEIGHT);
+  if (game.map[y][x].blocked) return;
+  
+  game.enemies.push({
+    x, y,
+    type,
+    health: type === 'Thug' ? 30 : type === 'Narc' ? 50 : 20,
+    speed: type === 'Narc' ? 1.5 : 0.8,
+    detectionRange: type === 'Narc' ? 150 : 80,
+    state: 'patrol',
+    targetX: x,
+    targetY: y,
+    lastAttack: 0
+  });
+}
+
+// ===== INPUT HANDLING =====
+window.addEventListener('keydown', e => {
+  game.keys[e.key.toLowerCase()] = true;
+  if (e.key === 'w' || e.key === 'W') toggleWallet();
+  if (e.key === 'q' && game.player.equipped[0]) consumePill(0);
+  if (e.key === 'e' && game.player.equipped[1]) consumePill(1);
+  if (e.key === 'r' && game.player.equipped[2]) consumePill(2);
+});
+
+window.addEventListener('keyup', e => {
+  game.keys[e.key.toLowerCase()] = false;
+});
+
+// ===== PILL CONSUMPTION =====
+function consumePill(slotIndex) {
+  const pill = game.player.equipped[slotIndex];
+  if (!pill) return;
+  
+  const stats = generateGameplayStats(pill);
+  const now = Date.now();
+  
+  // Tolerance check
+  if (game.player.tolerance.has(pill.tokenId) && now - game.player.tolerance.get(pill.tokenId) < 300000) {
+    log(`Tolerance active for ${pill.name}, effect reduced`);
+    stats.statBonus *= 0.5;
+  }
+  game.player.tolerance.set(pill.tokenId, now);
+  
+  // Apply main effect
+  const effect = {
+    name: pill.name,
+    stats,
+    endTime: now + stats.duration,
+    color: pill.color,
+    type: pill.effectClass
+  };
+  
+  game.player.activeEffects.push(effect);
+  
+  // Apply side effects
+  stats.sideEffects.forEach(se => {
+    if (Math.random() < stats.sideEffectChance) {
+      game.player.activeEffects.push({
+        name: se,
+        endTime: now + stats.duration * 0.8,
+        isSideEffect: true
+      });
+    }
+  });
+  
+  // Territory painting
+  const tile = getTileAt(game.player.x, game.player.y);
+  tile.faction = pill.manufacturer;
+  tile.owner = 'player';
+  
+  log(`Consumed ${pill.name} - ${pill.effectClass} effect active!`);
+  updateUI();
+}
+
+// ===== TERRITORY & TILE HELPERS =====
+function getTileAt(x, y) {
+  const tx = Math.floor(x);
+  const ty = Math.floor(y);
+  if (tx < 0 || tx >= MAP_WIDTH || ty < 0 || ty >= MAP_HEIGHT) return { type: 'void', blocked: true, speedMod: 1 };
+  return game.map[ty][tx];
+}
+
+// ===== ENEMY AI =====
+function updateEnemies(deltaTime) {
+  game.enemies.forEach(enemy => {
+    const dx = game.player.x - enemy.x;
+    const dy = game.player.y - enemy.y;
+    const dist = Math.sqrt(dx*dx + dy*dy);
+    
+    // Detection influenced by player glow
+    let detection = enemy.detectionRange;
+    if (game.player.activeEffects.length > 0) {
+      const maxGlow = Math.max(...game.player.activeEffects.map(e => e.stats?.glow || 0));
+      detection *= (1 + maxGlow);
+    }
+    
+    if (dist < detection) {
+      enemy.state = 'chase';
+      enemy.targetX = game.player.x;
+      enemy.targetY = game.player.y;
+    } else if (enemy.state === 'chase') {
+      enemy.state = 'patrol';
+    }
+    
+    // Movement
+    if (enemy.state === 'patrol') {
+      if (Math.random() < 0.02) {
+        enemy.targetX = enemy.x + (Math.random() - 0.5) * 10;
+        enemy.targetY = enemy.y + (Math.random() - 0.5) * 10;
+      }
+    }
+    
+    const moveX = Math.sign(enemy.targetX - enemy.x);
+    const moveY = Math.sign(enemy.targetY - enemy.y);
+    const newX = enemy.x + moveX * enemy.speed * deltaTime;
+    const newY = enemy.y + moveY * enemy.speed * deltaTime;
+    
+    const targetTile = getTileAt(newX, newY);
+    if (!targetTile.blocked) {
+      enemy.x = newX;
+      enemy.y = newY;
+    }
+    
+    // Attack
+    if (dist < 1.5 && Date.now() - enemy.lastAttack > 1000) {
+      enemy.lastAttack = Date.now();
+      game.player.health -= 10;
+      createParticles(game.player.x, game.player.y, '#f00');
+      log(`Hit by ${enemy.type}! -10 HP`);
+    }
+  });
+}
+
+// ===== PARTICLES =====
+function createParticles(x, y, color) {
+  for (let i = 0; i < 10; i++) {
+    game.particles.push({
+      x, y,
+      vx: (Math.random() - 0.5) * 2,
+      vy: (Math.random() - 0.5) * 2,
+      life: 30,
+      color
+    });
+  }
+}
+
+// ===== SHOP SYSTEM =====
+function openShop(shop) {
+  game.shopOpen = true;
+  document.getElementById('shopPanel').style.display = 'block';
+  const shopItems = document.getElementById('shopItems');
+  shopItems.innerHTML = '';
+  
+  shop.inventory.forEach(item => {
+    const div = document.createElement('div');
+    div.className = 'shopItem';
+    div.innerHTML = `
+      <span style="color:${item.pill.color}">●</span> ${item.pill.name} (${item.pill.rarity})
+      <span>$${item.price}</span>
+      <button onclick="buyPill(${item.pill.tokenId})" ${game.player.cash < item.price ? 'disabled' : ''}>BUY</button>
+    `;
+    shopItems.appendChild(div);
+  });
+}
+
+function closeShop() {
+  game.shopOpen = false;
+  document.getElementById('shopPanel').style.display = 'none';
+}
+
+function buyPill(tokenId) {
+  const shop = game.shops[0];
+  const item = shop.inventory.find(i => i.pill.tokenId === tokenId);
+  if (!item || game.player.cash < item.price) return;
+  
+  game.player.cash -= item.price;
+  game.player.inventory.push(item.pill);
+  shop.inventory = shop.inventory.filter(i => i.tokenId !== tokenId);
+  log(`Bought ${item.pill.name} for $${item.price}`);
+  closeShop();
+  updateUI();
+}
+
+// ===== WALLET UI =====
+function toggleWallet() {
+  game.walletOpen = !game.walletOpen;
+  const panel = document.getElementById('walletPanel');
+  panel.style.display = game.walletOpen ? 'block' : 'none';
+  if (game.walletOpen) renderWallet();
+}
+
+function renderWallet() {
+  const panel = document.getElementById('walletPanel');
+  panel.innerHTML = '<h4>PILL WALLET - Right-click to equip</h4>';
+  
+  game.player.inventory.forEach(pill => {
+    const div = document.createElement('div');
+    div.className = 'walletPill';
+    if (game.player.equipped.includes(pill)) div.className += ' walletPillEquipped';
+    div.innerHTML = `
+      <span style="color:${pill.color}; font-size:20px;">●</span>
+      <div style="flex:1; margin-left:10px;">
+        <div>${pill.name}</div>
+        <div style="font-size:10px; color:#888;">${pill.rarity} | ${pill.effectClass} | Purity: ${pill.purity}%</div>
+      </div>
+      <div style="text-align:right;">
+        <div style="color:#0f0;">$${Math.floor(pill.floorPrice * 1000)}</div>
+        <div style="font-size:10px;">ID: ${pill.tokenId}</div>
+      </div>
+    `;
+    div.oncontextmenu = (e) => {
+      e.preventDefault();
+      equipPill(pill);
+    };
+    panel.appendChild(div);
+  });
+}
+
+function equipPill(pill) {
+  const emptySlot = game.player.equipped.findIndex(slot => slot === null);
+  if (emptySlot === -1) {
+    game.player.equipped[0] = pill;
+  } else {
+    game.player.equipped[emptySlot] = pill;
+  }
+  log(`Equipped ${pill.name}`);
+  updateBinder();
+}
+
+function updateBinder() {
+  game.player.equipped.forEach((pill, i) => {
+    const icon = document.getElementById(`pillIcon${i}`);
+    if (pill) {
+      icon.style.background = `radial-gradient(circle, ${pill.color}, #000)`;
+      icon.style.boxShadow = `0 0 10px ${pill.color}`;
+    } else {
+      icon.style.background = '#222';
+      icon.style.boxShadow = 'none';
+    }
+  });
+}
+
+// ===== EFFECTS PROCESSING =====
+function updateEffects() {
+  const now = Date.now();
+  const overlay = document.getElementById('effectOverlay');
+  overlay.className = 'effectOverlay';
+  
+  // Reset player stats
+  game.player.speed = game.player.baseSpeed;
+  
+  // Process active effects
+  game.player.activeEffects = game.player.activeEffects.filter(effect => {
+    if (effect.endTime <= now) return false;
+    
+    if (effect.isSideEffect) {
+      // Side effect handling
+      if (effect.name === 'inverted_controls') {
+        overlay.classList.add('inverted');
+      }
+      if (effect.name === 'screen_shake') {
+        overlay.classList.add('shake');
+      }
+      if (effect.name === 'random_teleport' && Math.random() < 0.01) {
+        game.player.x = Math.random() * MAP_WIDTH;
+        game.player.y = Math.random() * MAP_HEIGHT;
+        createParticles(game.player.x, game.player.y, effect.color || '#fff');
+      }
+    } else {
+      // Main effect
+      if (effect.type === 'Stimulant') {
+        game.player.speed *= (1 + effect.stats.statBonus);
+      }
+      if (effect.type === 'Depressant') {
+        game.player.speed *= 0.7;
+      }
+    }
+    
+    return true;
+  });
+}
+
+// ===== PLAYER UPDATE =====
+function updatePlayer(deltaTime) {
+  if (game.shopOpen || game.walletOpen) return;
+  
+  let moveX = 0, moveY = 0;
+  if (game.keys['a']) moveX = -1;
+  if (game.keys['d']) moveX = 1;
+  if (game.keys['w']) moveY = -1;
+  if (game.keys['s']) moveY = 1;
+  
+  // Inverted controls side effect
+  if (game.player.activeEffects.some(e => e.name === 'inverted_controls')) {
+    moveX *= -1;
+    moveY *= -1;
+  }
+  
+  // Normalize diagonal movement
+  if (moveX !== 0 && moveY !== 0) {
+    moveX *= 0.707;
+    moveY *= 0.707;
+  }
+  
+  const newX = game.player.x + moveX * game.player.speed * deltaTime;
+  const newY = game.player.y + moveY * game.player.speed * deltaTime;
+  
+  const targetTile = getTileAt(newX, newY);
+  if (!targetTile.blocked) {
+    game.player.x = newX;
+    game.player.y = newY;
+  }
+  
+  // Check for shop
+  const currentTile = getTileAt(game.player.x, game.player.y);
+  if (currentTile.type === 'shop' && !game.shopOpen) {
+    openShop(game.shops[0]);
+  }
+  
+  // Territory painting
+  if (moveX !== 0 || moveY !== 0) {
+    const activeEffect = game.player.activeEffects.find(e => !e.isSideEffect);
+    if (activeEffect) {
+      currentTile.faction = activeEffect.stats.synergyTags[1]; // Manufacturer
+      currentTile.owner = 'player';
+    }
+  }
+  
+  // Death check
+  if (game.player.health <= 0) {
+    log('YOU DIED! Respawning...');
+    game.player.health = game.player.maxHealth;
+    game.player.x = 25;
+    game.player.y = 15;
+    game.player.score = Math.floor(game.player.score * 0.8);
+  }
+}
+
+// ===== RENDERING =====
+function render() {
+  // Clear
+  ctx.fillStyle = '#000';
+  ctx.fillRect(0, 0, canvas.width, canvas.height);
+  
+  // Camera follow
+  game.camera.x = game.player.x * TILE_SIZE - canvas.width / 2;
+  game.camera.y = game.player.y * TILE_SIZE - canvas.height / 2;
+  
+  // Draw map
+  const startX = Math.max(0, Math.floor(game.camera.x / TILE_SIZE));
+  const endX = Math.min(MAP_WIDTH, startX + Math.ceil(canvas.width / TILE_SIZE) + 2);
+  const startY = Math.max(0, Math.floor(game.camera.y / TILE_SIZE));
+  const endY = Math.min(MAP_HEIGHT, startY + Math.ceil(canvas.height / TILE_SIZE) + 2);
+  
+  for (let y = startY; y < endY; y++) {
+    for (let x = startX; x < endX; x++) {
+      const tile = game.map[y][x];
+      const screenX = x * TILE_SIZE - game.camera.x;
+      const screenY = y * TILE_SIZE - game.camera.y;
+      
+      // Terrain
+      if (tile.type === 'grass') ctx.fillStyle = '#1a2a1a';
+      else if (tile.type === 'road') ctx.fillStyle = '#333';
+      else if (tile.type === 'mud') ctx.fillStyle = '#3a2a1a';
+      else if (tile.type === 'wall') ctx.fillStyle = '#666';
+      else if (tile.type === 'shop') {
+        ctx.fillStyle = tile.owner === 'player' ? '#2a1a3a' : '#1a1a2a';
+        ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+        ctx.fillStyle = '#0ff';
+        ctx.fillRect(screenX + 5, screenY + 5, TILE_SIZE - 10, TILE_SIZE - 10);
+        continue;
+      }
+      ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+      
+      // Territory overlay
+      if (tile.owner === 'player' && tile.faction) {
+        const manuColors = {
+          'VoidPharma': 'rgba(128,0,255,0.3)',
+          'NeuroCorp': 'rgba(0,128,255,0.3)',
+          'Chaos Labs': 'rgba(255,0,128,0.3)',
+          'Biohazrd': 'rgba(255,128,0,0.3)',
+          'TripWare': 'rgba(0,255,128,0.3)',
+          'SynapseX': 'rgba(128,255,0,0.3)',
+          'DreamWeaver': 'rgba(255,0,255,0.3)',
+          'Chemical X': 'rgba(255,255,0,0.3)'
+        };
+        ctx.fillStyle = manuColors[tile.faction] || 'rgba(0,255,0,0.2)';
+        ctx.fillRect(screenX, screenY, TILE_SIZE, TILE_SIZE);
+      }
+    }
+  }
+  
+  // Draw enemies
+  game.enemies.forEach(enemy => {
+    const screenX = enemy.x * TILE_SIZE - game.camera.x;
+    const screenY = enemy.y * TILE_SIZE - game.camera.y;
+    ctx.fillStyle = enemy.type === 'Narc' ? '#f00' : enemy.type === 'Junkie' ? '#fa0' : '#a00';
+    ctx.beginPath();
+    ctx.arc(screenX + TILE_SIZE/2, screenY + TILE_SIZE/2, 8, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Health bar
+    ctx.fillStyle = '#000';
+    ctx.fillRect(screenX + 2, screenY - 5, TILE_SIZE - 4, 3);
+    ctx.fillStyle = '#f00';
+    ctx.fillRect(screenX + 2, screenY - 5, (TILE_SIZE - 4) * (enemy.health / 30), 3);
+  });
+  
+  // Draw particles
+  game.particles.forEach(p => {
+    const screenX = p.x * TILE_SIZE - game.camera.x;
+    const screenY = p.y * TILE_SIZE - game.camera.y;
+    ctx.fillStyle = p.color + Math.floor(p.life / 30 * 255).toString(16).padStart(2, '0');
+    ctx.fillRect(screenX, screenY, 3, 3);
+    p.x += p.vx;
+    p.y += p.vy;
+    p.life--;
+  });
+  game.particles = game.particles.filter(p => p.life > 0);
+  
+  // Draw player
+  const pScreenX = game.player.x * TILE_SIZE - game.camera.x;
+  const pScreenY = game.player.y * TILE_SIZE - game.camera.y;
+  ctx.fillStyle = '#0f0';
+  ctx.shadowBlur = game.player.activeEffects.length > 0 ? 20 : 0;
+  ctx.shadowColor = game.player.activeEffects[0]?.color || '#0f0';
+  ctx.beginPath();
+  ctx.arc(pScreenX + TILE_SIZE/2, pScreenY + TILE_SIZE/2, 10, 0, Math.PI * 2);
+  ctx.fill();
+  ctx.shadowBlur = 0;
+  
+  // Active effect aura
+  if (game.player.activeEffects.length > 0) {
+    const effect = game.player.activeEffects[0];
+    ctx.strokeStyle = effect.color;
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(pScreenX + TILE_SIZE/2, pScreenY + TILE_SIZE/2, 15 + Math.sin(game.time * 0.005) * 3, 0, Math.PI * 2);
+    ctx.stroke();
+  }
+}
+
+// ===== UI UPDATE =====
+function updateUI() {
+  document.getElementById('health').textContent = Math.floor(game.player.health);
+  document.getElementById('score').textContent = Math.floor(game.player.score);
+  document.getElementById('cash').textContent = game.player.cash;
+  
+  const tile = getTileAt(game.player.x, game.player.y);
+  document.getElementById('location').textContent = 
+    tile.owner === 'player' ? `${tile.faction} Territory` : 
+    tile.type === 'shop' ? 'Stash House' : 'Neutral Zone';
+  
+  const effects = game.player.activeEffects.filter(e => !e.isSideEffect).map(e => e.name).join(', ');
+  document.getElementById('activeEffects').textContent = effects || 'None';
+}
+
+function log(message) {
+  const console = document.getElementById('devConsole');
+  console.innerHTML += `<div>${new Date().toLocaleTimeString()} - ${message}</div>`;
+  console.scrollTop = console.scrollHeight;
+}
+
+function toggleDevConsole() {
+  const console = document.getElementById('devConsole');
+  console.style.display = console.style.display === 'none' ? 'block' : 'none';
+}
+
+// ===== GAME LOOP =====
+let lastTime = Date.now();
+function gameLoop() {
+  const now = Date.now();
+  const deltaTime = Math.min((now - lastTime) / 16, 2); // Cap at 2 frames
+  lastTime = now;
+  game.time = now;
+  game.frame++;
+  
+  if (!game.shopOpen) {
+    updatePlayer(deltaTime);
+    updateEnemies(deltaTime);
+  }
+  updateEffects();
+  
+  // Spawn enemies occasionally
+  if (game.frame % 300 === 0 && game.enemies.length < 10) {
+    spawnEnemy();
+  }
+  
+  // Score from territory
+  if (game.frame % 60 === 0) {
+    let territoryCount = 0;
+    game.map.forEach(row => row.forEach(tile => {
+      if (tile.owner === 'player') territoryCount++;
+    }));
+    game.player.score += territoryCount * 0.1;
+  }
+  
+  render();
+  updateUI();
+  requestAnimationFrame(gameLoop);
+}
+
+// ===== INITIALIZATION =====
+gameLoop();
+updateBinder();
+log('NarcotiX Game V2 Initialized');
+log('Press W to open wallet, Q/E/R to use equipped pills');
+log('Walk to shop (cyan square) to buy more pills');
+
+// Dev: Auto-equip first 3 pills
+game.player.equipped[0] = game.player.inventory[0];
+game.player.equipped[1] = game.player.inventory[1];
+game.player.equipped[2] = game.player.inventory[2];
+updateBinder();
+
+</script>
+</body>
+</html>

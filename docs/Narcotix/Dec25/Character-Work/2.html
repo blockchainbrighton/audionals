@@ -1,0 +1,100 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Evolving Warp Rings</title>
+<style>
+body{margin:0;background:#020202;color:#fff;font-family:'Courier New',monospace;overflow:hidden;display:flex;justify-content:center;align-items:center;height:100vh}canvas{display:block;filter:blur(.5px)}#overlay{position:absolute;top:0;left:0;width:100%;height:100%;display:flex;flex-direction:column;justify-content:center;align-items:center;background:rgba(0,0,0,.9);z-index:10;transition:opacity 1.5s ease}#overlay.hidden{opacity:0;pointer-events:none}.btn{background:0 0;color:#fff;border:1px solid rgba(255,255,255,.3);padding:20px 40px;font:inherit;font-size:18px;letter-spacing:2px;cursor:pointer;transition:all .4s ease;text-transform:uppercase}.btn:hover{border-color:#fff;background:rgba(255,255,255,.1);box-shadow:0 0 20px rgba(255,255,255,.1)}.subtitle{margin-top:20px;color:#888;font-size:14px;letter-spacing:1px;text-align:center;line-height:1.5}#hud{position:absolute;bottom:30px;left:0;width:100%;text-align:center;pointer-events:none;color:rgba(255,255,255,.6);font-size:14px;letter-spacing:2px;text-transform:uppercase;transition:opacity .5s;z-index:5;text-shadow:0 0 10px rgba(0,0,0,.8)}
+</style>
+</head>
+<body>
+<div id="overlay"><button class="btn" id="startBtn">Initialize Sequence</button><div class="subtitle">AUDIO REACTIVE SYSTEM<br><span style="font-size:12px;color:#555"><b>Arrow Keys:</b> Change Preset<br><b>Shift + Arrow:</b> Jump 50 Presets</span></div></div>
+<div id="hud">Waiting for initialization...</div>
+<canvas id="scope"></canvas>
+<script>
+const CONFIG={volume:.05,visualGain:3.5,segments:600},
+{PI,sin,cos,abs,pow,min,max,floor,random,sqrt}=Math,TWO_PI=2*PI;
+
+function superformula(e,t,a,r,n){if(0===a)return 0;const i=pow(abs(cos(t*e/4)),r),o=pow(abs(sin(t*e/4)),n);return pow(i+o,-1/a)}
+
+const BASE_SHAPES=[
+{id:'btc',name:"Bitcoin Symbol",shape:'custom_btc',colorKey:'btc'},
+{id:'eth',name:"Ethereum Crystal",shape:'custom_eth',colorKey:'eth'},
+{id:'block',name:"Genesis Block",shape:'superformula',m:4,n1:100,n2:100,n3:100,colorKey:'mono'},
+{id:'chain',name:"Blockchain Link",shape:'lissajous',kX:2,kY:1,colorKey:'forest'},
+{id:'node',name:"Decentralized",shape:'custom_net',colorKey:'plasma'},
+{id:'tri',name:"Hard Triangle",shape:'superformula',m:3,n1:100,n2:100,n3:100},
+{id:'pent',name:"Hard Pentagon",shape:'superformula',m:5,n1:100,n2:100,n3:100},
+{id:'hex',name:"Hard Hexagon",shape:'superformula',m:6,n1:100,n2:100,n3:100},
+{id:'wave_sin',name:"Sine Wave",shape:'linear',waveType:'sine'},
+{id:'wave_audio',name:"Audio Wave",shape:'linear',waveType:'audio'},
+{id:'wave_chaos',name:"Chaos Wave",shape:'linear',waveType:'noise'},
+{id:'fig8',name:"Figure 8",shape:'lissajous',kX:1,kY:2},
+{id:'spiral',name:"Golden Spiral",shape:'spiral',turns:5},
+{id:'star4',name:"Ninja Star",shape:'superformula',m:4,n1:.1,n2:1.7,n3:1.7},
+{id:'star5',name:"Star (5-pt)",shape:'superformula',m:5,n1:.2,n2:1.7,n3:1.7},
+{id:'burst',name:"Sun Burst",shape:'superformula',m:16,n1:.3,n2:.3,n3:.3},
+{id:'atom',name:"Atomic",shape:'rose',k:4}
+],
+SPEED_TIERS=[{label:"STATIC",val:0},{label:"SLOW",val:.1},{label:"FAST",val:1},{label:"TURBO",val:3},{label:"STROBE",val:15}],
+DRAW_STYLES=[{id:'line',label:"LINE"},{id:'dots',label:"DOTS"},{id:'web',label:"WEB"},{id:'vert',label:"MATRIX"}],
+PALETTE_MAP={cyan:['#0ff','#00f'],plasma:['#f0c','#33f'],forest:['#00ff7f','#006400'],fire:['#ffd700','#ff4500'],purple:['#8a2be2','#ff69b4'],mono:['#fff','#444'],hot:['#f00','#ff0'],btc:['#f7931a','#ffd700'],eth:['#627eea','#fff']},
+PALETTES_ARRAY=Object.values(PALETTE_MAP),
+PRESETS=[.01,.1,.25,.5,1,2.5,5,10].map(e=>({freq:e,name:`Classic Pulse (${e}Hz)`,shape:'circle',rotationSpeed:0,baseColor:'#0ff',type:'sine',drawMode:'radial',style:'line'}));
+
+let pIndex=PRESETS.length;
+BASE_SHAPES.forEach(((e,t)=>{const a=e.colorKey&&PALETTE_MAP[e.colorKey]?PALETTE_MAP[e.colorKey]:PALETTES_ARRAY[t%PALETTES_ARRAY.length];SPEED_TIERS.forEach((r=>{DRAW_STYLES.forEach((n=>{let i=55;"linear"===e.shape&&(i=40),"custom_btc"===e.shape&&(i=30);let o="linear"===e.shape?"linear":"radial";PRESETS.push({...e,name:e.name,rotationSpeed:r.val,speedLabel:r.label,colorMode:'gradient',palette:a,drawMode:o,style:n.id,styleLabel:n.label,freq:i+5*random(),type:"STROBE"===r.label?"square":"sine",_idx:pIndex++})}))}))}));
+
+let ctx,canvas,audioCtx,analyser,dataArray,osc,modOsc,modGain,isRunning=!1,currentPresetIndex=2;
+
+function init(){
+    canvas=document.getElementById("scope"),ctx=canvas.getContext("2d"),window.addEventListener("resize",resize),resize();
+    const e=document.getElementById("startBtn"),t=document.getElementById("overlay");
+    e.addEventListener("click",(async()=>{await startAudio(),t.classList.add("hidden"),isRunning=!0,loop(),updateHud()})),
+    document.addEventListener("keydown",(e=>{if(!isRunning)return;let t=e.shiftKey?50:1;"ArrowRight"!==e.key&&"ArrowUp"!==e.key||changePreset(currentPresetIndex+t),"ArrowLeft"!==e.key&&"ArrowDown"!==e.key||changePreset(currentPresetIndex-t)}))
+}
+function resize(){const e=window.devicePixelRatio||1;canvas.width=window.innerWidth*e,canvas.height=window.innerHeight*e,canvas.style.width=window.innerWidth+"px",canvas.style.height=window.innerHeight+"px",ctx.scale(e,e)}
+function changePreset(e){
+    e=(e%=PRESETS.length)<0?PRESETS.length+e:e,currentPresetIndex=e;const t=PRESETS[currentPresetIndex];
+    if(audioCtx&&osc){
+        const e=audioCtx.currentTime;osc.frequency.setValueAtTime(osc.frequency.value,e),osc.frequency.exponentialRampToValueAtTime(max(.01,t.freq),e+.1),osc.type=t.type||"sine",modGain.gain.setValueAtTime(modGain.gain.value,e),modGain.gain.linearRampToValueAtTime(0,e+.1)
+    }
+    updateHud()
+}
+function updateHud(){
+    const e=document.getElementById("hud"),t=PRESETS[currentPresetIndex];
+    let a=t.name;t.speedLabel&&(a+=` [${t.speedLabel}]`);let r=`PRESET ${currentPresetIndex+1} / ${PRESETS.length} | `;r+=t.styleLabel?`STYLE: ${t.styleLabel}`:`SHAPE: ${(t.shape||"Unknown").toUpperCase()}`,e.innerHTML=`<span style="font-size: 1.4em; color: #fff; letter-spacing: 3px;">${a}</span><br><span style="font-size: 0.9em; color: #aaa; margin-top:5px; display:inline-block;">${r}</span>`,e.style.opacity="1"
+}
+async function startAudio(){
+    audioCtx=new(window.AudioContext||window.webkitAudioContext),osc=audioCtx.createOscillator(),modOsc=audioCtx.createOscillator(),modGain=audioCtx.createGain(),modOsc.connect(modGain),modGain.connect(osc.frequency),analyser=audioCtx.createAnalyser(),analyser.fftSize=2048,analyser.smoothingTimeConstant=.92,dataArray=new Float32Array(analyser.fftSize);const e=audioCtx.createGain();e.gain.value=CONFIG.visualGain;const t=audioCtx.createGain();t.gain.value=CONFIG.volume,osc.connect(e),e.connect(analyser),analyser.connect(t),t.connect(audioCtx.destination),changePreset(currentPresetIndex),osc.start(),modOsc.start()
+}
+function draw(e){
+    const t=5e-4*e,a=PRESETS[currentPresetIndex],r=window.innerWidth,n=window.innerHeight,i=r/2,o=n/2,l=.35*min(r,n);
+    ctx.fillStyle="rgba(2, 2, 2, 0.2)",ctx.fillRect(0,0,r,n),analyser?analyser.getFloatTimeDomainData(dataArray):dataArray=new Float32Array(2048).fill(0),ctx.beginPath();
+    // Fix: Changed inner variable 'a' to 'idx' to prevent shadowing of the preset object 'a'
+    if("gradient"===a.colorMode&&a.palette){const e=ctx.createLinearGradient(0,0,r,n);a.palette.forEach(((t,idx)=>e.addColorStop(idx/(a.palette.length-1),t))),ctx.strokeStyle=e,ctx.fillStyle=e,ctx.shadowColor=a.palette[0]}else ctx.strokeStyle=a.baseColor||"#0ff",ctx.fillStyle=a.baseColor||"#0ff",ctx.shadowColor=a.baseColor||"#0ff";
+    ctx.lineWidth=1.5,ctx.lineCap="round",ctx.lineJoin="round",ctx.shadowBlur="dots"===a.style?2:10;
+    const s="lissajous"===a.shape||"rose"===a.shape?2*CONFIG.segments:CONFIG.segments;
+    for(let e=0;e<=s;e++){
+        const c=e/s;let d=0,h=0,u=1,p=0;
+        if("linear"===a.drawMode){p=150*dataArray[floor(c*(dataArray.length-1))]}else{const e=1-abs(2*c-1);p=100*dataArray[floor(e*(dataArray.length-1))]}
+        if("linear"===a.drawMode){
+            d=.1*r+.8*r*c;let e=0;"sine"===a.waveType?e=50*sin(10*c+5*t*a.rotationSpeed):"noise"===a.waveType&&(e=20*sin(50*c+t)),h=o+e+p
+        }else{
+            let e=c*TWO_PI,r=t*a.rotationSpeed,n=e+r,s=l;
+            if("custom_btc"===a.shape){
+                const e=.8*l,t=1.2*l;if(c<.2){const a=c/.2;d=i-.3*e,h=o+t/2-a*t}else if(c<.6){const a=(c-.2)/.4,r=-PI/2+a*PI,n=i-.3*e,l=o-.25*t;d=n+.6*e*cos(r),h=l+.25*t*sin(r)}else{const a=(c-.6)/.4,r=-PI/2+a*PI,n=i-.3*e,l=o+.25*t;d=n+.7*e*cos(r),h=l+.25*t*sin(r)}s=1
+            }else if("custom_eth"===a.shape){
+                const e=(4*c)%4,t=floor(e),a=e-t,r=.7*l,n=1.2*l,s=[{x:0,y:-n},{x:r,y:0},{x:0,y:n},{x:-r,y:0},{x:0,y:-n}],u=s[t],p=s[t+1];d=i+u.x+(p.x-u.x)*a,h=o+u.y+(p.y-u.y)*a;const m=d-i,f=h-o;d=i+m*cos(n)-f*sin(n),h=o+m*sin(n)+f*cos(n)
+            }else"custom_net"===a.shape?(d=i+cos(n)*s,h=o+sin(n)*s):"superformula"===a.shape?(s*=superformula(n,a.m,a.n1,a.n2,a.n3),d=i+cos(n)*s,h=o+sin(n)*s):"rose"===a.shape?(s=l*cos(a.k*n),d=i+cos(n)*s,h=o+sin(n)*s):"lissajous"===a.shape?(d=i+cos(n*a.kX)*s,h=o+sin(n*a.kY)*s):"spiral"===a.shape?(n=c*TWO_PI*(a.turns||5)+r,s=n/(5*TWO_PI)*l,d=i+cos(n)*s,h=o+sin(n)*s):(d=i+cos(n)*s,h=o+sin(n)*s);
+            const m=d-i,f=h-o,g=sqrt(m*m+f*f);g>.001&&(d+=m/g*p,h+=f/g*p)
+        }
+        "dots"===a.style?(ctx.beginPath(),ctx.arc(d,h,max(.5,"3d"===a.drawMode?2*u:2),0,TWO_PI),ctx.fill()):"web"===a.style?e%2==0&&(ctx.beginPath(),ctx.moveTo(i,o),ctx.lineTo(d,h),ctx.stroke()):"vert"===a.style?(ctx.beginPath(),ctx.moveTo(d,h),ctx.lineTo(d,h+20+abs(p)),ctx.stroke()):0===e?(ctx.beginPath(),ctx.moveTo(d,h)):ctx.lineTo(d,h)
+    }
+    (!a.style||"line"===a.style)&&ctx.stroke(),ctx.shadowBlur=0
+}
+function loop(){isRunning&&(draw(performance.now()),requestAnimationFrame(loop))}
+init();
+</script>
+</body>
+</html>
