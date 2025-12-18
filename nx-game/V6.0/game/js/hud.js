@@ -376,13 +376,14 @@ export const hud = {
                          referrerpolicy="no-referrer"
                          style="width: 100%; max-width: 200px; border: 1px solid #333; box-shadow: 0 0 10px rgba(0,0,0,0.5);"
                          onerror="
-                            if (!this.src.includes('ipfs.io')) { 
-                                console.warn('[HUD NFT Error] Hiro/Cache failed for ID ${id}. Trying IPFS fallback...'); 
+                            const currentSrc = this.src;
+                            if (!currentSrc.includes('ipfs.io')) { 
+                                console.warn('[HUD NFT Error] Hiro/Cache failed for ID ${id} (' + currentSrc + '). Trying IPFS fallback: ${ipfsUrl}'); 
                                 this.src='${ipfsUrl}'; 
                             } else { 
                                 this.onerror=null; 
                                 this.src='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII='; 
-                                console.warn('[HUD NFT Critical] IPFS fallback also failed for ID ${id}.'); 
+                                console.warn('[HUD NFT Critical] IPFS fallback also failed for ID ${id} (' + currentSrc + ').'); 
                             }
                          ">
                                 </div>
