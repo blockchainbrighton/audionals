@@ -1,6 +1,7 @@
 // --- START OF FILE js/enemyManager.js ---
 import { TILE_TYPES } from './mapManager.js'; // Import TILE_TYPES
 import { Enemy } from './Enemy.js'; // Import Enemy Class
+import { WorldItem } from './WorldItem.js'; // Import WorldItem
 
 export const enemyManager = {
     game: null,
@@ -51,7 +52,17 @@ export const enemyManager = {
         const bossX=this.game.config.MAP_WIDTH_TILES-10, bossY=this.game.config.MAP_HEIGHT_TILES-10;
         this.spawnEnemy('warden', bossX, bossY);
         const doc = this.game.itemManager.createItemById('xdata_fragment');
-        if(doc) this.game.itemManager.onMapItems.push({...doc, x:bossX*this.game.config.TILE_SIZE, y:(bossY-1)*this.game.config.TILE_SIZE, width:this.game.config.TILE_SIZE*0.8, height:this.game.config.TILE_SIZE*0.8});
+        if(doc) {
+            const worldItem = new WorldItem(
+                this.game, 
+                bossX*this.game.config.TILE_SIZE, 
+                (bossY-1)*this.game.config.TILE_SIZE, 
+                this.game.config.TILE_SIZE*0.8, 
+                this.game.config.TILE_SIZE*0.8, 
+                doc
+            );
+            this.game.itemManager.onMapItems.push(worldItem);
+        }
 
         // 1. Hostile Spawn Vectors (Placed by map generation)
         for(let r=0;r<this.game.config.MAP_HEIGHT_TILES;r++){
