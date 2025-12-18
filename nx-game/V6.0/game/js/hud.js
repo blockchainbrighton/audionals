@@ -4,6 +4,11 @@ import { imageLoader } from './imageLoader.js';
 export const hud = {
     game: null,
     activeItemIndex: -1, // Track which item is being inspected
+    showAllPois: false, // Admin flag to show all arrows
+    
+    // Admin Speed State
+    adminSpeedToggleActive: false,
+    adminSpeedTimeout: null,
 
 // Helper for mapping POI types to display names
     poiNames: {
@@ -16,9 +21,14 @@ export const hud = {
         'default': 'Location'
     },
     
+    initialized: false, // Flag to prevent double init
+
     init: function(gameInstance) {
+        if (this.initialized) return; // Prevent duplicate init
+        console.log("[HUD] init called");
         this.game = gameInstance;
         this.setupInput();
+        this.initialized = true;
 
         // Event Listeners
         this.game.events.on('PLAYER_STATS_UPDATED', () => this.update());
@@ -47,7 +57,9 @@ export const hud = {
             let newHovered = null;
 
             this.game.minimap.poiCache.forEach(poi => {
-                if (this.game.discovery && !this.game.discovery.shouldShowPoi(poi.type)) return;
+                // Respect discovery logic OR Admin override
+                if (!this.showAllPois && this.game.discovery && !this.game.discovery.shouldShowPoi(poi.type)) return;
+                
                 const targetPos = this.calculateArrowPosition(poi);
                 if (!targetPos) return; // POI is on screen
 
@@ -125,10 +137,45 @@ export const hud = {
     },
 
     setupInput: function() {
+        console.log("[HUD] setupInput called - adding keydown listener");
         window.addEventListener('keydown', (e) => {
+            if (e.repeat) return; // Prevent hold-down repeating
+            const key = e.key.toLowerCase();
+            
+            // ADMIN HOTKEYS
+            if (key === 'a') {
+                console.log(`[HUD Input] 'A' pressed. Current state: ${this.showAllPois}`);
+                this.showAllPois = !this.showAllPois;
+                this.game.utils.addMessage(`[ADMIN] Show All POIs: ${this.showAllPois ? 'ON' : 'OFF'}`);
+            }
+
+            if (key === 's') {
+                this.adminSpeedToggleActive = true;
+                this.game.utils.addMessage(`[ADMIN] Speed Mode: Press 1-9...`);
+                
+                if (this.adminSpeedTimeout) clearTimeout(this.adminSpeedTimeout);
+                this.adminSpeedTimeout = setTimeout(() => {
+                    if (this.adminSpeedToggleActive) {
+                        this.adminSpeedToggleActive = false;
+                        this.game.utils.addMessage(`[ADMIN] Speed Mode: Timed Out.`);
+                    }
+                }, 2000);
+            }
+
+            if (this.adminSpeedToggleActive && key >= '1' && key <= '9') {
+                const multiplier = parseInt(key);
+                if (this.game.player) {
+                    // Use defaultBaseSpeed as reference if available, else fallback to 150
+                    const base = this.game.player.defaultBaseSpeed || 150;
+                    this.game.player.baseSpeed = base * multiplier;
+                    this.game.utils.addMessage(`[ADMIN] Speed set to ${multiplier}x (Base: ${this.game.player.baseSpeed})`);
+                }
+                this.adminSpeedToggleActive = false;
+                if (this.adminSpeedTimeout) clearTimeout(this.adminSpeedTimeout);
+            }
+
             const detailView = document.getElementById('itemDetailView');
             if (detailView && detailView.style.display === 'block') {
-                const key = e.key.toLowerCase();
                 const index = this.activeItemIndex;
                 const inInventory = index > -1;
 
@@ -236,7 +283,9 @@ export const hud = {
         const screenH = this.game.canvas.height;
 
         this.game.minimap.poiCache.forEach(poi => {
-            if (this.game.discovery && !this.game.discovery.shouldShowPoi(poi.type)) return;
+            // Respect discovery logic OR Admin override
+            if (!this.showAllPois && this.game.discovery && !this.game.discovery.shouldShowPoi(poi.type)) return;
+            
             const targetPos = this.calculateArrowPosition(poi);
             if (!targetPos) return; // POI is on screen
 
@@ -359,15 +408,23 @@ export const hud = {
 
             console.log(`[HUD NFT] Initial item.imageUrl for ${item.name} (ID: ${id}): ${item.imageUrl}`);
             
-            // Use imageLoader to get the correct, CORS-ready URL. 
-            // We prioritize imageLoader.getUrl(id) because it handles caching and ?cors=1 injection.
-            // We fall back to a constructed Hiro URL only if absolutely necessary (though getUrl handles this default).
-            const cacheUrl = imageLoader.getUrl(id);
+            // Logic to distinguish real NFTs from items with "fake" traits (Walkman, Generic Pills)
+            let cacheUrl;
+            let ipfsUrl;
+
+            if (id && id !== '?') {
+                // Real NFT: Use loader for CORS/Cache logic
+                cacheUrl = imageLoader.getUrl(id);
+                // IPFS Fallback
+                ipfsUrl = `https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images/%23${id}.png?cors=1`;
+            } else {
+                // Local/Special Item (Walkman): Use defined URL
+                cacheUrl = item.imageUrl || 'artwork/narcotix_pill.svg';
+                // No IPFS fallback for local assets, use same URL or a placeholder to prevent error logic triggering wrongly
+                ipfsUrl = cacheUrl; 
+            }
 
             console.log(`[HUD NFT] Resolved URL for ${item.name} (ID: ${id}): ${cacheUrl}`);
-
-            // IPFS Fallback URL (also needs cors=1)
-            const ipfsUrl = `https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images/%23${id}.png?cors=1`;
 
             // --- FETCH FULL TAXONOMY DETAILS ---
             let taxonomyDetailsHtml = '';
