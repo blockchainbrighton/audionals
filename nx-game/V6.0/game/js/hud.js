@@ -359,8 +359,10 @@ export const hud = {
 
             console.log(`[HUD NFT] Initial item.imageUrl for ${item.name} (ID: ${id}): ${item.imageUrl}`);
             
-            // Use imageLoader to get the correct, CORS-ready URL (or fallback)
-            const cacheUrl = imageLoader.getUrl(id) || item.imageUrl || `https://assets.hiro.so/api/mainnet/token-metadata-api/SP8HMQP4Q63V3E6SXXPXZ4WJXA263HBD95QY2AM3.narcotix/${id}.png?cors=1`;
+            // Use imageLoader to get the correct, CORS-ready URL. 
+            // We prioritize imageLoader.getUrl(id) because it handles caching and ?cors=1 injection.
+            // We fall back to a constructed Hiro URL only if absolutely necessary (though getUrl handles this default).
+            const cacheUrl = imageLoader.getUrl(id);
 
             console.log(`[HUD NFT] Resolved URL for ${item.name} (ID: ${id}): ${cacheUrl}`);
 
