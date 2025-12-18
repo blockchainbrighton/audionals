@@ -369,25 +369,6 @@ export const hud = {
             // IPFS Fallback URL (also needs cors=1)
             const ipfsUrl = `https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images/%23${id}.png?cors=1`;
 
-            // --- FETCH FULL TAXONOMY DETAILS ---
-            let taxonomyDetailsHtml = '';
-            // We can re-derive the matches using the effect string, similar to itemManager
-            const taxMatches = this.game.itemManager.getTaxonomyMatches(effect, id);
-            
-            if (taxMatches && taxMatches.length > 0) {
-                const match = taxMatches[0]; // Primary match
-                taxonomyDetailsHtml = `
-                    <div style="margin-top: 10px; padding-top: 8px; border-top: 1px dashed #555;">
-                        <div style="color: #FFD700; font-size: 0.85em; font-weight: bold; margin-bottom: 4px;">CLASS: ${match.EffectGroup}</div>
-                        <div style="font-size: 0.8em; color: #EEE; display: grid; grid-template-columns: auto 1fr; gap: 4px;">
-                            <span style="color: #AAA;">Power:</span> <span style="color: #0F0;">${match.GameMechanic}</span>
-                            <span style="color: #AAA;">Visual:</span> <span style="color: #0FF;">${match.VisualEffect}</span>
-                            <span style="color: #AAA;">Risk:</span> <span style="color: #F66;">${match.SideEffectMechanic || 'None'}</span>
-                        </div>
-                    </div>
-                `;
-            }
-
             content = `
                 <h3 style="margin: 0 0 10px 0; color: #fff; text-shadow: 0 0 5px ${hex1}; border-bottom: 1px solid ${hex1}; padding-bottom: 5px;">${item.name}</h3>
                 
@@ -429,8 +410,6 @@ export const hud = {
                                             ${sideEffect}
                                         </div>
                                     </div>
-
-                                    ${taxonomyDetailsHtml}
                                 </div>
                             `;
                         } else if (item.type === 'weapon') {
