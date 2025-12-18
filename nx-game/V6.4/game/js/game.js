@@ -186,13 +186,15 @@ export const game = {
         // Spawn Walkman inside Safehouse (5, 7)
         const walkman = this.itemManager.createItemById('walkman');
         if (walkman) {
-            this.itemManager.onMapItems.push({
+            const walkmanItem = {
                 ...walkman,
                 x: 5 * this.config.TILE_SIZE,
                 y: 7 * this.config.TILE_SIZE,
                 width: this.config.TILE_SIZE * 0.8,
                 height: this.config.TILE_SIZE * 0.8
-            });
+            };
+            this.itemManager.onMapItems.push(walkmanItem);
+            this.entities.push(walkmanItem); // Add to render list
         }
 
 
@@ -304,7 +306,6 @@ export const game = {
         }
 
         this.particleManager.render(this.ctx); // Render particles
-        this.player.render();
         this.questManager.renderQuestMarkers();
         this.floatingTextManager.render(this.ctx); // Render floating text
 
