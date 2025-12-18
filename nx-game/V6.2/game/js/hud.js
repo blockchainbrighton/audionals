@@ -379,15 +379,23 @@ export const hud = {
 
             console.log(`[HUD NFT] Initial item.imageUrl for ${item.name} (ID: ${id}): ${item.imageUrl}`);
             
-            // Use imageLoader to get the correct, CORS-ready URL. 
-            // We prioritize imageLoader.getUrl(id) because it handles caching and ?cors=1 injection.
-            // We fall back to a constructed Hiro URL only if absolutely necessary (though getUrl handles this default).
-            const cacheUrl = imageLoader.getUrl(id);
+            // Logic to distinguish real NFTs from items with "fake" traits (Walkman, Generic Pills)
+            let cacheUrl;
+            let ipfsUrl;
+
+            if (id && id !== '?') {
+                // Real NFT: Use loader for CORS/Cache logic
+                cacheUrl = imageLoader.getUrl(id);
+                // IPFS Fallback
+                ipfsUrl = `https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images/%23${id}.png?cors=1`;
+            } else {
+                // Local/Special Item (Walkman): Use defined URL
+                cacheUrl = item.imageUrl || 'artwork/narcotix_pill.svg';
+                // No IPFS fallback for local assets, use same URL or a placeholder to prevent error logic triggering wrongly
+                ipfsUrl = cacheUrl; 
+            }
 
             console.log(`[HUD NFT] Resolved URL for ${item.name} (ID: ${id}): ${cacheUrl}`);
-
-            // IPFS Fallback URL (also needs cors=1)
-            const ipfsUrl = `https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images/%23${id}.png?cors=1`;
 
             // --- FETCH FULL TAXONOMY DETAILS ---
             let taxonomyDetailsHtml = '';
