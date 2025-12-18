@@ -644,8 +644,8 @@ export const soundManager = {
         } else if (mapId.includes('_interior') || mapId.includes('safehouse')) {
             if (mapId.includes('bar')) profileKey = 'BAR';
             else if (mapId.includes('armoury')) profileKey = 'ARMOURY';
-            else if (mapId.includes('casino')) profileKey = 'CASINO';
-            else if (mapId.includes('exchange')) profileKey = 'SHOP';
+            else if (mapId.includes('casino') || mapId.includes('lucky_hash')) profileKey = 'CASINO';
+            else if (mapId.includes('exchange') || mapId.includes('xemist_den')) profileKey = 'SHOP';
             else if (mapId.includes('safehouse')) profileKey = 'SAFEHOUSE';
             
             targetEnvVol = 0.8;
@@ -665,7 +665,7 @@ export const soundManager = {
 
             if(nearest) {
                 profileKey = nearest.profile;
-                const proximity = Math.max(0, 1 - (minDist/nearest.radius));
+                const proximity = Math.max(0, 1 - (minDist/(nearest.radius * 0.5)));
                 
                 // CONSTANT MUFFLE: Filter does NOT change with distance outside.
                 // It stays at a fixed "behind the wall" frequency.
