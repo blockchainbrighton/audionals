@@ -17,10 +17,14 @@ export const hud = {
         'default': 'Location'
     },
     
+    initialized: false, // Flag to prevent double init
+
     init: function(gameInstance) {
+        if (this.initialized) return; // Prevent duplicate init
         console.log("[HUD] init called");
         this.game = gameInstance;
         this.setupInput();
+        this.initialized = true;
 
         // Event Listeners
         this.game.events.on('PLAYER_STATS_UPDATED', () => this.update());
