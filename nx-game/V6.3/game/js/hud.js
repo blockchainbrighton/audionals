@@ -165,8 +165,10 @@ export const hud = {
             if (this.adminSpeedToggleActive && key >= '1' && key <= '9') {
                 const multiplier = parseInt(key);
                 if (this.game.player) {
-                    this.game.player.speed = this.game.player.baseSpeed * multiplier;
-                    this.game.utils.addMessage(`[ADMIN] Speed set to ${multiplier}x (${this.game.player.speed})`);
+                    // Use defaultBaseSpeed as reference if available, else fallback to 150
+                    const base = this.game.player.defaultBaseSpeed || 150;
+                    this.game.player.baseSpeed = base * multiplier;
+                    this.game.utils.addMessage(`[ADMIN] Speed set to ${multiplier}x (Base: ${this.game.player.baseSpeed})`);
                 }
                 this.adminSpeedToggleActive = false;
                 if (this.adminSpeedTimeout) clearTimeout(this.adminSpeedTimeout);

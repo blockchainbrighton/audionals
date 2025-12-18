@@ -25,6 +25,7 @@ export function initCore(gameInstance) {
     this.money = coreProperties.money;
     this.speed = coreProperties.baseSpeed;
     this.baseSpeed = coreProperties.baseSpeed;
+    this.defaultBaseSpeed = coreProperties.baseSpeed; // Store default for Admin/Resets
     this.collisionMode = 'STANDARD';
     
     this.aimAngle = 0;
