@@ -22,58 +22,41 @@ import { casinoGame } from './casinoGame.js'; // Import Casino Game
 import { discoveryManager } from './discoveryManager.js';
 
 
-// --- Projectile Manager ---
+// --- Projectile Manager (Simplified Wrapper) ---
 const projectileManager = {
     game: null,
-    // projectiles: [], // Deprecated, use game.entities
-
-    init: function(gameInstance) {
-        this.game = gameInstance;
-    },
-
+    init: function(gameInstance) { this.game = gameInstance; },
     addProjectile: function(options) {
-        const p = new Projectile(this.game, options);
         if (this.game.entities) {
-            this.game.entities.push(p);
+            this.game.entities.push(new Projectile(this.game, options));
         }
-    },
-
-    update: function(deltaTime) {
-        // Handled by game.entities loop
-    },
-
-    render: function(ctx) {
-        // Handled by game.entities loop
     }
 };
 // --- End Projectile Manager ---
-
 
 export const game = {
     // Properties
     config: config,
     utils: utils,
-    events: new EventBus(), // Initialize EventBus
+    events: new EventBus(), 
     canvas: null,
     ctx: null,
     gameState: 'PLAYING',
     gameTime: 0,
     deltaTime: 0, 
-    timeScale: 1.0, // Global time scale factor (1.0 = normal, 0.5 = slow motion for world)
+    timeScale: 1.0, 
     currentDay: 1,
     isDayTime: true,
 
     camera: {
         x: 0, y: 0,
         width: 0, height: 0,
-        zoom: 1,
-        minZoom: 0.5,
-        maxZoom: 2.0,
+        zoom: config.CAMERA_ZOOM_DEFAULT,
+        minZoom: config.CAMERA_ZOOM_MIN,
+        maxZoom: config.CAMERA_ZOOM_MAX,
         
         setZoom: function(newZoom) {
             this.zoom = Math.max(this.minZoom, Math.min(this.maxZoom, newZoom));
-            // Recalculate viewport dimensions in world units based on zoom
-            // Access canvas dimensions from game object
             if (game.canvas) {
                 this.width = game.canvas.width / this.zoom;
                 this.height = game.canvas.height / this.zoom;
@@ -81,7 +64,6 @@ export const game = {
         },
 
         update: function(targetEntity) {
-            // Ensure width/height are set (initially or if canvas changed)
             if (this.width === 0 && game.canvas) {
                  this.width = game.canvas.width / this.zoom;
                  this.height = game.canvas.height / this.zoom;
@@ -97,6 +79,7 @@ export const game = {
     },
     keysPressed: {},
     interactionCooldown: 0,
+    entities: [], // Unified entities list
 
     // Managers
     mapManager: mapManager,
@@ -289,7 +272,7 @@ export const game = {
     },
 
     handleZoom: function(delta) {
-        const zoomSpeed = 0.1;
+        const zoomSpeed = this.config.CAMERA_ZOOM_SPEED;
         const newZoom = this.camera.zoom - (delta * zoomSpeed);
         this.camera.setZoom(newZoom);
     },
@@ -320,11 +303,6 @@ export const game = {
             this.entities.forEach(e => e.render(this.ctx));
         }
 
-        // Removed individual manager renders:
-        // this.itemManager.renderItemsOnMap();
-        // this.projectileManager.render(this.ctx); 
-        // this.enemyManager.renderEnemies();
-
         this.particleManager.render(this.ctx); // Render particles
         this.player.render();
         this.questManager.renderQuestMarkers();
@@ -337,14 +315,14 @@ export const game = {
         this.minimap.render(); // Render Minimap (External Canvas)
         
         if (this.gameState === 'GAME_OVER') {
-            this.ctx.fillStyle = 'rgba(0,0,0,0.85)';
+            this.ctx.fillStyle = this.config.COLORS.UI_OVERLAY;
             this.ctx.fillRect(0,0,this.canvas.width,this.canvas.height);
-            this.ctx.fillStyle = 'red';
+            this.ctx.fillStyle = this.config.COLORS.UI_TEXT_ERROR;
             this.ctx.font = '48px Courier New';
             this.ctx.textAlign = 'center';
             this.ctx.fillText('S Y S T E M _ F A I L U R E', this.canvas.width/2, this.canvas.height/2 - 20);
             this.ctx.font = '24px Courier New';
-            this.ctx.fillStyle = '#0FF';
+            this.ctx.fillStyle = this.config.COLORS.UI_TEXT_PROMPT;
             this.ctx.fillText('Press R to Re-initialize Sequence', this.canvas.width/2, this.canvas.height/2 + 30);
         }
     },
@@ -652,7 +630,7 @@ export const game = {
                     this.gameState = 'MINIGAME';
                     break;
             }
-        }, 800); // 800ms transition time
+        }, this.config.LOCATION_TRANSITION_DELAY_MS); 
     },
 
     exitLocation: function() {
@@ -660,7 +638,7 @@ export const game = {
         if(modal) modal.style.display = 'none';
         
         // Set cooldown to prevent immediate re-entry loop
-        this.interactionCooldown = Date.now() + 2000; 
+        this.interactionCooldown = Date.now() + this.config.INTERACTION_COOLDOWN_MS; 
         
         this.soundManager.playTheme('WORLD'); // Restore World Theme
         this.gameState = 'PLAYING';

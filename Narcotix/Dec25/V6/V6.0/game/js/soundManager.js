@@ -730,7 +730,7 @@ export const soundManager = {
         const sources = [];
         if (!this.game || !this.game.mapManager || !this.game.mapManager.poiLocations) return sources;
         if (this.game.mapManager.currentMapId !== 'overworld') return sources;
-        const tileSize = this.game.config?.TILE_SIZE || 32;
+        const tileSize = this.game.config.TILE_SIZE;
         this.game.mapManager.poiLocations.forEach(poi => {
             const profile = this.profileForPoi(poi);
             if (!profile) return;

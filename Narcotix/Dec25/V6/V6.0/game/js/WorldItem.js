@@ -72,7 +72,7 @@ export class WorldItem extends Entity {
             else charToRender = this.game.itemManager.itemDefinitions[item.id]?.char || 'q';
         }
 
-        ctx.fillStyle = this.itemData.color || (item.type === 'weapon' ? '#CCC' : (item.type === 'ammo' ? '#FAD02C' : '#0FF'));
+        ctx.fillStyle = this.itemData.color || (item.type === 'weapon' ? this.game.config.COLORS.ITEM_WEAPON : (item.type === 'ammo' ? this.game.config.COLORS.ITEM_AMMO : this.game.config.COLORS.ITEM_GENERIC));
         ctx.font = `${this.game.config.TILE_SIZE*0.7}px Arial`;
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';

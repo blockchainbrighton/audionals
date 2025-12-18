@@ -133,6 +133,10 @@ export function generateId(prefix = 'id_') {
     return `${prefix}${Date.now()}_${Math.floor(Math.random() * 1000)}`;
 }
 
+export function escapeRegExp(string) {
+    return string.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'); // $& means the whole matched string
+}
+
 /**
  * Validates if a string is a valid 3-digit or 6-digit hexadecimal color code.
  * @param {string} hex - The string to validate.

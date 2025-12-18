@@ -47,6 +47,7 @@ export function updateStatusEffects(deltaTime) {
     let totalSpeedMult = 1.0;
     let totalDmgMult = 1.0;
     let totalDefMult = 1.0;
+    let totalScaleMult = 1.0;
     
     // Physics / Time Overrides
     let activeCollisionMode = 'STANDARD';
@@ -67,6 +68,7 @@ export function updateStatusEffects(deltaTime) {
         if (e.data.speedMultiplier) totalSpeedMult *= e.data.speedMultiplier;
         if (e.data.damageMultiplier) totalDmgMult *= e.data.damageMultiplier;
         if (e.data.defenseMultiplier) totalDefMult *= e.data.defenseMultiplier;
+        if (e.data.renderScale) totalScaleMult *= e.data.renderScale;
         
         // Handle New Mechanics
         if (e.data.collisionMode) activeCollisionMode = e.data.collisionMode;
@@ -79,6 +81,12 @@ export function updateStatusEffects(deltaTime) {
     const prevCollisionMode = this.collisionMode;
     this.collisionMode = activeCollisionMode;
     
+    // Apply Scale
+    if (this.renderScale !== totalScaleMult) {
+        this.renderScale = totalScaleMult;
+        changed = true;
+    }
+
     // Check for "Unstuck" requirement when phasing ends
     if (prevCollisionMode !== 'STANDARD' && activeCollisionMode === 'STANDARD') {
         this.ensureSafePosition();
@@ -183,6 +191,7 @@ export function updatePlayerStatusDisplay() {
                 if (e.data.speedMultiplier) details.push(`SPD x${e.data.speedMultiplier}`);
                 if (e.data.damageMultiplier) details.push(`DMG x${e.data.damageMultiplier}`);
                 if (e.data.defenseMultiplier) details.push(`DEF x${e.data.defenseMultiplier}`);
+                if (e.data.renderScale) details.push(`SCALE x${e.data.renderScale}`);
                 if (e.data.timeScale) details.push(`TIME x${e.data.timeScale}`);
                 if (e.data.collisionMode && e.data.collisionMode !== 'STANDARD') details.push(`${e.data.collisionMode}`);
                 

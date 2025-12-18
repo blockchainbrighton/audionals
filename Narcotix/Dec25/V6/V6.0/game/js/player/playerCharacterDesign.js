@@ -19,6 +19,8 @@ export const characterDesignProperties = {
     isAttacking: false,
     attackTimer: 0,
     attackDuration: 150, // Fast recoil for guns
+    
+    renderScale: 1.0, // Global render scale
 };
 
 export function initCharacterDesign() {
@@ -32,6 +34,7 @@ export function initCharacterDesign() {
     this.facingDirection = 1; 
     this.recoilOffset = 0;
     this.isAttacking = false;
+    this.renderScale = 1.0;
 }
 
 export function updateCharacterAnimation(deltaTime) {
@@ -85,6 +88,13 @@ export function renderCharacterDetails(ctx) {
     
     const cx = this.x + this.width / 2;
     const cy = this.y + this.height / 2;
+
+    // Apply global render scale for Shape Shifting
+    if (this.renderScale !== 1.0) {
+        ctx.translate(cx, cy);
+        ctx.scale(this.renderScale, this.renderScale);
+        ctx.translate(-cx, -cy);
+    }
 
     // 1. DYNAMIC LEGS (Oriented to movement if possible, or just below)
     if (this.isMoving) {

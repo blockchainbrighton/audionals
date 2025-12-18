@@ -11,6 +11,7 @@ export class Enemy extends Entity {
         this.currentHp = def.hp;
         this.speed = def.speed;
         this.damage = def.damage;
+        this.damageType = def.damageType || 'kinetic';
         this.detectionRange = def.detectionRange;
         this.attackRange = def.attackRange;
         this.ai = def.ai;
@@ -57,23 +58,30 @@ export class Enemy extends Entity {
         }
     }
 
-    takeDamage(amt) {
-        this.currentHp -= amt;
+    takeDamage(amt, damageType = 'kinetic') {
+        let finalAmt = amt;
+        
+        // Apply Specific Resistances
+        if (this.resistances && this.resistances[damageType]) {
+            finalAmt = Math.ceil(amt * (1.0 - this.resistances[damageType]));
+        }
+
+        this.currentHp -= finalAmt;
 
         // Show floating text
         if (this.game.floatingTextManager) {
             this.game.floatingTextManager.addText(
                 this.x + this.width / 2,
                 this.y,
-                `${amt}`,
-                '#FFF' // White for enemy damage taken
+                `${finalAmt}`,
+                damageType === 'energy' ? '#0FF' : (damageType === 'bio' ? '#0F0' : '#FFF') 
             );
         }
 
         // Play Hit Sound
         this.game.events.emit('PLAYER_HIT'); // Reusing player hit sound for now, or add ENEMY_HIT event
 
-        this.game.utils.addMessage(`${this.name} integrity failing (-${amt}).`);
+        this.game.utils.addMessage(`${this.name} integrity failing (-${finalAmt}).`);
         if (this.currentHp <= 0) this.die();
         else if (this.aiState !== 'CHASE' && this.aiState !== 'ATTACK' && !this.game.player.isStealthed()) {
             this.aiState = 'CHASE';
@@ -197,7 +205,7 @@ export class Enemy extends Entity {
                 if (this.target && this.target.hp > 0 && Date.now() - this.lastAttackTime >= this.attackCooldown) {
                     this.lastAttackTime = Date.now();
                     if (this.attackEffect) this.attackEffect(this.target);
-                    else this.target.takeDamage(this.damage);
+                    else this.target.takeDamage(this.damage, this.damageType);
                 }
                 break;
         }

@@ -26,35 +26,37 @@ export const weaponsData = {
     // Melee Weapons
     'stick': {
         id: 'stick', name: "Old Stick", type: weaponTypes.MELEE, damage: 5, rangeMultiplier: 1.2, attackSpeed: 600,
-        char: '|', description: "A surprisingly sturdy stick.", color: '#A84'
+        char: '|', description: "A surprisingly sturdy stick.", color: '#A84', damageType: 'kinetic'
     },
     'log': {
         id: 'log', name: "Heavy Log", type: weaponTypes.MELEE, damage: 10, rangeMultiplier: 1.3, attackSpeed: 900,
-        char: '▋', description: "Clunky, but packs a punch.", color: '#654'
+        char: '▋', description: "Clunky, but packs a punch.", color: '#654', damageType: 'kinetic'
     },
     'crowbar': {
         id: 'crowbar', name: "Crowbar", type: weaponTypes.MELEE, damage: 12, rangeMultiplier: 1.5, attackSpeed: 700,
-        char: 'T', description: "Good for prying and... other things.", color: '#D33'
+        char: 'T', description: "Good for prying and... other things.", color: '#D33', damageType: 'kinetic'
     },
     'knife': {
         id: 'knife', name: "Combat Knife", type: weaponTypes.MELEE, damage: 8, rangeMultiplier: 1.0, attackSpeed: 350,
-        char: '!', description: "Quick and silent.", color: '#CCC'
+        char: '!', description: "Quick and silent.", color: '#CCC', damageType: 'kinetic'
     },
     'sword': {
         id: 'sword', name: "Katana Shard", type: weaponTypes.MELEE, damage: 18, rangeMultiplier: 1.8, attackSpeed: 650,
-        char: '†', description: "A relic from a bygone data-feud.", color: '#AEF'
+        char: '†', description: "A relic from a bygone data-feud.", color: '#AEF', damageType: 'energy'
     },
 
     // Ranged Weapons
     'pistol': {
         id: 'pistol', name: "9mm Sidearm", type: weaponTypes.RANGED, damage: 10, rangeMultiplier: 10.0, attackSpeed: 450, // Slightly increased range, speed
         projectileType: 'bullet_light', ammoCapacity: 12, currentAmmo: 12,
-        char: '¬', description: "Standard issue, reliable.", color: '#BBB', projectileColor: '#FF0', accuracyCone: 0.20 // radians, smaller is more accurate
+        char: '¬', description: "Standard issue, reliable.", color: '#BBB', projectileColor: '#FF0', accuracyCone: 0.20, // radians, smaller is more accurate
+        damageType: 'kinetic'
     },
     'machine_gun': {
         id: 'machine_gun', name: "Pulse Rifle", type: weaponTypes.RANGED, damage: 7, rangeMultiplier: 15.0, attackSpeed: 100,
         projectileType: 'bullet_light', ammoCapacity: 30, currentAmmo: 30,
-        char: '=', description: "High fire rate, chews through targets and ammo.", color: '#8F8', projectileColor: '#0F0', accuracyCone: 0.35
+        char: '=', description: "High fire rate, chews through targets and ammo.", color: '#8F8', projectileColor: '#0F0', accuracyCone: 0.35,
+        damageType: 'energy'
     }
 };
 

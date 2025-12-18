@@ -164,10 +164,13 @@ export const itemManager = {
                 if (!entry.Keywords) continue;
                 const keywords = entry.Keywords.split(',').map(k => k.trim().toLowerCase());
                 for (const keyword of keywords) {
-                    // Use word boundary search if possible, or simple includes for now
-                    if (keyword && descLower.includes(keyword)) {
-                        matches.push(entry);
-                        break; // Found a match for this group, move to next group
+                    if (keyword) {
+                        // Use regex for word boundaries
+                        const regex = new RegExp(`\\b${this.game.utils.escapeRegExp(keyword)}\\b`, 'i');
+                        if (regex.test(descLower)) {
+                            matches.push(entry);
+                            break; 
+                        }
                     }
                 }
             }
@@ -223,9 +226,12 @@ export const itemManager = {
                                          this.game.utils.addMessage("Bio-systems regenerating rapidly.");
                                          break;
                                      case 'TECH_WIZ':
-                                         // Reduce cooldowns?
-                                         player.energy = player.maxEnergy;
-                                         this.game.utils.addMessage("Energy Cells Recharged.");
+                                         // Reset ability cooldowns
+                                         if (player.abilities) {
+                                             player.abilities.forEach(ab => ab.lastUsedTime = Date.now() - ab.cooldown);
+                                             player.updateAbilityStatusDisplay();
+                                         }
+                                         this.game.utils.addMessage("Subroutines Re-initialized.");
                                          break;
                                      case 'FLIGHT_RISK':
                                           // Flight Mode
@@ -278,10 +284,9 @@ export const itemManager = {
                                          // Random stats shuffle
                                          const r = Math.random();
                                          if (r < 0.33) {
-                                              player.applyStatusEffect("Small Form", 20000, { speedMultiplier: 1.4, defenseMultiplier: 1.5 }); // Fast but weak defense (wait, defenseMult < 1 is better usually? Let's assume > 1 is taking more damage or <1 is reduction. Standard is usually mult incoming damage.)
-                                              // Assuming defenseMultiplier: 0.5 means take 50% damage. 1.5 means take 150%.
+                                              player.applyStatusEffect("Small Form", 20000, { speedMultiplier: 1.4, defenseMultiplier: 1.5, renderScale: 0.6 });
                                          } else if (r < 0.66) {
-                                             player.applyStatusEffect("Giant Form", 20000, { damageMultiplier: 1.5, speedMultiplier: 0.6 });
+                                             player.applyStatusEffect("Giant Form", 20000, { damageMultiplier: 1.5, speedMultiplier: 0.6, renderScale: 1.8 });
                                          } else {
                                               player.heal(100); // Full restore
                                          }
@@ -418,16 +423,9 @@ export const itemManager = {
                     const iDef = this.itemDefinitions[rId];
                     if (iDef) {
                         mapItemEntry = {
-                            type: iDef.type, // 'consumable' or 'ammo'
-                            id: rId, // Item definition ID
+                            ...iDef,
                             x: itemSpawnX, y: itemSpawnY, width: itemWidth, height: itemHeight,
-                            name: iDef.name,
-                            quantity: iDef.stackable ? (Math.floor(Math.random() * (iDef.type === 'ammo' ? 20 : 3)) + 1) : 1,
-                            char: iDef.char || '?', // Use defined char or fallback
-                            // FIX: Explicitly copy visual traits so map render logic sees them
-                            nftTraits: iDef.nftTraits,
-                            color: iDef.color,
-                            imageUrl: iDef.imageUrl
+                            quantity: iDef.stackable ? (Math.floor(Math.random() * (iDef.type === 'ammo' ? 20 : 3)) + 1) : 1
                         };
                     }
                 } else if (spawnableWeaponIds.length > 0) { // 40% chance for weapon
@@ -440,6 +438,7 @@ export const itemManager = {
                             x: itemSpawnX, y: itemSpawnY, width: itemWidth, height: itemHeight,
                             name: weaponData.name,
                             char: weaponData.char, // Character for the weapon
+                            color: this.game.config.COLORS.ITEM_WEAPON,
                             // For ranged weapons on map, they could have partial ammo
                             ...(weaponData.type === PWeapons.weaponTypes.RANGED && {
                                 currentAmmo: Math.floor(Math.random() * (weaponData.ammoCapacity + 1))
@@ -482,15 +481,9 @@ export const itemManager = {
 
                      if (iDef) {
                          const nftEntry = {
-                             type: iDef.type,
-                             id: itemId,
-                             // x, y, width, height are passed as separate args to WorldItem
-                             name: iDef.name,
-                             quantity: 1,
-                             char: iDef.char,
-                             color: iDef.color,
-                             nftTraits: iDef.nftTraits, 
-                             imageUrl: iDef.imageUrl 
+                             ...iDef,
+                             x: itemSpawnX, y: itemSpawnY, width: itemWidth, height: itemHeight,
+                             quantity: 1
                          };
                          const newNftItem = new WorldItem(this.game, itemSpawnX, itemSpawnY, itemWidth, itemHeight, nftEntry);
                          this.onMapItems.push(newNftItem);
@@ -536,35 +529,15 @@ export const itemManager = {
 
         const TILE_SIZE = this.game.config.TILE_SIZE;
         let mapItemEntry = {
-            type: itemObject.type,
+            ...itemObject,
             x: x, y: y,
-            width: TILE_SIZE * 0.8, height: TILE_SIZE * 0.8,
-            name: itemObject.name,
-            char: itemObject.char || '?', // Get char from itemObject if available
+            width: TILE_SIZE * 0.8, height: TILE_SIZE * 0.8
         };
 
-        // Copy NFT traits and visual properties if present
-        if (itemObject.nftTraits) mapItemEntry.nftTraits = itemObject.nftTraits;
-        if (itemObject.color) mapItemEntry.color = itemObject.color;
-        if (itemObject.imageUrl) mapItemEntry.imageUrl = itemObject.imageUrl;
-
-        console.log(`[DEBUG DROP] Dropping ${itemObject.name}. Source Traits:`, itemObject.nftTraits, "Map Entry Traits:", mapItemEntry.nftTraits);
-
         if (itemObject.type === 'weapon' && itemObject.weaponId) {
-            mapItemEntry.weaponId = itemObject.weaponId;
             const weaponData = PWeapons.getWeaponData(itemObject.weaponId, this.game.config);
             mapItemEntry.char = weaponData?.char || 'W';
-            if (weaponData?.type === PWeapons.weaponTypes.RANGED) {
-                mapItemEntry.currentAmmo = itemObject.currentAmmo; // Preserve current ammo
-            }
-        } else if (itemObject.type === 'ammo' || itemObject.stackable) {
-            mapItemEntry.id = itemObject.id;
-            mapItemEntry.quantity = itemObject.quantity;
-            mapItemEntry.char = this.itemDefinitions[itemObject.id]?.char || 'i';
-        } else { // Non-stackable generic items
-            mapItemEntry.id = itemObject.id;
-            mapItemEntry.quantity = 1;
-            mapItemEntry.char = this.itemDefinitions[itemObject.id]?.char || 'i';
+            mapItemEntry.color = this.game.config.COLORS.ITEM_WEAPON;
         }
 
         const newItem = new WorldItem(this.game, mapItemEntry.x, mapItemEntry.y, mapItemEntry.width, mapItemEntry.height, mapItemEntry);

@@ -23,6 +23,16 @@ export class Projectile extends Entity {
         this.x += this.vx * deltaTime;
         this.y += this.vy * deltaTime;
 
+        // Wall Collision
+        if (this.game.mapManager.isColliding(this.x, this.y)) {
+            this.markedForDeletion = true;
+            // Optionally spawn a small spark particle
+            if (this.game.particleManager) {
+                this.game.particleManager.createEffect(this.x, this.y, 'spark', 3);
+            }
+            return;
+        }
+
         // Boundary check
         const mapWidth = this.game.config.MAP_WIDTH_TILES * this.game.config.TILE_SIZE;
         const mapHeight = this.game.config.MAP_HEIGHT_TILES * this.game.config.TILE_SIZE;

@@ -75,7 +75,7 @@ export function attack() {
 
             if (this.game.utils.distance(playerCenterX, playerCenterY, enemyCenterX, enemyCenterY) < this.equippedWeapon.effectiveRange) {
                 const wasAlive = enemy.currentHp > 0;
-                enemy.takeDamage(finalDamage);
+                enemy.takeDamage(finalDamage, this.equippedWeapon.damageType || 'kinetic');
                 
                 if (wasAlive && enemy.currentHp <= 0) {
                     this.applyOnKillEffect(); // Trigger Gang Effect
@@ -162,7 +162,7 @@ export function attack() {
                 
                 if (angleDiff < accuracy) { 
                     const wasAlive = enemy.currentHp > 0;
-                    enemy.takeDamage(finalDamage);
+                    enemy.takeDamage(finalDamage, this.equippedWeapon.damageType || 'kinetic');
                     
                     if (wasAlive && enemy.currentHp <= 0) {
                         this.applyOnKillEffect(); // Trigger Gang Effect
@@ -251,12 +251,17 @@ export function completeReload() {
     }
 }
 
-export function takeDamage(amount) {
+export function takeDamage(amount, damageType = 'kinetic') {
     let defMult = this.defenseMultiplier || 1.0;
     
     // Apply Gang Defense Mod
     if (this.gang && this.gang.DefenseMod) {
         defMult *= this.gang.DefenseMod;
+    }
+
+    // Apply Specific Resistances (Placeholder for now)
+    if (this.resistances && this.resistances[damageType]) {
+        defMult *= (1.0 - this.resistances[damageType]);
     }
 
     const finalDamage = Math.ceil(amount * defMult);
