@@ -26,10 +26,10 @@ export const TILE_PROPERTIES = {
     [TILE_TYPES.ARMOURY_INTERIOR]: { color: '#200', collision: false, speedModifier: 1, restricted: true },
     [TILE_TYPES.CASINO_INTERIOR]: { color: '#020', collision: false, speedModifier: 1, restricted: true },
     
-    // Counters (Collision, Interactive)
-    [TILE_TYPES.BAR_COUNTER]: { color: '#F80', collision: true, interactive: true, type: 'bar' },
-    [TILE_TYPES.ARMOURY_COUNTER]: { color: '#F00', collision: true, interactive: true, type: 'armoury' },
-    [TILE_TYPES.CASINO_COUNTER]: { color: '#0F0', collision: true, interactive: true, type: 'casino' },
+    // Counters (No Collision for Overlap Interaction, Interactive)
+    [TILE_TYPES.BAR_COUNTER]: { color: '#F80', collision: false, interactive: true, type: 'bar' },
+    [TILE_TYPES.ARMOURY_COUNTER]: { color: '#F00', collision: false, interactive: true, type: 'armoury' },
+    [TILE_TYPES.CASINO_COUNTER]: { color: '#0F0', collision: false, interactive: true, type: 'casino' },
 };
 
 export const mapManager = {
