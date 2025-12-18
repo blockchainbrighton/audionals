@@ -89,6 +89,10 @@ function gameLoop(currentTime) {
 
 // --- Initialization ---
 window.onload = async () => {
+    // 0. Set Version Display
+    const verEl = document.getElementById('gameVersion');
+    if (verEl) verEl.textContent = `${config.GAME_VERSION}`;
+
     // 1. Load NFT Metadata
     try {
         const response = await fetch('narcotix-collection-metadata.csv');
