@@ -321,7 +321,7 @@ export const UI = {
         return `
             <div class="inventory-item-card" style="border-color: ${borderColor};">
                 <div class="item-icon-container">
-                    <img src="${imageUrl}" class="item-icon" onerror="this.src='artwork/narcotix_pill.svg';">
+                    <img src="${imageUrl}" class="item-icon" crossorigin="anonymous" onerror="this.src='artwork/narcotix_pill.svg';">
                 </div>
                 <div class="item-details">
                     <div class="item-name">${item.name} <span class="item-qty">x${item.quantity || 1}</span></div>

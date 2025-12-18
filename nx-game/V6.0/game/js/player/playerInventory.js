@@ -315,7 +315,7 @@ export function renderInventory() {
         
         let equippedContent = `
             <div class="item-icon-container">
-                <img src="${weaponImg}" class="item-icon" onerror="this.style.display='none'">
+                <img src="${weaponImg}" class="item-icon" crossorigin="anonymous" onerror="this.style.display='none'">
             </div>
             <div class="item-details">
                 <div class="item-name">EQUIPPED: ${this.equippedWeapon.name}</div>
@@ -375,7 +375,7 @@ export function renderInventory() {
 
         const content = `
             <div class="item-icon-container">
-                <img src="${imgUrl}" class="item-icon" onerror="this.src='artwork/narcotix_pill.svg';">
+                <img src="${imgUrl}" class="item-icon" crossorigin="anonymous" onerror="this.src='artwork/narcotix_pill.svg';">
             </div>
             <div class="item-details">
                 <div class="item-name">${item.name} <span class="item-qty">x${item.quantity || 1}</span></div>

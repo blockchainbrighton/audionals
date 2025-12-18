@@ -72,6 +72,7 @@ export const imageLoader = {
             const img = new Image();
             img.onload = () => resolve(true);
             img.onerror = () => resolve(false);
+            img.crossOrigin = 'anonymous'; // Enable CORS for COEP
             img.referrerPolicy = 'no-referrer'; // Important for Hiro/IPFS
             img.src = src;
         });

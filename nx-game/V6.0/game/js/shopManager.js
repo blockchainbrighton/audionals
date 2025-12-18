@@ -99,7 +99,7 @@ export const shopManager = {
                     <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
                         <div style="display:flex; align-items:center;">
                             <div class="item-icon-container" style="width:32px; height:32px; margin-right:8px;">
-                                <img src="${imgUrl}" class="item-icon" onerror="this.src='artwork/narcotix_pill.svg';">
+                                <img src="${imgUrl}" class="item-icon" crossorigin="anonymous" onerror="this.src='artwork/narcotix_pill.svg';">
                             </div>
                             <span>${iDef.name} - ${p}c (Stock: ${entry.stock > 9000 ? "Abundant" : entry.stock})</span>
                         </div>
@@ -127,7 +127,7 @@ export const shopManager = {
                     <div style="display:flex; align-items:center; justify-content:space-between; width:100%;">
                         <div style="display:flex; align-items:center;">
                             <div class="item-icon-container" style="width:32px; height:32px; margin-right:8px;">
-                                <img src="${imgUrl}" class="item-icon" onerror="this.src='artwork/narcotix_pill.svg';">
+                                <img src="${imgUrl}" class="item-icon" crossorigin="anonymous" onerror="this.src='artwork/narcotix_pill.svg';">
                             </div>
                             <span>${pItem.name} (x${pItem.quantity||1}) - ${sellPriceToThisVendor}c each</span>
                         </div>
