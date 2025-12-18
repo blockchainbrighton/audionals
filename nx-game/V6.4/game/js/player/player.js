@@ -93,6 +93,7 @@ export const player = {
     },
 
     // Core Methods
+    update: function(dt) { /* Player update logic is mostly handled by handleInput and separate managers, this stub prevents game loop errors */ },
     render: core.renderCore,
     handleInput: core.handleInputMovement, 
     checkCollision: core.checkCollision,
