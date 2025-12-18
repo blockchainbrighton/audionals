@@ -1,5 +1,39 @@
 import { imageLoader } from './imageLoader.js';
 
+const PAYOUT_CONFIG = {
+    // Legacy pair payout (kept for fallback/engagement)
+    ANY_PAIR: { mult: 1, label: "PAIR (Breakeven)" },
+
+    // Jackpot trait stacking definitions (ordered by priority)
+    TRAIT_RULES: [
+        { key: 'expression', label: 'Expression Sync', baseMultiplier: 50 },
+        { key: 'hex1', label: 'Primary Color Lock', baseMultiplier: 25 },
+        { key: 'shape', label: 'Silhouette Match', baseMultiplier: 12, rareValues: ['star','diamond','pentagon','triangle'], rareBonus: 8 },
+        { key: 'base', label: 'Base Pigment Match', baseMultiplier: 10 },
+        { key: 'extras', label: 'Burst Pattern Match', baseMultiplier: 8 },
+        { key: 'animation', label: 'Animation State Match', baseMultiplier: 5 }
+    ],
+
+    // Bonus for multiple simultaneous trait matches
+    STACKED_BONUSES: [
+        { matchesRequired: 6, label: 'APEX JACKPOT', bonusMultiplier: 120 },
+        { matchesRequired: 5, label: 'NEXUS JACKPOT', bonusMultiplier: 80 },
+        { matchesRequired: 4, label: 'HARMONIC JACKPOT', bonusMultiplier: 40 },
+        { matchesRequired: 3, label: 'SYNC SURGE', bonusMultiplier: 15 }
+    ],
+
+    // Special Mini-Jackpots
+    DUAL_COLOR_BONUS: { label: 'Color Fusion Mini-Jackpot', bonusMultiplier: 20 },
+
+    // Pair Matching Rules
+    PAIR_RULES: [
+        { key: 'expression', label: 'Expression Pair' },
+        { key: 'shape', label: 'Shape Pair' },
+        { key: 'base', label: 'Base Color Pair' },
+        { key: 'hex1', label: 'Primary Color Pair' },
+    ]
+};
+
 export const casinoGame = {
     game: null,
     bet: 10,
@@ -9,36 +43,12 @@ export const casinoGame = {
     fallbackImageUrl: 'artwork/narcotix_pill.svg',
     ipfsBase: 'https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images',
     
-    // Legacy pair payout (kept for fallback/engagement)
-    payouts: {
-        'ANY_PAIR': { mult: 1, label: "PAIR (Breakeven)" }
-    },
-
-    // Jackpot trait stacking definitions (ordered by priority)
-    traitJackpotRules: [
-        { key: 'expression', label: 'Expression Sync', baseMultiplier: 50 },
-        { key: 'hex1', label: 'Primary Color Lock', baseMultiplier: 25 },
-        { key: 'shape', label: 'Silhouette Match', baseMultiplier: 12, rareValues: ['star','diamond','pentagon','triangle'], rareBonus: 8 },
-        { key: 'base', label: 'Base Pigment Match', baseMultiplier: 10 },
-        { key: 'extras', label: 'Burst Pattern Match', baseMultiplier: 8 },
-        { key: 'animation', label: 'Animation State Match', baseMultiplier: 5 }
-    ],
-
-    stackedJackpotTiers: [
-        { matchesRequired: 6, label: 'APEX JACKPOT', bonusMultiplier: 120 },
-        { matchesRequired: 5, label: 'NEXUS JACKPOT', bonusMultiplier: 80 },
-        { matchesRequired: 4, label: 'HARMONIC JACKPOT', bonusMultiplier: 40 },
-        { matchesRequired: 3, label: 'SYNC SURGE', bonusMultiplier: 15 }
-    ],
-    
-    pairMatchRules: [
-        { key: 'expression', label: 'Expression Pair' },
-        { key: 'shape', label: 'Shape Pair' },
-        { key: 'base', label: 'Base Color Pair' },
-        { key: 'hex1', label: 'Primary Color Pair' },
-    ],
-
-    dualColorMiniJackpot: { label: 'Color Fusion Mini-Jackpot', bonusMultiplier: 20 },
+    // Reference centralized config
+    payouts: { ANY_PAIR: PAYOUT_CONFIG.ANY_PAIR },
+    traitJackpotRules: PAYOUT_CONFIG.TRAIT_RULES,
+    stackedJackpotTiers: PAYOUT_CONFIG.STACKED_BONUSES,
+    pairMatchRules: PAYOUT_CONFIG.PAIR_RULES,
+    dualColorMiniJackpot: PAYOUT_CONFIG.DUAL_COLOR_BONUS,
 
     init: function(gameInstance) {
         this.game = gameInstance;
