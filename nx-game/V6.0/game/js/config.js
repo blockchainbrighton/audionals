@@ -11,7 +11,7 @@ export const MAX_MESSAGES = 10;
 export const TUTORIAL_DISPLAY_TIME = 5000; // Default
 
 // Game Version - UPDATE THIS ON EVERY NEW VERSION DEPLOYMENT
-export const GAME_VERSION = "V6.3.0";
+export const GAME_VERSION = "V6.7.0";
 
 // Camera Config
 export const CAMERA_ZOOM_DEFAULT = 1.0;
