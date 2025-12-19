@@ -245,7 +245,6 @@ export const RouletteGame = {
         if (this.preloadBuffer.length > 0) {
             choice = this.preloadBuffer.shift();
         } else {
-            // Fallback if buffer empty (shouldn't happen if preload works)
             const pool = this.game.collectionData || [];
             if (pool.length > 0) {
                 choice = pool[Math.floor(Math.random() * pool.length)];
@@ -254,56 +253,99 @@ export const RouletteGame = {
 
         if (!choice) {
             this.isSpinning = false;
-            return; // Error
+            return;
         }
 
         this.showResult(choice);
 
         // Check Wins
         let totalWin = 0;
-        const winningKeys = [];
+        const winningBets = []; // Store winning criteria {type, value}
 
-        // Helper to normalize
         const norm = (s) => String(s || '').trim().toLowerCase();
 
         // Check Shape
         const shapeVal = this.options.shapes.find(s => norm(choice.shape).includes(norm(s)));
-        if (shapeVal && this.bets[`shape:${shapeVal}`]) {
-            totalWin += this.bets[`shape:${shapeVal}`] * this.ODDS.shape;
-            winningKeys.push(`Shape: ${shapeVal}`);
+        if (shapeVal) {
+             const key = `shape:${shapeVal}`;
+             if (this.bets[key]) {
+                 totalWin += this.bets[key] * this.ODDS.shape;
+                 winningBets.push({type: 'shape', value: shapeVal});
+             }
         }
 
         // Check Color/Base
         const baseVal = this.options.colors.find(c => norm(choice.base).includes(norm(c)));
-        if (baseVal && this.bets[`base:${baseVal}`]) {
-            totalWin += this.bets[`base:${baseVal}`] * this.ODDS.base;
-            winningKeys.push(`Color: ${baseVal}`);
+        if (baseVal) {
+             const key = `base:${baseVal}`;
+             if (this.bets[key]) {
+                 totalWin += this.bets[key] * this.ODDS.base;
+                 winningBets.push({type: 'base', value: baseVal});
+             }
         }
 
         // Check Expression
-        // Simple containment check for characters
-        const exprVal = this.options.expressions.find(e => {
-            // Need robust checking as data might be "X)" or "X) "
-            return norm(choice.expression).includes(norm(e));
-        });
-        if (exprVal && this.bets[`expression:${exprVal}`]) {
-            totalWin += this.bets[`expression:${exprVal}`] * this.ODDS.expression;
-            winningKeys.push(`Expression: ${exprVal}`);
+        const exprVal = this.options.expressions.find(e => norm(choice.expression).includes(norm(e)));
+        if (exprVal) {
+             const key = `expression:${exprVal}`;
+             if (this.bets[key]) {
+                 totalWin += this.bets[key] * this.ODDS.expression;
+                 winningBets.push({type: 'expression', value: exprVal});
+             }
         }
 
         if (totalWin > 0) {
             this.game.player.earnMoney(totalWin);
-            this.game.utils.addMessage(`WINNER! +${totalWin}c (${winningKeys.join(', ')})`);
+            this.game.utils.addMessage(`WINNER! +${totalWin}c`);
             if (this.game.soundManager) this.game.soundManager.playPickup();
+            this.highlightWins(winningBets);
         } else {
             this.game.utils.addMessage("No Match.");
         }
 
-        // Clear Bets
+        // Delay clearing the table so player can see results
+        setTimeout(() => {
+            this.clearTable();
+        }, 3000);
+    },
+
+    highlightWins: function(winners) {
+        winners.forEach(w => {
+            // Find button by data attributes
+            const btn = document.querySelector(`.bet-option[data-type="${w.type}"][data-value="${w.value}"]`);
+            if (btn) {
+                btn.style.backgroundColor = '#0F0';
+                btn.style.color = '#000';
+                btn.style.borderColor = '#FFF';
+                btn.style.boxShadow = '0 0 10px #0F0';
+                btn.style.transform = 'scale(1.1)';
+                btn.style.zIndex = '10';
+            }
+        });
+    },
+
+    clearTable: function() {
         this.bets = {};
         this.updateBetUI();
         this.isSpinning = false;
-        document.getElementById('btn-spin-roulette').disabled = false;
+        const spinBtn = document.getElementById('btn-spin-roulette');
+        if(spinBtn) spinBtn.disabled = false;
+        
+        // Reset styles for all bet buttons
+        document.querySelectorAll('.bet-option').forEach(btn => {
+            btn.style.backgroundColor = '';
+            btn.style.color = '';
+            btn.style.borderColor = '';
+            btn.style.boxShadow = '';
+            btn.style.transform = '';
+            btn.style.zIndex = '';
+        });
+        
+        // Reset result display to '?'
+        const display = document.getElementById('roulette-result-display');
+        if(display) {
+            display.innerHTML = '<div id="roulette-img-placeholder" style="font-size:40px; color:#555;">?</div>';
+        }
     },
 
     ipfsBase: 'https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images',
