@@ -288,13 +288,36 @@ export const RouletteGame = {
         document.getElementById('btn-spin-roulette').disabled = false;
     },
 
+    ipfsBase: 'https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images',
+    fallbackImageUrl: 'artwork/narcotix_pill.svg',
+
+    getIpfsUrl: function(id) {
+        const cleanId = id ? String(id).trim() : '';
+        if (!cleanId) return this.fallbackImageUrl;
+        return `${this.ipfsBase}/${encodeURIComponent(`#${cleanId}`)}.png`;
+    },
+
+    handleImageError: function(imgEl, itemId) {
+        if (!imgEl) return;
+        const cleanId = itemId ? String(itemId).trim() : '';
+        const attempt = imgEl.dataset.imgAttempt || 'hiro';
+
+        if (attempt === 'hiro' && cleanId) {
+            imgEl.dataset.imgAttempt = 'ipfs';
+            imgEl.src = this.getIpfsUrl(cleanId);
+            return;
+        }
+        imgEl.src = this.fallbackImageUrl;
+    },
+
     showResult: function(item) {
         const display = document.getElementById('roulette-result-display');
         const imgUrl = imageLoader.getUrl(item.id);
+        const attemptState = imgUrl.includes('ipfs.io') ? 'ipfs' : 'hiro';
         
         display.innerHTML = `
             <div style="text-align:center;">
-                <img src="${imgUrl}" style="width:80px; height:80px; border:2px solid #FFF;">
+                <img src="${imgUrl}" data-img-attempt="${attemptState}" style="width:80px; height:80px; border:2px solid #FFF;" onerror="game.casino.Roulette.handleImageError(this, '${item.id}')">
                 <div style="font-size:12px; margin-top:5px;">${item.name || 'Unknown'}</div>
                 <div style="font-size:10px; color:#888;">${item.shape} | ${item.base} | ${item.expression}</div>
             </div>

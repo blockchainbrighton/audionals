@@ -101,6 +101,28 @@ export const HighLowGame = {
         document.getElementById('btn-leave-hl').onclick = () => this.game.exitLocation();
     },
 
+    ipfsBase: 'https://ipfs.io/ipfs/QmbDXZ5xbx9oKD1F6kXmv9gJ3FCKfN9yuoHad9zi8ndkVo/images',
+    fallbackImageUrl: 'artwork/narcotix_pill.svg',
+
+    getIpfsUrl: function(id) {
+        const cleanId = id ? String(id).trim() : '';
+        if (!cleanId) return this.fallbackImageUrl;
+        return `${this.ipfsBase}/${encodeURIComponent(`#${cleanId}`)}.png`;
+    },
+
+    handleImageError: function(imgEl, itemId) {
+        if (!imgEl) return;
+        const cleanId = itemId ? String(itemId).trim() : '';
+        const attempt = imgEl.dataset.imgAttempt || 'hiro';
+
+        if (attempt === 'hiro' && cleanId) {
+            imgEl.dataset.imgAttempt = 'ipfs';
+            imgEl.src = this.getIpfsUrl(cleanId);
+            return;
+        }
+        imgEl.src = this.fallbackImageUrl;
+    },
+
     changeBet: function(amount) {
         if (this.isProcessing) return;
         this.bet = amount;
@@ -113,7 +135,9 @@ export const HighLowGame = {
         const valContainer = document.getElementById('hl-current-val');
         
         const imgUrl = imageLoader.getUrl(this.currentPill.id);
-        imgContainer.innerHTML = `<img src="${imgUrl}" style="width:100px; height:100px;">`;
+        const attemptState = imgUrl.includes('ipfs.io') ? 'ipfs' : 'hiro';
+
+        imgContainer.innerHTML = `<img src="${imgUrl}" data-img-attempt="${attemptState}" style="width:100px; height:100px;" onerror="game.casino.HighLow.handleImageError(this, '${this.currentPill.id}')">`;
         
         valContainer.textContent = this.getPillValue(this.currentPill);
     },
@@ -156,7 +180,10 @@ export const HighLowGame = {
         const nextImg = document.getElementById('hl-next-img');
         const nextValEl = document.getElementById('hl-next-val');
         
-        nextImg.innerHTML = `<img src="${imageLoader.getUrl(nextPill.id)}" style="width:100px; height:100px;">`;
+        const imgUrl = imageLoader.getUrl(nextPill.id);
+        const attemptState = imgUrl.includes('ipfs.io') ? 'ipfs' : 'hiro';
+
+        nextImg.innerHTML = `<img src="${imgUrl}" data-img-attempt="${attemptState}" style="width:100px; height:100px;" onerror="game.casino.HighLow.handleImageError(this, '${nextPill.id}')">`;
         nextImg.classList.remove('hidden-card');
         nextValEl.textContent = nextVal;
 

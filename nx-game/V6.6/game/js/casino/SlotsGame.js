@@ -192,6 +192,28 @@ export const SlotsGame = {
         document.getElementById('btn-spin').disabled = false;
     },
 
+    getIpfsUrl: function(id) {
+        const cleanId = id ? String(id).trim() : '';
+        if (!cleanId) return this.getFallbackImage();
+        return `${this.ipfsBase}/${encodeURIComponent(`#${cleanId}`)}.png`;
+    },
+
+    handleImageError: function(imgEl, itemId) {
+        if (!imgEl) return;
+        const cleanId = itemId ? String(itemId).trim() : '';
+        const attempt = imgEl.dataset.imgAttempt || 'hiro';
+
+        if (attempt === 'hiro' && cleanId) {
+            imgEl.dataset.imgAttempt = 'ipfs';
+            // Also trigger loader cache update if possible, but here just fix UI
+            imgEl.src = this.getIpfsUrl(cleanId);
+            return;
+        }
+
+        imgEl.dataset.imgAttempt = 'fallback';
+        imgEl.src = this.getFallbackImage();
+    },
+
     updateReelVisuals: function(items = []) {
         for(let i = 0; i < 3; i++) {
             const el = document.getElementById(`reel-${i+1}`);
@@ -204,9 +226,14 @@ export const SlotsGame = {
                 ? this.getFallbackImage()
                 : (imageLoader.getUrl(safeItem.id) || this.getFallbackImage());
             
+            // Determine attempt state for error handler
+            const isIpfs = resolvedImgUrl.includes('ipfs.io');
+            const attemptState = isIpfs ? 'ipfs' : 'hiro';
+            const onErrorAttr = safeItem.isFallback ? '' : `onerror="game.casino.Slots.handleImageError(this, '${safeItem.id}')"`;
+
             el.innerHTML = `
                 <div class="reel-content" style="border-color:${borderColor}">
-                    <img src="${resolvedImgUrl}" style="width:64px; height:64px;">
+                    <img src="${resolvedImgUrl}" data-img-attempt="${attemptState}" style="width:64px; height:64px;" ${onErrorAttr}>
                     <div style="font-size:10px; color:${labelColor}; margin-top:2px;">${safeItem.shape}</div>
                 </div>
             `;

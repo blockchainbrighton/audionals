@@ -685,9 +685,28 @@ export const game = {
         if(modal) modal.style.display = 'none';
         
         // Set cooldown to prevent immediate re-entry loop
-        // Increased to 2000ms (2s) to allow player to move off the tile
         this.interactionCooldown = Date.now() + 2000; 
         
+        // Auto-Step Back: Move player off the trigger tile
+        const pCenterX = this.player.x + this.player.width / 2;
+        const pCenterY = this.player.y + this.player.height / 2;
+        const tileX = Math.floor(pCenterX / this.config.TILE_SIZE);
+        const tileY = Math.floor(pCenterY / this.config.TILE_SIZE);
+        const currentTileData = this.mapManager.getTileData(tileX, tileY);
+
+        if (currentTileData && currentTileData.interactionType) {
+            // Attempt to move player 1 tile DOWN (South)
+            const targetTileY = tileY + 1;
+            const targetWorldY = targetTileY * this.config.TILE_SIZE;
+            
+            // Check collision for the target spot (using player's center X)
+            if (this.mapManager.isValidTile(tileX, targetTileY) && !this.mapManager.isColliding(pCenterX, targetWorldY + this.player.height/2)) {
+                this.player.y = targetWorldY;
+                // Update camera immediately to prevent jitter
+                this.camera.update(this.player);
+            }
+        }
+
         this.soundManager.playTheme('WORLD'); // Restore World Theme
         this.gameState = 'PLAYING';
     },
