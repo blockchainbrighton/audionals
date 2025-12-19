@@ -105,6 +105,11 @@ export const game = {
             this.Slots.init(g);
             this.Roulette.init(g);
             this.HighLow.init(g);
+        },
+        preloadImages: function() {
+            if (this.Slots.preloadImages) this.Slots.preloadImages();
+            if (this.Roulette.preloadImages) this.Roulette.preloadImages();
+            if (this.HighLow.preloadImages) this.HighLow.preloadImages();
         }
     },
     imageLoader: imageLoader,
@@ -569,6 +574,11 @@ export const game = {
         this.gameState = 'LOCATION_TRANSITION';
         this.soundManager.playTheme(type); // Play Location Theme
 
+        // Preload Casino Assets if entering Casino
+        if (type === 'CASINO' && this.casino.preloadImages) {
+            this.casino.preloadImages();
+        }
+
         const modal = document.getElementById('locationModal');
         const titleEl = document.getElementById('locTitle');
         const descEl = document.getElementById('locDesc');
@@ -675,7 +685,8 @@ export const game = {
         if(modal) modal.style.display = 'none';
         
         // Set cooldown to prevent immediate re-entry loop
-        this.interactionCooldown = Date.now() + this.config.INTERACTION_COOLDOWN_MS; 
+        // Increased to 2000ms (2s) to allow player to move off the tile
+        this.interactionCooldown = Date.now() + 2000; 
         
         this.soundManager.playTheme('WORLD'); // Restore World Theme
         this.gameState = 'PLAYING';

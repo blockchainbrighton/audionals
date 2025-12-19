@@ -19,10 +19,28 @@ export const RouletteGame = {
         colors: ['Red', 'Blue', 'Green', 'Yellow', 'Purple', 'Pink'], // Mapped to 'base'
         expressions: ['XO', 'X]', 'X)', 'X}', 'X>', 'X|'] 
     },
+    
+    preloadBuffer: [],
 
     init: function(gameInstance) {
         this.game = gameInstance;
         this.bets = {};
+        this.preloadBuffer = [];
+    },
+
+    preloadImages: function() {
+        const pool = this.game.collectionData || [];
+        if (pool.length === 0) return;
+
+        // Ensure we have at least 20 preloaded outcomes ready
+        while (this.preloadBuffer.length < 20) {
+            const r = Math.floor(Math.random() * pool.length);
+            const item = pool[r];
+            if (item && item.id) {
+                imageLoader.preload(item.id);
+                this.preloadBuffer.push(item);
+            }
+        }
     },
 
     renderUI: function(container, actionsContainer) {
@@ -202,13 +220,25 @@ export const RouletteGame = {
     },
 
     finalizeSpin: function() {
-        const pool = this.game.collectionData || [];
-        if (pool.length === 0) {
+        // Replenish buffer if low
+        this.preloadImages(); 
+        
+        let choice = null;
+        if (this.preloadBuffer.length > 0) {
+            choice = this.preloadBuffer.shift();
+        } else {
+            // Fallback if buffer empty (shouldn't happen if preload works)
+            const pool = this.game.collectionData || [];
+            if (pool.length > 0) {
+                choice = pool[Math.floor(Math.random() * pool.length)];
+            }
+        }
+
+        if (!choice) {
             this.isSpinning = false;
             return; // Error
         }
 
-        const choice = pool[Math.floor(Math.random() * pool.length)];
         this.showResult(choice);
 
         // Check Wins

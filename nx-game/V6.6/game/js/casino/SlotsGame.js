@@ -45,6 +45,17 @@ export const SlotsGame = {
         this.bufferReelStrip();
     },
 
+    preloadImages: function() {
+        if (!this.reelStrip || this.reelStrip.length === 0) {
+            this.bufferReelStrip();
+        } else {
+            // Re-verify existing buffer
+            this.reelStrip.forEach(item => {
+                if (!item.isFallback) imageLoader.preload(item.id);
+            });
+        }
+    },
+
     bufferReelStrip: function() {
         const pool = Array.isArray(this.game.collectionData) ? this.game.collectionData : [];
         this.reelStrip = [];
