@@ -197,26 +197,44 @@ export const RouletteGame = {
         }
         if (this.isSpinning) return;
 
-        // Deduct money
         if (!this.game.player.payMoney(totalBet)) return;
 
         this.isSpinning = true;
         document.getElementById('btn-spin-roulette').disabled = true;
-        const display = document.getElementById('roulette-img-placeholder');
-        display.textContent = "...";
+        const display = document.getElementById('roulette-result-display');
+        
+        // Ensure buffer is ready
+        this.preloadImages();
+        const spinPool = this.preloadBuffer.length > 0 ? this.preloadBuffer : (this.game.collectionData || []);
 
-        // Simulation
-        let ticks = 0;
-        const interval = setInterval(() => {
-            ticks++;
-            // Flash random texts or colors?
-            display.style.backgroundColor = ticks % 2 === 0 ? '#333' : '#555';
+        const duration = 2000;
+        const intervalTime = 100;
+        let elapsed = 0;
+
+        const spinInterval = setInterval(() => {
+            elapsed += intervalTime;
             
-            if (ticks > 20) {
-                clearInterval(interval);
+            // Visual Cycle
+            const randomItem = spinPool[Math.floor(Math.random() * spinPool.length)];
+            if (randomItem) {
+                // Reuse showResult logic but without text details for speed/cleanliness during spin
+                const imgUrl = imageLoader.getUrl(randomItem.id);
+                const attemptState = imgUrl.includes('ipfs.io') ? 'ipfs' : 'hiro';
+                
+                display.innerHTML = `
+                    <div style="text-align:center; animation: pulse 0.1s infinite;">
+                        <img src="${imgUrl}" data-img-attempt="${attemptState}" style="width:80px; height:80px; opacity:0.7; filter:blur(1px);" onerror="game.casino.Roulette.handleImageError(this, '${randomItem.id}')">
+                    </div>
+                `;
+            }
+
+            if (this.game.soundManager) this.game.soundManager.playUI(); // Click sound
+
+            if (elapsed >= duration) {
+                clearInterval(spinInterval);
                 this.finalizeSpin();
             }
-        }, 100);
+        }, intervalTime);
     },
 
     finalizeSpin: function() {
