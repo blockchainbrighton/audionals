@@ -363,7 +363,9 @@ export const mapManager = {
                         case 'xemist_contact': label = "QUEST"; break;
                         case 'bar': label = "BAR"; break;
                         case 'armoury': label = "GUNS"; break;
-                        case 'casino': label = "SLOTS"; break;
+                        case 'casino_slots': label = "SLOTS"; break;
+                        case 'casino_roulette': label = "ROULETTE"; break;
+                        case 'casino_highlow': label = "HI/LOW"; break;
                         default: label = "ENTRANCE";
                     }
                     this.game.ctx.fillText(label, c * tileSize + tileSize / 2, r * tileSize - 2);

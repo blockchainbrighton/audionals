@@ -21,11 +21,30 @@ export const RouletteGame = {
     },
     
     preloadBuffer: [],
+    history: [], // Session history
 
     init: function(gameInstance) {
         this.game = gameInstance;
         this.bets = {};
         this.preloadBuffer = [];
+        this.history = [];
+    },
+
+    addHistory: function(msg, type = 'info') {
+        const time = new Date().toLocaleTimeString([], { hour12: false, hour: '2-digit', minute: '2-digit', second: '2-digit' });
+        this.history.unshift({ time, msg, type });
+        if (this.history.length > 50) this.history.pop();
+        this.updateHistoryUI();
+    },
+
+    updateHistoryUI: function() {
+        const el = document.getElementById('roulette-history-log');
+        if (!el) return;
+        el.innerHTML = this.history.map(h => `
+            <div class="history-entry history-${h.type}">
+                <span style="color:#555">[${h.time}]</span> ${h.msg}
+            </div>
+        `).join('');
     },
 
     preloadImages: function() {
@@ -77,6 +96,10 @@ export const RouletteGame = {
                     </div>
                     <div class="total-bet">TOTAL BET: <span id="total-bet-val" style="color:#0FF">0</span>c</div>
                 </div>
+
+                <div class="roulette-history" id="roulette-history-log">
+                    <div class="history-entry history-info">Welcome to Trait Roulette. Place your bets.</div>
+                </div>
             </div>
         `;
 
@@ -88,6 +111,7 @@ export const RouletteGame = {
 
         this.renderBetButtons();
         this.attachEvents();
+        this.updateHistoryUI();
     },
 
     renderBetButtons: function() {
@@ -199,6 +223,7 @@ export const RouletteGame = {
 
         if (!this.game.player.payMoney(totalBet)) return;
 
+        this.addHistory(`SPINNING... (Bet: ${totalBet}c)`, 'info');
         this.isSpinning = true;
         document.getElementById('btn-spin-roulette').disabled = true;
         const display = document.getElementById('roulette-result-display');
@@ -257,6 +282,8 @@ export const RouletteGame = {
         }
 
         this.showResult(choice);
+        const resultLabel = `${choice.shape} | ${choice.base} | ${choice.expression}`;
+        this.addHistory(`RESULT: ${resultLabel}`, 'info');
 
         // Check Wins
         let totalWin = 0;
@@ -269,8 +296,10 @@ export const RouletteGame = {
         if (shapeVal) {
              const key = `shape:${shapeVal}`;
              if (this.bets[key]) {
-                 totalWin += this.bets[key] * this.ODDS.shape;
+                 const win = this.bets[key] * this.ODDS.shape;
+                 totalWin += win;
                  winningBets.push({type: 'shape', value: shapeVal});
+                 this.addHistory(`WIN: Shape ${shapeVal} (x${this.ODDS.shape}) +${win}c`, 'win');
              }
         }
 
@@ -279,8 +308,10 @@ export const RouletteGame = {
         if (baseVal) {
              const key = `base:${baseVal}`;
              if (this.bets[key]) {
-                 totalWin += this.bets[key] * this.ODDS.base;
+                 const win = this.bets[key] * this.ODDS.base;
+                 totalWin += win;
                  winningBets.push({type: 'base', value: baseVal});
+                 this.addHistory(`WIN: Color ${baseVal} (x${this.ODDS.base}) +${win}c`, 'win');
              }
         }
 
@@ -289,8 +320,10 @@ export const RouletteGame = {
         if (exprVal) {
              const key = `expression:${exprVal}`;
              if (this.bets[key]) {
-                 totalWin += this.bets[key] * this.ODDS.expression;
+                 const win = this.bets[key] * this.ODDS.expression;
+                 totalWin += win;
                  winningBets.push({type: 'expression', value: exprVal});
+                 this.addHistory(`WIN: Expr ${exprVal} (x${this.ODDS.expression}) +${win}c`, 'win');
              }
         }
 
@@ -301,6 +334,7 @@ export const RouletteGame = {
             this.highlightWins(winningBets);
         } else {
             this.game.utils.addMessage("No Match.");
+            this.addHistory(`LOSS: No matches.`, 'loss');
         }
 
         // Delay clearing the table so player can see results
