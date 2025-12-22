@@ -1,0 +1,55 @@
+export const CAMPAIGN_DATA = [
+    {
+        id: "mission_01_wakeup",
+        title: "System Reboot",
+        description: "Wake up and access your personal Stash in the Safehouse.",
+        prereq: null, // First mission
+        type: "INTERACT",
+        targetId: "safehouse_stash", // ID of the stash tile/object
+        unlocks: ["feature_inventory", "zone_street"], // Flags to set on completion
+        dialogue: "Systems online. You need to check your stash before heading out."
+    },
+    {
+        id: "mission_02_first_blood",
+        title: "Cleaning the Streets",
+        description: "Defeat a corrupt Drone outside the Safehouse.",
+        prereq: "mission_01_wakeup",
+        type: "KILL",
+        targetType: "drone_scout",
+        count: 1,
+        unlocks: ["feature_combat", "shop_central_exchange"],
+        reward: { money: 50, item: "pistol_ammo_light" },
+        dialogue: "Hostiles detected. Clear the perimeter."
+    },
+    {
+        id: "mission_03_trade_route",
+        title: "Liquid Assets",
+        description: "Travel to the Central Exchange and buy a Nanite Repair.",
+        prereq: "mission_02_first_blood",
+        type: "BUY",
+        itemId: "nanite_repair",
+        unlocks: ["zone_casino_district"],
+        dialogue: "Good work. You're leaking data though. Go buy a patch."
+    },
+    {
+         id: "mission_04_explore",
+         title: "The Neon District",
+         description: "Locate the entrance to the Casino District.",
+         prereq: "mission_03_trade_route",
+         type: "GOTO",
+         targetZone: "zone_casino_district",
+         unlocks: ["feature_minigames"],
+         dialogue: "The wealthy elites gather in the Casino district. High risk, high reward."
+    },
+    {
+        id: "mission_05_jackpot",
+        title: "Feeling Lucky",
+        description: "Play the Slot Machine in the Casino.",
+        prereq: "mission_04_explore",
+        type: "INTERACT",
+        targetId: "slot_machine",
+        unlocks: ["open_world_access"],
+        reward: { item: "pistol_heavy" },
+        dialogue: "Test your luck. Maybe you'll hit the big one."
+    }
+];
