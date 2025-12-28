@@ -1,0 +1,151 @@
+To transform NarcotiX Systems into a structured, journey-based experience with unlockable
+  content, you need to move from a "Sandbox" architecture (where everything is available
+  immediately) to a "Gated Progression" architecture.
+
+  Here is a detailed architectural and gameplay plan to achieve this.
+
+  ---
+
+  1. Architectural Changes
+
+  A. The MissionManifest (Data-Driven Design)
+  Instead of hardcoding quests in questManager.js, create a structured data file (JSON or JS
+  Object) that defines the entire campaign tree. This makes it easy to add 50+ missions without
+  cluttering logic code.
+
+  Proposed Structure (`game/data/campaign.js`):
+
+    1 export const CAMPAIGN_DATA = [
+    2     {
+    3         id: "mission_01_wakeup",
+    4         title: "System Reboot",
+    5         description: "Wake up and access your personal Stash in the Safehouse.",
+    6         prereq: null, // First mission
+    7         type: "INTERACT",
+    8         targetId: "safehouse_stash", // ID of the stash tile/object
+    9         unlocks: ["feature_inventory", "zone_street"], // Flags to set on completion
+   10         dialogue: "Systems online. You need to check your stash before heading out."
+   11     },
+   12     {
+   13         id: "mission_02_first_blood",
+   14         title: "Cleaning the Streets",
+   15         description: "Defeat a corrupt Drone outside the Safehouse.",
+   16         prereq: "mission_01_wakeup",
+   17         type: "KILL",
+   18         targetType: "drone_scout",
+   19         count: 1,
+   20         unlocks: ["feature_combat", "shop_central_exchange"],
+   21         reward: { money: 50, item: "pistol_ammo_light" }
+   22     },
+   23     {
+   24         id: "mission_03_trade_route",
+   25         title: "Liquid Assets",
+   26         description: "Travel to the Central Exchange and buy a Nanite Repair.",
+   27         prereq: "mission_02_first_blood",
+   28         type: "BUY",
+   29         itemId: "nanite_repair",
+   30         unlocks: ["zone_casino_district"],
+   31         dialogue: "Good work. You're leaking data though. Go buy a patch."
+   32     }
+   33 ];
+
+  B. The ProgressionManager (The Gatekeeper)
+  Create a new manager (progressionManager.js) to handle the persistent state of the player's
+  journey. This separates "Quest Logic" (doing the task) from "World State" (what is unlocked).
+
+  Responsibilities:
+   1. State Tracking: Maintains a list of unlockedFlags (e.g., ["ZONE_A", "WEAPON_TIER_1",
+      "CASINO_ACCESS"]).
+   2. Loot Control: Wraps itemManager to only spawn items present in the unlockedFlags.
+   3. Map Gating: Wraps mapManager to block player movement into zones they haven't unlocked
+      yet (e.g., "Door Locked: Requires Casino Access").
+
+  C. Smart Spawning System
+  Modify itemManager.js and enemyManager.js to respect progression tiers.
+   * Before: spawnRandomItem() picks from all items.
+   * After: spawnRandomItem() checks ProgressionManager.currentTier.
+       * Tier 1: Only sticks, knives, and basic pills.
+       * Tier 2: Pistols and Tier 1 pills.
+       * Tier 3: Rifles, Casino tokens, and Rare pills.
+
+  ---
+
+  2. Gameplay Enhancements
+
+  A. The "Comms" System (Narrative Driver)
+  To guide the player without relying solely on standing NPCs, implement a "Neural Link" HUD
+  element.
+   * Function: Displays incoming messages from a "Handler" (e.g., a mysterious Xemist).
+   * Visual: A message box that slides in when a mission starts or ends.
+   * Utility: This drives the player to the next location. "Head to the Neon District. I've
+     uploaded the coordinates."
+
+  B. Dynamic Navigation (GPS)
+  Enhance the existing questManager.renderQuestMarkers() to be more aggressive during the
+  tutorial.
+   * Directional Arrow: If the target building is off-screen, draw an arrow on the edge of the
+     screen pointing toward it.
+   * Highlight Path: Briefly flash the path or the target building on the Minimap.
+
+  C. Locked Locations (Visual Gating)
+  Instead of just text saying "You can't go here," make the buildings visually distinct:
+   * Locked State: The door has a Red Holographic barrier. Interaction says: "Access Denied.
+     Clearance Level 'Street Rat' required."
+   * Unlocked State: The barrier turns Green or disappears.
+
+  ---
+
+  3. The "Introductory Journey" (Walkthrough)
+
+  Here is how the "one-by-one" unlocking flow would work using the new architecture:
+
+  Phase 1: The Safehouse (Tutorial)
+   * Context: Player spawns inside. Outside door is LOCKED.
+   * Mission 1: "Movement Diagnostics." Move to the kitchen.
+   * Mission 2: "Gear Up." Open the Stash. (Unlocks: Inventory System).
+   * Unlock: The Front Door unlocks.
+
+  Phase 2: The Alley (Combat Basics)
+   * Context: Only the alleyway is accessible. The main street is blocked by a "Police
+     Barricade" (Tile blocker).
+   * Mission 3: "Self Defense." Pick up the stick near the dumpster.
+   * Mission 4: "Pest Control." Kill the weak Rat/Drone blocking the path.
+   * Unlock: The Police Barricade dissolves/opens.
+
+  Phase 3: The Exchange (Economy)
+   * Context: Player enters the Main Hub. The Casino and Bar are LOCKED.
+   * Mission 5: "Networking." Go to the Exchange Node.
+   * Mission 6: "First Trade." Sell the "Rat Tail" or loot from Phase 2. Buy a Medkit.
+   * Unlock: The Bar ("Glitch & Tonic") unlocks.
+
+  Phase 4: The Social Hub (Lore & Buffs)
+   * Context: Enter the Bar.
+   * Mission 7: "Hydration." Buy a drink (learns about buffs/consumables).
+   * Mission 8: "The Rumor." Talk to the NPC in the corner.
+   * Unlock: The Casino District gate opens.
+
+  Phase 5: The Casino (Minigames & High Loot)
+   * Context: Enter the Casino.
+   * Mission 9: "Feeling Lucky." Spin the Slots once.
+   * Mission 10: "Jackpot." Win any amount (or just play 3 times).
+   * Reward: Rare Weapon (Pistol) and full open-world access.
+
+  ---
+
+  4. Implementation Steps (For Developer)
+
+   1. Create `game/data/missions.json`: Populate it with the linear mission steps.
+   2. Update `Entity.js` / `Player.js`: Add a progressionFlags array to the player's save
+      state.
+   3. Refactor `mapManager.js`:
+       * Add a checkLock(tileData) function.
+       * If tileData.reqFlag exists and player doesn't have it, deny entry and show "Locked"
+         message.
+   4. Update `hud.js`: Add a permanent "Current Objective" box in the top left (e.g.,
+      "OBJECTIVE: Reach the Exchange Node").
+   5. Refactor `questManager.js`:
+       * Make it listen to EventBus.
+       * On ENEMY_KILLED or ITEM_BOUGHT, check the current active mission from the JSON file to
+         see if conditions are met.
+  This approach transforms the game from a static sandbox into a compelling RPG experience that
+  teaches mechanics naturally while providing a sense of constant reward and expansion.

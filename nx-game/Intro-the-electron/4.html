@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Electron Shell Formation</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            background-color: #000;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        canvas {
+            /* Clean, sharp glow */
+            filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.8));
+        }
+    </style>
+</head>
+<body>
+
+<canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let width, height, centerX, centerY;
+
+    function resize() {
+        width = window.innerWidth;
+        height = window.innerHeight;
+        canvas.width = width;
+        canvas.height = height;
+        centerX = width / 2;
+        centerY = height / 2;
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    // --- CONFIGURATION ---
+    const electronSize = 4;
+    const maxRadius = 250; // Final size of the sphere
+    
+    // --- STATE VARIABLES ---
+    let phase = 'ACCEL'; // ACCEL -> TILT -> SPHERE -> RESET
+    
+    // 3D Position Variables
+    let angleX = 0; // Rotation around X axis
+    let angleY = 0; // Rotation around Y axis
+    
+    let speedX = 0.2; // Starts fast
+    let speedY = 0.0; // Starts at 0 (flat line)
+    
+    let currentRadius = 0; // Starts at 0, grows to maxRadius
+    
+    // To draw lines, we need history
+    let prevX = null;
+    let prevY = null;
+
+    function animate() {
+        // 1. FADE TRAIL
+        // A very low opacity (0.05) keeps the trails on screen for a long time.
+        // This is what makes the moving dot look like a solid shell.
+        ctx.fillStyle = 'rgba(0, 0, 0, 0.08)'; 
+        if(phase === 'RESET') ctx.fillStyle = 'rgba(0,0,0, 0.5)'; // Clear faster on reset
+        
+        ctx.fillRect(0, 0, width, height);
+
+        // 2. LOGIC BY PHASE
+        if (phase === 'ACCEL') {
+            // Grow the line width
+            if (currentRadius < maxRadius) currentRadius += 2;
+            // Speed up the horizontal oscillation
+            if (speedX < 0.8) speedX += 0.01;
+            
+            // Trigger next phase
+            if (currentRadius >= maxRadius && speedX >= 0.8) {
+                phase = 'TILT';
+            }
+        } 
+        else if (phase === 'TILT') {
+            // Introduce vertical rotation (The "Bending")
+            // As speedY increases, the flat disk tilts open
+            speedY += 0.002;
+            
+            // Once we have chaotic rotation on both axes, it's a sphere
+            if (speedY >= 0.6) {
+                phase = 'SPHERE';
+            }
+        }
+        else if (phase === 'SPHERE') {
+            // Keep spinning. We slightly modulate the speeds so the
+            // pattern of the sphere constantly shifts (doesn't repeat strictly)
+            speedX = 0.8 + Math.sin(Date.now() * 0.001) * 0.1;
+            speedY = 0.6 + Math.cos(Date.now() * 0.001) * 0.1;
+            
+            // Logic to eventually reset (Zoom out effect)
+            // Let's create a counter or random chance to reset
+            // For this demo, let's just let it run for a bit then shrink
+            if (Math.random() < 0.002) phase = 'RESET'; 
+        }
+        else if (phase === 'RESET') {
+            // Shrink back down
+            currentRadius *= 0.95;
+            // Reduce Y rotation to flatten it back out
+            speedY *= 0.9;
+            
+            if (currentRadius < 2) {
+                // Hard Reset
+                currentRadius = 0;
+                speedX = 0.2;
+                speedY = 0;
+                angleX = 0;
+                angleY = 0;
+                ctx.fillStyle = '#000';
+                ctx.fillRect(0,0,width,height);
+                phase = 'ACCEL';
+            }
+        }
+
+        // 3. 3D MATH PROJECTION
+        // We simulate a point on a 3D sphere, then flatten it to 2D
+        
+        // Increment angles
+        angleX += speedX;
+        angleY += speedY;
+
+        // Calculate 3D position
+        // Imagine a point on a sphere surface:
+        // x = r * cos(angleX)
+        // z = r * sin(angleX)
+        // Now rotate that circle around the Y axis
+        
+        // Simplified 3D rotation logic:
+        // 1. Create a ring on the X/Z plane
+        let x3d = Math.cos(angleX) * currentRadius;
+        let z3d = Math.sin(angleX) * currentRadius;
+        let y3d = 0; 
+
+        // 2. Rotate that ring around the Z-axis (tilting it up/down)
+        // This is what turns the line into a sphere
+        let newY = y3d * Math.cos(angleY) - z3d * Math.sin(angleY);
+        let newZ = y3d * Math.sin(angleY) + z3d * Math.cos(angleY);
+        y3d = newY;
+        z3d = newZ;
+
+        // 3. Project to 2D canvas (Perspective)
+        // We just flatten Z, but we could add perspective scale if we wanted.
+        const scale = 1; 
+        const x = centerX + x3d * scale;
+        const y = centerY + y3d * scale;
+
+        // 4. DRAW
+        ctx.beginPath();
+        if (prevX !== null) {
+            ctx.moveTo(prevX, prevY);
+            ctx.lineTo(x, y);
+        }
+        
+        ctx.strokeStyle = '#FFFFFF';
+        ctx.lineWidth = electronSize;
+        ctx.lineCap = 'round';
+        ctx.stroke();
+
+        // Optional: Draw the "Head" of the electron brighter
+        ctx.beginPath();
+        ctx.arc(x, y, electronSize, 0, Math.PI*2);
+        ctx.fillStyle = '#FFF';
+        ctx.fill();
+
+        prevX = x;
+        prevY = y;
+
+        // Run multiple steps per frame to ensure the line is solid
+        // This prevents "dotted line" look at high speeds
+        // We just ran it once above for simplicity, but in a real physics 
+        // engine we might sub-step. However, drawing a lineTo handles the gaps.
+
+        requestAnimationFrame(animate);
+    }
+
+    animate();
+
+</script>
+
+</body>
+</html>

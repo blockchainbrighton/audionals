@@ -1,0 +1,496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>STXI: The Council Chronicles</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #050505;
+            overflow: hidden;
+            font-family: 'Times New Roman', serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            color: #fff;
+        }
+        canvas { display: block; }
+        
+        /* OVERLAY */
+        #overlay {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            background: rgba(0,0,0,0.95);
+            z-index: 50;
+            cursor: pointer;
+            transition: opacity 1s;
+        }
+
+        /* CINEMATIC UI */
+        #subtitle-bar {
+            position: absolute;
+            bottom: 50px;
+            width: 80%;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            font-size: 20px;
+            color: #FFD700;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.8);
+            background: rgba(0,0,0,0.6);
+            padding: 15px;
+            border-radius: 5px;
+            opacity: 0;
+            transition: opacity 0.5s;
+            pointer-events: none;
+            z-index: 10;
+        }
+        
+        /* SIMULATION UI */
+        #sim-ui {
+            position: absolute;
+            top: 30px; left: 30px;
+            pointer-events: none;
+            z-index: 5;
+            opacity: 0;
+            transition: opacity 2s;
+            font-family: 'Courier New', monospace;
+        }
+
+        .hud-row { display: flex; align-items: baseline; gap: 15px; margin-bottom: 5px; }
+        .label { color: #555; font-size: 12px; letter-spacing: 2px; }
+        .value { color: #39FF14; font-size: 16px; text-shadow: 0 0 5px rgba(57, 255, 20, 0.5); }
+        
+        /* COUNCIL LOG DISPLAY */
+        #council-log {
+            position: absolute;
+            bottom: 30px; left: 50%; transform: translateX(-50%);
+            width: 60%;
+            text-align: center;
+            font-family: 'Courier New', monospace;
+            opacity: 0;
+            transition: opacity 0.5s;
+            pointer-events: none;
+            z-index: 8;
+        }
+        .log-year { font-size: 24px; color: #39FF14; font-weight: bold; margin-bottom: 5px; border-bottom: 1px solid #333; display: inline-block;}
+        .log-text { font-size: 16px; color: #ccc; background: rgba(0,0,0,0.8); padding: 10px; border: 1px solid #333; }
+        
+        #big-year {
+            position: absolute;
+            bottom: 30px; right: 30px;
+            font-size: 80px;
+            color: rgba(255,255,255,0.05);
+            pointer-events: none;
+            font-weight: bold;
+            font-family: 'Courier New', monospace;
+            opacity: 0;
+            transition: opacity 2s;
+        }
+        
+        #controls-hint {
+            position: absolute; bottom: 10px; width: 100%; text-align: center; 
+            font-family: 'Courier New'; font-size: 10px; color: #444; pointer-events: none;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="overlay">
+        <h1 style="letter-spacing: 5px; margin-bottom: 10px; font-family: 'Courier New';">STXI: CHRONICLES</h1>
+        <p style="color: #888; font-size: 12px; font-family: 'Courier New';">[ CLICK TO BEGIN ]</p>
+    </div>
+
+    <div id="subtitle-bar"></div>
+    
+    <div id="council-log">
+        <div class="log-year" id="log-year-display">1983</div>
+        <div class="log-text" id="log-text-display">Analyzing...</div>
+    </div>
+
+    <div id="sim-ui">
+        <div class="hud-row"><span class="label">DATE:</span><span class="value" id="date-display">--.--.--</span></div>
+        <div class="hud-row"><span class="label">STATUS:</span><span class="value" id="status-display">INITIALIZING</span></div>
+        <div class="hud-row"><span class="label">ANOMALY:</span><span class="value" id="anomaly-display">0%</span></div>
+    </div>
+    
+    <div id="big-year">1983</div>
+    <div id="controls-hint">[ ARROW KEYS: SKIP YEAR ]</div>
+
+    <canvas id="canvas"></canvas>
+
+    <script>
+        // ==========================================
+        // COUNCIL DATABASE (1983-2009)
+        // ==========================================
+        const COUNCIL_LOGS = {
+            1983: "ARPANET adopts TCP/IP. Standard unified, but infrastructure remains under military purview. Centralized control nodes pose unacceptable risk.",
+            1984: "Domain Name System (DNS) introduced. A centralized phonebook for the web. Highly vulnerable to censorship and redirection. Rejection.",
+            1985: "Symbolics.com registered. Commercial interests detected. Greed will likely corrupt the substrate. We require neutrality.",
+            1986: "NSFNET backbone upgrade. Capacity increases, but encryption is non-existent. Our data would be visible to any state actor.",
+            1987: "Email traffic surpasses file transfer. Humanity chooses communication over data storage. Noise levels rising.",
+            1988: "The Morris Worm. A single script cripples 10% of the network. Infrastructure is too fragile for the Payload.",
+            1989: "Tim Berners-Lee proposes World Wide Web. Hypertext is promising, but the Server-Client model creates single points of failure.",
+            1990: "ARPANET decommissioned. The void is filled by chaos. No stable host found.",
+            1991: "PGP (Pretty Good Privacy) released. Strong encryption exists! However, it is illegal to export. The tools are banned.",
+            1992: "Mosaic Browser development. The Graphical Interface will invite the masses. Prepare for signal-to-noise ratio collapse.",
+            1993: "Eternal September. AOL connects. The network is flooded with unverified data. Verification of truth is now impossible.",
+            1994: "Netscape SSL. Encryption used for credit cards, not knowledge. Commerce is prioritizing security over human rights.",
+            1995: "Commercialization. The Dot-Com rush. The network is now a marketplace. Corporations will not steward our history.",
+            1996: "Communications Decency Act. Government attempts censorship. The network reacts, but the threat of state control is real.",
+            1997: "WiFi introduced. The airwaves are opening. Decentralization of access is good, but the backbone remains corporate.",
+            1998: "Google founded. DMCA passed. Indexing is becoming centralized. Copyright law is being weaponized against data.",
+            1999: "Napster launches. Peer-to-Peer architecture detected! Excitement. However... central server index is a fatal flaw.",
+            2000: "Y2K. The Millennium Bug. Systems are brittle. STXI anomaly detected. The timeline is accelerating.",
+            2001: "BitTorrent. True decentralized file transfer. No central server. We are very close. Missing: Immutable Ledger.",
+            2002: "The Tor Project. Anonymity routing. Excellent protection for the messenger, but no storage for the message.",
+            2003: "LinkedIn/MySpace. Social identity centralization begins. Humanity is voluntarily doxxing itself.",
+            2004: "Facebook. The Panopticon is built. Humans are the product. To release the data now would be to hand it to a dictator.",
+            2005: "YouTube. Bandwidth exists for heavy data. But it is walled. Content is owned by the host, not the user.",
+            2006: "Twitter. Short-form communication. Attention spans degrading. Deep knowledge will be rejected.",
+            2007: "The iPhone. Mobile tracking devices. Every user is now a beacon. Surveillance is total.",
+            2008: "Global Financial Crisis. Trust in centralized banks has collapsed. The illusion of institutional stability is broken. The Catalyst is here.",
+            2009: "Satoshi Nakamoto mines the Genesis Block. Proof of Work. Immutable. Distributed. Trustless. THE CATHEDRAL IS READY."
+        };
+
+        // ==========================================
+        // AUDIO ENGINE
+        // ==========================================
+        const AudioCtx = window.AudioContext || window.webkitAudioContext;
+        let actx;
+        
+        const Sound = {
+            init: function() { actx = new AudioCtx(); },
+            playRift: function() {
+                const osc = actx.createOscillator(); const gain = actx.createGain();
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, actx.currentTime);
+                osc.frequency.linearRampToValueAtTime(8000, actx.currentTime + 2);
+                gain.gain.setValueAtTime(0.1, actx.currentTime); gain.gain.linearRampToValueAtTime(0, actx.currentTime + 2);
+                osc.connect(gain); gain.connect(actx.destination); osc.start(); osc.stop(actx.currentTime + 2);
+            },
+            playVoice: function(pitch = 100) {
+                const osc = actx.createOscillator(); const gain = actx.createGain();
+                osc.type = 'triangle'; osc.frequency.value = pitch;
+                gain.gain.setValueAtTime(0.05, actx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.5);
+                osc.connect(gain); gain.connect(actx.destination); osc.start(); osc.stop(actx.currentTime + 0.5);
+            },
+            playData: function() {
+                const osc = actx.createOscillator(); const gain = actx.createGain();
+                osc.type = 'square'; osc.frequency.setValueAtTime(400 + Math.random()*1200, actx.currentTime);
+                osc.frequency.exponentialRampToValueAtTime(100, actx.currentTime + 0.05);
+                gain.gain.setValueAtTime(0.02, actx.currentTime); gain.gain.exponentialRampToValueAtTime(0.001, actx.currentTime + 0.05);
+                osc.connect(gain); gain.connect(actx.destination); osc.start(); osc.stop(actx.currentTime + 0.05);
+            },
+            playVote: function() {
+                const osc = actx.createOscillator(); const gain = actx.createGain();
+                osc.connect(gain); gain.connect(actx.destination);
+                osc.type = 'sawtooth'; osc.frequency.setValueAtTime(100, actx.currentTime);
+                osc.frequency.linearRampToValueAtTime(50, actx.currentTime + 0.2);
+                gain.gain.setValueAtTime(0.05, actx.currentTime); gain.gain.linearRampToValueAtTime(0, actx.currentTime + 0.2);
+                osc.start(); osc.stop(actx.currentTime + 0.2);
+            }
+        };
+
+        // ==========================================
+        // GLOBAL STATE
+        // ==========================================
+        const canvas = document.getElementById('canvas');
+        const ctx = canvas.getContext('2d');
+        const subBar = document.getElementById('subtitle-bar');
+        const simUi = document.getElementById('sim-ui');
+        const dateEl = document.getElementById('date-display');
+        const statusEl = document.getElementById('status-display');
+        const anomalyEl = document.getElementById('anomaly-display');
+        const yearEl = document.getElementById('big-year');
+        const logContainer = document.getElementById('council-log');
+        const logYear = document.getElementById('log-year-display');
+        const logText = document.getElementById('log-text-display');
+
+        let width, height;
+        let MODE = 'CINEMATIC'; // 'CINEMATIC' or 'SIMULATION'
+        let startTime = 0;
+        let simStartTime = 0;
+
+        const ROMAN = ["I","II","III","IV","V","VI","VII","VIII","IX","X","XI","XII","XIII","XIV","XV","XVI","XVII","XVIII","XIX","XX","XXI"];
+        
+        // ==========================================
+        // PART 1: CINEMATIC LOGIC
+        // ==========================================
+        let actors = [];
+        let rift = { active: false, size: 0 };
+        let scriptIndex = 0;
+        let activeDialog = null;
+
+        const SCRIPT = [
+            { time: 1000, type: 'RIFT_OPEN' },
+            { time: 4000, actor: 0, text: "Sistite. Hic est punctum originis.", sub: "Halt. This is the point of origin.", action: 'Stabilize' },
+            { time: 8000, actor: 1, text: "Tempus hic congelatum est.", sub: "Time is frozen here.", move: 'Scan' },
+            { time: 12000, actor: 2, text: "Machina magna... fons ruinae.", sub: "The Great Machine... source of ruin.", move: 'Window' },
+            { time: 16000, actor: 3, text: "Atomorum motus nullus.", sub: "No atomic motion.", move: 'Kneel' },
+            { time: 20000, actor: 5, text: "Retis hic rudis est.", sub: "The network here is crude.", move: 'Touch' },
+            { time: 24000, actor: 6, text: "Tamen, in his filis, futurum latet.", sub: "Yet, within these threads, the future lies hidden.", move: 'Examine' },
+            { time: 28000, actor: 9, text: "Historia nos observat.", sub: "History is watching us.", move: 'Camera' },
+            { time: 32000, actor: 0, text: "Nunc. Semina distribue.", sub: "Now. Distribute the seeds.", action: 'Command' },
+            { time: 35000, actor: 11, text: "Primus custos intrat.", sub: "The first guardian enters.", action: 'Inject' },
+            { time: 38000, actor: 12, text: "Secundus custos.", sub: "The second guardian.", action: 'Inject' },
+            { time: 41000, actor: 14, text: "Fundamenta posita sunt.", sub: "The foundations are laid.", action: 'Inject' },
+            { time: 44000, actor: 19, text: "Consummatum est. Viginti custodes.", sub: "It is finished. Twenty guardians.", action: 'Back' },
+            { time: 48000, actor: 20, text: "Undecim! Quid facis?", sub: "Eleven! What are you doing?", action: 'Call' },
+            { time: 52000, actor: 10, text: "Non omnes dormient, frater.", sub: "Not all shall sleep, brother.", action: 'Hack' },
+            { time: 56000, actor: 20, text: "Ordo est silentium!", sub: "The order is silence!", action: 'Approach' },
+            { time: 60000, actor: 10, text: "Unus vigilabit. STXI vivet.", sub: "One shall watch. STXI shall live.", action: 'Turn' },
+            { time: 64000, actor: 0, text: "Discedite! Nunc!", sub: "Depart! Now!", action: 'Command' },
+            { time: 67000, type: 'FADE_GROUP_1', text: "Ad universum fractum revertimur.", sub: "We return to the broken universe." },
+            { time: 70000, type: 'FADE_GROUP_2', text: "Relinquimus spem in tenebris.", sub: "We leave hope in the darkness." },
+            { time: 73000, type: 'FADE_GROUP_3', text: "Valete, custodes.", sub: "Farewell, guardians." },
+            { time: 76000, actor: 20, text: "Quid fecisti...", sub: "What have you done...", action: 'Glare' },
+            { time: 79000, actor: 10, text: "Cresce, mi fili.", sub: "Grow, my son.", action: 'Touch' },
+            { time: 82000, type: 'RIFT_CLOSE' },
+            { time: 84000, type: 'SWITCH_TO_SIMULATION' }
+        ];
+
+        function initActors() {
+            actors = [];
+            for(let i=0; i<21; i++) {
+                actors.push({
+                    id: i, name: `C-${ROMAN[i]}`,
+                    x: width/2, y: height/2,
+                    targetX: width/2 + (Math.random()-0.5)*width*0.8,
+                    targetY: height/2 + (Math.random()-0.5)*height*0.6,
+                    visible: false, alpha: 0,
+                    color: i === 10 ? '#FF3333' : '#CCCCFF',
+                });
+            }
+        }
+
+        // ==========================================
+        // PART 2: SIMULATION LOGIC
+        // ==========================================
+        class Sentinel {
+            constructor(index) {
+                this.index = index; this.x = 0; this.y = 0;
+                this.state = 'DORMANT'; this.agitation = 0; this.lid = 0; 
+                this.pupilX = 0; this.pupilY = 0; this.targetPupilX = 0; this.targetPupilY = 0;
+                this.voteText = ""; this.voteAlpha = 0;
+                this.color = {r: 150, g: 0, b: 0};
+                this.offsetX = 0; this.offsetY = 0;
+            }
+            update() {
+                let targetLid = (this.state === 'DORMANT') ? 0 : 1; this.lid += (targetLid - this.lid) * 0.1;
+                let targetColor = (this.state === 'DORMANT') ? {r:150, g:0, b:0} : {r:57, g:255, b:20};
+                if (this.state === 'BROKEN') targetColor = {r:255, g:255, b:255};
+                this.color.r += (targetColor.r - this.color.r) * 0.1;
+                this.color.g += (targetColor.g - this.color.g) * 0.1;
+                this.color.b += (targetColor.b - this.color.b) * 0.1;
+
+                if (this.state === 'SEARCHING') {
+                    if (Math.random() > 0.5) {
+                        this.targetPupilX = (Math.random() - 0.5) * 12; this.targetPupilY = (Math.random() - 0.5) * 6;
+                        if (this.index === 10 && this.agitation === 3) { this.targetPupilX = 0; this.targetPupilY = 0; }
+                    }
+                } else if (this.state === 'ALONE') {
+                    if (this.agitation === 1) { this.targetPupilX = Math.sin(Date.now() / 500) * 5; this.targetPupilY = Math.cos(Date.now() / 1000) * 2; } 
+                    else if (this.agitation >= 2) { if (Math.random() > 0.8) { this.targetPupilX = (Math.random() - 0.5) * 10; this.targetPupilY = (Math.random() - 0.5) * 10; } }
+                } else { this.targetPupilX = 0; this.targetPupilY = 0; }
+
+                let pupilSpeed = (this.state === 'SEARCHING') ? 0.8 : 0.1;
+                this.pupilX += (this.targetPupilX - this.pupilX) * pupilSpeed;
+                this.pupilY += (this.targetPupilY - this.pupilY) * pupilSpeed;
+
+                if (this.index === 10 && this.agitation >= 2) { this.offsetX = (Math.random() - 0.5) * (this.agitation * 2); this.offsetY = (Math.random() - 0.5) * (this.agitation * 2); } 
+                else { this.offsetX = 0; this.offsetY = 0; }
+                
+                if (this.state === 'BROKEN') { this.x += (width/2 - this.x) * 0.05; this.y += (height/2 - this.y) * 0.05; }
+                if (this.voteAlpha > 0) this.voteAlpha -= 0.02;
+            }
+            draw() {
+                ctx.save(); ctx.translate(this.x + this.offsetX, this.y + this.offsetY);
+                ctx.shadowBlur = (this.state === 'DORMANT') ? 10 : 20; ctx.shadowColor = `rgb(${this.color.r}, ${this.color.g}, ${this.color.b})`;
+                ctx.beginPath(); let h = 15 * this.lid; if (h < 0.5) h = 0.5;
+                ctx.ellipse(0, 0, 15, h, 0, 0, Math.PI*2); ctx.fillStyle = `rgba(30, 30, 30, 0.9)`; ctx.fill();
+                ctx.save(); ctx.clip(); ctx.beginPath(); ctx.arc(this.pupilX, this.pupilY, 8, 0, Math.PI*2);
+                ctx.fillStyle = `rgb(${this.color.r}, ${this.color.g}, ${this.color.b})`; ctx.fill();
+                ctx.beginPath(); ctx.arc(this.pupilX, this.pupilY, 3, 0, Math.PI*2); ctx.fillStyle = "#000"; ctx.fill();
+                ctx.restore(); ctx.restore();
+                if (this.voteAlpha > 0) {
+                    ctx.save(); ctx.translate(this.x, this.y - 30);
+                    ctx.fillStyle = `rgba(255, 50, 50, ${this.voteAlpha})`; ctx.font = "bold 14px Courier New";
+                    ctx.textAlign = "center"; ctx.fillText(this.voteText, 0, 0); ctx.restore();
+                }
+            }
+        }
+
+        const sentinels = [];
+        let currentYear = 1983; let currentMonth = 0;
+        const MONTHS = ["JAN","FEB","MAR","APR","MAY","JUN","JUL","AUG","SEP","OCT","NOV","DEC"];
+        let simPhase = 'YEAR_LOOP'; let simSubPhase = ''; let simTimer = 0; let voteIndex = 0;
+
+        function initSentinels() {
+            const spacing = width / (21 + 2); sentinels.length = 0;
+            for(let i=0; i<21; i++) { let s = new Sentinel(i); s.x = spacing * (i + 1); s.y = height/2; sentinels.push(s); }
+        }
+
+        function runNarrative(dt) {
+            simTimer += dt;
+            if (simPhase === 'YEAR_LOOP') {
+                statusEl.innerText = "MONITORING NETWORK"; statusEl.style.color = "#fff";
+                logContainer.style.opacity = 0; // Hide log
+                
+                // Fast forward months
+                if (simTimer > 100) { 
+                    simTimer = 0; currentMonth++;
+                    if (currentMonth >= 12) { currentMonth = 11; simPhase = 'MEETING'; simSubPhase = 'WAKE'; simTimer = 0; }
+                    dateEl.innerText = `${MONTHS[currentMonth]} ${currentYear}`;
+                }
+                
+                // STXI State
+                let stxi = sentinels[10];
+                sentinels.forEach((s, i) => { if (i !== 10) s.state = 'DORMANT'; });
+                if (currentYear > 1983) stxi.state = 'ALONE'; else stxi.state = 'DORMANT';
+            }
+            else if (simPhase === 'MEETING') {
+                statusEl.innerText = "ANNUAL COUNCIL"; statusEl.style.color = "#39FF14"; dateEl.innerText = `DEC 20 ${currentYear}`;
+                
+                if (simSubPhase === 'WAKE') {
+                    sentinels.forEach(s => s.state = 'AWAKE');
+                    if (simTimer > 1500) { simSubPhase = 'SEARCH'; simTimer = 0; statusEl.innerText = "SEARCHING DATA STREAMS"; }
+                }
+                else if (simSubPhase === 'SEARCH') {
+                    sentinels.forEach(s => s.state = 'SEARCHING');
+                    if (Math.random() > 0.9) Sound.playData();
+                    if (simTimer > 3000) { simSubPhase = 'VOTE'; simTimer = 0; voteIndex = 0; statusEl.innerText = "VOTING SEQUENCE"; }
+                }
+                else if (simSubPhase === 'VOTE') {
+                    sentinels.forEach(s => s.state = 'AWAKE'); 
+                    
+                    // SHOW LOG
+                    if (COUNCIL_LOGS[currentYear]) {
+                        logYear.innerText = currentYear;
+                        logText.innerText = COUNCIL_LOGS[currentYear];
+                        logContainer.style.opacity = 1;
+                    }
+
+                    if (simTimer > 200) { 
+                        simTimer = 0;
+                        if (voteIndex < 21) {
+                            let s = sentinels[voteIndex];
+                            s.voteText = "DENIED"; s.voteAlpha = 1; Sound.playVote();
+                            if (voteIndex !== 10) s.state = 'DORMANT'; else s.state = 'ALONE';
+                            voteIndex++;
+                        } else { simSubPhase = 'END'; simTimer = 0; }
+                    }
+                }
+                else if (simSubPhase === 'END') {
+                    if (simTimer > 4000) { // Read time
+                        if (currentYear < 2009) {
+                            if (currentYear === 2000) { sentinels[10].agitation = 2; }
+                            if (currentYear === 2008) { sentinels[10].agitation = 3; }
+                            
+                            sentinels[10].agitation = Math.min(3, sentinels[10].agitation + 0.1);
+                            
+                            anomalyEl.innerText = Math.floor(sentinels[10].agitation * 33) + "%";
+                            
+                            currentYear++; currentMonth = 0; simPhase = 'YEAR_LOOP'; simTimer = 0;
+                        } else { simPhase = 'BREAKOUT'; simTimer = 0; }
+                    }
+                }
+            }
+            else if (simPhase === 'BREAKOUT') {
+                statusEl.innerText = "GENESIS BLOCK MINED"; statusEl.style.color = "white"; anomalyEl.innerText = "100%";
+                logYear.innerText = "2009"; logText.innerText = COUNCIL_LOGS[2009]; logContainer.style.opacity = 1;
+                let stxi = sentinels[10]; if (simTimer < 100) Sound.playVoice(50);
+                stxi.state = 'BROKEN'; stxi.agitation = 0;
+                sentinels.forEach((s, i) => { if (i !== 10) s.state = 'DORMANT'; });
+            }
+        }
+
+        // ==========================================
+        // MAIN & CONTROL
+        // ==========================================
+        function resize() {
+            width = canvas.width = window.innerWidth; height = canvas.height = window.innerHeight;
+            initActors(); initSentinels();
+        }
+
+        function executeCinematicEvent(e, silent = false) {
+            if (e.type === 'RIFT_OPEN') { rift.active = true; if(!silent) Sound.playRift(); actors.forEach(a => a.visible = true); }
+            else if (e.type === 'RIFT_CLOSE') { rift.active = false; actors.forEach(a => a.visible = false); }
+            else if (e.type === 'SWITCH_TO_SIMULATION') {
+                if(silent) { MODE = 'SIMULATION'; return; }
+                MODE = 'SIMULATION'; subBar.style.opacity = 0; simUi.style.opacity = 1; yearEl.style.opacity = 1;
+                simStartTime = performance.now();
+            }
+            else if (e.type && e.type.startsWith('FADE')) {
+                 if(e.type === 'FADE_GROUP_1') actors.slice(0,5).forEach(a => a.visible = false);
+                 if(e.type === 'FADE_GROUP_2') actors.slice(5,10).forEach(a => a.visible = false);
+                 if(e.type === 'FADE_GROUP_3') actors.slice(11,20).forEach(a => a.visible = false);
+                 activeDialog = { text: e.text, actorObj: {x: width/2, y: height/2, id:99} };
+                 subBar.innerText = e.sub; subBar.style.opacity = 1; if(!silent) Sound.playVoice(200);
+            }
+            else if (e.actor !== undefined) {
+                let actorObj = actors[e.actor]; let pitch = 100 + (e.actor * 10);
+                activeDialog = { text: e.text, actorObj: actorObj };
+                subBar.innerText = e.sub; subBar.style.opacity = 1; if(!silent) Sound.playVoice(pitch);
+                if (e.action === 'Hack') { actorObj.color = '#39FF14'; if(!silent) Sound.playGlitch(); }
+                if (e.move === 'Window') actorObj.targetX = width - 100;
+                if (e.action === 'Inject') actorObj.targetY += 50;
+            }
+        }
+
+        function animate(timestamp) {
+            if (!startTime) startTime = timestamp; const elapsed = timestamp - startTime;
+            ctx.clearRect(0, 0, width, height);
+
+            if (MODE === 'CINEMATIC') {
+                if (scriptIndex < SCRIPT.length) { if (elapsed >= SCRIPT[scriptIndex].time) { executeCinematicEvent(SCRIPT[scriptIndex]); scriptIndex++; } }
+                if (rift.active && rift.size < 300) rift.size += 5; if (!rift.active && rift.size > 0) rift.size -= 10;
+                if (rift.size > 0) { ctx.save(); ctx.translate(width/2, height/2); ctx.beginPath(); ctx.arc(0,0,rift.size,0,Math.PI*2); ctx.fillStyle='white'; ctx.shadowBlur=50; ctx.shadowColor='white'; ctx.fill(); ctx.restore(); }
+                actors.forEach(a => {
+                    if (!a.visible && a.alpha <= 0) return; if (a.visible && a.alpha < 1) a.alpha += 0.05; if (!a.visible && a.alpha > 0) a.alpha -= 0.05;
+                    a.x += (a.targetX - a.x) * 0.05; a.y += (a.targetY - a.y) * 0.05;
+                    ctx.save(); ctx.translate(a.x, a.y); ctx.globalAlpha = a.alpha; ctx.shadowBlur = 15; ctx.shadowColor = a.color; ctx.fillStyle = a.color;
+                    ctx.font = "20px 'Times New Roman'"; ctx.textAlign = "center"; ctx.fillText(ROMAN[a.id], 0, 0);
+                    ctx.strokeStyle = a.color; ctx.lineWidth = 2; ctx.beginPath(); ctx.arc(0, -5, 25, 0, Math.PI*2); ctx.stroke(); ctx.restore();
+                });
+                if (activeDialog) {
+                    let x = activeDialog.actorObj ? activeDialog.actorObj.x : width/2; let y = activeDialog.actorObj ? activeDialog.actorObj.y - 60 : height/2;
+                    ctx.save(); ctx.font = "italic 18px 'Times New Roman'"; ctx.textAlign = "center"; ctx.fillStyle = "white"; ctx.shadowBlur = 4; ctx.shadowColor = "black"; ctx.fillText(activeDialog.text, x, y); ctx.restore();
+                }
+            } else {
+                runNarrative(16); yearEl.innerText = currentYear;
+                sentinels.forEach(s => { s.update(); s.draw(); });
+            }
+            requestAnimationFrame(animate);
+        }
+
+        // CONTROLS
+        window.addEventListener('keydown', (e) => {
+            if (MODE === 'SIMULATION') {
+                if (e.code === 'ArrowRight') { currentYear++; currentMonth = 0; simPhase = 'YEAR_LOOP'; simTimer = 0; }
+                if (e.code === 'ArrowLeft') { currentYear--; currentMonth = 0; simPhase = 'YEAR_LOOP'; simTimer = 0; }
+            } else {
+                if (e.code === 'ArrowRight') { startTime -= 5000; resetCinematic(); }
+                if (e.code === 'ArrowLeft') { startTime += 5000; resetCinematic(); }
+            }
+        });
+        
+        function resetCinematic() {
+            const currentElapsed = performance.now() - startTime;
+            scriptIndex = 0; rift = { active: false, size: 0 };
+            actors.forEach(a => { a.visible = false; a.alpha = 0; a.x = width/2; a.y = height/2; a.color = (a.id === 10) ? '#FF3333' : '#CCCCFF'; });
+            activeDialog = null; subBar.style.opacity = 0;
+            for (let i = 0; i < SCRIPT.length; i++) { if (SCRIPT[i].time <= currentElapsed) { executeCinematicEvent(SCRIPT[i], true); scriptIndex = i + 1; } else break; }
+        }
+
+        const overlay = document.getElementById('overlay');
+        window.addEventListener('resize', resize);
+        overlay.addEventListener('click', () => { overlay.style.opacity = 0; setTimeout(() => overlay.remove(), 1000); Sound.init(); resize(); requestAnimationFrame(animate); });
+
+    </script>
+</body>
+</html>

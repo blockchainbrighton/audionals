@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Lifecycle - Pure Black</title>
+    <style>
+        body { margin: 0; background-color: #000; overflow: hidden; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        canvas { display: block; background-color: #000; }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let width, height;
+    
+    // --- TIMING CONFIG (Milliseconds) ---
+    const STAGES = {
+        STILL: 2000,      // Sit still at start
+        WOBBLE: 8000,     // Expand to line
+        SPHERE: 10000,    // Bend into sphere
+        HOLD: 4000,       // Stay as solid sphere
+        SHRINK: 6000,     // Shrink back to dot
+        RESET: 2000       // Pause before restart
+    };
+
+    const totalDuration = Object.values(STAGES).reduce((a, b) => a + b);
+    const baseOrbRadius = 5;
+    
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+        // Force a hard clear on resize
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function draw(timestamp) {
+        let elapsed = timestamp % totalDuration;
+        
+        let p = 0; 
+        let stage = "";
+        let currentTotal = 0;
+
+        // Stage Logic
+        if (elapsed < (currentTotal += STAGES.STILL)) {
+            stage = "STILL";
+            p = elapsed / STAGES.STILL;
+        } else if (elapsed < (currentTotal += STAGES.WOBBLE)) {
+            stage = "WOBBLE";
+            p = (elapsed - (currentTotal - STAGES.WOBBLE)) / STAGES.WOBBLE;
+        } else if (elapsed < (currentTotal += STAGES.SPHERE)) {
+            stage = "SPHERE";
+            p = (elapsed - (currentTotal - STAGES.SPHERE)) / STAGES.SPHERE;
+        } else if (elapsed < (currentTotal += STAGES.HOLD)) {
+            stage = "HOLD";
+            p = (elapsed - (currentTotal - STAGES.HOLD)) / STAGES.HOLD;
+        } else if (elapsed < (currentTotal += STAGES.SHRINK)) {
+            stage = "SHRINK";
+            p = (elapsed - (currentTotal - STAGES.SHRINK)) / STAGES.SHRINK;
+        } else {
+            stage = "RESET";
+            p = (elapsed - (currentTotal - STAGES.RESET)) / STAGES.RESET;
+        }
+
+        // --- DYNAMIC PARAMETERS ---
+        let sphereMaxRadius = 0;
+        let phiRange = 0; 
+        let ghostCount = 1;
+        let trailOpacity = 1.0; // Default to solid clear
+        let speedMult = 1;
+
+        if (stage === "STILL") {
+            sphereMaxRadius = 0;
+            trailOpacity = 1.0; // Hard clear every frame
+        } 
+        else if (stage === "WOBBLE") {
+            sphereMaxRadius = (Math.min(width, height) * 0.35) * Math.pow(p, 2);
+            ghostCount = 1 + (p * 45);
+            // Gradually transition from hard clear to motion trails
+            trailOpacity = 1.0 - (p * 0.9); 
+            speedMult = 1 + (p * 3);
+        } 
+        else if (stage === "SPHERE") {
+            sphereMaxRadius = Math.min(width, height) * 0.35;
+            phiRange = p; 
+            ghostCount = 45;
+            trailOpacity = 0.08; 
+            speedMult = 4;
+        } 
+        else if (stage === "HOLD") {
+            sphereMaxRadius = Math.min(width, height) * 0.35;
+            phiRange = 1;
+            ghostCount = 45;
+            trailOpacity = 0.05; 
+            speedMult = 4;
+        } 
+        else if (stage === "SHRINK") {
+            sphereMaxRadius = (Math.min(width, height) * 0.35) * (1 - p);
+            phiRange = (1 - p);
+            ghostCount = 45 * (1 - p);
+            // Gradually increase opacity to "eat" the trails back to black
+            trailOpacity = 0.05 + (p * 0.95); 
+            speedMult = 4 * (1 - p);
+        }
+        else if (stage === "RESET") {
+            sphereMaxRadius = 0;
+            ghostCount = 1;
+            trailOpacity = 1.0; // Ensure 100% black
+        }
+
+        // 1. Draw Background Trail (Pure Black)
+        // We use a slightly higher opacity floor to prevent "grey-out"
+        let finalOpacity = Math.max(trailOpacity, 0.02);
+        ctx.fillStyle = `rgba(0, 0, 0, ${finalOpacity})`;
+        ctx.fillRect(0, 0, width, height);
+
+        // 2. Draw the Electron(s)
+        ghostCount = Math.max(1, Math.floor(ghostCount));
+        
+        for (let i = 0; i < ghostCount; i++) {
+            let t = (timestamp - (i * 8)) * 0.0015;
+
+            // Longitude & Latitude
+            let theta = t * (20 * speedMult);
+            let phi = (Math.PI / 2) + Math.sin(t * (9 * speedMult)) * (phiRange * Math.PI / 2);
+
+            // Conversion
+            let x = sphereMaxRadius * Math.sin(phi) * Math.cos(theta);
+            let y = sphereMaxRadius * Math.cos(phi);
+            let z = sphereMaxRadius * Math.sin(phi) * Math.sin(theta);
+
+            // Perspective (makes it look like a sphere, not a circle)
+            let perspectiveBase = Math.min(width, height) * 0.35 || 1;
+            let scale = 0.7 + ((z / perspectiveBase) * 0.3);
+            let alpha = (0.2 + (scale * 0.8)) * (1 - (i / ghostCount));
+
+            ctx.save();
+            ctx.translate(width/2 + x, height/2 + y);
+            
+            ctx.beginPath();
+            ctx.arc(0, 0, baseOrbRadius * scale, 0, Math.PI * 2);
+            
+            // Glow settings - capped to prevent haze
+            ctx.shadowBlur = (stage === "STILL" || stage === "RESET") ? 10 : 15 * scale;
+            ctx.shadowColor = "white";
+            ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+            ctx.fill();
+            ctx.restore();
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    requestAnimationFrame(draw);
+</script>
+</body>
+</html>
