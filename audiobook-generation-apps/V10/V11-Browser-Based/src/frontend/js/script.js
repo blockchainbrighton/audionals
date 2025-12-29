@@ -181,17 +181,37 @@ const BrowserAPI = {
 async function initFFmpeg() {
     if (ffmpegLoaded) return;
     try {
+        LOG.add("Initializing Audio Engine...", 'info');
+
         const baseURL = 'https://unpkg.com/@ffmpeg/core@0.12.6/dist/umd';
-        const coreBlob = await fetch(`${baseURL}/ffmpeg-core.js`).then(r => r.blob());
+        const ffmpegBaseURL = 'https://unpkg.com/@ffmpeg/ffmpeg@0.12.10/dist/esm';
+
+        LOG.add("Fetching FFmpeg Core...", 'info');
+        const coreBlob = await fetch(`${baseURL}/ffmpeg-core.js`).then(r => {
+            if (!r.ok) throw new Error(`Failed to fetch core: ${r.statusText}`);
+            return r.blob();
+        });
         const coreURL = URL.createObjectURL(coreBlob);
 
+        LOG.add("Fetching FFmpeg Worker...", 'info');
+        const workerBlob = await fetch(`${ffmpegBaseURL}/worker.js`).then(r => {
+            if (!r.ok) throw new Error(`Failed to fetch worker: ${r.statusText}`);
+            return r.blob();
+        });
+        const workerURL = URL.createObjectURL(workerBlob);
+
+        LOG.add("Loading FFmpeg instance...", 'info');
+        // Pass workerLoadURL to use our blob instead of the CDN URL directly
         await ffmpeg.load({
             coreURL: coreURL,
-            wasmURL: `${baseURL}/ffmpeg-core.wasm`
+            wasmURL: `${baseURL}/ffmpeg-core.wasm`,
+            workerLoadURL: workerURL
         });
+        
         ffmpegLoaded = true;
         LOG.add("Audio Engine Ready", 'success');
     } catch(e) {
+        console.error("FFmpeg Init Error:", e);
         LOG.add("Audio Engine Failed: " + e.message, 'error');
     }
 }
