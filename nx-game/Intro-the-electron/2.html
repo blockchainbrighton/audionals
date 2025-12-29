@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Lifecycle - Refined</title>
+    <style>
+        body { margin: 0; background-color: #000; overflow: hidden; height: 100vh; display: flex; justify-content: center; align-items: center; }
+        canvas { display: block; background-color: #000; }
+    </style>
+</head>
+<body>
+<canvas id="canvas"></canvas>
+
+<script>
+    const canvas = document.getElementById('canvas');
+    const ctx = canvas.getContext('2d');
+
+    let width, height;
+    let lastTime = 0;
+    let internalClock = 0;
+
+    // --- TIMING CONFIG ---
+    const STAGES = {
+        STILL: 2000,
+        WOBBLE: 8000,
+        SPHERE: 10000,
+        HOLD: 4000,
+        SHRINK: 7000,
+        RESET: 2000
+    };
+    const totalDuration = Object.values(STAGES).reduce((a, b) => a + b);
+
+    const ease = (t) => t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+
+    function resize() {
+        width = canvas.width = window.innerWidth;
+        height = canvas.height = window.innerHeight;
+        ctx.fillStyle = '#000';
+        ctx.fillRect(0, 0, width, height);
+    }
+    window.addEventListener('resize', resize);
+    resize();
+
+    function draw(timestamp) {
+        const dt = timestamp - lastTime;
+        lastTime = timestamp;
+
+        let elapsed = timestamp % totalDuration;
+        let p = 0, stage = "", currentTotal = 0;
+
+        // Stage Selection
+        if (elapsed < (currentTotal += STAGES.STILL)) { stage = "STILL"; p = elapsed / STAGES.STILL; }
+        else if (elapsed < (currentTotal += STAGES.WOBBLE)) { stage = "WOBBLE"; p = (elapsed - (currentTotal - STAGES.WOBBLE)) / STAGES.WOBBLE; }
+        else if (elapsed < (currentTotal += STAGES.SPHERE)) { stage = "SPHERE"; p = (elapsed - (currentTotal - STAGES.SPHERE)) / STAGES.SPHERE; }
+        else if (elapsed < (currentTotal += STAGES.HOLD)) { stage = "HOLD"; p = (elapsed - (currentTotal - STAGES.HOLD)) / STAGES.HOLD; }
+        else if (elapsed < (currentTotal += STAGES.SHRINK)) { stage = "SHRINK"; p = (elapsed - (currentTotal - STAGES.SHRINK)) / STAGES.SHRINK; }
+        else { stage = "RESET"; p = (elapsed - (currentTotal - STAGES.RESET)) / STAGES.RESET; }
+
+        let targetRadius = 0;
+        let targetPhi = 0;
+        let targetSpeed = 0.4;
+        let targetGhostIntensity = 0; 
+        let trailAlpha = 1.0; // 1.0 = solid black, 0.0 = total smear
+
+        const maxR = Math.min(width, height) * 0.35;
+
+        if (stage === "STILL") {
+            targetRadius = 0;
+            trailAlpha = 1.0;
+            targetGhostIntensity = 0;
+        } 
+        else if (stage === "WOBBLE") {
+            targetRadius = maxR * ease(p);
+            targetSpeed = 0.4 + (ease(p) * 3.6);
+            // Ghosting starts at 0 and only ramps up halfway through wobble
+            targetGhostIntensity = p < 0.3 ? 0 : (p - 0.3) / 0.7;
+            trailAlpha = 1.0 - (ease(p) * 0.94); // Fade into trails
+        } 
+        else if (stage === "SPHERE") {
+            targetRadius = maxR;
+            targetPhi = ease(p);
+            targetSpeed = 4.0;
+            targetGhostIntensity = 1.0;
+            trailAlpha = 0.06;
+        } 
+        else if (stage === "HOLD") {
+            targetRadius = maxR;
+            targetPhi = 1.0;
+            targetSpeed = 4.0;
+            targetGhostIntensity = 1.0;
+            trailAlpha = 0.04;
+        } 
+        else if (stage === "SHRINK") {
+            targetRadius = maxR * (1 - ease(p));
+            targetPhi = 1.0 - ease(p);
+            targetSpeed = 4.0 * (1 - ease(p));
+            // Ghosting dies out before the shrink is finished
+            targetGhostIntensity = p > 0.7 ? 0 : 1.0 - (p / 0.7);
+            // Trail alpha ramps back to solid black to wipe the screen
+            trailAlpha = 0.04 + (ease(p) * 0.96);
+        }
+        else if (stage === "RESET") {
+            targetRadius = 0;
+            trailAlpha = 1.0;
+            targetGhostIntensity = 0;
+        }
+
+        internalClock += dt * targetSpeed * 0.002;
+
+        // 1. Clean Background
+        ctx.fillStyle = `rgba(0, 0, 0, ${trailAlpha})`;
+        ctx.fillRect(0, 0, width, height);
+
+        // 2. Draw Electron and Ghosts
+        const ghostLimit = 60;
+        for (let i = 0; i < ghostLimit; i++) {
+            let t = internalClock - (i * 0.012);
+
+            let theta = t * 13;
+            let phi = (Math.PI / 2) + Math.sin(t * 7.7) * (targetPhi * Math.PI / 2);
+
+            let x = targetRadius * Math.sin(phi) * Math.cos(theta);
+            let y = targetRadius * Math.cos(phi);
+            let z = targetRadius * Math.sin(phi) * Math.sin(theta);
+
+            let zScale = 0.7 + (z / (maxR || 1)) * 0.3;
+            
+            // LOGIC: If i is 0, it's the lead electron (always visible). 
+            // Others are "ghosts" that fade based on targetGhostIntensity.
+            let ghostAlphaFactor = i === 0 ? 1 : targetGhostIntensity * (1 - i / ghostLimit);
+            let alpha = (0.2 + (zScale * 0.8)) * ghostAlphaFactor;
+
+            if (alpha > 0.01) {
+                ctx.save();
+                ctx.translate(width/2 + x, height/2 + y);
+                ctx.beginPath();
+                ctx.arc(0, 0, 5 * zScale, 0, Math.PI * 2);
+                
+                // Glow scales with radius to keep the center clean
+                ctx.shadowBlur = (15 * zScale) * (targetRadius / 100 + 0.2);
+                ctx.shadowColor = "white";
+                ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+                ctx.fill();
+                ctx.restore();
+            }
+        }
+
+        requestAnimationFrame(draw);
+    }
+
+    requestAnimationFrame(draw);
+</script>
+</body>
+</html>

@@ -1,0 +1,111 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quantum Multiplication</title>
+    <style>
+        body {
+            margin: 0;
+            background-color: #050505;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+        }
+        canvas {
+            filter: blur(0.5px); /* Smooths out the "solid" line slightly */
+        }
+    </style>
+</head>
+<body>
+
+    <canvas id="electronCanvas"></canvas>
+
+    <script>
+        const canvas = document.getElementById('electronCanvas');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 1000;
+        canvas.height = 400;
+
+        let time = 0;
+        let amplitude = 0;
+        let frequency = 0.02;
+        let growth = 0;
+        let multiplicity = 1; // How many "ghosts" we draw per frame
+        
+        const centerX = canvas.width / 2;
+        const centerY = canvas.height / 2;
+        const orbRadius = 6;
+
+        function draw() {
+            // 1. DYNAMIC FADE
+            // As it speeds up, we clear the background LESS, 
+            // making the "solid line" persist more.
+            let alpha = Math.max(0.01, 0.2 - (growth / 15000));
+            ctx.fillStyle = `rgba(5, 5, 5, ${alpha})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // 2. MULTIPLICATION LOGIC
+            // We draw the electron multiple times in one frame 
+            // at slightly different points in time.
+            for (let i = 0; i < multiplicity; i++) {
+                // Offset each "copy" slightly in time
+                let timeOffset = i * (0.5 / multiplicity);
+                let currentX = centerX + Math.sin(time + timeOffset) * amplitude;
+
+                ctx.beginPath();
+                ctx.arc(currentX, centerY, orbRadius, 0, Math.PI * 2);
+                
+                // Make them slightly transparent as they multiply to look like a glow
+                let opacity = multiplicity > 1 ? 0.5 : 1;
+                ctx.fillStyle = `rgba(255, 255, 255, ${opacity})`;
+                
+                ctx.shadowBlur = 10;
+                ctx.shadowColor = 'white';
+                ctx.fill();
+                ctx.closePath();
+            }
+
+            // 3. ACCELERATION CONSTANTS
+            time += frequency;
+
+            // Grow amplitude (width) and frequency (speed)
+            if (growth < 3000) {
+                growth++;
+                
+                // Increase the distance it travels
+                amplitude += (growth / 6000) * 1.5; 
+                
+                // Increase the speed of oscillation
+                frequency += (growth / 80000);
+
+                // Start multiplying the "ghosts" after a certain point
+                if (growth > 1000) {
+                    multiplicity += 0.1; 
+                }
+            } else {
+                // FINAL STATE: Extreme speed/multiplicity
+                // This creates the "Solid White Line" effect
+                multiplicity = 100;
+                frequency = 0.5;
+            }
+
+            requestAnimationFrame(draw);
+        }
+
+        draw();
+
+        // Reset on click to watch the progression again
+        window.addEventListener('click', () => {
+            growth = 0;
+            amplitude = 0;
+            frequency = 0.02;
+            multiplicity = 1;
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+        });
+    </script>
+</body>
+</html>
