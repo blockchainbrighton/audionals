@@ -262,11 +262,43 @@ class AudioEngine{
             x+=bw+1;
         }
     }
-    async getVoices(){let bv=[];if(this.synth) bv=await new Promise(r=>{const v=this.synth.getVoices();v.length?r(v):this.synth.onvoiceschanged=()=>r(this.synth.getVoices())});const fmtBv=bv.map((v,i)=>({id:`sys_${i}`,name:v.name,lang:v.lang,type:'standard',ref:v}));return [...fmtBv,...(STATE.api.elevenLabs.voices||[])]}
+    async getVoices(){
+        let bv=[];
+        if(this.synth) {
+            bv = await new Promise(r => {
+                const v = this.synth.getVoices();
+                if (v.length) return r(v);
+                
+                // Race condition: wait for event OR timeout
+                let resolved = false;
+                const onEnd = () => {
+                    if(resolved) return;
+                    resolved = true;
+                    r(this.synth.getVoices());
+                };
+                
+                this.synth.onvoiceschanged = onEnd;
+                setTimeout(onEnd, 1000); // 1s fallback
+            });
+        }
+        const fmtBv = bv.map((v,i) => ({
+            id: `sys_${i}`,
+            name: v.name,
+            lang: v.lang,
+            type: 'standard',
+            ref: v
+        }));
+        return [...fmtBv, ...(STATE.api.elevenLabs.voices || [])];
+    }
     
     async generateChunk(text,vid,mid){
         const v=STATE.voices.find(vo=>vo.id===vid);
         if(!v)throw new Error('Select voice');
+        
+        if(v.type==='standard'){
+            throw new Error('Standard voices are Playback-Only (cannot generate MP3).');
+        }
+
         if(v.type==='premium'){
             if(!STATE.api.elevenLabs.connected)throw new Error('API not connected');
             return BrowserAPI.generateAudio(text, vid, STATE.api.elevenLabs.key, mid);
