@@ -201,11 +201,11 @@ async function initFFmpeg() {
         const workerURL = URL.createObjectURL(workerBlob);
 
         LOG.add("Loading FFmpeg instance...", 'info');
-        // Pass workerLoadURL to use our blob instead of the CDN URL directly
+        // Pass classWorkerURL to use our blob instead of the CDN URL directly
         await ffmpeg.load({
             coreURL: coreURL,
             wasmURL: `${baseURL}/ffmpeg-core.wasm`,
-            workerLoadURL: workerURL
+            classWorkerURL: workerURL
         });
         
         ffmpegLoaded = true;
