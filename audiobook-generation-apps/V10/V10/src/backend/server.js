@@ -17,9 +17,10 @@ const TITLES_DIR = path.join(OUTPUT_DIR, 'titles');
 const BOOK_DIR = path.join(OUTPUT_DIR, 'book');
 const LOGS_DIR = path.join(OUTPUT_DIR, 'logs');
 const PROJECTS_DIR = path.join(OUTPUT_DIR, 'projects'); 
+const TEMP_DIR = path.join(OUTPUT_DIR, 'temp');
 
 // Ensure directories exist
-[OUTPUT_DIR, CHUNKS_DIR, CHAPTERS_DIR, TITLES_DIR, BOOK_DIR, LOGS_DIR, PROJECTS_DIR].forEach(d => {
+[OUTPUT_DIR, CHUNKS_DIR, CHAPTERS_DIR, TITLES_DIR, BOOK_DIR, LOGS_DIR, PROJECTS_DIR, TEMP_DIR].forEach(d => {
     if (!fs.existsSync(d)) fs.mkdirSync(d, { recursive: true });
 });
 
@@ -70,12 +71,48 @@ const executeFfmpeg = (args) => new Promise((resolve, reject) => {
     ff.on('error', reject);
 });
 
-async function mergeAudioFiles(inputPaths, outputPath) {
+async function createSilenceFile(duration) {
+    const filename = `silence_${duration}s.mp3`;
+    const filePath = path.join(TEMP_DIR, filename);
+    if (fs.existsSync(filePath)) return filePath;
+    
+    // Generate silence (44.1kHz, mono, 128k - standard ElevenLabs match)
+    // We use -c:a libmp3lame to ensure mp3 format.
+    await executeFfmpeg([
+        '-f', 'lavfi', '-i', 'anullsrc=r=44100:cl=mono', 
+        '-t', duration.toString(), 
+        '-b:a', '128k', 
+        '-y', filePath
+    ]);
+    return filePath;
+}
+
+async function mergeAudioFiles(inputPaths, outputPath, silenceDuration = 0) {
     return ffmpegQueue.add(async () => {
         if (inputPaths.length === 0) throw new Error("No files to merge");
         
+        let filesToMerge = [...inputPaths];
+
+        // Insert silence if requested
+        if (silenceDuration > 0) {
+            try {
+                const silenceFile = await createSilenceFile(silenceDuration);
+                const interleaved = [];
+                for (let i = 0; i < filesToMerge.length; i++) {
+                    interleaved.push(filesToMerge[i]);
+                    // Add silence between chunks (not after the last one)
+                    if (i < filesToMerge.length - 1) {
+                        interleaved.push(silenceFile);
+                    }
+                }
+                filesToMerge = interleaved;
+            } catch (e) {
+                console.error("Silence generation failed, proceeding without silence:", e);
+            }
+        }
+
         const listPath = outputPath + '.list.txt';
-        const fileContent = inputPaths.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
+        const fileContent = filesToMerge.map(p => `file '${p.replace(/'/g, "'\\''")}'`).join('\n');
         fs.writeFileSync(listPath, fileContent);
         
         try {
@@ -501,7 +538,7 @@ const server = http.createServer(async (req, res) => {
                 const requestData = JSON.parse(body);
                 console.log("[API Generate Request]", { ...requestData, apiKey: '***' }); // Log request (hide key)
 
-                const { text, voiceId, apiKey, modelId, projectId, chapterIndex, chunkIndex } = requestData;
+                const { text, voiceId, apiKey, modelId, projectId, chapterIndex, chunkIndex, force } = requestData;
                 
                 if (!text || !voiceId || !apiKey) {
                     throw new Error("Missing required fields: text, voiceId, or apiKey");
@@ -513,15 +550,15 @@ const server = http.createServer(async (req, res) => {
                 const filePath = path.join(CHUNKS_DIR, fileName);
                 const publicUrl = `/output/chunks/${fileName}`;
 
-                // Check if exists
-                if (fs.existsSync(filePath)) {
+                // Check if exists (Bypass if force is true)
+                if (fs.existsSync(filePath) && !force) {
                     console.log(`[Cache Hit] ${fileName}`);
                     res.writeHead(200, { 'Content-Type': 'application/json' });
                     res.end(JSON.stringify({ url: publicUrl, filename: fileName, cached: true }));
                     return;
                 }
 
-                console.log(`[Generating] ${fileName} ...`);
+                console.log(`[Generating${force ? ' (FORCE)' : ''}] ${fileName} ...`);
                 const audioBuffer = await generateAudio(text, voiceId, apiKey, modelId);
                 fs.writeFileSync(filePath, audioBuffer);
 
@@ -543,7 +580,7 @@ const server = http.createServer(async (req, res) => {
         req.on('data', chunk => body += chunk);
         req.on('end', async () => {
             try {
-                const { projectId, chapterIndex, filenames, isTitle } = JSON.parse(body);
+                const { projectId, chapterIndex, filenames, isTitle, silence } = JSON.parse(body);
                 
                 if (!filenames || filenames.length === 0) throw new Error("No files provided");
 
@@ -562,13 +599,68 @@ const server = http.createServer(async (req, res) => {
                 const publicUrl = `/output/${isTitle ? 'titles' : 'chapters'}/${outName}`;
 
                 console.log(`[Merging] ${outName} from ${filenames.length} chunks...`);
-                await mergeAudioFiles(inputPaths, outPath);
+                await mergeAudioFiles(inputPaths, outPath, silence);
 
                 res.writeHead(200, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ url: publicUrl, path: outPath }));
 
             } catch (e) {
                 console.error("Merge Error:", e);
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
+            }
+        });
+        return;
+    }
+
+    // API: Merge Book
+    if (pathname === '/api/merge-book' && req.method === 'POST') {
+        let body = '';
+        req.on('data', chunk => body += chunk);
+        req.on('end', async () => {
+            try {
+                const { projectId, silence } = JSON.parse(body);
+                if (!projectId) throw new Error("Project ID required");
+
+                // 1. Find Files
+                const files = [];
+                
+                // Titles
+                const titleFile = `${projectId}_titles.mp3`;
+                if (fs.existsSync(path.join(TITLES_DIR, titleFile))) {
+                    files.push({ path: path.join(TITLES_DIR, titleFile), index: -1 });
+                }
+
+                // Chapters
+                if (fs.existsSync(CHAPTERS_DIR)) {
+                    const chFiles = fs.readdirSync(CHAPTERS_DIR);
+                    chFiles.forEach(f => {
+                        const match = f.match(new RegExp(`^${projectId}_chapter_(\\d+)\\.mp3$`));
+                        if (match) {
+                            files.push({ path: path.join(CHAPTERS_DIR, f), index: parseInt(match[1]) });
+                        }
+                    });
+                }
+
+                if (files.length === 0) throw new Error("No chapters found to merge");
+
+                // 2. Sort
+                files.sort((a, b) => a.index - b.index);
+                const inputPaths = files.map(f => f.path);
+
+                // 3. Merge
+                const outName = `${projectId}_full_book.mp3`;
+                const outPath = path.join(BOOK_DIR, outName);
+                const publicUrl = `/output/book/${outName}`;
+
+                console.log(`[Merging Book] ${outName} from ${files.length} files...`);
+                await mergeAudioFiles(inputPaths, outPath, silence);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ url: publicUrl, path: outPath }));
+
+            } catch (e) {
+                console.error("Book Merge Error:", e);
                 res.writeHead(500, { 'Content-Type': 'application/json' });
                 res.end(JSON.stringify({ error: e.message }));
             }

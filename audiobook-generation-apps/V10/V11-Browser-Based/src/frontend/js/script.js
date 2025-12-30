@@ -360,6 +360,8 @@ const dom={manuscript:document.getElementById('manuscript'),timeline:document.ge
 function setElStatus(s,t){if(dom.elStatusText)dom.elStatusText.innerText=t;if(dom.elDot){dom.elDot.className='status-dot';if(s==='active')dom.elDot.classList.add('active');if(s==='error')dom.elDot.classList.add('error')}}
 
 async function init(){
+    LOG.add("Audiobook Studio Gen-3 // v11.0", 'info');
+    console.log("Audiobook Studio Gen-3 // v11.0");
     await storage.init();
     await initFFmpeg(); 
     await refreshVoiceList();
