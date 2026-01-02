@@ -26,17 +26,17 @@
     - [x] Add audio playback and download for generated files.
 
 ## Phase 3: Timeline & Advanced Features
-- [ ] **Timeline UI**
-    - [ ] Build visual timeline component (chapters, chunks).
-    - [ ] Implement "Dual Voice" logic (parsing `* * *` and assigning voices).
-- [ ] **Audio Processing**
-    - [ ] Move audio merging (FFmpeg) from Client (WASM) to Backend (System FFmpeg) for speed.
-    - [ ] Implement Export to MP3/M4B with metadata.
+- [x] **Timeline UI**
+    - [x] Build visual timeline component (chapters, chunks).
+    - [x] Implement "Dual Voice" logic (parsing `* * *` and assigning voices).
+- [x] **Audio Processing**
+    - [x] Move audio merging (FFmpeg) from Client (WASM) to Backend (System FFmpeg) for speed.
+    - [x] Implement chapter-level audio merging.
 
 ## Phase 4: Polish & Migration
 - [ ] **UX Refinement**
     - [ ] Add dark/light mode toggle (persisted).
-    - [ ] Add keyboard shortcuts.
+    - [ ] Add keyboard shortcuts (Cmd+S to save, etc.).
 - [ ] **Cleanup**
     - [ ] Archive legacy `js/` and `css/` folders.
     - [ ] Update `README.md` with installation instructions for the new stack.

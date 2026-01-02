@@ -8,6 +8,7 @@ import path from 'path';
 import { initDb } from './utils/db';
 import projectRoutes from './routes/projects';
 import ttsRoutes from './routes/tts';
+import audioRoutes from './routes/audio';
 
 dotenv.config();
 
@@ -33,6 +34,7 @@ app.use(express.static(path.join(__dirname, '../public')));
 // API Routes
 app.use('/api/projects', projectRoutes);
 app.use('/api/tts', ttsRoutes);
+app.use('/api/audio', audioRoutes);
 
 // Health Check
 app.get('/health', (req: Request, res: Response) => {

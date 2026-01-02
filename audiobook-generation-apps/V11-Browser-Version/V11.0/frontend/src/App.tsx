@@ -1,11 +1,18 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { api, Project } from './api'
 import { Timeline } from './components/Timeline'
 
 // Types for local state
 interface ParsedChapter {
     title: string;
-    chunks: { text: string; status: 'pending' | 'generating' | 'done' | 'error'; audioUrl?: string }[];
+    chunks: { 
+        text: string; 
+        status: 'pending' | 'generating' | 'done' | 'error'; 
+        audioUrl?: string;
+        voiceId: string; // Specific voice for this chunk
+        role: 'narrator' | 'character';
+    }[];
+    chapterAudioUrl?: string; // New: Merged audio for the whole chapter
 }
 
 function App() {
@@ -15,61 +22,110 @@ function App() {
   const [selectedProject, setSelectedProject] = useState<Project | null>(null)
   const [manuscript, setManuscript] = useState('')
   const [voices, setVoices] = useState<{id: string, name: string}[]>([])
-  const [selectedVoice, setSelectedVoice] = useState('af_heart')
+  
+  // Dual Voice Settings
+  const [narratorVoice, setNarratorVoice] = useState('af_heart')
+  const [characterVoice, setCharacterVoice] = useState('am_michael')
+  
   const [isGenerating, setIsGenerating] = useState(false)
   
   // Parsed Timeline State
   const [timelineData, setTimelineData] = useState<ParsedChapter[]>([])
   const [activeTab, setActiveTab] = useState<'edit' | 'timeline'>('edit')
+  const [theme, setTheme] = useState<'dark' | 'light'>(localStorage.getItem('theme') as 'dark' | 'light' || 'dark')
 
   useEffect(() => {
     loadProjects()
     loadVoices()
-  }, [])
+    
+    // Add Keyboard Shortcuts
+    const handleKeyDown = (e: KeyboardEvent) => {
+        if ((e.metaKey || e.ctrlKey) && e.key === 's') {
+            e.preventDefault();
+            handleSaveManuscript();
+        }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedProject, manuscript]) // Re-bind shortcuts when manuscript changes
 
-  // Auto-parse manuscript when saving or switching tabs
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', theme === 'dark');
+    localStorage.setItem('theme', theme);
+  }, [theme])
+
+  function toggleTheme() {
+    setTheme(t => t === 'dark' ? 'light' : 'dark');
+  }
+
+  // Auto-parse manuscript when switching to timeline
   useEffect(() => {
     if (activeTab === 'timeline') {
         parseManuscript()
     }
-  }, [activeTab])
+  }, [activeTab, narratorVoice, characterVoice]) // Re-parse if voices change
 
   function parseManuscript() {
     if (!manuscript) return
     
-    // Simple parsing logic: Split by "# Header"
     const lines = manuscript.split('\n');
     const chapters: ParsedChapter[] = [];
     let currentChapter: ParsedChapter = { title: 'Introduction', chunks: [] };
     
-    // Helper to add chunk
-    const addChunk = (text: string) => {
+    // State for parsing
+    let currentRole: 'narrator' | 'character' = 'narrator';
+
+    const addChunk = (text: string, role: 'narrator' | 'character') => {
         if (!text.trim()) return;
-        // Basic sentence splitting for chunks (~200 chars)
+        
+        // Split long chunks
         const sentences = text.match(/[^.!?]+[.!?]+(?:\s|$)/g) || [text];
         let buffer = "";
+        
+        const commitBuffer = () => {
+            if (buffer.trim()) {
+                currentChapter.chunks.push({ 
+                    text: buffer.trim(), 
+                    status: 'pending', 
+                    role: role,
+                    voiceId: role === 'narrator' ? narratorVoice : characterVoice
+                });
+                buffer = "";
+            }
+        };
+
         sentences.forEach(s => {
             if (buffer.length + s.length > 300) {
-                currentChapter.chunks.push({ text: buffer.trim(), status: 'pending' });
-                buffer = "";
+                commitBuffer();
             }
             buffer += s;
         });
-        if (buffer.trim()) currentChapter.chunks.push({ text: buffer.trim(), status: 'pending' });
+        commitBuffer();
     };
 
     lines.forEach(line => {
-        if (line.trim().startsWith('#')) {
+        const trimmed = line.trim();
+        
+        // 1. Chapter Detection
+        if (trimmed.startsWith('#')) {
             if (currentChapter.chunks.length > 0) chapters.push(currentChapter);
-            currentChapter = { title: line.replace(/^#+\s*/, ''), chunks: [] };
-        } else {
-            addChunk(line);
+            currentChapter = { title: trimmed.replace(/^#+\s*/, ''), chunks: [] };
+            currentRole = 'narrator'; // Reset role on new chapter
+        } 
+        // 2. Voice Switch Detection
+        else if (trimmed === '* * *' || trimmed === '***') {
+            currentRole = currentRole === 'narrator' ? 'character' : 'narrator';
+        }
+        // 3. Content
+        else {
+            addChunk(trimmed, currentRole);
         }
     });
+    
     if (currentChapter.chunks.length > 0) chapters.push(currentChapter);
     
-    // Merge with existing state to preserve 'done' status/audio
-    // In a real app, we'd use IDs to track chunks more robustly
+    // In a real app, merge with existing 'done' chunks here to avoid re-generating
+    // For now, we simply set the state, which resets status (Prototype limitation)
     setTimelineData(chapters); 
   }
 
@@ -129,19 +185,64 @@ function App() {
     }
   }
 
-  // Generate SINGLE chunk (placeholder for full loop)
-  async function handleGenerateAudio() {
-    if (!manuscript.trim()) return
-    setIsGenerating(true)
+  // Full Loop Generation with Merging
+  async function handleGenerateAll() {
+    if (timelineData.length === 0) return;
+    setIsGenerating(true);
+
+    const newTimeline = [...timelineData];
+
     try {
-      // Just demo generating the first chunk of first chapter
-      parseManuscript(); // Ensure fresh
-      const result = await api.generateAudio(manuscript.substring(0, 100), selectedVoice)
-      alert(`Generated demo chunk! Saved to: ${result.outputPath}`)
+        for (let cIdx = 0; cIdx < newTimeline.length; cIdx++) {
+            const chapter = newTimeline[cIdx];
+            const chapterAudioUrls: string[] = [];
+
+            for (let chIdx = 0; chIdx < chapter.chunks.length; chIdx++) {
+                const chunk = chapter.chunks[chIdx];
+                
+                // If already done, preserve it
+                if (chunk.status === 'done' && chunk.audioUrl) {
+                    chapterAudioUrls.push(chunk.audioUrl);
+                    continue; 
+                }
+
+                // Update UI: Generating
+                newTimeline[cIdx].chunks[chIdx].status = 'generating';
+                setTimelineData([...newTimeline]);
+
+                try {
+                    const res = await api.generateAudio(chunk.text, chunk.voiceId);
+                    
+                    // Update UI: Done
+                    newTimeline[cIdx].chunks[chIdx].status = 'done';
+                    newTimeline[cIdx].chunks[chIdx].audioUrl = `http://localhost:3000${res.url}`;
+                    setTimelineData([...newTimeline]);
+                    
+                    chapterAudioUrls.push(`http://localhost:3000${res.url}`);
+
+                } catch (e) {
+                    console.error(e);
+                    newTimeline[cIdx].chunks[chIdx].status = 'error';
+                    setTimelineData([...newTimeline]);
+                }
+            }
+
+            // MERGE CHAPTER
+            if (chapterAudioUrls.length > 0) {
+                 try {
+                     const mergeRes = await api.mergeAudio(chapterAudioUrls, chapter.title);
+                     newTimeline[cIdx].chapterAudioUrl = `http://localhost:3000${mergeRes.url}`;
+                     setTimelineData([...newTimeline]);
+                 } catch (e) {
+                     console.error("Merge failed for chapter " + cIdx, e);
+                 }
+            }
+        }
+        alert('Batch Generation & Merging Complete!');
     } catch (err) {
-      alert('Generation failed: ' + err)
+        alert('Generation interrupted: ' + err);
     } finally {
-      setIsGenerating(false)
+        setIsGenerating(false);
     }
   }
 
@@ -158,7 +259,14 @@ function App() {
              <button onClick={() => setActiveTab('timeline')} className={`px-3 py-1 rounded ${activeTab === 'timeline' ? 'bg-slate-700 text-white' : 'text-slate-400 hover:text-white'}`}>Timeline</button>
           </div>
         )}
-        <div className="flex gap-4">
+        <div className="flex gap-4 items-center">
+            <button 
+                onClick={toggleTheme}
+                className="p-1.5 rounded-full hover:bg-slate-700 transition-colors text-lg"
+                title="Toggle Theme"
+            >
+                {theme === 'dark' ? '☀' : '🌙'}
+            </button>
             <button className="text-sm hover:text-white transition-colors">Settings</button>
         </div>
       </header>
@@ -187,7 +295,7 @@ function App() {
         <section className="flex-1 bg-bg-dark overflow-hidden flex flex-col">
           {!selectedProject ? (
             <div className="p-8 max-w-4xl mx-auto w-full">
-              {/* Project List (Same as before) */}
+              {/* Project List */}
               <h1 className="text-3xl font-bold mb-8 text-white">Welcome to Audiobook Studio</h1>
               
               <div className="bg-bg-card p-6 rounded-lg border border-slate-700 shadow-xl">
@@ -238,12 +346,12 @@ function App() {
                             className="flex-1 bg-bg-dark p-6 resize-none focus:outline-none text-lg leading-relaxed font-serif text-slate-300"
                             value={manuscript}
                             onChange={(e) => setManuscript(e.target.value)}
-                            placeholder="Enter your story here... Use # for Chapters."
+                            placeholder="Enter your story here...&#10;# Chapter 1&#10;Once upon a time...&#10;* * *&#10;Dialogue here...&#10;* * *&#10;Back to narrator..."
                         />
                     ) : (
                         <Timeline 
                             chapters={timelineData}
-                            onPlayChunk={(url) => { const a = new Audio(`http://localhost:3000${url}`); a.play(); }}
+                            onPlayChunk={(url) => { const a = new Audio(url); a.play(); }}
                         />
                     )}
                 </div>
@@ -251,33 +359,53 @@ function App() {
                 {/* CONTROLS PANEL */}
                 <div className="w-80 bg-bg-card flex flex-col shrink-0">
                     <div className="h-10 bg-slate-800/50 border-b border-slate-700 flex items-center px-4 shrink-0">
-                        <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Generation</span>
+                        <span className="text-xs font-bold uppercase tracking-widest text-slate-500">Voice Casting</span>
                     </div>
                     <div className="p-4 flex flex-col gap-6">
+                        {/* Narrator Voice */}
                         <div className="flex flex-col gap-2">
-                            <label className="text-xs font-semibold text-slate-400">Select Voice</label>
+                            <label className="text-xs font-semibold text-primary-blue">Narrator Voice</label>
                             <select 
-                                value={selectedVoice}
-                                onChange={(e) => setSelectedVoice(e.target.value)}
+                                value={narratorVoice}
+                                onChange={(e) => setNarratorVoice(e.target.value)}
                                 className="bg-bg-input border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-primary-blue"
                             >
                                 {voices.map(v => (
-                                    <option key={v.id} value={v.id}>{v.name}</option>
+                                    <option key={v.id} value={v.id}>{v.name} ({v.gender})</option>
                                 ))}
                             </select>
                         </div>
 
+                        {/* Character Voice */}
+                        <div className="flex flex-col gap-2">
+                            <label className="text-xs font-semibold text-success-green">Character Voice</label>
+                            <select 
+                                value={characterVoice}
+                                onChange={(e) => setCharacterVoice(e.target.value)}
+                                className="bg-bg-input border border-slate-600 rounded px-3 py-2 text-sm focus:outline-none focus:border-success-green"
+                            >
+                                {voices.map(v => (
+                                    <option key={v.id} value={v.id}>{v.name} ({v.gender})</option>
+                                ))}
+                            </select>
+                            <div className="text-[10px] text-slate-500">
+                                Use <span className="font-mono text-slate-300 bg-slate-800 px-1 rounded">* * *</span> in text to toggle.
+                            </div>
+                        </div>
+
+                        <div className="h-px bg-slate-700 my-2"></div>
+
                         <button 
-                            disabled={isGenerating || !manuscript.trim()}
-                            onClick={handleGenerateAudio}
-                            className={`w-full py-3 rounded font-bold text-sm shadow-lg transition-all ${isGenerating ? 'bg-warning-orange/50 cursor-wait' : 'bg-success-green hover:bg-emerald-500 shadow-emerald-900/20'}`}
+                            disabled={isGenerating || timelineData.length === 0}
+                            onClick={handleGenerateAll}
+                            className={`w-full py-3 rounded font-bold text-sm shadow-lg transition-all ${isGenerating ? 'bg-warning-orange/50 cursor-wait' : 'bg-primary-blue hover:bg-blue-600 shadow-blue-900/20'}`}
                         >
-                            {isGenerating ? 'GENERATING...' : 'GENERATE (DEMO)'}
+                            {isGenerating ? 'GENERATING BATCH...' : 'GENERATE ALL'}
                         </button>
                         
                         <div className="mt-auto border-t border-slate-700 pt-4">
                              <div className="text-[10px] text-slate-500 italic leading-tight">
-                                Switch to "Timeline" tab to see parsed chapters and segments before generating.
+                                Audio is generated sequentially. Do not close this tab while processing.
                              </div>
                         </div>
                     </div>

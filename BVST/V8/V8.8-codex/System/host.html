@@ -1,0 +1,568 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BVST Studio</title>
+    <style>
+        /* Combined Styles */
+        body { background: #1a1a1a; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+        
+        /* Launcher Styles */
+        .launcher-container { text-align: center; padding: 40px; background: #2a2a2a; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); margin-top: 10vh; transition: opacity 0.5s; }
+        .launcher-container.hidden { display: none; opacity: 0; }
+        
+        /* Host/Rack Styles */
+        .host-container { width: 100%; max-width: 1024px; text-align: center; display: none; opacity: 0; transition: opacity 0.5s; }
+        .host-container.visible { display: block; opacity: 1; }
+        
+        h1 { margin-top: 0; color: #0f0; margin-bottom: 10px; }
+        p { color: #aaa; margin-bottom: 20px; }
+        
+        /* Inputs & Buttons */
+        select { padding: 10px; font-size: 16px; width: 200px; border: none; border-radius: 4px; background: #333; color: white; outline: none; cursor: pointer; }
+        select:focus { background: #444; }
+        
+        button { padding: 10px 20px; font-size: 16px; background: #0f0; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s, transform 0.1s; margin-left: 10px; }
+        button:hover { background: #4f4; transform: scale(1.05); }
+        button:active { transform: scale(0.95); }
+
+        /* Rack Area */
+        #rack { margin-top: 20px; }
+        #rack iframe { border: none; width: 100%; height: 500px; background: #222; border-radius: 8px; box-shadow: inset 0 0 20px rgba(0,0,0,0.5); }
+        #status { font-family: monospace; color: #888; margin-top: 10px; }
+
+        /* Drag Overlay */
+        #dropOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 255, 0, 0.2);
+            border: 5px dashed #0f0;
+            display: none; justify-content: center; align-items: center;
+            font-size: 3rem; color: #0f0; pointer-events: none; z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="dropOverlay">Drop Audio/MIDI Here</div>
+
+    <!-- LAUNCHER SECTION -->
+    <div class="launcher-container" id="launcher">
+        <h1>BVST Studio</h1>
+        <p style="margin-bottom: 8px;">Plugin group:</p>
+        <select id="pluginGroup">
+            <option value="">Loading...</option>
+        </select>
+        <p style="margin-top: 16px; margin-bottom: 8px;">Plugin:</p>
+        <select id="pluginName" disabled>
+            <option value="">Select a group...</option>
+        </select>
+        <br><br>
+        <label style="color: #aaa; font-size: 14px;">
+            <input type="checkbox" id="useMic"> Enable Audio Input (Microphone/FX Mode)
+        </label>
+        <br><br>
+        <button onclick="launch()">Launch</button>
+        <p id="launcherError" style="color: #f44; display: none; margin-top: 10px;"></p>
+    </div>
+
+    <!-- HOST SECTION -->
+    <div class="host-container" id="host">
+        <h1 id="hostTitle">Synth Name</h1>
+        
+        <!-- MIDI PLAYER SECTION -->
+        <div id="midiPlayer" style="display: none; margin: 10px auto; background: #2a2a2a; padding: 10px; border-radius: 4px; width: fit-content; border: 1px solid #444;">
+            <span style="font-weight: bold; margin-right: 10px; color: #aaa;">MIDI File Loaded</span>
+            <button onclick="playMidi()" style="background: #444; color: #fff; padding: 5px 15px;">Play</button>
+            <button onclick="stopMidi()" style="background: #444; color: #fff; padding: 5px 15px;">Stop</button>
+        </div>
+
+        <div id="rack"></div>
+        <div id="status">Initializing...</div>
+        <button onclick="reset()" style="margin-top: 20px; background: #444; color: #ccc;">Back to Menu</button>
+    </div>
+
+    <script type="module">
+        import { MidiParser } from './shared/midi_parser.js';
+
+        let audioCtx;
+        let workletNode;
+        let paramListener = null;
+        let guiFrame = null;
+        let engineReady = false;
+        let analyserInput = null;
+        let analyserOutput = null;
+        let workletModulesLoaded = false;
+        
+        // MIDI State
+        let midiEvents = [];
+        let midiPPQ = 96;
+        let midiPlaying = false;
+        let midiTimeouts = [];
+
+        window.notifyGuiReady = function() {
+            if (guiFrame && guiFrame.contentWindow && engineReady) {
+                guiFrame.contentWindow.postMessage({ type: 'BVST_READY' }, '*');
+            }
+        };
+
+        // Allow Enter key
+        document.addEventListener('keypress', function (e) {
+            if (e.key === 'Enter' && !document.getElementById('launcher').classList.contains('hidden')) {
+                launch();
+            }
+        });
+
+        // Initialize Dropdowns (Group -> Plugin)
+        async function populateSynths() {
+            const groupSelect = document.getElementById('pluginGroup');
+            const pluginSelect = document.getElementById('pluginName');
+            try {
+                const res = await fetch('/api/synths');
+                if (!res.ok) throw new Error('Failed to fetch plugins');
+                const synths = await res.json();
+
+                const entries = Array.isArray(synths) ? synths : [];
+                const groups = new Map();
+
+                for (const entry of entries) {
+                    const name = typeof entry === 'string' ? entry : entry.name;
+                    const path = typeof entry === 'string' ? `Synths/${entry}` : entry.path;
+                    const type = typeof entry === 'string' ? 'Synth' : (entry.type || 'Plugin');
+                    const category = typeof entry === 'string'
+                        ? 'Legacy'
+                        : (entry.category || (typeof path === 'string' && path.startsWith('Plugins/') ? path.split('/')[1] : 'Legacy'));
+                    const subgroup = typeof entry === 'string' ? 'Synths' : (entry.subgroup || '');
+
+                    const groupLabel =
+                        category === 'Instruments'
+                            ? (subgroup || 'Synths')
+                            : category;
+
+                    if (!name || !path) continue;
+                    if (!groups.has(groupLabel)) groups.set(groupLabel, []);
+                    groups.get(groupLabel).push({ name, path, type, category, subgroup, groupLabel });
+                }
+
+                const groupOrder = ['Synths', 'Samplers', 'Sequencers', 'Effects', 'Dynamics', 'Modulation', 'Utility', 'Legacy'];
+
+                groupSelect.innerHTML = '';
+                pluginSelect.innerHTML = '<option value="">Select a group...</option>';
+                pluginSelect.disabled = true;
+
+                const sortedGroupNames = Array.from(groups.keys()).sort((a, b) => {
+                    const ia = groupOrder.indexOf(a);
+                    const ib = groupOrder.indexOf(b);
+                    if (ia !== -1 || ib !== -1) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+                    return a.localeCompare(b);
+                });
+
+                if (sortedGroupNames.length === 0) {
+                    groupSelect.innerHTML = '<option value="">No Plugins Found</option>';
+                    groupSelect.disabled = true;
+                    pluginSelect.innerHTML = '<option value="">No Plugins Found</option>';
+                    pluginSelect.disabled = true;
+                    return;
+                }
+
+                for (const g of sortedGroupNames) {
+                    const opt = document.createElement('option');
+                    opt.value = g;
+                    opt.text = `${g} (${groups.get(g).length})`;
+                    groupSelect.add(opt);
+                }
+                groupSelect.disabled = false;
+
+                const populatePluginsForGroup = (groupName, preferredPlugin = null) => {
+                    const list = (groups.get(groupName) || []).slice().sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
+                    pluginSelect.innerHTML = '';
+                    pluginSelect.disabled = list.length === 0;
+
+                    if (list.length === 0) {
+                        pluginSelect.innerHTML = '<option value="">No Plugins Found</option>';
+                        return;
+                    }
+
+                    list.forEach(it => {
+                        const opt = document.createElement('option');
+                        opt.value = it.path;
+                        opt.dataset.name = it.name;
+                        opt.dataset.type = it.type;
+                        opt.text = `${it.name} (${it.type})`;
+                        pluginSelect.add(opt);
+                    });
+
+                    if (preferredPlugin) {
+                        const match = Array.from(pluginSelect.querySelectorAll('option')).find(o => o.dataset.name === preferredPlugin || o.value === preferredPlugin);
+                        if (match) pluginSelect.value = match.value;
+                    }
+
+                    const selOpt = pluginSelect.options[pluginSelect.selectedIndex];
+                    if (selOpt) {
+                        document.querySelector('#launcher button').innerText = `Launch ${selOpt.dataset.name || selOpt.text}`;
+                    }
+                };
+
+                groupSelect.onchange = () => populatePluginsForGroup(groupSelect.value);
+
+                const urlParams = new URLSearchParams(window.location.search);
+                const urlSynth = urlParams.get('synth');
+                if (urlSynth) {
+                    let found = null;
+                    for (const [g, list] of groups.entries()) {
+                        const match = list.find(it => it.name === urlSynth || it.path === urlSynth);
+                        if (match) { found = { group: g, plugin: match.path }; break; }
+                    }
+                    if (found) {
+                        groupSelect.value = found.group;
+                        populatePluginsForGroup(found.group, found.plugin);
+                        return;
+                    }
+                }
+
+                const defaultGroup = groups.has('Synths') ? 'Synths' : sortedGroupNames[0];
+                groupSelect.value = defaultGroup;
+                populatePluginsForGroup(defaultGroup);
+            } catch (e) {
+                console.error(e);
+                groupSelect.innerHTML = '<option value="">Error loading plugins</option>';
+                groupSelect.disabled = true;
+                pluginSelect.innerHTML = '<option value="">Error loading plugins</option>';
+                pluginSelect.disabled = true;
+            }
+        }
+        populateSynths();
+
+        document.getElementById('pluginName').addEventListener('change', function() {
+            const opt = this.options[this.selectedIndex];
+            const label = opt ? (opt.dataset.name || opt.text) : '';
+            if (label) document.querySelector('#launcher button').innerText = `Launch ${label}`;
+        });
+
+        window.launch = async function() {
+            const select = document.getElementById('pluginName');
+            const selected = select.options[select.selectedIndex];
+            if (!selected) return;
+
+            const pluginPath = selected.value;
+            const displayName = selected.dataset.name || selected.text || pluginPath;
+            engineReady = false;
+
+            if (workletNode) {
+                try { workletNode.disconnect(); } catch (_) {}
+                workletNode = null;
+            }
+
+            document.getElementById('launcher').classList.add('hidden');
+            document.getElementById('host').classList.add('visible');
+            document.getElementById('hostTitle').innerText = displayName;
+            document.getElementById('status').innerText = "Initializing Audio Engine...";
+            document.getElementById('launcherError').style.display = 'none';
+
+            const synthPath = `../${pluginPath}`;
+
+            try {
+                if (!audioCtx) {
+                    audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+                } else if (audioCtx.state === 'suspended') {
+                    await audioCtx.resume();
+                }
+
+                const manifestUrl = `${synthPath}/manifest.json?t=${Date.now()}`;
+                const manifestReq = await fetch(manifestUrl);
+                if (!manifestReq.ok) throw new Error(`Manifest not found for '${displayName}'`);
+                const manifest = await manifestReq.json();
+
+                const shimUrl = `scripts/worklet_shim.js?t=${Date.now()}`;
+                const processorUrl = `shared/processor_unified.js?t=${Date.now()}`;
+
+                if (!workletModulesLoaded) {
+                    try {
+                        await audioCtx.audioWorklet.addModule(shimUrl);
+                        await audioCtx.audioWorklet.addModule(processorUrl);
+                        workletModulesLoaded = true;
+                    } catch (e) {
+                        // If the processor is already registered (e.g. hot-reload), allow launch to continue.
+                        const msg = (e && e.message) ? e.message : String(e);
+                        if (!msg.includes('already') && !msg.includes('exists')) {
+                            throw new Error(`Failed to load shared processor: ${msg}`);
+                        }
+                        workletModulesLoaded = true;
+                    }
+                }
+
+                try {
+                    workletNode = new AudioWorkletNode(audioCtx, 'bvst-processor', {
+                        numberOfInputs: 1,
+                        numberOfOutputs: 1,
+                        outputChannelCount: [2]
+                    });
+                } catch (e) {
+                    throw new Error(`Failed to create AudioWorkletNode: ${e.message}`);
+                }
+
+                const useMic = document.getElementById('useMic').checked;
+                if (useMic) {
+                    try {
+                        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                        const source = audioCtx.createMediaStreamSource(stream);
+                        analyserInput = audioCtx.createAnalyser(); 
+                        analyserInput.fftSize = 2048;
+                        source.connect(analyserInput); 
+                        analyserInput.connect(workletNode); 
+                        console.log("Microphone connected to plugin.");
+                    } catch (err) {
+                        console.warn("Microphone access denied or failed:", err);
+                        alert("Microphone access failed. Plugin will run without input.");
+                    }
+                } else {
+                    analyserInput = audioCtx.createAnalyser();
+                    analyserInput.fftSize = 2048;
+                }
+
+                const wasmUrl = `${synthPath}/${manifest.components.audio_engine}?t=${Date.now()}`;
+                const wasmReq = await fetch(wasmUrl);
+                if (!wasmReq.ok) throw new Error(`WASM file not found: ${wasmUrl}`);
+                const wasmBytes = await wasmReq.arrayBuffer();
+
+                workletNode.port.postMessage({
+                    type: 'INIT_WASM',
+                    wasmBytes: wasmBytes,
+                    pluginId: displayName,
+                    manifestName: manifest.name
+                });
+
+                analyserOutput = audioCtx.createAnalyser(); 
+                analyserOutput.fftSize = 2048;
+                workletNode.connect(analyserOutput); 
+                analyserOutput.connect(audioCtx.destination);
+
+                guiFrame = document.createElement('iframe');
+                guiFrame.onload = () => window.notifyGuiReady();
+                guiFrame.src = `${synthPath}/${manifest.components.ui_html}?t=${Date.now()}`;
+                document.getElementById('rack').innerHTML = '';
+                document.getElementById('rack').appendChild(guiFrame);
+
+                let visModes = {}; 
+                let visId = null;
+                const visDataFloat = new Float32Array(analyserInput.frequencyBinCount); 
+                const visDataByte = new Uint8Array(analyserInput.frequencyBinCount);   
+
+                const loop = () => {
+                    for (const instanceId in visModes) {
+                        const mode = visModes[instanceId];
+                        if (mode === 'off') continue;
+
+                        const analyserNode = (instanceId === 'input' && analyserInput) ? analyserInput : 
+                                             (instanceId === 'output' && analyserOutput) ? analyserOutput : null;
+                        
+                        if (!analyserNode) continue;
+
+                        if (mode === 'scope') {
+                            analyserNode.getFloatTimeDomainData(visDataFloat);
+                            if (guiFrame && guiFrame.contentWindow) {
+                                guiFrame.contentWindow.postMessage({ type: 'BVST_VIS_DATA', instanceId: instanceId, mode: 'scope', data: visDataFloat }, '*');
+                            }
+                        } else if (mode === 'spectrum') {
+                            analyserNode.getByteFrequencyData(visDataByte);
+                            if (guiFrame && guiFrame.contentWindow) {
+                                guiFrame.contentWindow.postMessage({ type: 'BVST_VIS_DATA', instanceId: instanceId, mode: 'spectrum', data: visDataByte }, '*');
+                            }
+                        }
+                    }
+                    visId = requestAnimationFrame(loop);
+                };
+
+                if (paramListener) {
+                    window.removeEventListener('message', paramListener);
+                }
+                paramListener = (event) => {
+                    if (event.data.type === 'BVST_PARAM' && workletNode) {
+                        workletNode.port.postMessage({ type: 'PARAM', id: event.data.id, value: event.data.value });
+                    }
+                    else if (event.data.type === 'NOTE_ON' && workletNode) {
+                        workletNode.port.postMessage({ type: 'NOTE_ON', note: event.data.note, velocity: event.data.velocity });
+                    }
+                    else if (event.data.type === 'NOTE_OFF' && workletNode) {
+                        workletNode.port.postMessage({ type: 'NOTE_OFF', note: event.data.note });
+                    }
+                    else if (event.data.type === 'MIDI_CC' && workletNode) {
+                        workletNode.port.postMessage({ type: 'MIDI_CC', cc: event.data.cc, value: event.data.value });
+                    }
+                    else if (event.data.type === 'BVST_POWER') {
+                        if (audioCtx && audioCtx.state === 'suspended') {
+                            audioCtx.resume().then(() => console.log("Host Audio Context Resumed"));
+                        }
+                    }
+                    else if (event.data.type === 'BVST_VISUALIZER_MODE') {
+                        const instanceId = event.data.instanceId;
+                        visModes[instanceId] = event.data.mode;
+                        
+                        let anyActive = false;
+                        for (const id in visModes) {
+                            if (visModes[id] !== 'off') {
+                                anyActive = true;
+                                break;
+                            }
+                        }
+
+                        if (anyActive && !visId) {
+                            visId = requestAnimationFrame(loop);
+                        } else if (!anyActive && visId) {
+                            cancelAnimationFrame(visId);
+                            visId = null;
+                        }
+                    }
+                    else if (event.data.type === 'BVST_LOAD_SAMPLE_FROM_GUI' && workletNode) {
+                        workletNode.port.postMessage({
+                            type: 'LOAD_SAMPLE',
+                            samples: event.data.samples
+                        });
+                        document.getElementById('status').innerText = "Sample Loaded from URL";
+                    }
+                };
+                window.addEventListener('message', paramListener);
+
+                workletNode.port.onmessage = (e) => {
+                    if (e.data.type === 'READY') {
+                        engineReady = true;
+                        document.getElementById('status').innerText = `Running: ${displayName}`;
+                        document.getElementById('status').style.color = '#0f0';
+                        window.notifyGuiReady();
+                    } else if (e.data.type === 'ERROR') {
+                        document.getElementById('status').innerText = "Error: " + e.data.error;
+                        document.getElementById('status').style.color = '#f44';
+                    }
+                };
+                
+                const newUrl = new URL(window.location);
+                newUrl.searchParams.set('synth', displayName);
+                window.history.pushState({}, '', newUrl);
+
+            } catch (e) {
+                console.error(e);
+                document.getElementById('status').innerText = "Launch Failed: " + e.message;
+                document.getElementById('status').style.color = '#f44';
+            }
+        };
+
+        window.reset = function() {
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.delete('synth');
+            window.location.href = newUrl.toString();
+        };
+
+        // MIDI Playback Logic
+        window.playMidi = function() {
+            if (!midiEvents || midiEvents.length === 0) return alert("No MIDI loaded");
+            if (!workletNode) return alert("Launch a synth first");
+            
+            stopMidi();
+            midiPlaying = true;
+            
+            const now = audioCtx.currentTime;
+            // Default 120 BPM if no tempo event found (simplification)
+            // Time per tick = 60 / (BPM * PPQ).
+            const secondsPerTick = 60.0 / (120.0 * midiPPQ);
+            
+            midiEvents.forEach(evt => {
+                // Ignore ticks < 0?
+                const time = now + (evt.ticks * secondsPerTick);
+                const delayMs = (time - now) * 1000;
+                
+                if (delayMs >= 0) {
+                    const id = setTimeout(() => {
+                        if (!midiPlaying) return;
+                        if (evt.type === 'note_on') {
+                            workletNode.port.postMessage({ type: 'NOTE_ON', note: evt.note, velocity: evt.velocity });
+                        } else if (evt.type === 'note_off') {
+                            workletNode.port.postMessage({ type: 'NOTE_OFF', note: evt.note });
+                        }
+                    }, delayMs);
+                    midiTimeouts.push(id);
+                }
+            });
+            
+            document.getElementById('status').innerText = "Playing MIDI...";
+        };
+
+        window.stopMidi = function() {
+            midiPlaying = false;
+            midiTimeouts.forEach(id => clearTimeout(id));
+            midiTimeouts = [];
+            document.getElementById('status').innerText = "MIDI Stopped";
+        };
+
+        // --- DRAG AND DROP ---
+        const dropOverlay = document.getElementById('dropOverlay');
+        let dragCounter = 0;
+
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            window.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        window.addEventListener('dragenter', (e) => {
+            dragCounter++;
+            dropOverlay.style.display = 'flex';
+        });
+
+        window.addEventListener('dragleave', (e) => {
+            dragCounter--;
+            if (dragCounter === 0) dropOverlay.style.display = 'none';
+        });
+
+        window.addEventListener('drop', async (e) => {
+            dragCounter = 0;
+            dropOverlay.style.display = 'none';
+
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (!workletNode || !engineReady) {
+                alert("Please launch a plugin first.");
+                return;
+            }
+
+            if (files.length > 0) {
+                const file = files[0];
+                
+                if (file.name.match(/\.mid$/i)) {
+                    // MIDI File
+                    try {
+                        const buffer = await file.arrayBuffer();
+                        const parsed = MidiParser.parse(buffer);
+                        midiEvents = parsed.events;
+                        midiPPQ = parsed.timeDivision;
+                        console.log("MIDI Loaded:", parsed);
+                        document.getElementById('midiPlayer').style.display = 'block';
+                        document.getElementById('status').innerText = `MIDI Loaded: ${file.name} (${midiEvents.length} events)`;
+                    } catch (err) {
+                        alert("Error parsing MIDI: " + err.message);
+                    }
+                }
+                else if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a)$/i)) {
+                    // Audio File
+                    document.getElementById('status').innerText = "Loading Sample...";
+                    try {
+                        const arrayBuffer = await file.arrayBuffer();
+                        const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                        const channelData = audioBuffer.getChannelData(0);
+                        
+                        workletNode.port.postMessage({ type: 'LOAD_SAMPLE', samples: channelData });
+
+                        if (guiFrame && guiFrame.contentWindow) {
+                            guiFrame.contentWindow.postMessage({ type: 'BVST_SAMPLE_DATA', samples: channelData }, '*');
+                        }
+                        document.getElementById('status').innerText = `Sample Loaded: ${file.name} (${audioBuffer.duration.toFixed(2)}s)`;
+                    } catch (err) {
+                        document.getElementById('status').innerText = "Error Loading Sample: " + err.message;
+                        alert("Error loading sample: " + err.message);
+                    }
+                } else {
+                    alert("Unsupported file type: " + file.type);
+                }
+            }
+        });
+    </script>
+</body>
+</html>

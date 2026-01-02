@@ -63,5 +63,15 @@ export const api = {
         });
         if (!res.ok) throw new Error('Failed to generate audio');
         return res.json();
+    },
+
+    async mergeAudio(chunks: string[], chapterTitle: string): Promise<{url: string}> {
+        const res = await fetch(`${API_BASE_URL}/audio/merge`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ chunks, chapterTitle }),
+        });
+        if (!res.ok) throw new Error('Failed to merge audio');
+        return res.json();
     }
 };
