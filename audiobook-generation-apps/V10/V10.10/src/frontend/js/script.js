@@ -89,14 +89,12 @@ const TextParser = {
     },
 
     parseDualVoiceSegments: function(text, delim = '* * *', initVoiceIndex = 0, voiceNames = []) {
-        console.log(`[DEBUG] parseDualVoiceSegments. Delimiter: "${delim}", InitVoice: ${initVoiceIndex}`);
         const segs = [];
         const token = delim.trim() || '* * *';
         const escToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         
         // Split by token
         const parts = text.split(new RegExp(escToken, 'g'));
-        console.log(`[DEBUG] Dual voice split parts: ${parts.length}`);
         
         let currentVoice = initVoiceIndex % 2; // 0 or 1
         
@@ -427,24 +425,12 @@ async function generateChapter(idx,e){
 }
 function attachDefaultConfirmListener(){document.getElementById('btn-confirm-start').onclick=startFullBookGeneration}
 
-async function renderTimeline() {
+function renderTimeline() {
     if (!STATE.chapters.length) {
         dom.timeline.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim);font-style:italic">No chapters. Paste text & "Analyze".</div>';
         return;
     }
-
-    // Incremental rendering for large projects
-    dom.timeline.innerHTML = '<div style="padding:20px;text-align:center;">⌛ Rendering timeline...</div>';
-    await new Promise(r => setTimeout(r, 0));
-
-    let html = '';
-    for (let idx = 0; idx < STATE.chapters.length; idx++) {
-        // Yield every 10 chapters to keep UI responsive
-        if (idx > 0 && idx % 10 === 0) {
-            await new Promise(r => setTimeout(r, 0));
-        }
-
-        const ch = STATE.chapters[idx];
+    dom.timeline.innerHTML = STATE.chapters.map((ch, idx) => {
         const uniqueVoices = new Set(ch.chunks.map(c => c.voiceName)).size;
         const allDone = ch.chunks.every(ck => ck.status === 'done');
         const playing = STATE.activePlaybackId === `chapter_${idx}`;
@@ -463,7 +449,7 @@ async function renderTimeline() {
                 </div></div>`;
         }).join('') : '';
 
-        html += `<div class="chapter-card">
+        return `<div class="chapter-card">
             <div class="chapter-header">
                 <div class="ch-row">
                     <div style="display:flex;align-items:center;gap:6px;flex:1;overflow:hidden">
@@ -486,9 +472,7 @@ async function renderTimeline() {
                     </div>
                 </div>
             </div>${chunksHtml}</div>`;
-    }
-    
-    dom.timeline.innerHTML = html;
+    }).join('');
 }
 
 function toggleChapterCollapse(i,e){if(e)e.stopPropagation();STATE.chapters[i].collapsed=!STATE.chapters[i].collapsed;renderTimeline()}
@@ -519,171 +503,48 @@ function sanitizeChunkSize(v){const p=parseInt(v,10);return isNaN(p)?1000:Math.m
 
 function splitTextIntoChunks(txt,max){
     const res=[];let rem=txt.trim();
-    let loopCount = 0;
-    while(rem.length>0){
-        loopCount++;
-        if(loopCount > 100000) { console.error("Infinite loop in splitTextIntoChunks detected!"); break; }
-        
-        if(rem.length<=max){res.push(rem);break}
+    while(rem.length>0){if(rem.length<=max){res.push(rem);break}
         const safe=Math.floor(max*0.75),area=rem.substring(safe,max);
         let split=safe,match,last=-1;
         while((match=/[.!?\u201d"]+(?=\s|$)/g.exec(area))!==null)last=match.index+match[0].length;
         if(last!==-1)split+=last;else{const sp=rem.lastIndexOf(' ',max);split=(sp>max*0.3)?sp:(rem.lastIndexOf('\n',max)>max*0.3?rem.lastIndexOf('\n',max):max)}
-        
-        if (split <= 0) split = max;
-
         res.push(rem.slice(0,split).trim());rem=rem.slice(split).trimStart();
-    }
-    return res
+    }return res
 }
 
-dom.manuscript.addEventListener('input',()=>{
-    try {
-        localStorage.setItem('ab_manuscript', dom.manuscript.value);
-    } catch(e) {
-        console.warn("Could not save to localStorage:", e.message);
-    }
-    updateReceipt();
-});
+dom.manuscript.addEventListener('input',()=>{localStorage.setItem('ab_manuscript',dom.manuscript.value);updateReceipt()});
 
-document.getElementById('btn-analyze').addEventListener('click', async ()=>{
-
-    const btn = document.getElementById('btn-analyze');
-
-    const originalText = btn.innerText;
-
-    btn.disabled = true;
-
-    btn.innerText = "⏳ Analyzing...";
-
-    
-
-    LOG.add("Analyzing manuscript...", 'info');
-
-    try {
-
-        const raw=dom.manuscript.value;
-
-        if(!raw.trim()){ LOG.add("Manuscript is empty.", 'warning'); btn.disabled = false; btn.innerText = originalText; return; }
-
-        
-
-        STATE.chapters.forEach(c=>c.chunks.forEach(k=>{if(k.audioUrl)URL.revokeObjectURL(k.audioUrl)}));STATE.chapters=[];
-
-        STATE.project.voiceNames=[dom.voiceName1.value,dom.voiceName2.value];STATE.project.token=dom.voiceToken.value;
-
-        
-
-        const lim=sanitizeChunkSize(dom.chunkSize.value);dom.chunkSize.value=lim;
-
-
-
-        const reg=TextParser.getChapterHeadingRegex();
-
-        const parts=raw.split(reg).filter(p=>p.trim().length>0);
-
-
-
-        let curT="Start",pre="",pend="",cnt=0;
-
-        if(parts.length&&!parts[0].match(reg))pre=parts[0];
-
-        
-
-        for(let i=0; i<parts.length; i++){
-
-            // Yield to main thread every few parts to keep UI responsive
-
-            if(i % 5 === 0) await new Promise(r => setTimeout(r, 0));
-
-            
-
-            const p=parts[i],pc=p.trim();
-
-            if(pc.match(reg)){
-
-                curT=pc.replace(/^[#\s]+/,'').trim();cnt++;pend=curT.replace(/[:|–—]\s*/g,'... ... ... ').trim();if(!pend.match(/[.!?]$/))pend+='... ... ...';pend+='\n\n';
-
-            }else{
-
-                let ft=pend+p;pend="";
-
-                let segs=STATE.project.mode==='dual'?TextParser.parseDualVoiceSegments(ft,STATE.project.token,TextParser.detectStartingVoice(ft,curT,STATE.project.voiceNames),STATE.project.voiceNames):[{text:ft,voiceIndex:0}];
-
-
-
-                const chChunks=[];
-
-                segs.forEach((s)=>{
-
-                    splitTextIntoChunks(s.text,lim).forEach(t=>{
-
-                        chChunks.push({text:t,status:'pending',id:Math.random().toString(36).substr(2,9),audioUrl:null,voiceId:STATE.project.voiceIds[s.voiceIndex]||STATE.project.voiceIds[0],voiceName:STATE.project.voiceNames[s.voiceIndex]||(s.voiceIndex===0?"Voice 1":"Voice 2"),duration:0});
-
-                    });
-
-                });
-
-                
-
-                if(chChunks.length){
-
-                    let ft="Titles";
-
-                    if(cnt>0){let ch=curT.replace(/^(Chapter|Part|Book|Kapitel|Prologue|Epilogue)\s+\d*[:\.]?\s*/i,'');ft=`Chapter ${cnt}${ch?': '+ch:''}`}
-
-                    STATE.chapters.push({title:ft,chunks:chChunks,collapsed:false});
-
-                }
-
+document.getElementById('btn-analyze').addEventListener('click',()=>{
+    const raw=dom.manuscript.value;if(!raw.trim())return;
+    STATE.chapters.forEach(c=>c.chunks.forEach(k=>{if(k.audioUrl)URL.revokeObjectURL(k.audioUrl)}));STATE.chapters=[];
+    STATE.project.voiceNames=[dom.voiceName1.value,dom.voiceName2.value];STATE.project.token=dom.voiceToken.value;
+    const lim=sanitizeChunkSize(dom.chunkSize.value);dom.chunkSize.value=lim;
+    const reg=TextParser.getChapterHeadingRegex(),parts=raw.split(reg).filter(p=>p.trim().length>0);
+    let curT="Start",pre="",pend="",cnt=0;
+    if(parts.length&&!parts[0].match(reg))pre=parts[0];
+    for(let i=0;i<parts.length;i++){
+        const p=parts[i],pc=p.trim();
+        if(pc.match(reg)){
+            curT=pc.replace(/^[#\s]+/,'').trim();cnt++;pend=curT.replace(/[:|–—]\s*/g,'... ... ... ').trim();if(!pend.match(/[.!?]$/))pend+='... ... ...';pend+='\n\n';
+        }else{
+            let ft=pend+p;pend="";let segs=STATE.project.mode==='dual'?TextParser.parseDualVoiceSegments(ft,STATE.project.token,TextParser.detectStartingVoice(ft,curT,STATE.project.voiceNames),STATE.project.voiceNames):[{text:ft,voiceIndex:0}];
+            const chChunks=[];
+            segs.forEach(s=>splitTextIntoChunks(s.text,lim).forEach(t=>{
+                chChunks.push({text:t,status:'pending',id:Math.random().toString(36).substr(2,9),audioUrl:null,voiceId:STATE.project.voiceIds[s.voiceIndex]||STATE.project.voiceIds[0],voiceName:STATE.project.voiceNames[s.voiceIndex]||(s.voiceIndex===0?"Voice 1":"Voice 2"),duration:0});
+            }));
+            if(chChunks.length){
+                let ft="Titles";
+                if(cnt>0){let ch=curT.replace(/^(Chapter|Part|Book|Kapitel|Prologue|Epilogue)\s+\d*[:\.]?\s*/i,'');ft=`Chapter ${cnt}${ch?': '+ch:''}`}
+                STATE.chapters.push({title:ft,chunks:chChunks,collapsed:false});
             }
-
         }
-
-        
-
-        const meta=TextParser.detectProjectMetadata(raw,pre),safeT=(meta.title||'u').replace(/\W/g,''),safeA=(meta.author||'u').replace(/\W/g,'');
-
-        const combined = safeT + safeA;
-        let hash = 0;
-        for (let i = 0; i < combined.length; i++) {
-            hash = ((hash << 5) - hash) + combined.charCodeAt(i);
-            hash |= 0;
-        }
-        STATE.project.id = `${safeT.substring(0,10)}_${Math.abs(hash).toString(16)}`;
-
-        
-
-        const cost=STATE.chapters.reduce((a,c)=>a+c.chunks.reduce((x,y)=>x+y.text.length,0),0)*TextParser.getModelCreditMultiplier(dom.elModel.value)*0.000165;
-
-        
-
-        document.getElementById('project-summary').style.display='block';document.getElementById('sum-title').innerText=meta.title;document.getElementById('sum-author').innerText=meta.author;document.getElementById('sum-lang').innerText=meta.language;
-
-        document.getElementById('sum-chapters').innerText=STATE.chapters.length;document.getElementById('sum-chars').innerText=Math.round(cost/0.000165);document.getElementById('sum-cost').innerText=`${cost.toFixed(2)}`;document.getElementById('sum-model').innerText=dom.elModel.value;
-
-        
-
-        renderTimeline();
-
-        dom.btnGenerate.disabled=!STATE.chapters.length;dom.btnGenerateTimeline.disabled=!STATE.chapters.length;dom.btnGenerate.innerText="2. Generate Audio";updateReceipt();
-
-        LOG.add(`Analysis complete. Found ${STATE.chapters.length} chapters.`, 'success');
-
-    } catch(e) {
-
-        console.error("Analysis Error:", e);
-
-        LOG.add("Analysis failed: " + e.message, 'error');
-
-    } finally {
-
-        btn.disabled = false;
-
-        btn.innerText = originalText;
-
     }
-
+    const meta=TextParser.detectProjectMetadata(raw,pre),safeT=(meta.title||'u').replace(/\W/g,''),safeA=(meta.author||'u').replace(/\W/g,'');
+    STATE.project.id=`${safeT.substring(0,10)}_${Math.abs([...(safeT+safeA)].reduce((h,c)=>(h<<5)-h+c.charCodeAt(0)|0,0)).toString(16)}`;
+    const cost=STATE.chapters.reduce((a,c)=>a+c.chunks.reduce((x,y)=>x+y.text.length,0),0)*TextParser.getModelCreditMultiplier(dom.elModel.value)*0.000165;
+    document.getElementById('project-summary').style.display='block';document.getElementById('sum-title').innerText=meta.title;document.getElementById('sum-author').innerText=meta.author;document.getElementById('sum-lang').innerText=meta.language;
+    document.getElementById('sum-chapters').innerText=STATE.chapters.length;document.getElementById('sum-chars').innerText=Math.round(cost/0.000165);document.getElementById('sum-cost').innerText=`$${cost.toFixed(2)}`;document.getElementById('sum-model').innerText=dom.elModel.value;
+    renderTimeline();dom.btnGenerate.disabled=!STATE.chapters.length;dom.btnGenerateTimeline.disabled=!STATE.chapters.length;dom.btnGenerate.innerText="2. Generate Audio";updateReceipt();
 });
 
 async function initiateGeneration(){

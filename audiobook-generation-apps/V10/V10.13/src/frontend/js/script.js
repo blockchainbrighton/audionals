@@ -76,6 +76,54 @@ const LANG_CONFIG = [
   ['unk', 'Unknown', ['Part', 'Parte', 'Partie', 'Teil', 'Livre', 'Libro', 'Buch'], []]
 ];
 
+const ChapterVerifier = {
+    wordMap: {
+        // English
+        'one':1,'two':2,'three':3,'four':4,'five':5,'six':6,'seven':7,'eight':8,'nine':9,'ten':10,
+        'eleven':11,'twelve':12,'thirteen':13,'fourteen':14,'fifteen':15,'sixteen':16,'seventeen':17,'eighteen':18,'nineteen':19,'twenty':20,
+        'twenty-one':21,'twenty-two':22,'thirty':30,'forty':40,'fifty':50,
+        // Spanish
+        'uno':1,'dos':2,'tres':3,'cuatro':4,'cinco':5,'seis':6,'siete':7,'ocho':8,'nueve':9,'diez':10,
+        'once':11,'doce':12,'trece':13,'catorce':14,'quince':15,'dieciseis':16,'dieciséis':16,'diecisiete':17,'dieciocho':18,'diecinueve':19,'veinte':20,
+        'veintiuno':21,'veintidos':22,'veintidós':22,'treinta':30,'cuarenta':40,'cincuenta':50,
+        // Spanish Compound (31-39)
+        'treinta y uno':31,'treinta y dos':32,'treinta y tres':33,'treinta y cuatro':34,'treinta y cinco':35,
+        'treinta y seis':36,'treinta y siete':37,'treinta y ocho':38,'treinta y nueve':39,
+        // German
+        'eins':1,'zwei':2,'drei':3,'vier':4,'fünf':5,'sechs':6,'sieben':7,'acht':8,'neun':9,'zehn':10,
+        'elf':11,'zwölf':12,'dreizehn':13,'vierzehn':14,'fünfzehn':15,'sechzehn':16,'siebzehn':17,'achtzehn':18,'neunzehn':19,'zwanzig':20,
+        // French
+        'un':1,'deux':2,'trois':3,'quatre':4,'cinq':5,'six':6,'sept':7,'huit':8,'neuf':9,'dix':10,
+        'onze':11,'douze':12,'treize':13,'quatorze':14,'quinze':15,'seize':16,'dix-sept':17,'dix-huit':18,'dix-neuf':19,'vingt':20
+    },
+    romanMap: {
+        'i':1,'ii':2,'iii':3,'iv':4,'v':5,'vi':6,'vii':7,'viii':8,'ix':9,'x':10,
+        'xi':11,'xii':12,'xiii':13,'xiv':14,'xv':15,'xvi':16,'xvii':17,'xviii':18,'xix':19,'xx':20,
+        'xxi':21,'xxii':22,'xxiii':23,'xxiv':24,'xxv':25,'xxvi':26,'xxvii':27,'xxviii':28,'xxix':29,'xxx':30,
+        'xxxi':31,'xxxii':32,'xxxiii':33,'xxxiv':34,'xxxv':35
+    },
+    parse(title) {
+        // Normalize: remove "Chapter", "Capítulo", etc.
+        const clean = title.replace(/^(Chapter|Capítulo|Chapitre|Kapitel|Part|Parte)\s+/i, '').trim().toLowerCase();
+        
+        // 1. Try Digits
+        const digitMatch = clean.match(/^(\d+)/);
+        if (digitMatch) return parseInt(digitMatch[1], 10);
+
+        // 2. Try Roman Numerals (must be standalone word)
+        const firstWord = clean.split(/[\s:.]/)[0];
+        if (this.romanMap[firstWord]) return this.romanMap[firstWord];
+
+        // 3. Try Word Map (Longest match first)
+        const sortedKeys = Object.keys(this.wordMap).sort((a, b) => b.length - a.length);
+        for (const word of sortedKeys) {
+            if (clean.startsWith(word)) return this.wordMap[word];
+        }
+        
+        return null;
+    }
+};
+
 const TextParser = {
     escapeRegex: (v) => v.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
 
@@ -89,18 +137,16 @@ const TextParser = {
     },
 
     parseDualVoiceSegments: function(text, delim = '* * *', initVoiceIndex = 0, voiceNames = []) {
-        console.log(`[DEBUG] parseDualVoiceSegments. Delimiter: "${delim}", InitVoice: ${initVoiceIndex}`);
         const segs = [];
         const token = delim.trim() || '* * *';
         const escToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         
         // Split by token
         const parts = text.split(new RegExp(escToken, 'g'));
-        console.log(`[DEBUG] Dual voice split parts: ${parts.length}`);
         
         let currentVoice = initVoiceIndex % 2; // 0 or 1
         
-        parts.forEach(part => {
+        parts.forEach((part, index) => {
             let content = part.trim();
             if(content) {
                 // Check if segment starts with the current voice's name (e.g. "Vincent.")
@@ -110,8 +156,12 @@ const TextParser = {
                     // Regex: Start of line, Name, optional punctuation, optional newline
                     const nameRegex = new RegExp(`^(${TextParser.escapeRegex(name)})([:|.]?)(\\s+)`, 'i');
                     
-                    if (nameRegex.test(content)) {
-                        // Insert pause
+                    // NEW: Strip the name if it is the very first segment (Label)
+                    if (index === 0 && nameRegex.test(content)) {
+                        content = content.replace(nameRegex, '');
+                    }
+                    else if (nameRegex.test(content)) {
+                        // Insert pause for subsequent occurrences
                         content = content.replace(nameRegex, '$1... ... ... $3');
                     }
                 }
@@ -427,24 +477,12 @@ async function generateChapter(idx,e){
 }
 function attachDefaultConfirmListener(){document.getElementById('btn-confirm-start').onclick=startFullBookGeneration}
 
-async function renderTimeline() {
+function renderTimeline() {
     if (!STATE.chapters.length) {
         dom.timeline.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim);font-style:italic">No chapters. Paste text & "Analyze".</div>';
         return;
     }
-
-    // Incremental rendering for large projects
-    dom.timeline.innerHTML = '<div style="padding:20px;text-align:center;">⌛ Rendering timeline...</div>';
-    await new Promise(r => setTimeout(r, 0));
-
-    let html = '';
-    for (let idx = 0; idx < STATE.chapters.length; idx++) {
-        // Yield every 10 chapters to keep UI responsive
-        if (idx > 0 && idx % 10 === 0) {
-            await new Promise(r => setTimeout(r, 0));
-        }
-
-        const ch = STATE.chapters[idx];
+    dom.timeline.innerHTML = STATE.chapters.map((ch, idx) => {
         const uniqueVoices = new Set(ch.chunks.map(c => c.voiceName)).size;
         const allDone = ch.chunks.every(ck => ck.status === 'done');
         const playing = STATE.activePlaybackId === `chapter_${idx}`;
@@ -454,16 +492,18 @@ async function renderTimeline() {
             const isPlaying = STATE.activePlaybackId === `chunk_${ck.id}`;
             const st = isPlaying ? 'status-playing' : `status-${ck.status}`;
             const bg = cIdx % 2 === 0 ? 'background:rgba(255,255,255,0.02);' : '';
+            const vClass = ck.voiceIndex === 1 ? 'v2' : 'v1'; // Determine color class
+            
             return `<div id="chunk-${ck.id}" class="chunk-item ${st}" onclick="playSingleChunk('${ck.id}')" style="${bg}" role="button">
                 <div style="display:flex;align-items:center;gap:10px;width:100%">
                     <span style="font-family:var(--font-mono);font-size:0.8rem;color:${isPlaying?'var(--accent)':'var(--text-dim)'};width:20px;text-align:center">${isPlaying?'⏹':(cIdx+1)}</span>
-                    <span class="voice-tag ${isPlaying?'playing':''}" style="${allDone||isPlaying?'display:inline-block':''};margin:0;width:80px;text-align:center">${ck.voiceName||'Voice'}</span>
+                    <span class="voice-tag ${vClass} ${isPlaying?'playing':''}" style="margin:0;width:80px;text-align:center">${ck.voiceName||'Voice'}</span>
                     <span class="chunk-content" style="flex:1">${ck.text.substring(0,60)}...</span>
                     <div class="chunk-actions"><button class="action-btn" onclick="generateSingleChunk('${ck.id}',event)">↺</button><span class="generated-icon" style="opacity:${ck.status==='done'?1:0}">✓</span></div>
                 </div></div>`;
         }).join('') : '';
 
-        html += `<div class="chapter-card">
+        return `<div class="chapter-card">
             <div class="chapter-header">
                 <div class="ch-row">
                     <div style="display:flex;align-items:center;gap:6px;flex:1;overflow:hidden">
@@ -486,9 +526,7 @@ async function renderTimeline() {
                     </div>
                 </div>
             </div>${chunksHtml}</div>`;
-    }
-    
-    dom.timeline.innerHTML = html;
+    }).join('');
 }
 
 function toggleChapterCollapse(i,e){if(e)e.stopPropagation();STATE.chapters[i].collapsed=!STATE.chapters[i].collapsed;renderTimeline()}
@@ -519,171 +557,232 @@ function sanitizeChunkSize(v){const p=parseInt(v,10);return isNaN(p)?1000:Math.m
 
 function splitTextIntoChunks(txt,max){
     const res=[];let rem=txt.trim();
-    let loopCount = 0;
-    while(rem.length>0){
-        loopCount++;
-        if(loopCount > 100000) { console.error("Infinite loop in splitTextIntoChunks detected!"); break; }
-        
-        if(rem.length<=max){res.push(rem);break}
+    while(rem.length>0){if(rem.length<=max){res.push(rem);break}
         const safe=Math.floor(max*0.75),area=rem.substring(safe,max);
         let split=safe,match,last=-1;
-        while((match=/[.!?\u201d"]+(?=\s|$)/g.exec(area))!==null)last=match.index+match[0].length;
+        const re = /[.!?\u201d"]+(?=\s|$)/g;
+        while((match=re.exec(area))!==null)last=match.index+match[0].length;
         if(last!==-1)split+=last;else{const sp=rem.lastIndexOf(' ',max);split=(sp>max*0.3)?sp:(rem.lastIndexOf('\n',max)>max*0.3?rem.lastIndexOf('\n',max):max)}
-        
-        if (split <= 0) split = max;
-
         res.push(rem.slice(0,split).trim());rem=rem.slice(split).trimStart();
-    }
-    return res
+    }return res
 }
 
-dom.manuscript.addEventListener('input',()=>{
-    try {
-        localStorage.setItem('ab_manuscript', dom.manuscript.value);
-    } catch(e) {
-        console.warn("Could not save to localStorage:", e.message);
-    }
+dom.manuscript.addEventListener('input', () => {
+    localStorage.setItem('ab_manuscript', dom.manuscript.value);
     updateReceipt();
+    // Debounce log to avoid spamming while typing
+    if(this._inputLogTimer) clearTimeout(this._inputLogTimer);
+    this._inputLogTimer = setTimeout(() => {
+        LOG.add(`Manuscript updated: ${dom.manuscript.value.length.toLocaleString()} characters.`);
+    }, 1000);
 });
 
-document.getElementById('btn-analyze').addEventListener('click', async ()=>{
-
-    const btn = document.getElementById('btn-analyze');
-
-    const originalText = btn.innerText;
-
-    btn.disabled = true;
-
-    btn.innerText = "⏳ Analyzing...";
-
+document.getElementById('btn-analyze').addEventListener('click', () => {
+    const raw = dom.manuscript.value;
+    if(!raw.trim()) {
+        LOG.add("Analysis aborted: Manuscript is empty.", "warning");
+        return;
+    }
     
+    const startTime = performance.now();
+    LOG.add(`Starting Analysis of ${raw.length.toLocaleString()} characters...`);
 
-    LOG.add("Analyzing manuscript...", 'info');
+    // Reset
+    STATE.chapters.forEach(ch => {
+        ch.chunks.forEach(chunk => {
+            if(chunk.audioUrl) URL.revokeObjectURL(chunk.audioUrl);
+        });
+    });
+    STATE.chapters = [];
+    
+    // Update State from UI
+    STATE.project.voiceNames = [dom.voiceName1.value, dom.voiceName2.value];
+    STATE.project.token = dom.voiceToken.value;
 
-    try {
+    const chunkLimit = sanitizeChunkSize(dom.chunkSize.value);
+    dom.chunkSize.value = chunkLimit;
+    LOG.add(`Chunk strategy: Max ${chunkLimit} chars per segment.`);
+    
+    // 1. Split Chapters (Improved Regex with Multi-Language Support)
+    const chapterRegex = TextParser.getChapterHeadingRegex();
+    
+    // Split but keep delimiters
+    const parts = raw.split(chapterRegex).filter(p => p.trim().length > 0);
+    LOG.add(`Regex split found ${parts.length} text segments.`);
+    
+    let currentTitle = "Start";
+    let preamble = "";
+    
+    // Check for preamble (text before first chapter)
+    if(parts.length > 0 && !parts[0].match(chapterRegex)) {
+        preamble = parts[0];
+        LOG.add(`Detected Preamble/Prologue (${preamble.length} chars).`);
+    }
+    
+    const isDual = STATE.project.mode === 'dual';
+    let pendingHeader = "";
 
-        const raw=dom.manuscript.value;
+    const summary = [];
+    const anomalies = [];
 
-        if(!raw.trim()){ LOG.add("Manuscript is empty.", 'warning'); btn.disabled = false; btn.innerText = originalText; return; }
-
+    // Iterate
+    let chapterCounter = 0;
+    for(let i=0; i<parts.length; i++) {
+        const p = parts[i];
+        const pClean = p.trim();
         
-
-        STATE.chapters.forEach(c=>c.chunks.forEach(k=>{if(k.audioUrl)URL.revokeObjectURL(k.audioUrl)}));STATE.chapters=[];
-
-        STATE.project.voiceNames=[dom.voiceName1.value,dom.voiceName2.value];STATE.project.token=dom.voiceToken.value;
-
-        
-
-        const lim=sanitizeChunkSize(dom.chunkSize.value);dom.chunkSize.value=lim;
-
-
-
-        const reg=TextParser.getChapterHeadingRegex();
-
-        const parts=raw.split(reg).filter(p=>p.trim().length>0);
-
-
-
-        let curT="Start",pre="",pend="",cnt=0;
-
-        if(parts.length&&!parts[0].match(reg))pre=parts[0];
-
-        
-
-        for(let i=0; i<parts.length; i++){
-
-            // Yield to main thread every few parts to keep UI responsive
-
-            if(i % 5 === 0) await new Promise(r => setTimeout(r, 0));
-
+        if(pClean.match(chapterRegex)) {
+            // Found a header
+            currentTitle = pClean.replace(/^[#\s]+/, '').trim();
+            chapterCounter++;
             
+            const detectedNum = ChapterVerifier.parse(currentTitle);
+            if (detectedNum !== null && detectedNum !== chapterCounter) {
+                const msg = `Mismatch: Chapter ${chapterCounter} titled "${currentTitle}" (Parsed: ${detectedNum})`;
+                anomalies.push(msg);
+            }
+            
+            // Format header for audio
+            pendingHeader = currentTitle
+                .replace(/[:|–—]\s*/g, '... ... ... ') // 1.5s approx pause
+                .trim();
+            
+            if (!pendingHeader.match(/[.!?]$/)) pendingHeader += '... ... ...';
+            pendingHeader += '\n\n';
 
-            const p=parts[i],pc=p.trim();
+        } else {
+             // Found content
+             let fullText = p;
+             
+             // Prepend the chapter header to the start of the text
+             if (pendingHeader) {
+                 fullText = pendingHeader + fullText;
+                 pendingHeader = "";
+             }
 
-            if(pc.match(reg)){
+             let segments = [];
+             
+             if(isDual) {
+                 const startVoice = TextParser.detectStartingVoice(fullText, currentTitle, STATE.project.voiceNames);
+                 const startName = STATE.project.voiceNames[startVoice] || (startVoice === 0 ? "Voice 1" : "Voice 2");
+                 
+                 segments = TextParser.parseDualVoiceSegments(fullText, STATE.project.token, startVoice, STATE.project.voiceNames);
+             } else {
+                 segments = [{ text: fullText, voiceIndex: 0 }];
+             }
 
-                curT=pc.replace(/^[#\s]+/,'').trim();cnt++;pend=curT.replace(/[:|–—]\s*/g,'... ... ... ').trim();if(!pend.match(/[.!?]$/))pend+='... ... ...';pend+='\n\n';
+             const chapterChunks = [];
+             
+             segments.forEach(seg => {
+                 const textChunks = splitTextIntoChunks(seg.text, chunkLimit);
+                 textChunks.forEach(txt => {
+                     const assignedVoiceId = STATE.project.voiceIds[seg.voiceIndex] || STATE.project.voiceIds[0];
+                     const assignedName = STATE.project.voiceNames[seg.voiceIndex] || (seg.voiceIndex === 0 ? "Voice 1" : "Voice 2");
 
-            }else{
+                     chapterChunks.push({
+                        text: txt,
+                        status: 'pending',
+                        id: Math.random().toString(36).substr(2,9),
+                        audioUrl: null,
+                        voiceId: assignedVoiceId,
+                        voiceName: assignedName, 
+                        voiceIndex: seg.voiceIndex,
+                        duration: 0
+                     });
+                 });
+             });
 
-                let ft=pend+p;pend="";
-
-                let segs=STATE.project.mode==='dual'?TextParser.parseDualVoiceSegments(ft,STATE.project.token,TextParser.detectStartingVoice(ft,curT,STATE.project.voiceNames),STATE.project.voiceNames):[{text:ft,voiceIndex:0}];
-
-
-
-                const chChunks=[];
-
-                segs.forEach((s)=>{
-
-                    splitTextIntoChunks(s.text,lim).forEach(t=>{
-
-                        chChunks.push({text:t,status:'pending',id:Math.random().toString(36).substr(2,9),audioUrl:null,voiceId:STATE.project.voiceIds[s.voiceIndex]||STATE.project.voiceIds[0],voiceName:STATE.project.voiceNames[s.voiceIndex]||(s.voiceIndex===0?"Voice 1":"Voice 2"),duration:0});
-
-                    });
-
-                });
-
-                
-
-                if(chChunks.length){
-
-                    let ft="Titles";
-
-                    if(cnt>0){let ch=curT.replace(/^(Chapter|Part|Book|Kapitel|Prologue|Epilogue)\s+\d*[:\.]?\s*/i,'');ft=`Chapter ${cnt}${ch?': '+ch:''}`}
-
-                    STATE.chapters.push({title:ft,chunks:chChunks,collapsed:false});
-
+             if(chapterChunks.length > 0) {
+                let finalChapterTitle;
+                if (chapterCounter === 0) {
+                    finalChapterTitle = "Titles";
+                } else {
+                    let cleanHeading = currentTitle.replace(/^(Chapter|Part|Book|Kapitel|Prologue|Epilogue)\s+\d*[:\.]?\s*/i, '');
+                    if (cleanHeading === "Start") cleanHeading = "";
+                    finalChapterTitle = `Chapter ${chapterCounter}${cleanHeading ? ': ' + cleanHeading : ''}`;
                 }
 
-            }
-
+                 STATE.chapters.push({
+                     title: finalChapterTitle,
+                     chunks: chapterChunks,
+                     collapsed: true
+                 });
+                 
+                 summary.push({
+                     index: chapterCounter,
+                     title: finalChapterTitle,
+                     chunks: chapterChunks.length,
+                     voiceSwitches: segments.length - 1
+                 });
+             }
         }
-
-        
-
-        const meta=TextParser.detectProjectMetadata(raw,pre),safeT=(meta.title||'u').replace(/\W/g,''),safeA=(meta.author||'u').replace(/\W/g,'');
-
-        const combined = safeT + safeA;
-        let hash = 0;
-        for (let i = 0; i < combined.length; i++) {
-            hash = ((hash << 5) - hash) + combined.charCodeAt(i);
-            hash |= 0;
-        }
-        STATE.project.id = `${safeT.substring(0,10)}_${Math.abs(hash).toString(16)}`;
-
-        
-
-        const cost=STATE.chapters.reduce((a,c)=>a+c.chunks.reduce((x,y)=>x+y.text.length,0),0)*TextParser.getModelCreditMultiplier(dom.elModel.value)*0.000165;
-
-        
-
-        document.getElementById('project-summary').style.display='block';document.getElementById('sum-title').innerText=meta.title;document.getElementById('sum-author').innerText=meta.author;document.getElementById('sum-lang').innerText=meta.language;
-
-        document.getElementById('sum-chapters').innerText=STATE.chapters.length;document.getElementById('sum-chars').innerText=Math.round(cost/0.000165);document.getElementById('sum-cost').innerText=`${cost.toFixed(2)}`;document.getElementById('sum-model').innerText=dom.elModel.value;
-
-        
-
-        renderTimeline();
-
-        dom.btnGenerate.disabled=!STATE.chapters.length;dom.btnGenerateTimeline.disabled=!STATE.chapters.length;dom.btnGenerate.innerText="2. Generate Audio";updateReceipt();
-
-        LOG.add(`Analysis complete. Found ${STATE.chapters.length} chapters.`, 'success');
-
-    } catch(e) {
-
-        console.error("Analysis Error:", e);
-
-        LOG.add("Analysis failed: " + e.message, 'error');
-
-    } finally {
-
-        btn.disabled = false;
-
-        btn.innerText = originalText;
-
     }
+    
+    // --- METADATA & SUMMARY ---
+    const meta = TextParser.detectProjectMetadata(raw, preamble);
+    LOG.add(`Metadata detected: "${meta.title}" (${meta.language})`);
+    
+    // Generate Deterministic Project ID
+    const safeTitle = (meta.title || 'untitled').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const safeAuthor = (meta.author || 'unknown').toLowerCase().replace(/[^a-z0-9]/g, '');
+    const uniqueString = `${safeTitle}_${safeAuthor}`.substring(0, 30);
+    // Simple hash to ensure shortness and uniqueness
+    let hash = 0;
+    for (let i = 0; i < uniqueString.length; i++) {
+        hash = ((hash << 5) - hash) + uniqueString.charCodeAt(i);
+        hash |= 0;
+    }
+    const hashStr = (hash >>> 0).toString(16);
+    
+    STATE.project.id = `${safeTitle.substring(0,10)}_${hashStr}`;
 
+    const modelId = dom.elModel.value; 
+    const creditMultiplier = TextParser.getModelCreditMultiplier(modelId);
+    
+    const costPerCharBase = 0.000165; 
+
+    const totalChars = STATE.chapters.reduce((acc, ch) => acc + ch.chunks.reduce((c, ck) => c + ck.text.length, 0), 0);
+    const estCost = totalChars * creditMultiplier * costPerCharBase;
+
+    // Update UI Summary
+    document.getElementById('project-summary').style.display = 'block';
+    document.getElementById('sum-title').innerText = meta.title.substring(0,20);
+    document.getElementById('sum-author').innerText = meta.author.substring(0,20);
+    document.getElementById('sum-lang').innerText = meta.language;
+    
+    const hasTitles = STATE.chapters.length > 0 && STATE.chapters[0].title === "Titles";
+    const actualChapterCount = hasTitles ? STATE.chapters.length - 1 : STATE.chapters.length;
+    const label = hasTitles ? `${actualChapterCount} (+Titles)` : `${actualChapterCount}`;
+    
+    document.getElementById('sum-chapters').innerText = label;
+    document.getElementById('sum-chars').innerText = totalChars.toLocaleString();
+    document.getElementById('sum-cost').innerText = `$${estCost.toFixed(2)}`;
+    document.getElementById('sum-model').innerText = dom.elModel.options[dom.elModel.selectedIndex].text;
+
+    // Render Timeline via helper
+    renderTimeline();
+
+    const endTime = performance.now();
+    
+    if (anomalies.length > 0) {
+        LOG.add(`⚠️ Found ${anomalies.length} potential issues:`, 'warning');
+        anomalies.forEach(a => LOG.add(`   - ${a}`, 'warning'));
+    }
+    
+    console.table(summary);
+    LOG.add(`Analysis Complete in ${(endTime - startTime).toFixed(2)}ms. Processed ${summary.length} chapters.`);
+
+    if(!STATE.chapters.length) {
+        dom.timeline.innerHTML = `<div style="padding:20px; text-align:center; color: var(--text-dim); font-style:italic;">
+            Unable to detect chapters. Ensure your manuscript uses headings (e.g. "Chapter 1", "# Title").
+        </div>`;
+    }
+    
+    const hasChunks = STATE.chapters.some(ch => ch.chunks.length > 0);
+    dom.btnGenerate.disabled = !hasChunks;
+    dom.btnGenerateTimeline.disabled = !hasChunks;
+    dom.btnGenerate.innerText = "2. Generate Audio";
+    updateReceipt();
 });
 
 async function initiateGeneration(){
@@ -871,13 +970,9 @@ async function loadProject(id){
         dom.silenceChapter.value = STATE.project.silenceChapter !== undefined ? STATE.project.silenceChapter : 1.0;
         dom.projectNotes.value = STATE.project.notes || '';
 
-        // Auto-collapse completed chapters
+        // Collapse all chapters by default
         STATE.chapters.forEach(ch => {
-            if (ch.chunks && ch.chunks.length > 0 && ch.chunks.every(c => c.status === 'done')) {
-                ch.collapsed = true;
-            } else {
-                ch.collapsed = false;
-            }
+            ch.collapsed = true;
         });
 
         // Refresh State
