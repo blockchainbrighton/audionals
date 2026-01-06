@@ -125,199 +125,127 @@ async function mergeAudioFiles(inputPaths, outputPath, silenceDuration = 0) {
     });
 }
 
-// Helper: Wait
-const wait = (ms) => new Promise(resolve => setTimeout(resolve, ms));
-
-// Helper: Send Response with CORS
-const sendResponse = (res, statusCode, data, contentType = 'application/json') => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS, PATCH, DELETE');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, xi-api-key');
-    res.writeHead(statusCode, { 'Content-Type': contentType });
-    res.end(typeof data === 'object' ? JSON.stringify(data) : data);
-};
-
-// ElevenLabs API Helper (with Retry)
+// ElevenLabs API Helper
 async function generateAudio(text, voiceId, apiKey, modelId) {
-    return elevenLabsQueue.add(async () => {
-        let attempts = 0;
-        const maxAttempts = 5;
-        let delay = 1000;
-
-        while (attempts < maxAttempts) {
-            try {
-                return await new Promise((resolve, reject) => {
-                    const req = https.request('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
-                        method: 'POST',
-                        headers: {
-                            'xi-api-key': apiKey,
-                            'Content-Type': 'application/json',
-                            'Accept': 'audio/mpeg'
-                        }
-                    }, (res) => {
-                        if (res.statusCode === 429) {
-                            // Rate Limited
-                            resolve({ retry: true }); 
-                            return;
-                        }
-                        
-                        const chunks = [];
-                        res.on('data', chunk => chunks.push(chunk));
-                        res.on('end', () => {
-                            if (res.statusCode !== 200) {
-                                reject(new Error(`ElevenLabs API Error: ${res.statusCode}`));
-                            } else {
-                                resolve({ buffer: Buffer.concat(chunks) });
-                            }
-                        });
-                    });
-
-                    req.on('error', reject);
-                    req.write(JSON.stringify({
-                        text,
-                        model_id: modelId,
-                        voice_settings: { stability: 0.5, similarity_boost: 0.75 }
-                    }));
-                    req.end();
-                });
-            } catch (e) {
-                // Network errors, throw immediately unless we want to retry those too? 
-                // For now, throw.
-                throw e;
+    return elevenLabsQueue.add(() => new Promise((resolve, reject) => {
+        const req = https.request('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
+            method: 'POST',
+            headers: {
+                'xi-api-key': apiKey,
+                'Content-Type': 'application/json',
+                'Accept': 'audio/mpeg'
             }
-            
-            // Check result of the promise
-            // NOTE: The Queue wrapper expects a Promise. 
-            // We had to await the inner promise to check for retry signal.
-            
-            // Wait, the structure above is slightly complex because of the callback.
-            // Let's refactor slightly to handle the result.
-        }
-        throw new Error("Max retries exceeded for ElevenLabs API");
-    });
-}
-
-// Refactored Generate Audio to be cleaner
-async function generateAudioWithRetry(text, voiceId, apiKey, modelId) {
-    return elevenLabsQueue.add(async () => {
-        let attempts = 0;
-        let delay = 2000; // Start with 2s
-
-        while (attempts < 5) {
-            attempts++;
-            try {
-                const result = await new Promise((resolve, reject) => {
-                    const req = https.request('https://api.elevenlabs.io/v1/text-to-speech/' + voiceId, {
-                        method: 'POST',
-                        headers: {
-                            'xi-api-key': apiKey,
-                            'Content-Type': 'application/json',
-                            'Accept': 'audio/mpeg'
-                        }
-                    }, (res) => {
-                        if (res.statusCode === 429) {
-                            resolve({ status: 429 });
-                            return;
-                        }
-                        const chunks = [];
-                        res.on('data', chunk => chunks.push(chunk));
-                        res.on('end', () => {
-                            if (res.statusCode !== 200) {
-                                reject(new Error(`ElevenLabs API Error: ${res.statusCode}`));
-                            } else {
-                                resolve({ status: 200, buffer: Buffer.concat(chunks) });
-                            }
-                        });
-                    });
-                    req.on('error', reject);
-                    req.write(JSON.stringify({ text, model_id: modelId, voice_settings: { stability: 0.5, similarity_boost: 0.75 } }));
-                    req.end();
-                });
-
-                if (result.status === 429) {
-                    console.log(`[ElevenLabs] Rate Limit (429). Retrying in ${delay/1000}s...`);
-                    await wait(delay);
-                    delay *= 2; // Exponential backoff
-                    continue;
+        }, (res) => {
+            const chunks = [];
+            res.on('data', chunk => chunks.push(chunk));
+            res.on('end', () => {
+                if (res.statusCode !== 200) {
+                    reject(new Error(`ElevenLabs API Error: ${res.statusCode}`));
+                } else {
+                    resolve(Buffer.concat(chunks));
                 }
+            });
+        });
 
-                return result.buffer;
-
-            } catch (e) {
-                throw e;
-            }
-        }
-        throw new Error("ElevenLabs API Rate Limit Exceeded (Max Retries)");
-    });
+        req.on('error', reject);
+        req.write(JSON.stringify({
+            text,
+            model_id: modelId,
+            voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+        }));
+        req.end();
+    }));
 }
-
-// Map old function name to new one
-const generateAudioOld = generateAudio; 
-// We will replace the call site to use generateAudioWithRetry or rename it.
-// Let's rename generateAudioWithRetry to generateAudio in the final replacement.
 
 const server = http.createServer(async (req, res) => {
-    // CORS Preflight
-    if (req.method === 'OPTIONS') {
-        sendResponse(res, 200, '');
-        return;
-    }
+    // CORS
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+    if (req.method === 'OPTIONS') { res.writeHead(200); res.end(); return; }
 
     const parsedUrl = url.parse(req.url, true);
     const pathname = parsedUrl.pathname;
 
     // ==========================================
-    // 1. SERVE FRONTEND
+    // 1. SERVE FRONTEND (MODIFIED FOR MODULES)
     // ==========================================
+
+    // Serve HTML
     if (pathname === '/' || pathname === '/index.html') {
-        fs.readFile(path.join(FRONTEND_DIR, 'index.html'), (err, data) => {
-            if (err) sendResponse(res, 500, 'Error loading UI', 'text/plain');
-            else sendResponse(res, 200, data, 'text/html');
+        const fileToServe = path.join(FRONTEND_DIR, 'index.html');
+        
+        fs.readFile(fileToServe, (err, data) => {
+            if (err) {
+                res.writeHead(500);
+                res.end('Error loading UI: Ensure src/frontend/index.html exists.');
+            } else {
+                res.writeHead(200, { 'Content-Type': 'text/html' });
+                res.end(data);
+            }
         });
         return;
     }
+
+    // Serve CSS
     if (pathname === '/style.css' || pathname === '/css/style.css') {
-        fs.readFile(path.join(FRONTEND_DIR, 'css', 'style.css'), (err, data) => {
-            if (err) sendResponse(res, 404, 'CSS not found', 'text/plain');
-            else sendResponse(res, 200, data, 'text/css');
+        const cssPath = path.join(FRONTEND_DIR, 'css', 'style.css');
+        fs.readFile(cssPath, (err, data) => {
+            if (err) {
+                res.writeHead(404);
+                res.end('CSS not found');
+            } else {
+                res.writeHead(200, { 'Content-Type': 'text/css' });
+                res.end(data);
+            }
         });
         return;
     }
+
+    // Serve JS
     if (pathname === '/script.js' || pathname === '/js/script.js') {
-        fs.readFile(path.join(FRONTEND_DIR, 'js', 'script.js'), (err, data) => {
-            if (err) sendResponse(res, 404, 'JS not found', 'text/plain');
-            else sendResponse(res, 200, data, 'text/javascript');
+        const jsPath = path.join(FRONTEND_DIR, 'js', 'script.js');
+        fs.readFile(jsPath, (err, data) => {
+            if (err) {
+                res.writeHead(404);
+                res.end('JS not found');
+            } else {
+                res.writeHead(200, { 'Content-Type': 'application/javascript' });
+                res.end(data);
+            }
         });
         return;
     }
 
     // ==========================================
-    // 2. Serve Audio Files
+    // 2. Serve Audio Files (EXISTING LOGIC)
     // ==========================================
     if (pathname.startsWith('/output/')) {
         const filePath = path.join(ROOT_DIR, pathname);
+        // Security check
         if (!filePath.startsWith(ROOT_DIR)) {
-            sendResponse(res, 403, 'Access Denied', 'text/plain');
+            res.writeHead(403);
+            res.end('Access Denied');
             return;
         }
         if (fs.existsSync(filePath)) {
-            // Stream audio - need manual headers for stream
-            res.setHeader('Access-Control-Allow-Origin', '*');
             res.writeHead(200, { 'Content-Type': 'audio/mpeg' });
             fs.createReadStream(filePath).pipe(res);
         } else {
-            sendResponse(res, 404, 'File not found', 'text/plain');
+            res.writeHead(404);
+            res.end('File not found');
         }
         return;
     }
 
     // ==========================================
-    // 3. API ROUTES
+    // 3. API ROUTES (EXISTING LOGIC)
     // ==========================================
 
     // API: List Projects
     if ((pathname === '/api/projects' || pathname === '/api/projects/') && req.method === 'GET') {
         try {
+            // 1. Get Real Projects (JSON files)
             if (!fs.existsSync(PROJECTS_DIR)) fs.mkdirSync(PROJECTS_DIR, { recursive: true });
             const projectFiles = fs.readdirSync(PROJECTS_DIR).filter(f => f.endsWith('.json'));
             const projectList = projectFiles.map(f => {
@@ -336,28 +264,41 @@ const server = http.createServer(async (req, res) => {
                 } catch(e) { return null; }
             }).filter(Boolean);
 
-            // Ghost Projects Logic...
+            // 2. Discover "Ghost" Projects from Chunks (Unsaved)
             const chunkFiles = fs.existsSync(CHUNKS_DIR) ? fs.readdirSync(CHUNKS_DIR).filter(f => f.endsWith('.mp3')) : [];
             const ghostIds = new Set();
+            
             chunkFiles.forEach(f => {
                 const match = f.match(/^(.+?)_ch\d+_chk\d+/);
-                if (match) ghostIds.add(match[1]);
+                if (match) {
+                    ghostIds.add(match[1]);
+                }
             });
+
             const existingIds = new Set(projectList.map(p => p.id));
+            
             ghostIds.forEach(gid => {
                 if (!existingIds.has(gid) && gid !== 'undefined') {
                     const inferredTitle = gid.split('_').slice(0, -1).join('_') || gid;
+                    
                     projectList.push({
-                        id: gid, title: `(Recovered) ${inferredTitle}`, author: 'Unknown', updatedAt: new Date().toISOString(), type: 'ghost'
+                        id: gid,
+                        title: `(Recovered) ${inferredTitle}`,
+                        author: 'Unknown',
+                        updatedAt: new Date().toISOString(), 
+                        type: 'ghost'
                     });
                 }
             });
+
             projectList.sort((a,b) => new Date(b.updatedAt) - new Date(a.updatedAt));
-            
-            sendResponse(res, 200, projectList);
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(projectList));
         } catch (e) {
             console.error("List Projects Error:", e);
-            sendResponse(res, 500, { error: e.message });
+            res.writeHead(500, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: e.message }));
         }
         return;
     }
@@ -368,7 +309,8 @@ const server = http.createServer(async (req, res) => {
         const projectId = parts.pop();
         
         if (!projectId || projectId === 'projects') {
-            sendResponse(res, 400, { error: "Invalid Project ID" });
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Invalid Project ID" }));
             return;
         }
 
@@ -378,21 +320,28 @@ const server = http.createServer(async (req, res) => {
             try {
                 const content = fs.readFileSync(filePath, 'utf8');
                 const data = JSON.parse(content);
-                // Discovery logic (omitted for brevity in replacement, assumed largely same structure but wrapped)
+
+                // 1. Auto-discover existing chapter/title files
                 if (data.chapters && Array.isArray(data.chapters)) {
+                    // Pre-scan chunks directory to speed up lookup
                     const chunkFiles = fs.existsSync(CHUNKS_DIR) ? fs.readdirSync(CHUNKS_DIR) : [];
+
                     data.chapters.forEach((ch, idx) => {
                         const isTitle = ch.title === "Titles" || idx === 0;
                         const chapterFileName = isTitle ? `${projectId}_titles.mp3` : `${projectId}_chapter_${idx}.mp3`;
                         const chapterDir = isTitle ? TITLES_DIR : CHAPTERS_DIR;
                         const subDir = isTitle ? 'titles' : 'chapters';
+                        
                         if (fs.existsSync(path.join(chapterDir, chapterFileName))) {
                             ch.audioUrl = `/output/${subDir}/${chapterFileName}`;
                         }
-                        if (ch.chunks) {
+
+                        // 2. Discover individual chunks for this chapter
+                        if (ch.chunks && Array.isArray(ch.chunks)) {
                             ch.chunks.forEach((chunk, cIdx) => {
                                 const chunkPrefix = `${projectId}_ch${idx}_chk${cIdx}_`;
                                 const foundChunkFile = chunkFiles.find(f => f.startsWith(chunkPrefix) && f.endsWith('.mp3'));
+                                
                                 if (foundChunkFile) {
                                     chunk.audioUrl = `/output/chunks/${foundChunkFile}`;
                                     chunk.filename = foundChunkFile;
@@ -402,42 +351,79 @@ const server = http.createServer(async (req, res) => {
                         }
                     });
                 }
-                sendResponse(res, 200, data);
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify(data));
             } catch (e) {
-                sendResponse(res, 500, { error: "Failed to parse project: " + e.message });
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: "Failed to parse project: " + e.message }));
             }
             return;
         }
-        
-        // Ghost Recovery Logic
+
         try {
             if (!fs.existsSync(CHUNKS_DIR)) {
-                sendResponse(res, 404, { error: "Project not found" });
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: "Project not found" }));
                 return;
             }
             const chunkFiles = fs.readdirSync(CHUNKS_DIR).filter(f => f.startsWith(`${projectId}_`) && f.endsWith('.mp3'));
+            
             if (chunkFiles.length === 0) {
-                sendResponse(res, 404, { error: "Project not found" });
+                res.writeHead(404, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: "Project not found" }));
                 return;
             }
-            // ... (Recovery logic same as before) ...
+
+            // Group by Chapter
             const chaptersMap = new Map();
+            
             chunkFiles.forEach(f => {
+                // Parse: projId_ch0_chk0_hash.mp3
                 const match = f.match(/_ch(\d+)_chk(\d+)_/);
                 if (match) {
                     const chIdx = parseInt(match[1]);
                     const ckIdx = parseInt(match[2]);
-                    if (!chaptersMap.has(chIdx)) chaptersMap.set(chIdx, []);
+                    
+                    if (!chaptersMap.has(chIdx)) {
+                        chaptersMap.set(chIdx, []);
+                    }
+                    
                     chaptersMap.get(chIdx).push({
-                        id: `rec_${chIdx}_${ckIdx}`, text: "(Recovered Audio Segment)", status: 'done', filename: f, audioUrl: `/output/chunks/${f}`, chunkIndex: ckIdx, voiceId: null
+                        id: `rec_${chIdx}_${ckIdx}`,
+                        text: "(Recovered Audio Segment)",
+                        status: 'done',
+                        filename: f,
+                        audioUrl: `/output/chunks/${f}`,
+                        chunkIndex: ckIdx,
+                        voiceId: null
                     });
                 }
             });
-            const chapters = Array.from(chaptersMap.entries()).sort((a, b) => a[0] - b[0]).map(([idx, chunks]) => ({ title: idx === 0 ? "Titles" : `Chapter ${idx}`, chunks: chunks.sort((a, b) => a.chunkIndex - b.chunkIndex) }));
-            const recoveredProject = { id: projectId, title: projectId, author: 'Unknown', manuscript: "Recovered...", chapters: chapters, projectSettings: { mode: 'single', voiceIds: [], names: [] } };
-            sendResponse(res, 200, recoveredProject);
+
+            // Convert to Array and Sort
+            const chapters = Array.from(chaptersMap.entries())
+                .sort((a, b) => a[0] - b[0])
+                .map(([idx, chunks]) => ({
+                    title: idx === 0 ? "Titles (Recovered)" : `Chapter ${idx} (Recovered)`,
+                    chunks: chunks.sort((a, b) => a.chunkIndex - b.chunkIndex)
+                }));
+
+            const recoveredProject = {
+                id: projectId,
+                title: projectId,
+                author: 'Unknown',
+                manuscript: "Project recovered from audio files. Original text unavailable.\n\nTo restore generation capabilities, paste the original text here and Analyze again (it should match the hashes if unchanged).",
+                chapters: chapters,
+                projectSettings: { mode: 'single', voiceIds: [], names: [] }
+            };
+
+            res.writeHead(200, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify(recoveredProject));
+
         } catch(e) {
-            sendResponse(res, 500, { error: "Recovery failed: " + e.message });
+            res.writeHead(500);
+            res.end(JSON.stringify({ error: "Recovery failed: " + e.message }));
         }
         return;
     }
@@ -446,25 +432,40 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/projects/') && req.method === 'PATCH') {
         const parts = pathname.split('/').filter(Boolean);
         const projectId = parts.pop();
-        if (!projectId) { sendResponse(res, 400, { error: "Invalid Project ID" }); return; }
+
+        if (!projectId || projectId === 'projects') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Invalid Project ID" }));
+            return;
+        }
 
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
             try {
                 const { title } = JSON.parse(body);
+                if (!title) throw new Error("Title is required");
+
                 const filePath = path.join(PROJECTS_DIR, `${projectId}.json`);
+
                 if (fs.existsSync(filePath)) {
-                    const data = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                    const content = fs.readFileSync(filePath, 'utf8');
+                    const data = JSON.parse(content);
+                    
                     data.title = title;
                     data.updatedAt = new Date().toISOString();
+
                     fs.writeFileSync(filePath, JSON.stringify(data, null, 2));
-                    sendResponse(res, 200, { status: 'updated', id: projectId, title });
+
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ status: 'updated', id: projectId, title }));
                 } else {
-                    sendResponse(res, 404, { error: "Project not found" });
+                    res.writeHead(404, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ error: "Project not found" }));
                 }
             } catch (e) {
-                sendResponse(res, 500, { error: "Failed to rename: " + e.message });
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: "Failed to rename: " + e.message }));
             }
         });
         return;
@@ -474,35 +475,55 @@ const server = http.createServer(async (req, res) => {
     if (pathname.startsWith('/api/projects/') && req.method === 'DELETE') {
         const parts = pathname.split('/').filter(Boolean);
         const projectId = parts.pop();
-        if (!projectId) { sendResponse(res, 400, { error: "Invalid Project ID" }); return; }
+
+        if (!projectId || projectId === 'projects') {
+            res.writeHead(400, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Invalid Project ID" }));
+            return;
+        }
 
         const filePath = path.join(PROJECTS_DIR, `${projectId}.json`);
+
         if (fs.existsSync(filePath)) {
             try {
                 fs.unlinkSync(filePath);
-                sendResponse(res, 200, { status: 'deleted', id: projectId });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ status: 'deleted', id: projectId }));
             } catch (e) {
-                sendResponse(res, 500, { error: "Failed to delete: " + e.message });
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: "Failed to delete project: " + e.message }));
             }
         } else {
-            sendResponse(res, 404, { error: "Project not found" });
+            res.writeHead(404, { 'Content-Type': 'application/json' });
+            res.end(JSON.stringify({ error: "Project not found" }));
         }
         return;
     }
 
-    // API: Save Project
+    // API: Save Project (Create/Update)
     if (pathname === '/api/projects' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
         req.on('end', () => {
             try {
                 const data = JSON.parse(body);
+                // Ensure ID
                 const id = data.id || 'proj_' + Date.now().toString(36);
-                const projectData = { ...data, id, updatedAt: new Date().toISOString() };
-                fs.writeFileSync(path.join(PROJECTS_DIR, `${id}.json`), JSON.stringify(projectData, null, 2));
-                sendResponse(res, 200, { id, status: 'saved' });
+                const projectData = { 
+                    ...data, 
+                    id, 
+                    updatedAt: new Date().toISOString() 
+                };
+                
+                // Save to individual file
+                const filePath = path.join(PROJECTS_DIR, `${id}.json`);
+                fs.writeFileSync(filePath, JSON.stringify(projectData, null, 2));
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ id, status: 'saved' }));
             } catch (e) {
-                sendResponse(res, 400, { error: e.message });
+                res.writeHead(400);
+                res.end(JSON.stringify({ error: e.message }));
             }
         });
         return;
@@ -515,32 +536,39 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 const requestData = JSON.parse(body);
-                console.log("[API Generate Request]", { ...requestData, apiKey: '***' }); 
+                console.log("[API Generate Request]", { ...requestData, apiKey: '***' }); // Log request (hide key)
+
                 const { text, voiceId, apiKey, modelId, projectId, chapterIndex, chunkIndex, force } = requestData;
                 
-                if (!text || !voiceId || !apiKey) throw new Error("Missing fields");
+                if (!text || !voiceId || !apiKey) {
+                    throw new Error("Missing required fields: text, voiceId, or apiKey");
+                }
 
+                // Deterministic Filename based on content hash
                 const contentHash = generateHash(text + voiceId + modelId);
                 const fileName = `${projectId}_ch${chapterIndex}_chk${chunkIndex}_${contentHash}.mp3`;
                 const filePath = path.join(CHUNKS_DIR, fileName);
                 const publicUrl = `/output/chunks/${fileName}`;
 
+                // Check if exists (Bypass if force is true)
                 if (fs.existsSync(filePath) && !force) {
                     console.log(`[Cache Hit] ${fileName}`);
-                    sendResponse(res, 200, { url: publicUrl, filename: fileName, cached: true });
+                    res.writeHead(200, { 'Content-Type': 'application/json' });
+                    res.end(JSON.stringify({ url: publicUrl, filename: fileName, cached: true }));
                     return;
                 }
 
                 console.log(`[Generating${force ? ' (FORCE)' : ''}] ${fileName} ...`);
-                // Use new Retry Function
-                const audioBuffer = await generateAudioWithRetry(text, voiceId, apiKey, modelId);
+                const audioBuffer = await generateAudio(text, voiceId, apiKey, modelId);
                 fs.writeFileSync(filePath, audioBuffer);
 
-                sendResponse(res, 200, { url: publicUrl, filename: fileName, cached: false });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ url: publicUrl, filename: fileName, cached: false }));
 
             } catch (e) {
                 console.error("Generation Error:", e);
-                sendResponse(res, 500, { error: e.message });
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
             }
         });
         return;
@@ -553,23 +581,33 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 const { projectId, chapterIndex, filenames, isTitle, silence } = JSON.parse(body);
-                if (!filenames || !filenames.length) throw new Error("No files");
+                
+                if (!filenames || filenames.length === 0) throw new Error("No files provided");
 
+                // Resolve absolute paths
                 const inputPaths = filenames.map(f => path.join(CHUNKS_DIR, f));
-                for (const p of inputPaths) if (!fs.existsSync(p)) throw new Error(`Missing: ${path.basename(p)}`);
+                
+                // Verify all exist
+                for (const p of inputPaths) {
+                    if (!fs.existsSync(p)) throw new Error(`Missing chunk file: ${path.basename(p)}`);
+                }
 
+                // Determine Output Dir and Filename
                 const targetDir = isTitle ? TITLES_DIR : CHAPTERS_DIR;
                 const outName = isTitle ? `${projectId}_titles.mp3` : `${projectId}_chapter_${chapterIndex}.mp3`;
                 const outPath = path.join(targetDir, outName);
                 const publicUrl = `/output/${isTitle ? 'titles' : 'chapters'}/${outName}`;
 
-                console.log(`[Merging] ${outName}...`);
+                console.log(`[Merging] ${outName} from ${filenames.length} chunks...`);
                 await mergeAudioFiles(inputPaths, outPath, silence);
 
-                sendResponse(res, 200, { url: publicUrl, path: outPath });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ url: publicUrl, path: outPath }));
+
             } catch (e) {
                 console.error("Merge Error:", e);
-                sendResponse(res, 500, { error: e.message });
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
             }
         });
         return;
@@ -582,36 +620,55 @@ const server = http.createServer(async (req, res) => {
         req.on('end', async () => {
             try {
                 const { projectId, silence } = JSON.parse(body);
-                // (Omitted: Same logic as before, just wrapped in sendResponse)
-                // Re-implementing logic quickly:
+                if (!projectId) throw new Error("Project ID required");
+
+                // 1. Find Files
                 const files = [];
+                
+                // Titles
                 const titleFile = `${projectId}_titles.mp3`;
-                if (fs.existsSync(path.join(TITLES_DIR, titleFile))) files.push({ path: path.join(TITLES_DIR, titleFile), index: -1 });
+                if (fs.existsSync(path.join(TITLES_DIR, titleFile))) {
+                    files.push({ path: path.join(TITLES_DIR, titleFile), index: -1 });
+                }
+
+                // Chapters
                 if (fs.existsSync(CHAPTERS_DIR)) {
-                    fs.readdirSync(CHAPTERS_DIR).forEach(f => {
+                    const chFiles = fs.readdirSync(CHAPTERS_DIR);
+                    chFiles.forEach(f => {
                         const match = f.match(new RegExp(`^${projectId}_chapter_(\\d+)\\.mp3$`));
-                        if (match) files.push({ path: path.join(CHAPTERS_DIR, f), index: parseInt(match[1]) });
+                        if (match) {
+                            files.push({ path: path.join(CHAPTERS_DIR, f), index: parseInt(match[1]) });
+                        }
                     });
                 }
-                if (files.length === 0) throw new Error("No chapters found");
+
+                if (files.length === 0) throw new Error("No chapters found to merge");
+
+                // 2. Sort
                 files.sort((a, b) => a.index - b.index);
                 const inputPaths = files.map(f => f.path);
+
+                // 3. Merge
                 const outName = `${projectId}_full_book.mp3`;
                 const outPath = path.join(BOOK_DIR, outName);
                 const publicUrl = `/output/book/${outName}`;
 
-                console.log(`[Merging Book] ${outName}...`);
+                console.log(`[Merging Book] ${outName} from ${files.length} files...`);
                 await mergeAudioFiles(inputPaths, outPath, silence);
-                sendResponse(res, 200, { url: publicUrl, path: outPath });
+
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ url: publicUrl, path: outPath }));
+
             } catch (e) {
                 console.error("Book Merge Error:", e);
-                sendResponse(res, 500, { error: e.message });
+                res.writeHead(500, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ error: e.message }));
             }
         });
         return;
     }
 
-    // API: Check Cache
+    // API: Bulk Cache Check
     if (pathname === '/api/check-cache' && req.method === 'POST') {
         let body = '';
         req.on('data', chunk => body += chunk);
@@ -621,17 +678,26 @@ const server = http.createServer(async (req, res) => {
                 const results = chunks.map(c => {
                     const contentHash = generateHash(c.text + c.voiceId + modelId);
                     const fileName = `${projectId}_ch${c.chapterIndex}_chk${c.chunkIndex}_${contentHash}.mp3`;
-                    return { id: c.id, exists: fs.existsSync(path.join(CHUNKS_DIR, fileName)), filename: fileName, url: `/output/chunks/${fileName}` };
+                    const filePath = path.join(CHUNKS_DIR, fileName);
+                    return {
+                        id: c.id,
+                        exists: fs.existsSync(filePath),
+                        filename: fileName,
+                        url: `/output/chunks/${fileName}`
+                    };
                 });
-                sendResponse(res, 200, { chunks: results });
+                res.writeHead(200, { 'Content-Type': 'application/json' });
+                res.end(JSON.stringify({ chunks: results }));
             } catch (e) {
-                sendResponse(res, 400, { error: e.message });
+                res.writeHead(400);
+                res.end(JSON.stringify({ error: e.message }));
             }
         });
         return;
     }
 
-    sendResponse(res, 404, 'Not Found', 'text/plain');
+    res.writeHead(404);
+    res.end('Not Found');
 });
 
 server.listen(PORT, () => {
