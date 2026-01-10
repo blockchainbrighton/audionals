@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>The Vorenus Chronicles: The Complete Journey</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+     
+    <style>
+        /* BASE STYLES */
+        body { margin: 0; padding: 0; font-family: 'Georgia', 'Times New Roman', serif; background: #2c3e50; overflow: hidden; }
+        #map { height: 100vh; width: 100%; z-index: 1; filter: saturate(0.8) sepia(0.2); } 
+        
+        /* THE BOOK CONTAINER */
+        .story-box {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 440px;
+            background: #fdfbf7; 
+            border-radius: 4px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.5);
+            z-index: 1000;
+            display: flex;
+            flex-direction: column;
+            max-height: 90vh;
+            border: 1px solid #dcd6cc;
+        }
+
+        /* HEADER */
+        .story-header {
+            background: #1a252f;
+            color: #ecf0f1;
+            padding: 15px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: baseline;
+            border-bottom: 4px solid #c0392b;
+        }
+        .story-header h2 { margin: 0; font-size: 1.1rem; letter-spacing: 1px; text-transform: uppercase; font-family: 'Segoe UI', sans-serif; }
+        .location-coords { font-size: 0.75rem; color: #7f8c8d; font-family: monospace; }
+
+        /* TABS (TIMELINES) */
+        .timeline-tabs { display: flex; background: #e0e0e0; }
+        .tab-btn {
+            flex: 1; padding: 12px; border: none; background: #e0e0e0; cursor: pointer;
+            font-weight: bold; color: #7f8c8d; transition: 0.3s;
+            font-family: 'Segoe UI', sans-serif; font-size: 0.9rem; border-bottom: 3px solid transparent;
+        }
+        .tab-btn:hover { background: #d6d6d6; }
+        .tab-btn.active-77 { background: #fdfbf7; color: #27ae60; border-bottom: 3px solid #27ae60; }
+        .tab-btn.active-67 { background: #fdfbf7; color: #c0392b; border-bottom: 3px solid #c0392b; }
+
+        /* CONTENT AREA */
+        .story-content { padding: 25px 30px; overflow-y: auto; flex-grow: 1; min-height: 250px; }
+        .chapter-title { font-size: 1.3rem; font-weight: bold; margin-bottom: 15px; color: #2c3e50; }
+        .narrative-text { font-size: 1.05rem; line-height: 1.7; color: #333; }
+        .narrative-text p { margin-bottom: 15px; }
+        .dialogue { font-style: italic; color: #555; border-left: 3px solid #ccc; padding-left: 10px; margin: 10px 0; }
+
+        /* INTERNAL PAGINATION */
+        .internal-nav {
+            display: flex; justify-content: space-between; align-items: center;
+            margin-top: 20px; padding-top: 15px; border-top: 1px dashed #ccc;
+            font-size: 0.9rem; color: #7f8c8d;
+        }
+        .page-btn {
+            background: none; border: 1px solid #bdc3c7; padding: 5px 12px; border-radius: 15px;
+            cursor: pointer; color: #2c3e50; font-family: sans-serif; transition: 0.2s;
+        }
+        .page-btn:hover { background: #ecf0f1; border-color: #95a5a6; }
+        .page-btn:disabled { opacity: 0; cursor: default; }
+
+        /* GLOBAL CONTROLS */
+        .global-controls {
+            padding: 15px; background: #f1f1f1; display: flex; justify-content: space-between;
+            border-top: 1px solid #dcd6cc;
+        }
+        button.map-btn {
+            background: #2c3e50; color: white; border: none; padding: 12px 24px; border-radius: 4px;
+            cursor: pointer; font-weight: bold; font-family: 'Segoe UI', sans-serif;
+            text-transform: uppercase; font-size: 0.85rem; letter-spacing: 1px;
+            display: flex; align-items: center; gap: 8px;
+        }
+        button.map-btn:hover { background: #34495e; }
+        button.map-btn:disabled { background: #95a5a6; cursor: not-allowed; }
+
+        /* ANIMATION */
+        .fade-in { animation: fadeIn 0.5s ease-in-out; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(5px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* MARKERS */
+        .custom-marker {
+            background-color: #2c3e50; border: 2px solid #fff; border-radius: 50%;
+            color: white; text-align: center; line-height: 24px; font-weight: bold;
+            font-family: sans-serif; box-shadow: 0 3px 8px rgba(0,0,0,0.6);
+            transition: transform 0.3s;
+        }
+        .custom-marker:hover { transform: scale(1.1); }
+        .custom-marker.active {
+            background-color: #c0392b; color: #fff; transform: scale(1.3);
+            border-color: #f1c40f; z-index: 1000 !important;
+        }
+
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="story-box">
+    <div class="story-header">
+        <h2 id="location-header">Rome</h2>
+        <span class="location-coords" id="coords-display">Lat/Lng</span>
+    </div>
+
+    <div class="timeline-tabs">
+        <button id="tab-77" class="tab-btn active-77" onclick="setEra('77bc')">77 BC: The Boy</button>
+        <button id="tab-67" class="tab-btn" onclick="setEra('67bc')">67 BC: The Man</button>
+    </div>
+
+    <div class="story-content">
+        <div id="chapter-title" class="chapter-title"></div>
+        <div id="narrative-display" class="narrative-text fade-in"></div>
+
+        <div class="internal-nav">
+            <button class="page-btn" id="btn-page-prev" onclick="changePage(-1)">&#8592; Prev</button>
+            <span id="page-indicator">Page 1</span>
+            <button class="page-btn" id="btn-page-next" onclick="changePage(1)">Next &#8594;</button>
+        </div>
+    </div>
+
+    <div class="global-controls">
+        <button class="map-btn" id="btn-loc-prev" onclick="changeLocation(-1)">&#9664; West</button>
+        <button class="map-btn" id="btn-loc-next" onclick="changeLocation(1)">East &#9654;</button>
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+crossorigin=""></script>
+
+<script>
+    // ==========================================
+    // THE EXPANDED JOURNEY DATA
+    // ==========================================
+    const journeyData = [
+        {
+            title: "1. The House on Caelian Hill",
+            coords: [41.889, 12.492],
+            zoom: 13,
+            story77: [
+                "The house smelled of beeswax and silence. My father, Spurius, believed that laughter was a lack of discipline. I was eleven, and I had packed my tunic three times.",
+                "In the Atrium, my father poured a libation to the <em>Imagines</em>—the wax masks of our ancestors. <div class='dialogue'>'Do not become a Greek, Lucius,'</div> he warned. <div class='dialogue'>'Come back a Roman.'</div>",
+                "My uncle Titus waited by the door. He winked at me. <div class='dialogue'>'The carriage is ready, Little Owl. Let us leave the ghosts behind.'</div>"
+            ],
+            story67: [
+                "Ten years later, the house felt smaller. The wax masks were dusty. My father sat in his chair, staring at a letter from the East.",
+                "<div class='dialogue'>'Your brother calls for you,'</div> he said. <div class='dialogue'>'Marcus has found something. He says he needs a mind, not a sword.'</div>",
+                "I took the letter. Rome was starving; the pirates had cut the grain lines. <div class='dialogue'>'I will go,'</div> I said. <div class='dialogue'>'But not for you.'</div>"
+            ]
+        },
+        {
+            title: "2. The Port of Ostia",
+            coords: [41.756, 12.288],
+            zoom: 13,
+            story77: [
+                "The <em>Sagitta</em> was a swift courier ship, painted blue. It smelled of pine resin and the sea. I had never seen so much water.",
+                "Uncle Titus ordered a sacrifice to Neptune—a white rooster. <div class='dialogue'>'Respect the gods, Lucius, but trust the rudder.'</div>",
+                "As the ropes were cast off, I felt the land release its grip on me. I was free."
+            ],
+            story67: [
+                "Ostia was a graveyard of ships. The pirates had raided here months ago, burning the consular fleet. The smell of wet ash still hung in the air.",
+                "My ship, the <em>Gorgon</em>, was no pleasure yacht. It was a blockade runner, armed with ballistae. The crew looked like cutthroats.",
+                "There was no sacrifice this time. Just a nervous captain watching the horizon. <div class='dialogue'>'If we see a sail, we run,'</div> he told me. <div class='dialogue'>'If we can't run, you fight.'</div>"
+            ]
+        },
+        {
+            title: "3. The Tyrrhenian Night (At Sea)",
+            coords: [40.500, 13.500], // Middle of the sea
+            zoom: 8,
+            story77: [
+                "I could not sleep. The rocking of the ship was like a cradle. I sat on the deck with Chresimus, my uncle’s slave-tutor.",
+                "He pointed to a red glow on the horizon—the volcano Stromboli. <div class='dialogue'>'Vulcan's Forge,'</div> I whispered.",
+                "<div class='dialogue'>'Magma,'</div> Chresimus corrected gently. <div class='dialogue'>'The earth breathing. There is no magic, Lucius, only nature.'</div> We ate salted fish and watched the fireworks of the earth."
+            ],
+            story67: [
+                "We sailed in total darkness. No lanterns. No cooking fires. A spark could be seen for miles by a pirate lookout.",
+                "The volcano was a curse now. Its glow silhouetted our sails against the black sky. We were a perfect target.",
+                "I sat with my back to the mast, my hand on a dagger I barely knew how to use. The sailors played dice in the dark, listening to the creak of the wood."
+            ]
+        },
+        {
+            title: "4. The Strait of Messina",
+            coords: [38.245, 15.630],
+            zoom: 10,
+            story77: [
+                "Scylla and Charybdis. The monsters of the Odyssey. I expected dragon heads. I saw swirling water.",
+                "The current was violent, ripping through the narrow gap between Italy and Sicily. The ship bucked like a horse.",
+                "Uncle Titus laughed as spray hit his face. <div class='dialogue'>'Physics, boy! The tides of two seas fighting for space.'</div> We shot through the gap, cheering."
+            ],
+            story67: [
+                "The Strait was a choke point. Pirate skiffs hid in the Calabrian coves, waiting for merchant ships to drift into the current.",
+                "We waited three days for a moonless night. We slipped through in silence, oars muffled with leather.",
+                "On the rocks of Scylla, I saw the wreckage of a grain ship. Timbers and amphorae floating in the foam. No survivors. The monsters were real enough."
+            ]
+        },
+        {
+            title: "5. The Deep Ionian (At Sea)",
+            coords: [37.500, 18.000],
+            zoom: 7,
+            story77: [
+                "We lost sight of land. It was just blue above and purple below. I felt small.",
+                "Chresimus brought out a <em>Groma</em> and showed me how to measure the angle of the sun. <div class='dialogue'>'The world is a sphere, Lucius. We are crawling on the skin of an apple.'</div>",
+                "I realized then that Rome was not the center of the world. It was just a spot on the apple."
+            ],
+            story67: [
+                "Dawn brought a sail on the horizon. A Liburnian—fast, shallow-draft. A pirate scout.",
+                "The captain screamed orders. <div class='dialogue'>'Double time! Row!'</div> I threw off my cloak and took an oar next to a scarred Phoenician.",
+                "We rowed for four hours until my hands blistered and bled. We outran them, but I learned that day that heroism smells like sweat and vomit."
+            ]
+        },
+        {
+            title: "6. Zakynthos (Greek Coast)",
+            coords: [37.780, 20.890],
+            zoom: 10,
+            story77: [
+                "We stopped for water at Zakynthos. The cliffs were white as bone, dropping into turquoise water.",
+                "I bought a melon from a fisherman. He spoke a dialect I barely understood, but he smiled and ruffled my hair.",
+                "It was peaceful. The Pax Romana seemed real here. The war was just a story told in the Senate."
+            ],
+            story67: [
+                "We did not stop. We couldn't. Smoke was rising from the village on the cliffs.",
+                "Through the spyglass, I saw the charred remains of the fishing boats. The pirates had stripped the island of men.",
+                "My brother Marcus was fighting these men in the East. For the first time, I didn't hate him for it. Someone had to stop the fire."
+            ]
+        },
+        {
+            title: "7. The Crocodile (Prasonisi)",
+            coords: [35.910, 23.270],
+            zoom: 11,
+            story77: [
+                "I saw them first. Two small black islands guarding the approach to Antikythera. The northern one looked like a snout.",
+                "I drew it in my wax tablet. 'A crocodile,' I said. 'Waiting for dinner.' Uncle Titus chuckled. <div class='dialogue'>'A sleeping crocodile, Lucius. Let it sleep.'</div>",
+                "Seagulls roosted on its stone teeth. It looked harmless."
+            ],
+            story67: [
+                "The weather had turned. The sea was grey and angry. Waves smashed over the Crocodile's back, spraying foam fifty feet in the air.",
+                "It didn't look like a toy now. The hollow 'eye' I had drawn as a boy was a black void, swallowing the water.",
+                "I felt a cold premonition. I couldn't look away. <div class='dialogue'>'Starboard!'</div> the helmsman screamed. We barely cleared the snout."
+            ]
+        },
+        {
+            title: "8. The Weave (Antikythera Channel)",
+            coords: [35.840, 23.280],
+            zoom: 11,
+            story77: [
+                "The Meltemi wind howled from the North. Captain Eudoxus shouted, and we banked hard to the West.",
+                "We cut under the shadow of the Crocodile, aiming for the cliffs of Antikythera. Suddenly, silence.",
+                "The island blocked the wind. We glided in the lee, 'weaving' through the danger. It was a masterstroke of sailing."
+            ],
+            story67: [
+                "There was no beauty in the weave this time. We were heavy with cargo and the crew was terrified.",
+                "We slid sideways toward the rocks, the current fighting the rudder. I could hear the surf roaring.",
+                "We made the turn by yards. I looked back at the wake. We had threaded the needle, but the thread was fraying."
+            ]
+        },
+        {
+            title: "9. North Coast of Crete (Heraklion)",
+            coords: [35.330, 25.130],
+            zoom: 9,
+            story77: [
+                "We sailed past the ruins of Knossos. Uncle Titus told me of the Minotaur and the Labyrinth.",
+                "I imagined heroes and monsters. The world felt ancient here, older than Rome. Magic felt possible.",
+                "We slept on deck, the warm breeze smelling of thyme and oregano from the hills."
+            ],
+            story67: [
+                "A Roman Quinquereme hailed us. We were boarded not by pirates, but by our own soldiers.",
+                "They checked our cargo for contraband. They were rude, tired, and corrupt. They took a cask of wine as a 'tax'.",
+                "The magic was gone. Crete was just another province under the boot, occupied and weary."
+            ]
+        },
+        {
+            title: "10. The Approach to Rhodes",
+            coords: [36.440, 28.200],
+            zoom: 11,
+            story77: [
+                "We arrived at the Golden Hour. The walls of Rhodes glowed pink and orange in the sunset.",
+                "The harbor was a forest of masts. Ships from Egypt, Phoenicia, and Gaul. It was the center of the world.",
+                "I felt a surge of joy. I was here to learn the secrets of the universe."
+            ],
+            story67: [
+                "We arrived at dawn in a thick fog. The harbor chain was raised. The city was locked down.",
+                "We had to signal the watchtower with a mirror to prove we were friends. The walls were manned by archers.",
+                "Rhodes was no longer a school. It was a fortress. The war had come to the philosophers."
+            ]
+        },
+        {
+            title: "11. Mandraki Harbor (Arrival)",
+            coords: [36.445, 28.225],
+            zoom: 14,
+            story77: [
+                "I stepped onto the quay. I touched the fallen bronze toes of the Colossus. Even broken, he was a god.",
+                "Uncle Titus led me up the hill to the house of Posidonius. <div class='dialogue'>'Open your eyes, Lucius,'</div> he said. <div class='dialogue'>'Your education begins.'</div>"
+            ],
+            story67: [
+                "I stepped onto the quay, exhausted. My hands were bandaged. My heart was cold.",
+                "A man stepped out of the mist. He wore a red cloak and the armor of a Legate. It was my brother, Marcus.",
+                "<div class='dialogue'>'Hello, Little Owl,'</div> he said, smiling a wolf's smile. <div class='dialogue'>'You took your time. I have a puzzle for you.'</div>"
+            ]
+        }
+    ];
+
+    // ==========================================
+    // MAP & LOGIC SETUP
+    // ==========================================
+    let currentLocIndex = 0;
+    let currentEra = '77bc';
+    let currentPageIndex = 0;
+
+    const map = L.map('map', { zoomControl: false, attributionControl: false }).setView(journeyData[0].coords, 13);
+    L.control.zoom({ position: 'bottomright' }).addTo(map);
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager_labels_under/{z}/{x}/{y}{r}.png', { subdomains: 'abcd', maxZoom: 19 }).addTo(map);
+
+    // Draw the Route
+    const routePoints = journeyData.map(p => p.coords);
+    const polyline = L.polyline(routePoints, { color: '#c0392b', weight: 3, dashArray: '5, 10', opacity: 0.6 }).addTo(map);
+
+    // Create Markers
+    const markers = [];
+    journeyData.forEach((loc, index) => {
+        const icon = L.divIcon({ className: 'custom-marker', html: index + 1, iconSize: [24, 24], iconAnchor: [12, 12] });
+        const marker = L.marker(loc.coords, { icon: icon }).addTo(map);
+        marker.on('click', () => { goToLocation(index); });
+        markers.push(marker);
+    });
+
+    // Navigation Functions
+    function goToLocation(index) {
+        currentLocIndex = index;
+        currentPageIndex = 0;
+        const loc = journeyData[currentLocIndex];
+        map.flyTo(loc.coords, loc.zoom, { duration: 2.0, easeLinearity: 0.25 });
+        updateDisplay();
+    }
+
+    function changeLocation(dir) {
+        const newIndex = currentLocIndex + dir;
+        if (newIndex >= 0 && newIndex < journeyData.length) goToLocation(newIndex);
+    }
+
+    function setEra(era) {
+        currentEra = era;
+        currentPageIndex = 0;
+        document.getElementById('tab-77').className = era === '77bc' ? 'tab-btn active-77' : 'tab-btn';
+        document.getElementById('tab-67').className = era === '67bc' ? 'tab-btn active-67' : 'tab-btn';
+        updateDisplay();
+    }
+
+    function changePage(dir) {
+        const storyArray = currentEra === '77bc' ? journeyData[currentLocIndex].story77 : journeyData[currentLocIndex].story67;
+        const newPage = currentPageIndex + dir;
+        if (newPage >= 0 && newPage < storyArray.length) {
+            currentPageIndex = newPage;
+            const textContainer = document.getElementById('narrative-display');
+            textContainer.classList.remove('fade-in');
+            void textContainer.offsetWidth; 
+            textContainer.classList.add('fade-in');
+            updateDisplay();
+        }
+    }
+
+    function updateDisplay() {
+        const loc = journeyData[currentLocIndex];
+        const storyArray = currentEra === '77bc' ? loc.story77 : loc.story67;
+        
+        document.getElementById('location-header').innerText = loc.title;
+        document.getElementById('coords-display').innerText = `${loc.coords[0].toFixed(3)}, ${loc.coords[1].toFixed(3)}`;
+        
+        const chapterTitle = currentEra === '77bc' ? `Part I: Innocence` : `Part II: Experience`;
+        const titleElem = document.getElementById('chapter-title');
+        titleElem.innerText = chapterTitle;
+        titleElem.style.color = currentEra === '77bc' ? '#27ae60' : '#c0392b';
+
+        document.getElementById('narrative-display').innerHTML = storyArray[currentPageIndex];
+        document.getElementById('page-indicator').innerText = `Page ${currentPageIndex + 1} of ${storyArray.length}`;
+        
+        document.getElementById('btn-page-prev').disabled = (currentPageIndex === 0);
+        document.getElementById('btn-page-next').disabled = (currentPageIndex === storyArray.length - 1);
+        document.getElementById('btn-loc-prev').disabled = (currentLocIndex === 0);
+        document.getElementById('btn-loc-next').disabled = (currentLocIndex === journeyData.length - 1);
+        
+        markers.forEach((m, idx) => {
+            const el = m.getElement();
+            if (el) {
+                if (idx === currentLocIndex) el.classList.add('active');
+                else el.classList.remove('active');
+            }
+        });
+    }
+
+    // Initialize
+    updateDisplay();
+
+</script>
+
+</body>
+</html>
