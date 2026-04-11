@@ -88,7 +88,11 @@ const setupBase64DisplayAndActions = async (audioBlob, outputFormat, originalNam
 
     // Clear previous player and create a new one for the Base64 audio (optional but good for verification)
     base64Result.innerHTML = ''; // Clear previous results
-    const mimeType = outputFormat === 'mp3' ? 'audio/mpeg' : 'audio/opus';
+    let mimeType;
+    if (outputFormat === 'mp3') mimeType = 'audio/mpeg';
+    else if (outputFormat === 'weba') mimeType = 'audio/webm; codecs=opus';
+    else mimeType = 'audio/opus';
+    
     // Create player using the original blob, as converting Base64 back to blob just for player is inefficient
     const base64PlayerContainer = createAudioPlayer(audioBlob, mimeType, 'Converted Audio (Preview)');
     base64Result.appendChild(base64PlayerContainer);

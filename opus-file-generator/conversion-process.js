@@ -29,7 +29,7 @@ const runConversion = async () => {
     // --- Determine Output Format and Filenames ---
     const inputFilename = "input_audio_file";
     const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
-    const outputFormat = selectedFormatRadio ? selectedFormatRadio.value : 'mp3';
+    const outputFormat = selectedFormatRadio ? selectedFormatRadio.value : 'weba';
     const outputFilename = `output.${outputFormat}`;
     const originalNameBase = getBaseFilename(selectedFile.name);
 
@@ -54,7 +54,7 @@ const runConversion = async () => {
         let mimeType;
         if (outputFormat === 'mp3') mimeType = 'audio/mpeg';
         else if (outputFormat === 'opus') mimeType = 'audio/opus';
-        else if (outputFormat === 'webm') mimeType = 'audio/webm';
+        else if (outputFormat === 'weba') mimeType = 'audio/webm; codecs=opus';
         else {
             mimeType = 'application/octet-stream';
             console.warn(`Unknown output format for MIME type: ${outputFormat}`);
@@ -148,7 +148,7 @@ const runBatchConversion = async () => {
     if (base64Container) base64Container.style.display = 'none'; // Hide single base64 area
     if (batchResultEl) batchResultEl.innerHTML = '<h3>Batch Conversion Results:</h3>';
 
-    const outputFormat = document.querySelector('input[name="format"]:checked')?.value || 'webm';
+    const outputFormat = document.querySelector('input[name="format"]:checked')?.value || 'weba';
     let successCount = 0;
     let failCount = 0;
 
@@ -203,7 +203,7 @@ const runBatchConversion = async () => {
             let mimeType;
             if (outputFormat === 'mp3') mimeType = 'audio/mpeg';
             else if (outputFormat === 'opus') mimeType = 'audio/opus'; // Typically in .opus or .ogg
-            else if (outputFormat === 'webm') mimeType = 'audio/webm'; // Opus in WebM
+            else if (outputFormat === 'weba') mimeType = 'audio/webm; codecs=opus'; // Opus in WebM Audio
             else mimeType = 'application/octet-stream';
 
             const convertedBlob = new Blob([outputData.buffer], { type: mimeType });

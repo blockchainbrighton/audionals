@@ -27,7 +27,7 @@ const createABPlayerUI = (originalBlob, originalMimeType, convertedBlob, convert
       </div>
       <p id="labelA" style="font-weight:bold;opacity:1;">A: Original Audio</p>
       <audio id="audioA" controls preload="metadata" style="width:100%;margin-bottom:5px;"></audio>
-      <p id="labelB" style="font-weight:bold;opacity:0.6;">B: Converted Audio (WebM/Opus)</p>
+      <p id="labelB" style="font-weight:bold;opacity:0.6;">B: Converted Audio (WebM Audio/Opus)</p>
       <audio id="audioB" controls preload="metadata" style="width:100%;"></audio>
     `;
   
