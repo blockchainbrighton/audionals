@@ -1,0 +1,486 @@
+// System/shared/ui_styles.js
+// Centralized CSS for BVST Shared Components
+
+const injectCSS = (id, cssContent) => {
+    if (document.getElementById(id)) return;
+    const style = document.createElement('style');
+    style.id = id;
+    style.textContent = cssContent;
+    document.head.appendChild(style);
+};
+
+export const ControlsCSS = `
+    /* --- LAYOUT & STRUCTURE --- */
+    .bvst-app {
+        width: 100%;
+        max-width: 1000px;
+        background: #1e1e24;
+        border: 2px solid #007a82;
+        box-shadow: 0 0 30px rgba(0,0,0,0.7);
+        border-radius: 8px;
+        display: flex;
+        flex-direction: column;
+        position: relative;
+        font-family: 'Courier New', Courier, monospace;
+        color: #e0e0e0;
+        user-select: none;
+    }
+    .bvst-top-bar {
+        height: 60px;
+        background: #000;
+        border-bottom: 1px solid #007a82;
+        display: flex;
+        align-items: center;
+        padding: 0 20px;
+        justify-content: space-between;
+    }
+    .bvst-title { margin: 0; font-size: 1.2rem; color: #00f0ff; text-shadow: 0 0 5px #007a82; }
+    
+    .bvst-controls-grid {
+        padding: 20px;
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+        gap: 10px;
+    }
+
+    .bvst-module {
+        background: rgba(255,255,255,0.03);
+        border: 1px solid #333;
+        border-radius: 4px;
+        padding: 10px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+    }
+    .bvst-module h3 {
+        margin: 0 0 10px 0;
+        font-size: 0.7rem;
+        color: #888;
+        text-transform: uppercase;
+        width: 100%;
+        text-align: center;
+        border-bottom: 1px solid #333;
+        padding-bottom: 5px;
+    }
+    
+    .bvst-row {
+        display: flex;
+        gap: 15px;
+        justify-content: center;
+        flex-wrap: wrap;
+        width: 100%;
+    }
+
+    /* --- KNOBS --- */
+    .knob-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 5px;
+    }
+    .knob-outer {
+        width: 50px;
+        height: 50px;
+        border-radius: 50%;
+        background: #222;
+        border: 2px solid #444;
+        position: relative;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        cursor: ns-resize;
+    }
+    .knob-track {
+        width: 40px;
+        height: 40px;
+        border-radius: 50%;
+        background: #1a1a1a;
+        position: relative;
+    }
+    .knob {
+        width: 100%;
+        height: 100%;
+        position: absolute;
+        top: 0;
+        left: 0;
+    }
+    /* The rotating part of the knob */
+    .knob-rotator { 
+        width: 100%; height: 100%; 
+        border-radius: 50%; 
+        position: absolute; 
+        top:0; left:0; 
+    }
+    .knob-rotator::after {
+        content: '';
+        position: absolute;
+        top: 10%; left: 50%;
+        width: 2px; height: 40%;
+        background: #00f0ff;
+        transform: translateX(-50%);
+    }
+    .knob-value {
+        font-family: monospace;
+        font-size: 10px;
+        color: #00f0ff;
+        margin-top: -2px;
+        user-select: none;
+        display: none; /* Hidden by default, shown if needed */
+    }
+    .knob-label {
+        font-size: 0.6rem;
+        margin-top: 5px;
+        text-align: center;
+    }
+
+    /* --- SELECTS --- */
+    .bvst-select {
+        background: #000;
+        color: #00f0ff;
+        border: 1px solid #007a82;
+        padding: 5px;
+        font-family: inherit;
+        font-size: 0.7rem;
+        cursor: pointer;
+        margin-top: 5px;
+        width: 100%;
+    }
+
+    /* --- SLIDERS (Faders) --- */
+    .slider-container {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin: 5px;
+    }
+    .slider-track {
+        background: #111;
+        border: 1px solid #333;
+        border-radius: 4px;
+        position: relative;
+        cursor: pointer;
+    }
+    
+    /* Vertical Slider */
+    .slider-track:not(.horizontal) {
+        width: 12px;
+        height: 150px;
+        cursor: ns-resize;
+    }
+    .slider-handle {
+        background: #444;
+        border: 1px solid #666;
+        border-radius: 2px;
+        position: absolute;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+        pointer-events: none; /* Events caught by track */
+    }
+    .slider-track:not(.horizontal) .slider-handle {
+        width: 30px;
+        height: 15px;
+        left: 50%;
+        transform: translateX(-50%);
+        bottom: 0;
+    }
+    .slider-track:not(.horizontal) .slider-handle::after {
+        content: '';
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 20px; height: 2px;
+        background: #00f0ff;
+    }
+
+    /* Horizontal Slider */
+    .slider-track.horizontal {
+        width: 150px;
+        height: 12px;
+        cursor: ew-resize;
+    }
+    .slider-track.horizontal .slider-handle {
+        width: 15px;
+        height: 30px;
+        top: 50%;
+        transform: translateY(-50%);
+        left: 0;
+    }
+    .slider-track.horizontal .slider-handle::after {
+        content: '';
+        position: absolute;
+        top: 50%; left: 50%;
+        transform: translate(-50%, -50%);
+        width: 2px; height: 20px;
+        background: #00f0ff;
+    }
+
+    /* --- SWITCHES --- */
+    .switch-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        cursor: pointer;
+        margin: 5px;
+    }
+    .switch-track {
+        width: 40px;
+        height: 20px;
+        background: #222;
+        border: 1px solid #444;
+        border-radius: 10px;
+        position: relative;
+        transition: background 0.2s;
+    }
+    .switch-track.active {
+        background: #005055;
+        border-color: #00a0aa;
+    }
+    .switch-handle {
+        width: 16px;
+        height: 16px;
+        background: #888;
+        border-radius: 50%;
+        position: absolute;
+        top: 1px;
+        left: 1px;
+        transition: left 0.2s;
+        box-shadow: 0 2px 4px rgba(0,0,0,0.5);
+    }
+    .switch-track.active .switch-handle {
+        left: 21px;
+        background: #fff;
+        box-shadow: 0 0 5px #00f0ff;
+    }
+
+    /* --- BUTTONS --- */
+    .button-container {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        margin: 5px;
+    }
+    .button {
+        width: 40px;
+        height: 40px;
+        background: #333;
+        border: 2px solid #555;
+        border-radius: 4px;
+        cursor: pointer;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        font-weight: bold;
+        color: #aaa;
+        transition: all 0.1s;
+        user-select: none;
+    }
+    .button:active, .button.active {
+        background: #00f0ff;
+        color: #000;
+        border-color: #007a82;
+        box-shadow: 0 0 10px rgba(0, 240, 255, 0.5);
+        transform: scale(0.95);
+    }
+`;
+
+export const KeyboardCSS = `
+    /* KEYBOARD STYLES injected by Keyboard Module */
+    .bvst-keyboard {
+        display: flex;
+        height: 120px;
+        background: #111;
+        justify-content: center; /* Keep centered if width < 100% */
+        position: relative;
+        margin-top: 10px;
+        padding: 10px 0;
+        border-top: 4px solid #222;
+        user-select: none;
+        -webkit-user-select: none;
+        width: 100%; 
+        box-sizing: border-box;
+    }
+    
+    .key {
+        position: relative;
+        height: 100%;
+        background: var(--key-white, #fffff0);
+        border: 1px solid #999;
+        border-radius: 0 0 4px 4px;
+        /* Widths handled by JS for perfect fit */
+        cursor: pointer;
+        box-sizing: border-box;
+    }
+    
+    .key.black {
+        height: 60%;
+        background: var(--key-black, #151515);
+        border: 1px solid #000;
+        border-radius: 0 0 2px 2px;
+        box-shadow: 2px 2px 5px rgba(0,0,0,0.5);
+        /* Z-index handled by JS */
+    }
+    
+    .key.active {
+        background: var(--accent, #ff9900);
+        box-shadow: 0 0 15px var(--accent, #ff9900);
+    }
+    
+    .key.black.active {
+        background: #cc7a00; /* Darker orange */
+    }
+`;
+
+export const MidiCSS = `
+    /* MIDI Styles injected by MidiManager */
+    .midi-container {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-bottom: 15px;
+        padding: 8px;
+        background: #1a1a1a;
+        border-radius: 6px;
+        border: 1px solid #333;
+        width: fit-content;
+    }
+    
+    .midi-label {
+        font-size: 11px;
+        color: #666;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        font-weight: bold;
+    }
+    
+    #midi-in { /* Default ID selector fallback */
+        background: #111;
+        color: #ccc;
+        border: 1px solid #444;
+        padding: 4px 8px;
+        border-radius: 4px;
+        font-size: 12px;
+        width: 180px;
+        outline: none;
+        cursor: pointer;
+    }
+    #midi-in:hover {
+        border-color: #666;
+    }
+
+    #midi-led { /* Default ID selector fallback */
+        width: 10px;
+        height: 10px;
+        border-radius: 50%;
+        background: #330000;
+        border: 1px solid #550000;
+        transition: background 0.05s, box-shadow 0.05s;
+        flex-shrink: 0;
+    }
+    
+    #midi-led.active {
+        background: #ff3333;
+        box-shadow: 0 0 8px #ff0000;
+        border-color: #ff8888;
+    }
+`;
+
+export const SequencerCSS = `
+    .seq-grid { display: grid; grid-template-columns: repeat(16, 1fr); gap: 2px; margin-top: 10px; }
+    .step-col { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .led { width: 8px; height: 8px; background: #400; border-radius: 50%; margin-bottom: 5px; border: 1px solid #000; box-shadow: inset 0 0 2px #000; }
+    .led.active { background: #f00; box-shadow: 0 0 5px #f00; }
+    .led.current { background: #ff0; box-shadow: 0 0 8px #ff0; }
+    
+    .seq-btn {
+        width: 100%; height: 20px; border: 1px solid #444; background: #222;
+        cursor: pointer; font-size: 0.6rem; display: flex; justify-content: center; align-items: center; color: #888;
+        user-select: none;
+    }
+    .seq-btn:hover { border-color: #666; }
+    .seq-btn.active { background: #666; color: #fff; border-color: #888; }
+    
+    /* Accent & Slide Colors */
+    .seq-btn.accent.active { background: #ff3333; color: #000; }
+    .seq-btn.slide.active { background: #4a90e2; color: #000; }
+    
+    .note-select {
+        width: 100%; font-size: 0.6rem; background: #111; color: #ccc;
+        border: 1px solid #333; -webkit-appearance: none; padding: 0; text-align: center; cursor: pointer;
+    }
+    .note-select:focus { border-color: #666; outline: none; }
+`;
+
+export const GridSequencerCSS = `
+    .bvst-grid-container { 
+        display: grid; 
+        grid-template-columns: 60px repeat(16, 1fr); 
+        gap: 4px; 
+        background: #222; 
+        padding: 10px; 
+        border-radius: 4px; 
+        margin-top: 10px;
+    }
+    .bvst-row-label { 
+        display: flex; 
+        align-items: center; 
+        font-size: 10px; 
+        color: #888; 
+        font-weight: bold; 
+        font-family: monospace;
+    }
+    .bvst-step {
+        background: #333; 
+        border: 1px solid #444; 
+        cursor: pointer;
+        border-radius: 2px;
+        min-height: 20px;
+    }
+    .bvst-step:hover { border-color: #666; }
+    .bvst-step.active { background: #f90; border-color: #f90; box-shadow: 0 0 5px #f90; }
+    .bvst-step.current { background: #fff; }
+    .bvst-step.active.current { background: #ffc; }
+    
+    /* Custom Row Colors */
+    .row-0 .bvst-step.active { background: #f44; border-color: #f44; box-shadow: 0 0 5px #f44; }
+    .row-1 .bvst-step.active { background: #4f4; border-color: #4f4; box-shadow: 0 0 5px #4f4; }
+    .row-2 .bvst-step.active { background: #4bf; border-color: #4bf; box-shadow: 0 0 5px #4bf; }
+    .row-3 .bvst-step.active { background: #d4f; border-color: #d4f; box-shadow: 0 0 5px #d4f; }
+`;
+
+export const SamplerCSS = `
+    .bvst-sampler-container { width: 100%; background: #000; font-family: monospace; }
+    .bvst-waveform-wrapper { position: relative; height: 150px; width: 100%; background: #111; border-bottom: 1px solid #007a82; overflow: hidden; cursor: crosshair; }
+    .bvst-waveform-canvas { width: 100%; height: 100%; display: block; }
+    .bvst-waveform-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; }
+    .bvst-marker { position: absolute; top: 0; height: 100%; width: 2px; background: #fff; z-index: 10; }
+    .bvst-marker-start { background: #0f0; box-shadow: 0 0 5px #0f0; }
+    .bvst-marker-end { background: #f00; box-shadow: 0 0 5px #f00; }
+    .bvst-playhead { position: absolute; top: 0; height: 100%; width: 2px; background: #ff0; box-shadow: 0 0 8px #ff0; z-index: 20; will-change: left; }
+    .bvst-drop-hint { position: absolute; top: 5px; left: 10px; color: #0f0; font-size: 10px; pointer-events: none; opacity: 0.7; }
+    .bvst-sampler-loader { display: flex; padding: 5px; background: #000; border-bottom: 1px solid #333; }
+    .bvst-url-input { flex: 1; background: #222; border: 1px solid #444; color: #ddd; padding: 4px; margin-right: 5px; }
+    .bvst-load-btn { background: #007a82; color: #fff; border: none; padding: 0 10px; cursor: pointer; font-weight: bold; }
+    .bvst-load-btn:hover { background: #009a92; }
+`;
+
+export const VisualizerCSS = `
+    .bvst-visualizer {
+        width: 100%;
+        height: 100%;
+        background: #000;
+        border-radius: 4px;
+        border: 1px solid #333;
+        --viz-scope-color: #00f0ff;
+        --viz-spectrum-color: #ff0055;
+        --viz-trail-color: rgba(0, 0, 0, 0.2);
+        --viz-grid-color: rgba(255, 255, 255, 0.1);
+    }
+`;
+
+export const injectControlsStyles = () => injectCSS('bvst-controls-styles', ControlsCSS);
+export const injectKeyboardStyles = () => injectCSS('bvst-keyboard-styles', KeyboardCSS);
+export const injectMidiStyles = () => injectCSS('bvst-midi-styles', MidiCSS);
+export const injectSequencerStyles = () => injectCSS('bvst-sequencer-styles', SequencerCSS);
+export const injectGridSequencerStyles = () => injectCSS('bvst-grid-seq-styles', GridSequencerCSS);
+export const injectSamplerStyles = () => injectCSS('bvst-sampler-styles', SamplerCSS);
+export const injectVisualizerStyles = () => injectCSS('bvst-visualizer-styles', VisualizerCSS);

@@ -1,0 +1,544 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>BAM — Blockchain Audional Matrix</title>
+  <style>
+    :root{
+      --bg:#020403;
+      --green:#39ff7a;
+      --green2:#0eea5f;
+      --dim:rgba(57,255,122,.18);
+      --scan:rgba(57,255,122,.08);
+      --shadow:rgba(57,255,122,.25);
+      --letterboxH:14vh;
+      --font: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace;
+    }
+    html,body{height:100%;margin:0;background:#000;overflow:hidden}
+    body{display:grid;place-items:center;font-family:var(--font);}
+
+    /* Stage */
+    .stage{
+      position:relative;
+      width:min(1100px, 96vw);
+      height:min(620px, 70vh);
+      background: radial-gradient(1200px 700px at 50% 50%, rgba(57,255,122,.06), transparent 62%),
+                  linear-gradient(180deg, #000, var(--bg));
+      border:1px solid rgba(57,255,122,.18);
+      box-shadow: 0 0 40px rgba(57,255,122,.10), inset 0 0 80px rgba(57,255,122,.06);
+      border-radius: 18px;
+      overflow:hidden;
+    }
+
+    /* CRT vibe */
+    .crt::before{
+      content:"";
+      position:absolute; inset:0;
+      background:
+        repeating-linear-gradient(
+          to bottom,
+          rgba(0,0,0,.0) 0px,
+          rgba(0,0,0,.0) 2px,
+          rgba(0,0,0,.15) 3px
+        );
+      mix-blend-mode:multiply;
+      pointer-events:none;
+      opacity:.55;
+    }
+    .crt::after{
+      content:"";
+      position:absolute; inset:-20%;
+      background:
+        radial-gradient(circle at 50% 45%, rgba(57,255,122,.12), transparent 55%),
+        repeating-linear-gradient(
+          90deg,
+          rgba(57,255,122,.03) 0px,
+          rgba(57,255,122,.03) 1px,
+          rgba(0,0,0,0) 2px
+        );
+      pointer-events:none;
+      filter: blur(.2px);
+      opacity:.65;
+      animation: flicker 3.8s infinite linear;
+    }
+    @keyframes flicker{
+      0%,100%{opacity:.55; transform: translate(0,0)}
+      10%{opacity:.70}
+      20%{opacity:.52}
+      30%{opacity:.78}
+      55%{opacity:.60; transform: translate(.4px,0)}
+      70%{opacity:.66; transform: translate(-.3px,.2px)}
+      85%{opacity:.58}
+    }
+
+    /* Letterbox bars */
+    .bar{
+      position:absolute; left:0; right:0;
+      height: var(--letterboxH);
+      background: #000;
+      z-index: 50;
+      box-shadow: 0 8px 22px rgba(0,0,0,.65);
+    }
+    .bar.top{top:0; transform: translateY(-100%);}
+    .bar.bot{bottom:0; transform: translateY(100%);}
+    .bar.in{
+      transition: transform 800ms cubic-bezier(.18,.9,.12,1);
+    }
+    .bar.top.in{ transform: translateY(0); }
+    .bar.bot.in{ transform: translateY(0); }
+
+    /* HUD corners */
+    .hud{
+      position:absolute; inset:0;
+      pointer-events:none;
+      z-index: 10;
+      opacity:.9;
+    }
+    .corner{
+      position:absolute; width:64px; height:64px;
+      border:2px solid rgba(57,255,122,.35);
+      filter: drop-shadow(0 0 10px rgba(57,255,122,.18));
+    }
+    .corner.tl{top:18px; left:18px; border-right:none; border-bottom:none; border-radius:14px 0 0 0;}
+    .corner.tr{top:18px; right:18px; border-left:none; border-bottom:none; border-radius:0 14px 0 0;}
+    .corner.bl{bottom:18px; left:18px; border-right:none; border-top:none; border-radius:0 0 0 14px;}
+    .corner.br{bottom:18px; right:18px; border-left:none; border-top:none; border-radius:0 0 14px 0;}
+    .hudText{
+      position:absolute; left:18px; right:18px; top:18px;
+      display:flex; justify-content:space-between; gap:12px;
+      color: rgba(57,255,122,.55);
+      font-size: 12px;
+      letter-spacing: .14em;
+      text-transform: uppercase;
+    }
+    .hudText span{white-space:nowrap}
+    .hudText .right{opacity:.7}
+
+    /* Center content */
+    .content{
+      position:absolute; inset:0;
+      display:grid; place-items:center;
+      z-index: 20;
+    }
+    .centerWrap{
+      position:relative;
+      width: 100%;
+      height: 100%;
+      display:grid; place-items:center;
+      transform: translateZ(0);
+    }
+
+    /* Explosion burst behind BAM */
+    .burst{
+      position:absolute;
+      width:min(520px, 74vw);
+      aspect-ratio: 1/1;
+      opacity:0;
+      transform: scale(.6) rotate(-12deg);
+      filter: drop-shadow(0 0 28px rgba(57,255,122,.20));
+      z-index: 0;
+    }
+    .burst.show{
+      opacity:1;
+      transition: opacity 140ms ease-out;
+    }
+    .burst.pop{
+      animation: pop 520ms cubic-bezier(.2,1,.2,1) both;
+    }
+    @keyframes pop{
+      0%{transform: scale(.35) rotate(-12deg); filter: drop-shadow(0 0 0 rgba(57,255,122,0));}
+      60%{transform: scale(1.08) rotate(6deg); filter: drop-shadow(0 0 42px rgba(57,255,122,.35));}
+      100%{transform: scale(1.0) rotate(0deg); filter: drop-shadow(0 0 30px rgba(57,255,122,.22));}
+    }
+
+    /* Text styling */
+    .glow{
+      color: var(--green);
+      text-shadow:
+        0 0 10px rgba(57,255,122,.45),
+        0 0 24px rgba(57,255,122,.22),
+        0 0 44px rgba(57,255,122,.12);
+    }
+    .scanline{
+      position:absolute; inset:0;
+      background: linear-gradient(to bottom, transparent 0%, var(--scan) 50%, transparent 100%);
+      height: 18%;
+      width: 100%;
+      opacity:.8;
+      transform: translateY(-120%);
+      pointer-events:none;
+      z-index: 30;
+      animation: scan 2.6s linear infinite;
+    }
+    @keyframes scan{
+      0%{transform: translateY(-120%)}
+      100%{transform: translateY(520%)}
+    }
+
+    /* BAM line */
+    .bamRow{
+      position:relative;
+      display:flex;
+      align-items:baseline;
+      gap: 26px;
+      z-index: 5;
+      opacity:0;
+      transform: translateY(18px);
+    }
+    .bamRow.on{
+      opacity:1;
+      transform: translateY(0);
+      transition: opacity 250ms ease-out, transform 300ms ease-out;
+    }
+
+    .bamWord{
+      display:flex; align-items:baseline; gap: 2px;
+      font-weight: 800;
+      letter-spacing: .10em;
+      font-size: clamp(46px, 8.2vw, 92px);
+      line-height: 1;
+      padding: 8px 10px;
+      border: 1px solid rgba(57,255,122,.22);
+      background: rgba(0,0,0,.35);
+      box-shadow: inset 0 0 0 1px rgba(57,255,122,.08);
+      border-radius: 14px;
+      position:relative;
+      overflow:hidden;
+    }
+    .bamWord::before{
+      content:"";
+      position:absolute; inset:0;
+      background: linear-gradient(90deg, transparent, rgba(57,255,122,.08), transparent);
+      transform: translateX(-120%);
+      animation: sheen 1.8s ease-in-out infinite;
+      pointer-events:none;
+    }
+    @keyframes sheen{
+      0%{transform: translateX(-120%)}
+      55%{transform: translateX(120%)}
+      100%{transform: translateX(120%)}
+    }
+
+    /* Second BAM comes a beat later */
+    .bamWord.second{opacity:0; transform: translateY(6px) scale(.98);}
+    .bamWord.second.hit{
+      opacity:1; transform: translateY(0) scale(1);
+      transition: opacity 180ms ease-out, transform 220ms ease-out;
+    }
+
+    /* Split letters line */
+    .splitLine{
+      margin-top: 18px;
+      display:flex;
+      align-items:baseline;
+      justify-content:center;
+      gap: 22px;
+      opacity:0;
+      transform: translateY(10px);
+      z-index: 6;
+    }
+    .splitLine.show{
+      opacity:1;
+      transform: translateY(0);
+      transition: opacity 260ms ease-out, transform 260ms ease-out;
+    }
+
+    .chunk{
+      display:flex;
+      align-items:baseline;
+      gap: 10px;
+      padding: 10px 14px;
+      border-radius: 14px;
+      border: 1px solid rgba(57,255,122,.22);
+      background: rgba(0,0,0,.28);
+      box-shadow: 0 0 18px rgba(57,255,122,.08);
+      position:relative;
+      transform: translateX(0);
+    }
+    .chunk.moveLeft{transform: translateX(-120px)}
+    .chunk.moveMid{transform: translateX(0)}
+    .chunk.moveRight{transform: translateX(120px)}
+    .chunk.moved{
+      transition: transform 720ms cubic-bezier(.18,.95,.18,1);
+    }
+
+    .bigLetter{
+      font-weight: 900;
+      letter-spacing:.08em;
+      font-size: clamp(40px, 6.2vw, 78px);
+      line-height:1;
+      position:relative;
+    }
+
+    .typed{
+      font-size: clamp(16px, 2.0vw, 22px);
+      letter-spacing: .14em;
+      text-transform: uppercase;
+      opacity:.95;
+      position:relative;
+      padding-bottom: 2px;
+    }
+    .caret{
+      display:inline-block;
+      width: 10px;
+      margin-left: 2px;
+      border-bottom: 2px solid rgba(57,255,122,.85);
+      transform: translateY(-2px);
+      animation: blink 900ms steps(1,end) infinite;
+      opacity:.85;
+    }
+    @keyframes blink{50%{opacity:0}}
+
+    /* Subtle bottom caption */
+    .caption{
+      position:absolute;
+      left:0; right:0;
+      bottom: calc(var(--letterboxH) + 16px);
+      text-align:center;
+      color: rgba(57,255,122,.45);
+      font-size: 12px;
+      letter-spacing:.22em;
+      text-transform: uppercase;
+      z-index: 25;
+      opacity:0;
+      transform: translateY(8px);
+    }
+    .caption.on{
+      opacity:1;
+      transform: translateY(0);
+      transition: opacity 400ms ease-out, transform 400ms ease-out;
+    }
+
+    /* Noise */
+    .noise{
+      position:absolute; inset:0;
+      background-image:
+        url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)' opacity='.22'/%3E%3C/svg%3E");
+      opacity:.10;
+      mix-blend-mode: overlay;
+      pointer-events:none;
+      z-index: 40;
+      animation: jitter 1.6s steps(2,end) infinite;
+    }
+    @keyframes jitter{
+      0%{transform: translate(0,0)}
+      25%{transform: translate(1px,-1px)}
+      50%{transform: translate(-1px,1px)}
+      75%{transform: translate(1px,1px)}
+      100%{transform: translate(0,0)}
+    }
+
+    /* Respect reduced motion */
+    @media (prefers-reduced-motion: reduce){
+      .crt::after,.scanline,.noise,.bamWord::before{animation:none}
+      .bar.in,.bamRow.on,.burst.pop,.chunk.moved,.caption.on{transition:none}
+    }
+  </style>
+</head>
+<body>
+  <div class="stage crt" id="stage">
+    <div class="bar top in" id="barTop"></div>
+    <div class="bar bot in" id="barBot"></div>
+
+    <div class="hud">
+      <div class="hudText">
+        <span>RETRO SYSTEM / GREEN MODE</span>
+        <span class="right" id="hudRight">SYNC: 00.00</span>
+      </div>
+      <div class="corner tl"></div>
+      <div class="corner tr"></div>
+      <div class="corner bl"></div>
+      <div class="corner br"></div>
+    </div>
+
+    <div class="content">
+      <div class="centerWrap">
+        <div class="scanline"></div>
+
+        <!-- Explosion burst (SVG) -->
+        <svg class="burst" id="burst" viewBox="0 0 200 200" aria-hidden="true">
+          <defs>
+            <radialGradient id="g" cx="50%" cy="50%" r="60%">
+              <stop offset="0%" stop-color="rgba(57,255,122,.55)"/>
+              <stop offset="55%" stop-color="rgba(57,255,122,.18)"/>
+              <stop offset="100%" stop-color="rgba(57,255,122,0)"/>
+            </radialGradient>
+            <filter id="pix" x="-20%" y="-20%" width="140%" height="140%">
+              <feComponentTransfer>
+                <feFuncR type="discrete" tableValues="0 0.5 1"/>
+                <feFuncG type="discrete" tableValues="0 0.6 1"/>
+                <feFuncB type="discrete" tableValues="0 0.2 0.4"/>
+              </feComponentTransfer>
+              <feGaussianBlur stdDeviation="0.35"/>
+            </filter>
+          </defs>
+          <!-- burst spikes -->
+          <path d="M100 10
+                   L112 40 L145 22 L132 55 L168 58 L138 78 L178 98 L138 108
+                   L168 142 L130 135 L145 178 L112 152 L100 190 L88 152
+                   L55 178 L70 135 L32 142 L62 108 L22 98 L62 78 L32 58
+                   L68 55 L55 22 L88 40 Z"
+                fill="rgba(57,255,122,.16)" stroke="rgba(57,255,122,.55)" stroke-width="2"
+                filter="url(#pix)"/>
+          <circle cx="100" cy="100" r="56" fill="url(#g)" />
+          <!-- inner rings -->
+          <circle cx="100" cy="100" r="38" fill="none" stroke="rgba(57,255,122,.55)" stroke-width="2" opacity=".55"/>
+          <circle cx="100" cy="100" r="24" fill="none" stroke="rgba(57,255,122,.55)" stroke-width="2" opacity=".45"/>
+          <!-- pixel dots -->
+          <g fill="rgba(57,255,122,.65)" opacity=".5">
+            <rect x="96" y="28" width="4" height="4"/><rect x="100" y="28" width="4" height="4"/>
+            <rect x="32" y="96" width="4" height="4"/><rect x="32" y="100" width="4" height="4"/>
+            <rect x="164" y="96" width="4" height="4"/><rect x="164" y="100" width="4" height="4"/>
+            <rect x="96" y="168" width="4" height="4"/><rect x="100" y="168" width="4" height="4"/>
+          </g>
+        </svg>
+
+        <div class="bamRow" id="bamRow">
+          <div class="bamWord glow" id="bam1">BAM</div>
+          <div class="bamWord second glow" id="bam2">BAM</div>
+        </div>
+
+        <div class="splitLine" id="splitLine" aria-label="Blockchain Audional Matrix">
+          <div class="chunk" id="chunkB">
+            <div class="bigLetter glow">B</div>
+            <div class="typed glow" id="typeB"></div>
+          </div>
+          <div class="chunk" id="chunkA">
+            <div class="bigLetter glow">A</div>
+            <div class="typed glow" id="typeA"></div>
+          </div>
+          <div class="chunk" id="chunkM">
+            <div class="bigLetter glow">M</div>
+            <div class="typed glow" id="typeM"></div>
+          </div>
+        </div>
+
+        <div class="caption" id="caption">BLOCKCHAIN  •  AUDIONAL  •  MATRIX</div>
+      </div>
+    </div>
+
+    <div class="noise"></div>
+  </div>
+
+  <script>
+    // Tiny helper timing
+    const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+    // Retro "typewriter" with optional glitchy pauses
+    async function typeText(el, text, speed=36){
+      el.textContent = "";
+      const caret = document.createElement("span");
+      caret.className = "caret";
+      el.appendChild(caret);
+
+      const buf = [];
+      for (let i=0;i<text.length;i++){
+        buf.push(text[i]);
+        // occasional micro-glitch pause
+        const jitter = (Math.random() < 0.08) ? (60 + Math.random()*120) : 0;
+        el.firstChild && el.removeChild(el.firstChild); // caret
+        el.textContent = buf.join("");
+        el.appendChild(caret);
+        await wait(speed + jitter);
+      }
+      // keep caret blinking
+    }
+
+    // HUD timer
+    let t0 = performance.now();
+    const hudRight = document.getElementById("hudRight");
+    function tick(){
+      const s = (performance.now() - t0)/1000;
+      hudRight.textContent = "SYNC: " + s.toFixed(2).padStart(5,"0");
+      requestAnimationFrame(tick);
+    }
+    tick();
+
+    async function run(){
+      const barTop = document.getElementById("barTop");
+      const barBot = document.getElementById("barBot");
+      const burst  = document.getElementById("burst");
+      const bamRow = document.getElementById("bamRow");
+      const bam2   = document.getElementById("bam2");
+      const splitLine = document.getElementById("splitLine");
+      const caption = document.getElementById("caption");
+
+      const chunkB = document.getElementById("chunkB");
+      const chunkA = document.getElementById("chunkA");
+      const chunkM = document.getElementById("chunkM");
+
+      // Start with letterbox sliding in
+      await wait(120);
+      barTop.classList.add("in");
+      barBot.classList.add("in");
+
+      // Bring in BAM + burst pop
+      await wait(520);
+      burst.classList.add("show","pop");
+      bamRow.classList.add("on");
+
+      // Second BAM hits
+      await wait(260);
+      bam2.classList.add("hit");
+
+      // Hold on the comic beat
+      await wait(740);
+
+      // Transition to split letters
+      bamRow.style.opacity = "0";
+      bamRow.style.transform = "translateY(-8px) scale(.98)";
+      bamRow.style.transition = "opacity 260ms ease-out, transform 260ms ease-out";
+      burst.style.opacity = "0.75";
+      burst.style.transform = "scale(1.05) rotate(0deg)";
+      burst.style.transition = "opacity 420ms ease-out, transform 420ms ease-out";
+
+      await wait(320);
+      splitLine.classList.add("show");
+
+      // Move chunks apart (B left, A center, M right)
+      chunkB.classList.add("moved","moveLeft");
+      chunkA.classList.add("moved","moveMid");
+      chunkM.classList.add("moved","moveRight");
+
+      await wait(260);
+
+      // Type out expansions
+      const typeBEl = document.getElementById("typeB");
+      const typeAEl = document.getElementById("typeA");
+      const typeMEl = document.getElementById("typeM");
+
+      // Slight stagger so it feels like a system reveal
+      await typeText(typeBEl, "LOCKCHAIN", 32); // after B => Blockchain
+      await wait(140);
+      await typeText(typeAEl, "UDIONAL", 32);   // after A => Audional
+      await wait(140);
+      await typeText(typeMEl, "ATRIX", 32);     // after M => Matrix
+
+      await wait(420);
+      caption.classList.add("on");
+
+      // Optional: gentle "end beat" pulse
+      pulseOnce([chunkB,chunkA,chunkM], 260);
+    }
+
+    function pulseOnce(nodes, dur=240){
+      nodes.forEach(n=>{
+        n.style.transition += ", box-shadow 220ms ease-out, transform 220ms ease-out";
+        const cur = getComputedStyle(n).transform;
+        n.style.boxShadow = "0 0 28px rgba(57,255,122,.18)";
+        n.style.transform = (cur === "none" ? "" : cur) + " scale(1.015)";
+        setTimeout(()=>{
+          n.style.boxShadow = "";
+          n.style.transform = cur;
+        }, dur);
+      });
+    }
+
+    // Click to replay
+    document.getElementById("stage").addEventListener("click", () => location.reload());
+
+    run();
+  </script>
+</body>
+</html>

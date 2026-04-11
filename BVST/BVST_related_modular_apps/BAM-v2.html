@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAM - Blockchain Audional Matrix</title>
+    <!-- Import Retro Font -->
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --retro-green: #00ff00;
+            --retro-dark: #003300;
+            --bg-color: #050505;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: var(--bg-color);
+            overflow: hidden;
+            font-family: 'Press Start 2P', monospace;
+            color: var(--retro-green);
+            user-select: none;
+        }
+
+        /* Letterbox Effect */
+        .letterbox {
+            position: fixed;
+            left: 0;
+            width: 100%;
+            height: 12vh;
+            background: #000;
+            z-index: 100;
+            border-bottom: 2px solid #111;
+        }
+        .letterbox.top { top: 0; }
+        .letterbox.bottom { 
+            bottom: 0; 
+            border-bottom: none;
+            border-top: 2px solid #111;
+        }
+
+        /* CRT Scanline Overlay */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(255,255,255,0),
+                rgba(255,255,255,0) 50%,
+                rgba(0,0,0,0.2) 50%,
+                rgba(0,0,0,0.2)
+            );
+            background-size: 100% 4px;
+            z-index: 50;
+            pointer-events: none;
+            animation: scanlineMove 10s linear infinite;
+        }
+
+        /* Subtle flicker */
+        .flicker-overlay {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 255, 0, 0.02);
+            opacity: 0;
+            z-index: 50;
+            pointer-events: none;
+            animation: flicker 0.15s infinite;
+        }
+
+        /* Container for animation */
+        #stage {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            display: flex;
+            flex-direction: column;
+            align-items: center; /* Start centered */
+            justify-content: center;
+            width: 80%; /* Width constraint */
+            z-index: 20;
+        }
+
+        /* The canvas for explosion acts as background to stage */
+        #explosion-canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            z-index: 10;
+            pointer-events: none;
+        }
+
+        /* Text Lines */
+        .word-row {
+            display: flex;
+            align-items: center;
+            height: 0; /* Initially collapsed vertically */
+            opacity: 1;
+            transition: all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            white-space: nowrap;
+            position: absolute; /* Stacked initially */
+        }
+
+        /* Typography */
+        .capital {
+            font-size: 4rem; /* Big BAM letters */
+            text-shadow: 4px 4px 0px var(--retro-dark);
+            display: inline-block;
+            transition: all 0.5s ease;
+        }
+
+        /* The hidden parts of the words */
+        .rest {
+            font-size: 2rem; /* Slightly smaller for the rest */
+            max-width: 0;
+            overflow: hidden;
+            opacity: 0;
+            display: inline-block;
+            vertical-align: middle;
+            margin-left: 0px;
+            text-transform: uppercase;
+            white-space: nowrap;
+            border-right: 10px solid transparent; /* Cursor placeholder */
+        }
+
+        /* ---- STATES ---- */
+
+        /* State 0: Initial Hidden (Handled by JS mostly) */
+        
+        /* State 1: BAM assembled in center */
+        /* They are absolute positioned in center by default */
+        
+        /* State 2: Explosion/Separation */
+        #stage.expanded .word-row {
+            position: relative; /* Switch to flow layout or controlled absolute */
+            height: 80px; /* Give them height */
+            margin: 10px 0;
+            width: 100%; /* Take full width to allow left alignment if desired, or center */
+            justify-content: flex-start; /* Align left after expansion */
+        }
+
+        /* Specific positions for the BAM illusion */
+        /* Initially, we want them to look like "B A M" side by side */
+        .word-row.initial-b { transform: translateX(-120%); }
+        .word-row.initial-a { transform: translateX(0); }
+        .word-row.initial-m { transform: translateX(120%); }
+
+        /* When expanded, reset transforms so they stack vertically */
+        #stage.expanded .word-row {
+            transform: translateX(0);
+            left: 10%; /* Indent slightly */
+        }
+
+        /* State 3: Typing Reveal */
+        .typing .rest {
+            opacity: 1;
+            margin-left: 10px;
+            /* Animation handled by JS for dynamic width, but here's the cursor */
+            animation: cursor-blink 0.8s infinite;
+        }
+        
+        .typing-done .rest {
+            border-right: none;
+        }
+
+        /* Animations */
+        @keyframes scanlineMove {
+            0% { background-position: 0 0; }
+            100% { background-position: 0 100%; }
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.02; }
+            50% { opacity: 0.05; }
+            100% { opacity: 0.02; }
+        }
+
+        @keyframes cursor-blink {
+            0%, 100% { border-color: transparent; }
+            50% { border-color: var(--retro-green); }
+        }
+
+        /* Boom Shake Effect */
+        .shake {
+            animation: shake 0.5s cubic-bezier(.36,.07,.19,.97) both;
+        }
+
+        @keyframes shake {
+            10%, 90% { transform: translate(-50%, -50%) translate3d(-1px, 0, 0); }
+            20%, 80% { transform: translate(-50%, -50%) translate3d(2px, 0, 0); }
+            30%, 50%, 70% { transform: translate(-50%, -50%) translate3d(-4px, 0, 0); }
+            40%, 60% { transform: translate(-50%, -50%) translate3d(4px, 0, 0); }
+        }
+
+        /* Replay Button */
+        #replay {
+            position: fixed;
+            bottom: 20px;
+            right: 20px;
+            background: transparent;
+            border: 2px solid var(--retro-green);
+            color: var(--retro-green);
+            font-family: 'Press Start 2P';
+            padding: 10px 20px;
+            cursor: pointer;
+            z-index: 200;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 1s;
+        }
+        #replay:hover {
+            background: var(--retro-green);
+            color: black;
+        }
+
+        /* Mobile adjustments */
+        @media (max-width: 768px) {
+            .capital { font-size: 2.5rem; }
+            .rest { font-size: 1.2rem; }
+            #stage.expanded .word-row { height: 50px; left: 0; justify-content: center; }
+            /* On mobile, center stack instead of left align */
+            #stage.expanded .word-row { transform: translateX(0); }
+        }
+
+    </style>
+</head>
+<body>
+
+    <div class="letterbox top"></div>
+    <div class="letterbox bottom"></div>
+    <div class="scanlines"></div>
+    <div class="flicker-overlay"></div>
+
+    <canvas id="explosion-canvas"></canvas>
+
+    <div id="stage">
+        <div class="word-row initial-b" id="row-b">
+            <span class="capital">B</span><span class="rest" id="text-b">LOCKCHAIN</span>
+        </div>
+        <div class="word-row initial-a" id="row-a">
+            <span class="capital">A</span><span class="rest" id="text-a">UDIONAL</span>
+        </div>
+        <div class="word-row initial-m" id="row-m">
+            <span class="capital">M</span><span class="rest" id="text-m">ATRIX</span>
+        </div>
+    </div>
+
+    <button id="replay" onclick="startSequence()">REPLAY_LEVEL</button>
+
+    <script>
+        const canvas = document.getElementById('explosion-canvas');
+        const ctx = canvas.getContext('2d');
+        const stage = document.getElementById('stage');
+        const replayBtn = document.getElementById('replay');
+        
+        let width, height;
+        let particles = [];
+
+        // Resize canvas
+        function resize() {
+            width = canvas.width = window.innerWidth;
+            height = canvas.height = window.innerHeight;
+        }
+        window.addEventListener('resize', resize);
+        resize();
+
+        // Particle Class for Pixel Explosion
+        class Particle {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                // Random angle for explosion
+                const angle = Math.random() * Math.PI * 2;
+                const speed = Math.random() * 15 + 5; // Fast explosion
+                this.vx = Math.cos(angle) * speed;
+                this.vy = Math.sin(angle) * speed;
+                this.size = Math.random() * 8 + 4; // Big pixels
+                this.color = `rgba(0, 255, 0, ${Math.random()})`;
+                this.decay = Math.random() * 0.02 + 0.01;
+                this.life = 1;
+            }
+
+            update() {
+                this.x += this.vx;
+                this.y += this.vy;
+                this.vx *= 0.95; // Friction
+                this.vy *= 0.95;
+                this.life -= this.decay;
+            }
+
+            draw() {
+                ctx.fillStyle = `rgba(0, 255, 0, ${this.life})`;
+                // Draw rectangles for retro feel
+                ctx.fillRect(this.x, this.y, this.size, this.size);
+            }
+        }
+
+        function createExplosion() {
+            particles = [];
+            const centerX = width / 2;
+            const centerY = height / 2;
+            
+            // Create a lot of particles
+            for(let i = 0; i < 150; i++) {
+                particles.push(new Particle(centerX, centerY));
+            }
+            animateParticles();
+        }
+
+        function animateParticles() {
+            if (particles.length === 0) return;
+
+            ctx.clearRect(0, 0, width, height);
+            
+            for (let i = particles.length - 1; i >= 0; i--) {
+                const p = particles[i];
+                p.update();
+                p.draw();
+                if (p.life <= 0) {
+                    particles.splice(i, 1);
+                }
+            }
+            
+            requestAnimationFrame(animateParticles);
+        }
+
+        // Typing Effect function
+        function typeWriter(elementId, text, speed = 50) {
+            const element = document.getElementById(elementId);
+            element.style.maxWidth = '0px';
+            element.innerText = text; // Set text but it's hidden by width
+            
+            // We use max-width transition for smooth reveal or distinct steps
+            // Let's do a stepped width increase for a "typing" feel
+            let len = text.length;
+            let current = 0;
+            
+            // Calculate approximate width per char (rough estimate for monospace)
+            // or just animate max-width smoothly.
+            // Let's do step-by-step text content manipulation actually, cleaner for JS
+            element.innerText = "";
+            element.style.maxWidth = '1000px'; // Release width constraint
+            
+            let interval = setInterval(() => {
+                if(current < len) {
+                    element.innerText += text.charAt(current);
+                    current++;
+                } else {
+                    clearInterval(interval);
+                    // Check if all are done to remove cursors?
+                    // We'll leave cursor blinking for retro feel
+                }
+            }, speed);
+        }
+
+        function resetState() {
+            // Reset styles
+            stage.className = '';
+            stage.classList.remove('expanded');
+            stage.classList.remove('shake');
+            
+            document.querySelectorAll('.rest').forEach(el => {
+                el.innerText = '';
+                el.style.maxWidth = '0';
+                el.parentElement.classList.remove('typing');
+                el.parentElement.classList.remove('typing-done');
+            });
+
+            // Reset positions (remove expanded logic handled by CSS)
+            replayBtn.style.opacity = 0;
+            replayBtn.style.pointerEvents = 'none';
+        }
+
+        function startSequence() {
+            resetState();
+            ctx.clearRect(0,0,width,height);
+
+            // Timeline
+            // 0ms: Initial state "B A M" centered (CSS Default)
+            
+            // 800ms: EXPLOSION & SHAKE
+            setTimeout(() => {
+                createExplosion();
+                stage.classList.add('shake'); // Shake the text container
+            }, 800);
+
+            // 1000ms: Move Apart (Expand)
+            setTimeout(() => {
+                stage.classList.add('expanded'); // Triggers CSS transition to vertical stack
+            }, 1000);
+
+            // 2000ms: Start Typing
+            setTimeout(() => {
+                document.querySelectorAll('.word-row').forEach(row => row.classList.add('typing'));
+                
+                typeWriter('text-b', 'LOCKCHAIN', 80);
+                setTimeout(() => typeWriter('text-a', 'UDIONAL', 80), 400); // Slight stagger
+                setTimeout(() => typeWriter('text-m', 'ATRIX', 80), 800);
+            }, 2000);
+
+            // 4000ms: Show Replay
+            setTimeout(() => {
+                replayBtn.style.opacity = 1;
+                replayBtn.style.pointerEvents = 'auto';
+                document.querySelectorAll('.word-row').forEach(row => row.classList.add('typing-done'));
+            }, 4500);
+        }
+
+        // Auto start
+        window.onload = () => {
+            // Short delay to ensure fonts loaded
+            setTimeout(startSequence, 500);
+        };
+
+    </script>
+</body>
+</html>

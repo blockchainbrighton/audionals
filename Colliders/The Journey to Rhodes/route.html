@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Antikythera Shipwreck: Hypothetical Route (67 BC)</title>
+    
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+     integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+     crossorigin=""/>
+     
+    <style>
+        body { margin: 0; padding: 0; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        #map { height: 100vh; width: 100%; }
+        
+        /* Floating Info Box */
+        .info-box {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 340px;
+            background: rgba(255, 255, 255, 0.95);
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+            z-index: 1000;
+            max-height: 80vh;
+            overflow-y: auto;
+        }
+        h1 { margin-top: 0; font-size: 1.2rem; color: #2c3e50; }
+        p { font-size: 0.9rem; line-height: 1.4; color: #444; }
+        .legend-item { display: flex; align-items: center; margin-bottom: 8px; font-size: 0.85rem; }
+        .dot { width: 12px; height: 12px; border-radius: 50%; margin-right: 10px; display: inline-block; }
+        .line-swatch { width: 28px; height: 0; border-top: 4px solid #000; margin-right: 10px; border-radius: 2px; }
+        .highlight { font-weight: bold; color: #d35400; }
+        .note { font-size: 0.8rem; background: #f8f9fa; padding: 10px; border-left: 4px solid #3498db; margin-top: 15px; }
+        hr { border: none; border-top: 1px solid #ddd; margin: 14px 0; }
+        ul { margin: 6px 0; }
+    </style>
+</head>
+<body>
+
+<div id="map"></div>
+
+<div class="info-box">
+    <h1>The Antikythera Route</h1>
+    <p>Mapping the hypothetical journey from Rome to Rhodes (c. 67 BC), plus a colour-coded return journey showing the intended course, drift toward Antikythera, and the final lightning-to-sinking segment.</p>
+    
+    <div class="legend-item">
+        <span class="dot" style="background: #2ecc71;"></span> Start: Port of Ostia (Rome)
+    </div>
+    <div class="legend-item">
+        <span class="dot" style="background: #f1c40f;"></span> Destination: Rhodes
+    </div>
+    <div class="legend-item">
+        <span class="dot" style="background: #e74c3c;"></span> Wreck Site: Antikythera
+    </div>
+
+    <hr>
+
+    <p><strong>Route Segments:</strong></p>
+
+    <div class="legend-item">
+        <span class="line-swatch" style="border-top-color:#34495e; border-top-style:dashed;"></span>
+        Outbound route (reconstructed)
+    </div>
+    <div class="legend-item">
+        <span class="line-swatch" style="border-top-color:#f1c40f;"></span>
+        Return (intended)
+    </div>
+    <div class="legend-item">
+        <span class="line-swatch" style="border-top-color:#e67e22;"></span>
+        Return (blown off course toward Antikythera)
+    </div>
+    <div class="legend-item">
+        <span class="line-swatch" style="border-top-color:#c0392b;"></span>
+        Lightning → sinking
+    </div>
+
+    <hr>
+    
+    <ul style="padding-left: 20px; font-size: 0.9rem;">
+        <li>Outbound: south via Strait of Messina → Ionian → W. Greece → Antikythera → N. Crete → Rhodes</li>
+        <li>Return: intended to run south of Antikythera (yellow), but weather drives the ship up toward the island (orange)</li>
+        <li>Lightning strike triggers the final short sinking segment (red)</li>
+    </ul>
+
+    <div class="note">
+        <strong>Historical Note:</strong><br>
+        While this map visualizes a Rome → Rhodes journey, many historians argue the ship may have been traveling <strong>East → West</strong>, carrying high-value cargo toward Italy when it sank.
+    </div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+crossorigin=""></script>
+
+<script>
+    // 1. Initialize the Map
+    var map = L.map('map').setView([38.5, 20.0], 6);
+
+    // 2. Add a Tile Layer (CartoDB Voyager)
+    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+        attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>',
+        subdomains: 'abcd',
+        maxZoom: 19
+    }).addTo(map);
+
+    // =========================
+    // OUTBOUND (your original)
+    // =========================
+    var routePoints = [
+        [41.75, 12.28], // Port of Ostia (Rome)
+        [40.80, 13.50], // Tyrrhenian Sea waypoint
+        [38.24, 15.63], // Strait of Messina
+        [37.50, 17.50], // Crossing the Ionian Sea
+        [37.70, 20.40], // West of Zakynthos
+        [36.80, 21.50], // Off Methoni
+        [35.95, 23.10], // West of Antikythera
+        [35.80, 23.35], // "Underneath" (South of) Antikythera - wreck vicinity (your described line)
+        [35.65, 24.00], // Turning East towards Crete
+        [35.55, 25.10], // North Coast of Crete (Heraklion)
+        [35.40, 26.50], // East of Crete
+        [36.44, 28.22]  // Rhodes
+    ];
+
+    var outboundLine = L.polyline(routePoints, {
+        color: '#34495e',
+        weight: 3,
+        opacity: 0.8,
+        dashArray: '10, 10'
+    }).addTo(map);
+
+    // ======================================================
+    // RETURN JOURNEY (refactored to match your new diagrams)
+    // ======================================================
+
+    // Yellow: intended return track (broadly along Crete then south of Antikythera, heading west)
+    var returnIntended = [
+        [36.44, 28.22], // Rhodes
+        [35.40, 26.50], // East of Crete
+        [35.55, 25.10], // North Crete (Heraklion)
+        [35.65, 24.00], // Leaving Crete NW
+        [35.72, 23.10], // Intended south-of-Antikythera lane (key)
+        [35.72, 22.40], // Continue west
+        [36.40, 20.80], // West of Greece lane
+        [37.50, 17.50], // Ionian waypoint
+        [38.24, 15.63], // Messina
+        [40.80, 13.50], // Tyrrhenian waypoint
+        [41.75, 12.28]  // Ostia
+    ];
+
+    // Orange: blown off course
+    // Starts SE of Antikythera and is pushed mostly NORTH (with a slight NW set)
+    var returnBlownOffCourse = [
+        [35.70, 23.40], // SE-ish of Antikythera (still on the intended lane)
+        [35.78, 23.37], // drifting north, slight west
+        [35.85, 23.34]  // skirting close to Antikythera
+    ];
+
+    // Red: lightning → sinking (short, intense final segment)
+    // Place the strike slightly offshore east/NE of Antikythera, then down toward the wreck vicinity.
+    var LIGHTNING_POINT = [35.88, 23.36];
+    var SINKING_POINT   = [35.80, 23.35]; // your wreck-vicinity point; adjust if needed
+
+    var returnFinal = [
+        LIGHTNING_POINT,
+        [35.86, 23.34], // immediate loss of control
+        [35.83, 23.34], // closing on the steep slope
+        SINKING_POINT
+    ];
+
+    // Draw return segments
+    var intendedLine = L.polyline(returnIntended, {
+        color: '#f1c40f', // yellow
+        weight: 4,
+        opacity: 0.9
+    }).addTo(map);
+
+    var blownLine = L.polyline(returnBlownOffCourse, {
+        color: '#e67e22', // orange
+        weight: 4,
+        opacity: 0.95
+    }).addTo(map);
+
+    var finalLine = L.polyline(returnFinal, {
+        color: '#c0392b', // red
+        weight: 5,
+        opacity: 0.95
+    }).addTo(map);
+
+    // =================
+    // Markers (yours + lightning)
+    // =================
+
+    // Start: Ostia
+    L.circleMarker([41.75, 12.28], {
+        color: '#27ae60', fillColor: '#2ecc71', fillOpacity: 1, radius: 8
+    }).addTo(map).bindPopup("<b>Port of Ostia</b><br>Origin");
+
+    // Waypoint: Strait of Messina
+    L.circleMarker([38.24, 15.63], {
+        color: '#7f8c8d', fillColor: '#bdc3c7', fillOpacity: 1, radius: 5
+    }).addTo(map).bindPopup("<b>Strait of Messina</b><br>Passing between Italy and Sicily");
+
+    // Destination: Rhodes
+    L.circleMarker([36.44, 28.22], {
+        color: '#f39c12', fillColor: '#f1c40f', fillOpacity: 1, radius: 8
+    }).addTo(map).bindPopup("<b>Port of Rhodes</b><br>Destination");
+
+    // Wreck Site marker (near Antikythera)
+    var wreckIcon = L.divIcon({
+        className: 'custom-div-icon',
+        html: "<div style='background-color:#c0392b;width:12px;height:12px;border-radius:50%;border:2px solid white;'></div>",
+        iconSize: [12, 12],
+        iconAnchor: [6, 6]
+    });
+
+    L.marker([35.88, 23.31], { icon: wreckIcon }).addTo(map)
+        .bindPopup("<b>Antikythera Shipwreck</b><br>Approx. site marker for narrative use.");
+
+    // Lightning strike marker
+    var lightningIcon = L.divIcon({
+        className: 'custom-div-icon',
+        html: "<div style='width:18px;height:18px;display:flex;align-items:center;justify-content:center;background:#ffffffcc;border:2px solid #c0392b;border-radius:50%;font-size:12px;'>⚡</div>",
+        iconSize: [18, 18],
+        iconAnchor: [9, 9]
+    });
+
+    L.marker(LIGHTNING_POINT, { icon: lightningIcon }).addTo(map)
+        .bindPopup("<b>Lightning strike</b><br>Return journey disaster trigger (story point).");
+
+    // Fit map to show everything
+    var allLines = L.featureGroup([outboundLine, intendedLine, blownLine, finalLine]);
+    map.fitBounds(allLines.getBounds(), { padding: [50, 50] });
+
+</script>
+
+</body>
+</html>

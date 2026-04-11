@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAM - Blockchain Audional Matrix</title>
+    <style>
+        :root {
+            --retro-green: #33ff33;
+            --dark-green: #003300;
+            --glow: 0 0 10px rgba(51, 255, 51, 0.8), 0 0 20px rgba(51, 255, 51, 0.4);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #050505;
+            color: var(--retro-green);
+            font-family: 'Courier New', Courier, monospace;
+            overflow: hidden;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* Letterbox bars */
+        .letterbox-overlay {
+            position: fixed;
+            left: 0;
+            width: 100%;
+            height: 15%;
+            background: #000;
+            z-index: 100;
+        }
+        .top-bar { top: 0; border-bottom: 1px solid var(--dark-green); }
+        .bottom-bar { bottom: 0; border-top: 1px solid var(--dark-green); }
+
+        /* CRT Scanline Effect */
+        .scanlines {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                to bottom,
+                rgba(18, 16, 16, 0) 50%,
+                rgba(0, 0, 0, 0.25) 50%
+            );
+            background-size: 100% 4px;
+            z-index: 200;
+            pointer-events: none;
+        }
+
+        /* Screen Flicker */
+        .crt-flicker {
+            position: fixed;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(51, 255, 51, 0.02);
+            opacity: 0;
+            z-index: 199;
+            pointer-events: none;
+            animation: flicker 0.15s infinite;
+        }
+
+        @keyframes flicker {
+            0% { opacity: 0.1; }
+            50% { opacity: 0.02; }
+            100% { opacity: 0.08; }
+        }
+
+        #scene {
+            position: relative;
+            width: 800px;
+            height: 400px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* The Explosion Shape (Vector Style) */
+        #explosion-svg {
+            position: absolute;
+            width: 400px;
+            height: 400px;
+            fill: none;
+            stroke: var(--retro-green);
+            stroke-width: 2;
+            opacity: 0;
+            transform: scale(0);
+            filter: drop-shadow(var(--glow));
+        }
+
+        .text-container {
+            display: flex;
+            flex-direction: column;
+            align-items: flex-start;
+            font-size: 3.5rem;
+            font-weight: bold;
+            letter-spacing: 5px;
+            text-shadow: var(--glow);
+            z-index: 10;
+        }
+
+        .word-row {
+            display: flex;
+            height: 70px;
+            align-items: center;
+            overflow: hidden;
+            transition: transform 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+
+        .suffix {
+            width: 0;
+            opacity: 0;
+            white-space: nowrap;
+            display: inline-block;
+            transition: opacity 0.3s;
+            text-transform: uppercase;
+        }
+
+        /* Shake animation for the "BAM" moment */
+        @keyframes shake {
+            0% { transform: translate(0,0); }
+            10% { transform: translate(-5px, -5px); }
+            20% { transform: translate(5px, 5px); }
+            30% { transform: translate(-5px, 5px); }
+            40% { transform: translate(5px, -5px); }
+            50% { transform: translate(0,0); }
+        }
+
+        .shake {
+            animation: shake 0.4s ease-in-out;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="letterbox-overlay top-bar"></div>
+    <div class="letterbox-overlay bottom-bar"></div>
+    <div class="scanlines"></div>
+    <div class="crt-flicker"></div>
+
+    <div id="scene">
+        <!-- Batman style jagged explosion -->
+        <svg id="explosion-svg" viewBox="0 0 200 200">
+            <polygon points="100,10 115,60 180,40 140,90 190,130 130,130 150,190 100,150 50,190 70,130 10,130 60,90 20,40 85,60" />
+        </svg>
+
+        <div class="text-container" id="text-container">
+            <div class="word-row" id="row-b">
+                <span class="initial">B</span><span class="suffix" id="suffix-b">LOCKCHAIN</span>
+            </div>
+            <div class="word-row" id="row-a">
+                <span class="initial">A</span><span class="suffix" id="suffix-a">UDIONAL</span>
+            </div>
+            <div class="word-row" id="row-m">
+                <span class="initial">M</span><span class="suffix" id="suffix-m">ATRIX</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const explosion = document.getElementById('explosion-svg');
+        const rows = {
+            b: document.getElementById('row-b'),
+            a: document.getElementById('row-a'),
+            m: document.getElementById('row-m')
+        };
+        const suffixes = {
+            b: document.getElementById('suffix-b'),
+            a: document.getElementById('suffix-a'),
+            m: document.getElementById('suffix-m')
+        };
+        const container = document.getElementById('text-container');
+        const scene = document.getElementById('scene');
+
+        function reset() {
+            // Initial BAM state - stacked tightly to look like one word
+            explosion.style.transition = 'none';
+            explosion.style.transform = 'scale(0)';
+            explosion.style.opacity = '0';
+            
+            rows.b.style.transform = 'translateY(70px)';
+            rows.a.style.transform = 'translateY(0px)';
+            rows.m.style.transform = 'translateY(-70px)';
+            
+            Object.values(suffixes).forEach(s => {
+                s.style.width = '0';
+                s.style.opacity = '0';
+                s.textContent = ""; 
+            });
+        }
+
+        async function typeWriter(element, text) {
+            element.style.opacity = '1';
+            element.style.width = 'auto';
+            for (let i = 0; i <= text.length; i++) {
+                element.textContent = text.substring(0, i);
+                await new Promise(r => setTimeout(r, 50));
+            }
+        }
+
+        async function runAnimation() {
+            reset();
+            
+            // 1. Brief pause then BAM!
+            await new Promise(r => setTimeout(r, 1000));
+            
+            // 2. Explosion flash
+            scene.classList.add('shake');
+            explosion.style.transition = 'transform 0.3s ease-out, opacity 0.3s';
+            explosion.style.transform = 'scale(1.5) rotate(10deg)';
+            explosion.style.opacity = '0.7';
+
+            // 3. Letters Move Apart
+            setTimeout(() => {
+                rows.b.style.transform = 'translateY(0)';
+                rows.a.style.transform = 'translateY(0)';
+                rows.m.style.transform = 'translateY(0)';
+                explosion.style.transform = 'scale(1.2) rotate(-5deg)';
+                explosion.style.opacity = '0.2';
+            }, 400);
+
+            await new Promise(r => setTimeout(r, 800));
+            scene.classList.remove('shake');
+
+            // 4. Typing sequence
+            await typeWriter(suffixes.b, "LOCKCHAIN");
+            await typeWriter(suffixes.a, "UDIONAL");
+            await typeWriter(suffixes.m, "ATRIX");
+
+            // 5. Hold then Loop
+            await new Promise(r => setTimeout(r, 3000));
+            runAnimation();
+        }
+
+        // Start the sequence
+        runAnimation();
+    </script>
+</body>
+</html>

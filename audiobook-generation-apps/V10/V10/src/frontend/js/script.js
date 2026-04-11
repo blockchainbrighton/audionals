@@ -12,11 +12,15 @@ const STATE = {
         mode: 'single', // 'single' or 'dual'
         voiceIds: [null, null], // [Voice 1, Voice 2]
         voiceNames: ['', ''],
-        token: '* * *'
+        token: '* * *',
+        silenceChunk: 0.0,
+        silenceChapter: 1.0,
+        notes: ''
     },
     isProcessing: false,
     isPlaying: false,
     activePlaybackId: null, 
+    editingChunkId: null, // Track which chunk is in the editor
     activeVoiceSlot: null,
     halt: false,
     sessionCost: 0,
@@ -85,12 +89,14 @@ const TextParser = {
     },
 
     parseDualVoiceSegments: function(text, delim = '* * *', initVoiceIndex = 0, voiceNames = []) {
+        console.log(`[DEBUG] parseDualVoiceSegments. Delimiter: "${delim}", InitVoice: ${initVoiceIndex}`);
         const segs = [];
         const token = delim.trim() || '* * *';
         const escToken = token.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
         
         // Split by token
         const parts = text.split(new RegExp(escToken, 'g'));
+        console.log(`[DEBUG] Dual voice split parts: ${parts.length}`);
         
         let currentVoice = initVoiceIndex % 2; // 0 or 1
         
@@ -227,12 +233,13 @@ class APIService {
         const d=await this.req('https://api.elevenlabs.io/v1/voices',{headers:{'xi-api-key':key}});
         return d.voices.map(v=>({id:v.voice_id,name:v.name,labels:v.labels||{},lang:'en-US',type:'premium',source:'ElevenLabs'}));
     }
-    static async generateAudio(text,voiceId,apiKey,modelId,ctx){
-        const d=await this.req('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,voiceId,apiKey,modelId,projectId:ctx.projectId,chapterIndex:ctx.chapterIndex,chunkIndex:ctx.chunkIndex})});
+    static async generateAudio(text,voiceId,apiKey,modelId,ctx,force=false){
+        const d=await this.req('/api/generate',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({text,voiceId,apiKey,modelId,projectId:ctx.projectId,chapterIndex:ctx.chapterIndex,chunkIndex:ctx.chunkIndex,force})});
         return {duration:Math.ceil(text.length/15),audioUrl:d.url,filename:d.filename};
     }
     static async checkCache(pid,mid,chunks){return this.req('/api/check-cache',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:pid,modelId:mid,chunks})})}
-    static async mergeChapter(pid,idx,files,isTitle){return this.req('/api/merge-chapter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:pid,chapterIndex:idx,filenames:files,isTitle})})}
+    static async mergeChapter(pid,idx,files,isTitle,silence=0){return this.req('/api/merge-chapter',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:pid,chapterIndex:idx,filenames:files,isTitle,silence})})}
+    static async mergeBook(pid,silence=0){return this.req('/api/merge-book',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({projectId:pid,silence})})}
     static async deleteProject(id){return this.req(`/api/projects/${id}`,{method:'DELETE'})}
     static async renameProject(id, title){return this.req(`/api/projects/${id}`,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify({title})})}
 }
@@ -244,7 +251,7 @@ class AudioEngine{
     draw(){if(!this.analyser||!this.cCtx)return;this.animId=requestAnimationFrame(()=>this.draw());this.analyser.getByteFrequencyData(this.dataArray);const w=this.canvas.width,h=this.canvas.height;this.cCtx.fillStyle='#000';this.cCtx.fillRect(0,0,w,h);const bw=(w/this.analyser.frequencyBinCount)*2.5;let x=0;
         for(let i=0;i<this.analyser.frequencyBinCount;i++){const bh=this.dataArray[i]/2;this.cCtx.fillStyle=`rgb(${bh+100},92,231)`;this.cCtx.fillRect(x,h-bh,bw,bh);x+=bw+1;}}
     async getVoices(){let bv=[];if(this.synth) bv=await new Promise(r=>{const v=this.synth.getVoices();v.length?r(v):this.synth.onvoiceschanged=()=>r(this.synth.getVoices())});const fmtBv=bv.map((v,i)=>({id:`sys_${i}`,name:v.name,lang:v.lang,type:'standard',ref:v}));return [...fmtBv,...(STATE.api.elevenLabs.voices||[])]}
-    async generateChunk(text,vid,mid,ctx){const v=STATE.voices.find(vo=>vo.id===vid);if(!v)throw new Error('Select voice');if(v.type==='premium'){if(!STATE.api.elevenLabs.connected)throw new Error('API not connected');return APIService.generateAudio(text,vid,STATE.api.elevenLabs.key,mid,ctx)}return new Promise(r=>setTimeout(()=>r({duration:Math.ceil(text.length/15)}),200))}
+    async generateChunk(text,vid,mid,ctx,force=false){const v=STATE.voices.find(vo=>vo.id===vid);if(!v)throw new Error('Select voice');if(v.type==='premium'){if(!STATE.api.elevenLabs.connected)throw new Error('API not connected');return APIService.generateAudio(text,vid,STATE.api.elevenLabs.key,mid,ctx,force)}return new Promise(r=>setTimeout(()=>r({duration:Math.ceil(text.length/15)}),200))}
     playChunk(chunk,overrideVid=null){const pid=`chunk_${chunk.id}`;if(dom.manuscript){dom.manuscript.value=chunk.text;dom.manuscript.scrollTop=0}if(chunk.audioUrl) return this.playAudioBuffer(chunk.audioUrl,pid);const vid=overrideVid||chunk.voiceId||STATE.project.voiceIds[0];const v=STATE.voices.find(vo=>vo.id===vid);if(v&&v.type==='premium')return Promise.reject(new Error('Audio not generated'));if(v&&v.ref){if(!this.synth)return Promise.reject(new Error('No TTS'));return new Promise((res,rej)=>{this.stop(true);STATE.activePlaybackId=pid;STATE.isPlaying=true;this.updateBtn(true);renderTimeline();const ut=new SpeechSynthesisUtterance(chunk.text);ut.voice=v.ref;
     this.cancelCurrent=()=>{this.cancelCurrent=null;res()};
     ut.onend=()=>{this.cancelCurrent=null;STATE.activePlaybackId=null;renderTimeline();res()};ut.onerror=()=>{this.cancelCurrent=null;STATE.activePlaybackId=null;renderTimeline();rej(new Error('Playback failed'))};this.synth.speak(ut)})}return Promise.reject(new Error('Voice unavailable'))}
@@ -257,7 +264,7 @@ class AudioEngine{
     updateBtn(p){if(dom.btnPlay){dom.btnPlay.innerText=p?"⏹":"▶";p?dom.btnPlay.classList.add('playing'):dom.btnPlay.classList.remove('playing')}}}
 
 const engine=new AudioEngine();
-const dom={manuscript:document.getElementById('manuscript'),timeline:document.getElementById('timeline-container'),voiceDropdown:document.getElementById('voice-dropdown'),chunkSize:document.getElementById('chunk-size'),btnGenerate:document.getElementById('btn-generate'),btnPlay:document.getElementById('btn-play-all'),masterProgress:document.getElementById('master-progress'),elKey:document.getElementById('el-key'),elName:document.getElementById('el-name'),elDot:document.getElementById('el-status-dot'),elStatusText:document.getElementById('el-status-text'),receipt:document.getElementById('live-receipt'),elModel:document.getElementById('el-model'),projectMode:document.getElementById('project-mode'),voiceBtn1:document.getElementById('voice-select-btn-1'),voiceBtn2:document.getElementById('voice-select-btn-2'),voiceName1:document.getElementById('voice-name-1'),voiceName2:document.getElementById('voice-name-2'),groupVoice2:document.getElementById('group-voice-2'),groupToken:document.getElementById('group-token'),voiceToken:document.getElementById('voice-token')};
+const dom={manuscript:document.getElementById('manuscript'),timeline:document.getElementById('timeline-container'),voiceDropdown:document.getElementById('voice-dropdown'),chunkSize:document.getElementById('chunk-size'),btnGenerate:document.getElementById('btn-generate'),btnGenerateTimeline:document.getElementById('btn-generate-all-timeline'),btnPlay:document.getElementById('btn-play-all'),masterProgress:document.getElementById('master-progress'),elKey:document.getElementById('el-key'),elName:document.getElementById('el-name'),elDot:document.getElementById('el-status-dot'),elStatusText:document.getElementById('el-status-text'),receipt:document.getElementById('live-receipt'),elModel:document.getElementById('el-model'),projectMode:document.getElementById('project-mode'),voiceBtn1:document.getElementById('voice-select-btn-1'),voiceBtn2:document.getElementById('voice-select-btn-2'),voiceName1:document.getElementById('voice-name-1'),voiceName2:document.getElementById('voice-name-2'),groupVoice2:document.getElementById('group-voice-2'),groupToken:document.getElementById('group-token'),voiceToken:document.getElementById('voice-token'),silenceChunk:document.getElementById('silence-chunk'),silenceChapter:document.getElementById('silence-chapter'),projectNotes:document.getElementById('project-notes'),forceMerge:document.getElementById('force-merge-check'),forceRegen:document.getElementById('force-regen-check'),btnSaveText:document.getElementById('btn-save-text')};
 
 function setElStatus(s,t){if(dom.elStatusText)dom.elStatusText.innerText=t;if(dom.elDot){dom.elDot.className='status-dot';if(s==='active')dom.elDot.classList.add('active');if(s==='error')dom.elDot.classList.add('error')}}
 async function init(){await refreshVoiceList();const k=localStorage.getItem('ab_api_el');if(k){try{const p=JSON.parse(k);dom.elKey.value=p.key;dom.elName.value=p.name;connectElevenLabs(true)}catch(e){}}const t=localStorage.getItem('ab_manuscript');if(t)dom.manuscript.value=t;updateReceipt()}
@@ -278,7 +285,10 @@ async function connectElevenLabs(silent=false){
 }
 function disconnectElevenLabs(){localStorage.removeItem('ab_api_el');STATE.api.elevenLabs={key:'',name:'',voices:[],connected:false};dom.elKey.value='';dom.elName.value='';setElStatus('idle','Not Connected');document.getElementById('btn-connect-el').innerText="Connect";document.getElementById('btn-disconnect-el').style.display='none';refreshVoiceList();LOG.add('Disconnected')}
 
-async function playSingleChunk(id){const pid=`chunk_${id}`;if(STATE.activePlaybackId===pid){engine.stop();return}engine.stop();let chunk; STATE.chapters.some(c=>{chunk=c.chunks.find(k=>k.id===id);return !!chunk});if(chunk) engine.playChunk(chunk).catch(e=>LOG.add(e.message,'error'))}
+async function playSingleChunk(id){
+    STATE.editingChunkId=id; // Set active chunk for editing
+    dom.btnSaveText.style.display='inline-block'; // Show save button
+    const pid=`chunk_${id}`;if(STATE.activePlaybackId===pid){engine.stop();return}engine.stop();let chunk; STATE.chapters.some(c=>{chunk=c.chunks.find(k=>k.id===id);return !!chunk});if(chunk) engine.playChunk(chunk).catch(e=>LOG.add(e.message,'error'))}
 function displayChapter(idx){const ch=STATE.chapters[idx];if(ch)dom.manuscript.value=ch.chunks.map(c=>c.text).join('\n\n')}
 async function playChapter(idx,e){
     if(e)e.stopPropagation();
@@ -319,7 +329,7 @@ async function checkProjectCache(){
     try{
         const res=await APIService.checkCache(STATE.project.id,mid,all);
         let cached=0,miss=0;
-        res.chunks.forEach(r=>{const c=all.find(x=>x.id===r.id);if(r.exists){cached++;STATE.chapters[c.chapterIndex].chunks[c.chunkIndex].audioUrl=r.url;STATE.chapters[c.chapterIndex].chunks[c.chunkIndex].status='done'}else miss+=c.text.length});
+        res.chunks.forEach(r=>{const c=all.find(x=>x.id===r.id);if(r.exists){cached++;STATE.chapters[c.chapterIndex].chunks[c.chunkIndex].audioUrl=r.url;STATE.chapters[c.chapterIndex].chunks[c.chunkIndex].status='done'}else{miss+=c.text.length;const t=STATE.chapters[c.chapterIndex].title;LOG.add(`Missing: "${c.text.substring(0,30)}..." (${t})`,'warning')}});
         const cost=miss*TextParser.getModelCreditMultiplier(mid)*0.000165;
         document.getElementById('confirm-chars').innerText=flat.reduce((a,b)=>a+b.text.length,0).toLocaleString();
         document.getElementById('confirm-new').innerText=all.length-cached;
@@ -329,19 +339,19 @@ async function checkProjectCache(){
     }catch(e){LOG.add('Cache check error','error');return null}
 }
 
-async function processChunkGeneration(chunk,chIdx,ckIdx,retry=0){
+async function processChunkGeneration(chunk,chIdx,ckIdx,retry=0,force=false){
     if(STATE.halt)return false;
     const limit=parseFloat(document.getElementById('budget-limit').value)||999;
     if(STATE.sessionCost>limit){alert('Budget Exceeded');return false}
     updateChunkUI(chunk.id,'processing');
     try{
         const mid=dom.elModel.value,vid=chunk.voiceId||STATE.project.voiceIds[0];
-        const res=await engine.generateChunk(chunk.text,vid,mid,{projectId:STATE.project.id,chapterIndex:chIdx,chunkIndex:ckIdx});
+        const res=await engine.generateChunk(chunk.text,vid,mid,{projectId:STATE.project.id,chapterIndex:chIdx,chunkIndex:ckIdx},force);
         if(!res.cached){STATE.sessionCost+=chunk.text.length*TextParser.getModelCreditMultiplier(mid)*0.000165;updateReceipt()}
         chunk.duration=res.duration;chunk.audioUrl=res.audioUrl;chunk.filename=res.filename;chunk.status='done';updateChunkUI(chunk.id,'done');
         return true;
     }catch(e){
-        if(retry<3&&!STATE.halt){await new Promise(r=>setTimeout(r,Math.pow(2,retry)*1000));return processChunkGeneration(chunk,chIdx,ckIdx,retry+1)}
+        if(retry<3&&!STATE.halt){await new Promise(r=>setTimeout(r,Math.pow(2,retry)*1000));return processChunkGeneration(chunk,chIdx,ckIdx,retry+1,force)}
         chunk.status='error';updateChunkUI(chunk.id,'error');LOG.add(e.message,'error');return false;
     }
 }
@@ -353,9 +363,49 @@ async function generateSingleChunk(id,e){
     if(!chunk)return;
     const mid=dom.elModel.value,res=await APIService.checkCache(STATE.project.id,mid,[{id:chunk.id,text:chunk.text,voiceId:chunk.voiceId||STATE.project.voiceIds[0],chapterIndex:chIdx,chunkIndex:ckIdx}]);
     const isCached=res.chunks[0].exists,cost=isCached?0:chunk.text.length*TextParser.getModelCreditMultiplier(mid)*0.000165;
-    document.getElementById('safety-message').innerText="Generate segment?";document.getElementById('confirm-chars').innerText=chunk.text.length;document.getElementById('confirm-new').innerText=isCached?0:1;document.getElementById('confirm-cached').innerText=isCached?1:0;document.getElementById('confirm-cost').innerText=`$${cost.toFixed(4)}`;
+    
+    // UI Setup
+    document.getElementById('safety-message').innerText="Generate segment?";
+    document.getElementById('confirm-chars').innerText=chunk.text.length;
+    document.getElementById('confirm-new').innerText=isCached?0:1;
+    document.getElementById('confirm-cached').innerText=isCached?1:0;
+    document.getElementById('confirm-cost').innerText=`$${cost.toFixed(4)}`;
+    
+    // Show/Reset Checkboxes
+    dom.forceMerge.parentElement.style.display = 'none'; // Hide Force Merge
+    dom.forceRegen.parentElement.style.display = 'flex'; // Show Force Regen
+    dom.forceRegen.checked = false; // Reset
+
     openSafetyModal();
-    document.getElementById('btn-confirm-start').onclick=async()=>{closeSafetyModal();await processChunkGeneration(chunk,chIdx,ckIdx);attachDefaultConfirmListener()};
+    
+    document.getElementById('btn-confirm-start').onclick=async()=>{
+        closeSafetyModal();
+        const force = dom.forceRegen.checked;
+        const success = await processChunkGeneration(chunk,chIdx,ckIdx,0,force);
+        
+        // Auto-merge chapter if successful
+        if(success){
+             try {
+                const ch = STATE.chapters[chIdx];
+                const silenceChunk = parseFloat(dom.silenceChunk.value) || 0;
+                // Collect files for this chapter
+                const files = ch.chunks.filter(c => c.status === 'done' && c.filename).map(c => c.filename);
+                if(files.length === ch.chunks.length) {
+                    LOG.add(`Updating Chapter ${chIdx+1}...`);
+                    const r = await APIService.mergeChapter(STATE.project.id, chIdx, files, ch.title === "Titles", silenceChunk);
+                    ch.audioUrl = r.url;
+                    renderTimeline();
+                }
+             } catch(err) {
+                 LOG.add("Chapter update failed: " + err.message, 'error');
+             }
+        }
+        
+        // Reset UI state
+        dom.forceMerge.parentElement.style.display = 'flex';
+        dom.forceRegen.parentElement.style.display = 'flex';
+        attachDefaultConfirmListener();
+    };
 }
 
 async function generateChapter(idx,e){
@@ -371,18 +421,30 @@ async function generateChapter(idx,e){
         let files=[],ok=0;
         for(let i=0;i<ch.chunks.length;i++){if(STATE.halt)break;if(await processChunkGeneration(ch.chunks[i],idx,i)){ok++;if(ch.chunks[i].filename)files.push(ch.chunks[i].filename)}}
         document.getElementById('btn-halt').style.display='none';
-        if(ok===ch.chunks.length&&files.length){try{const r=await APIService.mergeChapter(STATE.project.id,idx,files,ch.title==="Titles");ch.audioUrl=r.url;renderTimeline()}catch(e){LOG.add(e.message,'error')}}
+        if(ok===ch.chunks.length&&files.length){try{const silence=parseFloat(dom.silenceChunk.value)||0;const r=await APIService.mergeChapter(STATE.project.id,idx,files,ch.title==="Titles",silence);ch.audioUrl=r.url;renderTimeline()}catch(e){LOG.add(e.message,'error')}}
         attachDefaultConfirmListener();
     }
 }
 function attachDefaultConfirmListener(){document.getElementById('btn-confirm-start').onclick=startFullBookGeneration}
 
-function renderTimeline() {
+async function renderTimeline() {
     if (!STATE.chapters.length) {
         dom.timeline.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-dim);font-style:italic">No chapters. Paste text & "Analyze".</div>';
         return;
     }
-    dom.timeline.innerHTML = STATE.chapters.map((ch, idx) => {
+
+    // Incremental rendering for large projects
+    dom.timeline.innerHTML = '<div style="padding:20px;text-align:center;">⌛ Rendering timeline...</div>';
+    await new Promise(r => setTimeout(r, 0));
+
+    let html = '';
+    for (let idx = 0; idx < STATE.chapters.length; idx++) {
+        // Yield every 10 chapters to keep UI responsive
+        if (idx > 0 && idx % 10 === 0) {
+            await new Promise(r => setTimeout(r, 0));
+        }
+
+        const ch = STATE.chapters[idx];
         const uniqueVoices = new Set(ch.chunks.map(c => c.voiceName)).size;
         const allDone = ch.chunks.every(ck => ck.status === 'done');
         const playing = STATE.activePlaybackId === `chapter_${idx}`;
@@ -401,7 +463,7 @@ function renderTimeline() {
                 </div></div>`;
         }).join('') : '';
 
-        return `<div class="chapter-card">
+        html += `<div class="chapter-card">
             <div class="chapter-header">
                 <div class="ch-row">
                     <div style="display:flex;align-items:center;gap:6px;flex:1;overflow:hidden">
@@ -424,7 +486,9 @@ function renderTimeline() {
                     </div>
                 </div>
             </div>${chunksHtml}</div>`;
-    }).join('');
+    }
+    
+    dom.timeline.innerHTML = html;
 }
 
 function toggleChapterCollapse(i,e){if(e)e.stopPropagation();STATE.chapters[i].collapsed=!STATE.chapters[i].collapsed;renderTimeline()}
@@ -455,59 +519,226 @@ function sanitizeChunkSize(v){const p=parseInt(v,10);return isNaN(p)?1000:Math.m
 
 function splitTextIntoChunks(txt,max){
     const res=[];let rem=txt.trim();
-    while(rem.length>0){if(rem.length<=max){res.push(rem);break}
+    let loopCount = 0;
+    while(rem.length>0){
+        loopCount++;
+        if(loopCount > 100000) { console.error("Infinite loop in splitTextIntoChunks detected!"); break; }
+        
+        if(rem.length<=max){res.push(rem);break}
         const safe=Math.floor(max*0.75),area=rem.substring(safe,max);
         let split=safe,match,last=-1;
         while((match=/[.!?\u201d"]+(?=\s|$)/g.exec(area))!==null)last=match.index+match[0].length;
         if(last!==-1)split+=last;else{const sp=rem.lastIndexOf(' ',max);split=(sp>max*0.3)?sp:(rem.lastIndexOf('\n',max)>max*0.3?rem.lastIndexOf('\n',max):max)}
+        
+        if (split <= 0) split = max;
+
         res.push(rem.slice(0,split).trim());rem=rem.slice(split).trimStart();
-    }return res
+    }
+    return res
 }
 
-dom.manuscript.addEventListener('input',()=>{localStorage.setItem('ab_manuscript',dom.manuscript.value);updateReceipt()});
-
-document.getElementById('btn-analyze').addEventListener('click',()=>{
-    const raw=dom.manuscript.value;if(!raw.trim())return;
-    STATE.chapters.forEach(c=>c.chunks.forEach(k=>{if(k.audioUrl)URL.revokeObjectURL(k.audioUrl)}));STATE.chapters=[];
-    STATE.project.voiceNames=[dom.voiceName1.value,dom.voiceName2.value];STATE.project.token=dom.voiceToken.value;
-    const lim=sanitizeChunkSize(dom.chunkSize.value);dom.chunkSize.value=lim;
-    const reg=TextParser.getChapterHeadingRegex(),parts=raw.split(reg).filter(p=>p.trim().length>0);
-    let curT="Start",pre="",pend="",cnt=0;
-    if(parts.length&&!parts[0].match(reg))pre=parts[0];
-    for(let i=0;i<parts.length;i++){
-        const p=parts[i],pc=p.trim();
-        if(pc.match(reg)){
-            curT=pc.replace(/^[#\s]+/,'').trim();cnt++;pend=curT.replace(/[:|–—]\s*/g,'... ... ... ').trim();if(!pend.match(/[.!?]$/))pend+='... ... ...';pend+='\n\n';
-        }else{
-            let ft=pend+p;pend="";let segs=STATE.project.mode==='dual'?TextParser.parseDualVoiceSegments(ft,STATE.project.token,TextParser.detectStartingVoice(ft,curT,STATE.project.voiceNames),STATE.project.voiceNames):[{text:ft,voiceIndex:0}];
-            const chChunks=[];
-            segs.forEach(s=>splitTextIntoChunks(s.text,lim).forEach(t=>{
-                chChunks.push({text:t,status:'pending',id:Math.random().toString(36).substr(2,9),audioUrl:null,voiceId:STATE.project.voiceIds[s.voiceIndex]||STATE.project.voiceIds[0],voiceName:STATE.project.voiceNames[s.voiceIndex]||(s.voiceIndex===0?"Voice 1":"Voice 2"),duration:0});
-            }));
-            if(chChunks.length){
-                let ft="Titles";
-                if(cnt>0){let ch=curT.replace(/^(Chapter|Part|Book|Kapitel|Prologue|Epilogue)\s+\d*[:\.]?\s*/i,'');ft=`Chapter ${cnt}${ch?': '+ch:''}`}
-                STATE.chapters.push({title:ft,chunks:chChunks,collapsed:false});
-            }
-        }
+dom.manuscript.addEventListener('input',()=>{
+    try {
+        localStorage.setItem('ab_manuscript', dom.manuscript.value);
+    } catch(e) {
+        console.warn("Could not save to localStorage:", e.message);
     }
-    const meta=TextParser.detectProjectMetadata(raw,pre),safeT=(meta.title||'u').replace(/\W/g,''),safeA=(meta.author||'u').replace(/\W/g,'');
-    STATE.project.id=`${safeT.substring(0,10)}_${Math.abs([...(safeT+safeA)].reduce((h,c)=>(h<<5)-h+c.charCodeAt(0)|0,0)).toString(16)}`;
-    const cost=STATE.chapters.reduce((a,c)=>a+c.chunks.reduce((x,y)=>x+y.text.length,0),0)*TextParser.getModelCreditMultiplier(dom.elModel.value)*0.000165;
-    document.getElementById('project-summary').style.display='block';document.getElementById('sum-title').innerText=meta.title;document.getElementById('sum-author').innerText=meta.author;document.getElementById('sum-lang').innerText=meta.language;
-    document.getElementById('sum-chapters').innerText=STATE.chapters.length;document.getElementById('sum-chars').innerText=Math.round(cost/0.000165);document.getElementById('sum-cost').innerText=`$${cost.toFixed(2)}`;document.getElementById('sum-model').innerText=dom.elModel.value;
-    renderTimeline();dom.btnGenerate.disabled=!STATE.chapters.length;dom.btnGenerate.innerText="2. Generate Audio";updateReceipt();
+    updateReceipt();
 });
 
-document.getElementById('btn-generate').addEventListener('click',async()=>{if(!STATE.project.voiceIds[0]){alert("Select Voice 1");return}
-    dom.btnGenerate.innerText="Checking...";dom.btnGenerate.disabled=true;
-    const st=await checkProjectCache();dom.btnGenerate.innerText="2. Generate Audio";dom.btnGenerate.disabled=false;
-    if(!st)return;if(st.missingCount===0){alert("All cached!");return}
-    document.getElementById('safety-message').innerText="Generate full book?";attachDefaultConfirmListener();openSafetyModal();
+document.getElementById('btn-analyze').addEventListener('click', async ()=>{
+
+    const btn = document.getElementById('btn-analyze');
+
+    const originalText = btn.innerText;
+
+    btn.disabled = true;
+
+    btn.innerText = "⏳ Analyzing...";
+
+    
+
+    LOG.add("Analyzing manuscript...", 'info');
+
+    try {
+
+        const raw=dom.manuscript.value;
+
+        if(!raw.trim()){ LOG.add("Manuscript is empty.", 'warning'); btn.disabled = false; btn.innerText = originalText; return; }
+
+        
+
+        STATE.chapters.forEach(c=>c.chunks.forEach(k=>{if(k.audioUrl)URL.revokeObjectURL(k.audioUrl)}));STATE.chapters=[];
+
+        STATE.project.voiceNames=[dom.voiceName1.value,dom.voiceName2.value];STATE.project.token=dom.voiceToken.value;
+
+        
+
+        const lim=sanitizeChunkSize(dom.chunkSize.value);dom.chunkSize.value=lim;
+
+
+
+        const reg=TextParser.getChapterHeadingRegex();
+
+        const parts=raw.split(reg).filter(p=>p.trim().length>0);
+
+
+
+        let curT="Start",pre="",pend="",cnt=0;
+
+        if(parts.length&&!parts[0].match(reg))pre=parts[0];
+
+        
+
+        for(let i=0; i<parts.length; i++){
+
+            // Yield to main thread every few parts to keep UI responsive
+
+            if(i % 5 === 0) await new Promise(r => setTimeout(r, 0));
+
+            
+
+            const p=parts[i],pc=p.trim();
+
+            if(pc.match(reg)){
+
+                curT=pc.replace(/^[#\s]+/,'').trim();cnt++;pend=curT.replace(/[:|–—]\s*/g,'... ... ... ').trim();if(!pend.match(/[.!?]$/))pend+='... ... ...';pend+='\n\n';
+
+            }else{
+
+                let ft=pend+p;pend="";
+
+                let segs=STATE.project.mode==='dual'?TextParser.parseDualVoiceSegments(ft,STATE.project.token,TextParser.detectStartingVoice(ft,curT,STATE.project.voiceNames),STATE.project.voiceNames):[{text:ft,voiceIndex:0}];
+
+
+
+                const chChunks=[];
+
+                segs.forEach((s)=>{
+
+                    splitTextIntoChunks(s.text,lim).forEach(t=>{
+
+                        chChunks.push({text:t,status:'pending',id:Math.random().toString(36).substr(2,9),audioUrl:null,voiceId:STATE.project.voiceIds[s.voiceIndex]||STATE.project.voiceIds[0],voiceName:STATE.project.voiceNames[s.voiceIndex]||(s.voiceIndex===0?"Voice 1":"Voice 2"),duration:0});
+
+                    });
+
+                });
+
+                
+
+                if(chChunks.length){
+
+                    let ft="Titles";
+
+                    if(cnt>0){let ch=curT.replace(/^(Chapter|Part|Book|Kapitel|Prologue|Epilogue)\s+\d*[:\.]?\s*/i,'');ft=`Chapter ${cnt}${ch?': '+ch:''}`}
+
+                    STATE.chapters.push({title:ft,chunks:chChunks,collapsed:false});
+
+                }
+
+            }
+
+        }
+
+        
+
+        const meta=TextParser.detectProjectMetadata(raw,pre),safeT=(meta.title||'u').replace(/\W/g,''),safeA=(meta.author||'u').replace(/\W/g,'');
+
+        const combined = safeT + safeA;
+        let hash = 0;
+        for (let i = 0; i < combined.length; i++) {
+            hash = ((hash << 5) - hash) + combined.charCodeAt(i);
+            hash |= 0;
+        }
+        STATE.project.id = `${safeT.substring(0,10)}_${Math.abs(hash).toString(16)}`;
+
+        
+
+        const cost=STATE.chapters.reduce((a,c)=>a+c.chunks.reduce((x,y)=>x+y.text.length,0),0)*TextParser.getModelCreditMultiplier(dom.elModel.value)*0.000165;
+
+        
+
+        document.getElementById('project-summary').style.display='block';document.getElementById('sum-title').innerText=meta.title;document.getElementById('sum-author').innerText=meta.author;document.getElementById('sum-lang').innerText=meta.language;
+
+        document.getElementById('sum-chapters').innerText=STATE.chapters.length;document.getElementById('sum-chars').innerText=Math.round(cost/0.000165);document.getElementById('sum-cost').innerText=`${cost.toFixed(2)}`;document.getElementById('sum-model').innerText=dom.elModel.value;
+
+        
+
+        renderTimeline();
+
+        dom.btnGenerate.disabled=!STATE.chapters.length;dom.btnGenerateTimeline.disabled=!STATE.chapters.length;dom.btnGenerate.innerText="2. Generate Audio";updateReceipt();
+
+        LOG.add(`Analysis complete. Found ${STATE.chapters.length} chapters.`, 'success');
+
+    } catch(e) {
+
+        console.error("Analysis Error:", e);
+
+        LOG.add("Analysis failed: " + e.message, 'error');
+
+    } finally {
+
+        btn.disabled = false;
+
+        btn.innerText = originalText;
+
+    }
+
 });
+
+async function initiateGeneration(){
+    if(!STATE.project.voiceIds[0]){alert("Select Voice 1");return}
+    dom.btnGenerate.innerText="Checking...";dom.btnGenerate.disabled=true;
+    dom.btnGenerateTimeline.innerText="Checking...";dom.btnGenerateTimeline.disabled=true;
+    const st=await checkProjectCache();
+    dom.btnGenerate.innerText="2. Generate Audio";dom.btnGenerate.disabled=false;
+    dom.btnGenerateTimeline.innerText="⚡ Generate All";dom.btnGenerateTimeline.disabled=false;
+    if(!st)return;
+    if(st.missingCount===0){
+        document.getElementById('safety-message').innerText="All segments cached. Merge chapters & book?";
+    } else {
+        document.getElementById('safety-message').innerText="Generate full book?";
+    }
+    attachDefaultConfirmListener();openSafetyModal();
+}
+
+dom.btnSaveText.addEventListener('click', () => {
+    if(!STATE.editingChunkId) return;
+    const newText = dom.manuscript.value;
+    let found = false;
+    
+    // Find and update chunk
+    STATE.chapters.some(ch => {
+        const chunk = ch.chunks.find(c => c.id === STATE.editingChunkId);
+        if(chunk) {
+            chunk.text = newText;
+            chunk.status = 'pending'; // Reset status to force attention
+            chunk.audioUrl = null; // Clear old audio
+            found = true;
+            return true;
+        }
+    });
+
+    if(found) {
+        LOG.add("Text updated. Please regenerate the segment.", "success");
+        renderTimeline();
+    } else {
+        LOG.add("Error: Could not find segment to update.", "error");
+    }
+});
+
+dom.btnGenerate.addEventListener('click',initiateGeneration);
+dom.btnGenerateTimeline.addEventListener('click',initiateGeneration);
 
 async function startFullBookGeneration(){
-    closeSafetyModal();STATE.halt=false;dom.btnGenerate.disabled=true;dom.btnGenerate.innerText="Generating...";document.getElementById('btn-halt').style.display='inline-block';
+    closeSafetyModal();STATE.halt=false;
+    dom.btnGenerate.disabled=true;dom.btnGenerate.innerText="Generating...";
+    dom.btnGenerateTimeline.disabled=true;dom.btnGenerateTimeline.innerText="Generating...";
+    document.getElementById('btn-halt').style.display='inline-block';
+    
+    const silenceChunk = parseFloat(dom.silenceChunk.value) || 0;
+    const forceMerge = dom.forceMerge.checked;
+
     for(let i=0;i<STATE.chapters.length;i++){
         if(STATE.halt)break;const ch=STATE.chapters[i];let files=[],ok=0;
         for(let j=0;j<ch.chunks.length;j++){
@@ -515,9 +746,27 @@ async function startFullBookGeneration(){
             if(ck.status==='done'&&ck.audioUrl){ok++;files.push(ck.filename||ck.audioUrl.split('/').pop());continue}
             if(await processChunkGeneration(ck,i,j)){ok++;if(ck.filename)files.push(ck.filename)}
         }
-        if(!STATE.halt&&ok===ch.chunks.length&&files.length)try{const r=await APIService.mergeChapter(STATE.project.id,i,files,ch.title==="Titles");ch.audioUrl=r.url}catch(e){}
+        // Merge if all chunks ok OR if Force Merge is on (and we have at least one file)
+        if(!STATE.halt && (ok===ch.chunks.length || (forceMerge && files.length > 0)) && files.length){
+            try{
+                const r=await APIService.mergeChapter(STATE.project.id,i,files,ch.title==="Titles",silenceChunk);
+                ch.audioUrl=r.url;renderTimeline();
+            }catch(e){LOG.add(e.message,'error')}
+        }
     }
-    dom.btnGenerate.disabled=false;dom.btnGenerate.innerText="2. Generate Audio";document.getElementById('btn-halt').style.display='none';renderTimeline();
+
+    if(!STATE.halt){
+        try{
+            dom.btnGenerate.innerText="Merging Book...";
+            const silenceChapter=parseFloat(dom.silenceChapter.value)||0;
+            const res=await APIService.mergeBook(STATE.project.id, silenceChapter);
+            LOG.add(`Full Book Generated! <a href="${res.url}" target="_blank" style="color:#fff;text-decoration:underline">Download</a>`,'success');
+        }catch(e){LOG.add("Book Merge failed: "+e.message,'error')}
+    }
+
+    dom.btnGenerate.disabled=false;dom.btnGenerate.innerText="2. Generate Audio";
+    dom.btnGenerateTimeline.disabled=false;dom.btnGenerateTimeline.innerText="⚡ Generate All";
+    document.getElementById('btn-halt').style.display='none';renderTimeline();
 }
 
 dom.btnPlay.addEventListener('click',async()=>{if(STATE.isPlaying){engine.stop();return}
@@ -546,6 +795,9 @@ async function saveCurrentProject(){
     
     // Save current model settings
     STATE.project.modelId = dom.elModel.value;
+    STATE.project.silenceChunk = parseFloat(dom.silenceChunk.value) || 0;
+    STATE.project.silenceChapter = parseFloat(dom.silenceChapter.value) || 0;
+    STATE.project.notes = dom.projectNotes.value;
 
     try{
         const r=await APIService.req('/api/projects',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({id:STATE.project.id,title:m.title,author:m.author,chapters:STATE.chapters,manuscript:dom.manuscript.value,projectSettings:STATE.project})});
@@ -615,6 +867,9 @@ async function loadProject(id){
         dom.voiceName2.value = STATE.project.voiceNames ? STATE.project.voiceNames[1] : "";
         if(STATE.project.token) dom.voiceToken.value = STATE.project.token;
         if(STATE.project.modelId) dom.elModel.value = STATE.project.modelId;
+        dom.silenceChunk.value = STATE.project.silenceChunk !== undefined ? STATE.project.silenceChunk : 0.0;
+        dom.silenceChapter.value = STATE.project.silenceChapter !== undefined ? STATE.project.silenceChapter : 1.0;
+        dom.projectNotes.value = STATE.project.notes || '';
 
         // Auto-collapse completed chapters
         STATE.chapters.forEach(ch => {

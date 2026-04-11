@@ -1,0 +1,4 @@
+[The Arrival (the story of the arrival of the Colliders) is told as a series of short prefaces before every chapter up to 20th Dec 1982]
+
+Chapter 1 preface:
+[In a space where even the whisper of time is hushed, silence reigns with a kind of mystic severity. Imagine a vast, echoing white chamber—a gallery of endless light—populated solely by men attired in immaculate white. Their stillness is not merely the absence of motion but the embodiment of a time suspended, a moment where the future and past are indistinguishable. In this profound hush, an ineffable foreboding lingers, as if the very walls held secrets too ancient to name, and every breath was a memory waiting to be unfurled.]

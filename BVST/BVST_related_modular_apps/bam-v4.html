@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>BAM - Blockchain Audional Matrix</title>
+    <style>
+        :root {
+            --retro-green: #00ff41;
+            --dark-bg: #0a0a0a;
+            --glow: 0 0 10px rgba(0, 255, 65, 0.7);
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            background-color: #000;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            font-family: 'Courier New', Courier, monospace;
+        }
+
+        /* Letterbox Container */
+        .stage {
+            position: relative;
+            width: 100%;
+            max-width: 1100px;
+            aspect-ratio: 21 / 9;
+            background-color: var(--dark-bg);
+            border-top: 2px solid #333;
+            border-bottom: 2px solid #333;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            box-shadow: 0 0 50px rgba(0,0,0,1);
+        }
+
+        /* Scanline Effect */
+        .stage::after {
+            content: " ";
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: linear-gradient(
+                rgba(18, 16, 16, 0) 50%,
+                rgba(0, 0, 0, 0.25) 50%
+            ), linear-gradient(
+                90deg,
+                rgba(255, 0, 0, 0.06),
+                rgba(0, 255, 0, 0.02),
+                rgba(0, 0, 255, 0.06)
+            );
+            background-size: 100% 4px, 3px 100%;
+            pointer-events: none;
+            z-index: 10;
+        }
+
+        /* Flickering Overlay */
+        .flicker {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 255, 65, 0.02);
+            opacity: 0;
+            pointer-events: none;
+            z-index: 11;
+            animation: flickerAnim 0.15s infinite;
+        }
+
+        @keyframes flickerAnim {
+            0% { opacity: 0.1; }
+            50% { opacity: 0.02; }
+            100% { opacity: 0.08; }
+        }
+
+        /* Explosion Graphic */
+        .explosion-container {
+            position: absolute;
+            width: 500px;
+            height: 500px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            opacity: 0;
+            transform: scale(0);
+            transition: transform 0.4s cubic-bezier(0.175, 0.885, 0.32, 1.275), opacity 0.2s;
+        }
+
+        .explosion-container.active {
+            opacity: 1;
+            transform: scale(1.2);
+        }
+
+        .explosion-svg {
+            fill: none;
+            stroke: var(--retro-green);
+            stroke-width: 4;
+            filter: drop-shadow(0 0 8px var(--retro-green));
+        }
+
+        /* Text Elements */
+        .word-wrap {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0;
+            font-size: 4.5rem;
+            font-weight: bold;
+            color: var(--retro-green);
+            text-shadow: var(--glow);
+            z-index: 5;
+            text-transform: uppercase;
+            letter-spacing: -2px;
+            width: 100%;
+        }
+
+        .letter-block {
+            display: flex;
+            align-items: baseline;
+            transition: all 0.8s cubic-bezier(0.68, -0.55, 0.265, 1.55);
+            position: relative;
+        }
+
+        .suffix {
+            width: 0;
+            overflow: hidden;
+            white-space: nowrap;
+            display: inline-block;
+            font-size: 2rem;
+            opacity: 0;
+            transition: width 1s ease-out, opacity 0.5s;
+            color: var(--retro-green);
+            margin-left: 2px;
+        }
+
+        /* Animation States - Adjusted for tighter grouping */
+        .stage.expanded .letter-block {
+            gap: 15px;
+        }
+
+        /* Move B left and M right, but much less than before */
+        .stage.expanded #block-b { transform: translateX(-60px); }
+        .stage.expanded #block-m { transform: translateX(60px); }
+
+        .stage.show-full .suffix {
+            opacity: 1;
+        }
+
+        /* Explicit widths for suffix expansion */
+        .stage.show-full #block-b .suffix { width: 230px; }
+        .stage.show-full #block-a .suffix { width: 170px; }
+        .stage.show-full #block-m .suffix { width: 140px; }
+
+        /* Replay Button */
+        .controls {
+            position: absolute;
+            bottom: 20px;
+            right: 20px;
+            z-index: 100;
+        }
+
+        button {
+            background: transparent;
+            border: 1px solid var(--retro-green);
+            color: var(--retro-green);
+            padding: 8px 16px;
+            cursor: pointer;
+            font-family: inherit;
+            text-transform: uppercase;
+            font-size: 0.8rem;
+            transition: background 0.3s;
+        }
+
+        button:hover {
+            background: rgba(0, 255, 65, 0.2);
+        }
+
+        /* Initial BAM State */
+        .bam-init {
+            opacity: 0;
+            transform: scale(0.5);
+            transition: all 0.3s ease;
+        }
+
+        .bam-init.visible {
+            opacity: 1;
+            transform: scale(1);
+        }
+
+        /* Responsive scaling */
+        @media (max-width: 900px) {
+            .word-wrap { font-size: 3rem; }
+            .suffix { font-size: 1.4rem; }
+            .stage.show-full #block-b .suffix { width: 160px; }
+            .stage.show-full #block-a .suffix { width: 120px; }
+            .stage.show-full #block-m .suffix { width: 100px; }
+            .stage.expanded #block-b { transform: translateX(-30px); }
+            .stage.expanded #block-m { transform: translateX(30px); }
+        }
+
+        @media (max-width: 600px) {
+            .word-wrap { font-size: 2rem; }
+            .suffix { font-size: 0.9rem; }
+            .stage.show-full #block-b .suffix { width: 110px; }
+            .stage.show-full #block-a .suffix { width: 80px; }
+            .stage.show-full #block-m .suffix { width: 70px; }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="stage" id="stage">
+        <div class="flicker"></div>
+        
+        <!-- Retro Starburst Explosion -->
+        <div class="explosion-container" id="explosion">
+            <svg viewBox="0 0 200 200" class="explosion-svg" width="100%" height="100%">
+                <path d="M100 20 L115 70 L170 60 L130 95 L185 135 L125 130 L135 185 L100 150 L65 185 L75 130 L15 135 L70 95 L30 60 L85 70 Z" />
+                <path d="M100 45 L110 80 L145 75 L120 100 L155 125 L115 120 L120 155 L100 135 L80 155 L85 120 L45 125 L80 100 L55 75 L90 80 Z" stroke-dasharray="4" />
+            </svg>
+        </div>
+
+        <div class="word-wrap bam-init" id="main-text">
+            <div class="letter-block" id="block-b">
+                <span class="root">B</span>
+                <span class="suffix">lockchain</span>
+            </div>
+            <div class="letter-block" id="block-a">
+                <span class="root">A</span>
+                <span class="suffix">udional</span>
+            </div>
+            <div class="letter-block" id="block-m">
+                <span class="root">M</span>
+                <span class="suffix">atrix</span>
+            </div>
+        </div>
+
+        <div class="controls">
+            <button onclick="runAnimation()">Reset Terminal</button>
+        </div>
+    </div>
+
+    <script>
+        const stage = document.getElementById('stage');
+        const explosion = document.getElementById('explosion');
+        const mainText = document.getElementById('main-text');
+
+        function runAnimation() {
+            // Reset state
+            stage.classList.remove('expanded', 'show-full');
+            explosion.classList.remove('active');
+            mainText.classList.remove('visible');
+
+            // 1. Start sequence (BAM appears with explosion)
+            setTimeout(() => {
+                explosion.classList.add('active');
+                mainText.classList.add('visible');
+            }, 500);
+
+            // 2. Letters split apart slightly
+            setTimeout(() => {
+                stage.classList.add('expanded');
+                explosion.style.opacity = '0.3';
+            }, 1600);
+
+            // 3. Words fill out
+            setTimeout(() => {
+                stage.classList.add('show-full');
+            }, 2300);
+            
+            // 4. Explosion fades away
+            setTimeout(() => {
+                explosion.classList.remove('active');
+            }, 3200);
+        }
+
+        // Initialize on load
+        window.onload = runAnimation;
+    </script>
+</body>
+</html>

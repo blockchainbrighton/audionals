@@ -59,7 +59,7 @@ const setupEventListeners = () => {
             }
         });
     } else {
-        console.error("Opus/WebM bitrate slider or value span not found.");
+        console.error("Opus/WebM Audio bitrate slider or value span not found.");
     }
 
     // Add updateEstimatedSize() to other Opus control listeners
@@ -191,10 +191,10 @@ const initializeUIState = () => {
     }
 
     if (formatRadios) {
-        const webmRadio = document.querySelector('input[name="format"][value="webm"]');
+        const webaRadio = document.querySelector('input[name="format"][value="weba"]');
         const checkedRadio = document.querySelector('input[name="format"]:checked');
-        if (webmRadio && !checkedRadio) {
-             webmRadio.checked = true;
+        if (webaRadio && !checkedRadio) {
+             webaRadio.checked = true;
         } else if (!checkedRadio && formatRadios.length > 0) {
              formatRadios[0].checked = true;
         }

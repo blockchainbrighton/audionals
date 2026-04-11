@@ -52,7 +52,7 @@ const enableConvertButtonIfNeeded = () => {
   
     // --- Get current output format for button text ---
     const selectedFormatRadio = document.querySelector('input[name="format"]:checked');
-    const outputFormatName = selectedFormatRadio ? selectedFormatRadio.value.toUpperCase() : 'WEBM';
+    const outputFormatName = selectedFormatRadio ? selectedFormatRadio.value.toUpperCase() : 'WEBA';
   
     // --- Update "Play Original" button ---
     if (playSampleBtn) {
@@ -139,10 +139,10 @@ const enableConvertButtonIfNeeded = () => {
           estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
           estimateValue = `~${window.formatBytes(estimatedSizeBytes)} (MP3 VBR q:${visualQuality})`;
   
-      } else if ((selectedFormat === 'opus' || selectedFormat === 'webm') && opusBitrateSlider) {
+      } else if ((selectedFormat === 'opus' || selectedFormat === 'weba') && opusBitrateSlider) {
           const bitrateKbps = parseInt(opusBitrateSlider.value, 10);
           estimatedSizeBytes = (bitrateKbps * 1000 * fileDuration) / 8;
-          const formatName = selectedFormat === 'opus' ? 'Opus' : 'WebM (Opus)';
+          const formatName = selectedFormat === 'opus' ? 'Opus' : 'WebM Audio (.weba)';
           estimateValue = `~${window.formatBytes(estimatedSizeBytes)} (${formatName} @${bitrateKbps}kbps)`;
       } else {
           estimateValue = 'N/A (Settings incomplete)';
@@ -165,7 +165,7 @@ const enableConvertButtonIfNeeded = () => {
   
     const fmt = selectedFormatRadio.value;
   
-    opusSettingsDiv.style.display = (fmt === 'opus' || fmt === 'webm') ? 'block' : 'none';
+    opusSettingsDiv.style.display = (fmt === 'opus' || fmt === 'weba') ? 'block' : 'none';
     mp3SettingsDiv.style.display = fmt === 'mp3' ? 'block' : 'none';
   
     updateEstimatedSize(); 
@@ -375,7 +375,7 @@ const enableConvertButtonIfNeeded = () => {
     infoHTML += audioFormatInfo.bitrate || '';
     infoHTML += audioFormatInfo.formatsTitle || '';
     infoHTML += audioFormatInfo.wav || '';
-    infoHTML += audioFormatInfo.webm || '';
+    infoHTML += audioFormatInfo.weba || '';
     infoHTML += audioFormatInfo.opus || '';
     infoHTML += audioFormatInfo.mp3 || '';
     infoHTML += audioFormatInfo.opusRecommendationsTitle || '';

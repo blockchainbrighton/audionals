@@ -42,7 +42,7 @@ const loadFFmpeg = async () => {
  * Runs the FFmpeg conversion command.
  * @param {string} inputFilename - The name of the input file in FFmpeg's virtual FS.
  * @param {string} outputFilename - The desired name for the output file in FFmpeg's virtual FS.
- * @param {string} outputFormat - 'mp3', 'opus', or 'webm'. // Updated doc
+ * @param {string} outputFormat - 'mp3', 'opus', or 'weba'. // Updated doc
  * @returns {Promise<Uint8Array>} The raw byte data of the converted file.
  */
 const runFFmpegConversion = async (inputFilename, outputFilename, outputFormat) => {
@@ -61,7 +61,7 @@ const runFFmpegConversion = async (inputFilename, outputFilename, outputFormat) 
     cmd.push('-metadata', `AOE-Generator=${generatorIdentifier}`);
     cmd.push('-metadata', `X-AudionalTool-Origin=${generatorIdentifier}`); // Another distinct custom tag
 
-    // For WebM/Opus, we can try to target the audio stream specifically for some tags,
+    // For WebM Audio/Opus, we can try to target the audio stream specifically for some tags,
     // though FFmpeg's general -metadata often applies globally or to the first suitable stream.
     // The syntax for stream-specific metadata is '-metadata:s:a:0 key=value' for the first audio stream.
     // However, for simplicity and broad compatibility of the -metadata flag, applying globally is usually sufficient
@@ -76,7 +76,7 @@ const runFFmpegConversion = async (inputFilename, outputFilename, outputFormat) 
     cmd.push('-metadata', `comment=${watermarkValue}`);
 
 
-    if (outputFormat === 'opus' || outputFormat === 'webm') { // Common settings for Opus and WebM (Opus)
+    if (outputFormat === 'opus' || outputFormat === 'weba') { // Common settings for Opus and WebM Audio (Opus)
         const bitrate = opusBitrateSlider ? opusBitrateSlider.value : initialOpusBitrate;
         const vbrMode = opusVbrModeSelect ? opusVbrModeSelect.value : initialOpusVbrMode;
         const compressionLevel = opusCompressionLevelSlider ? opusCompressionLevelSlider.value : initialOpusCompressionLevel;
@@ -94,9 +94,9 @@ const runFFmpegConversion = async (inputFilename, outputFilename, outputFormat) 
         cmd.push('-compression_level', compressionLevel.toString());
         cmd.push('-application', application);
 
-        if (outputFormat === 'webm') {
-            console.info("Using libopus codec for WebM container with specified settings.");
-            // FFmpeg automatically handles the WebM container. '-vn' might be added if source could have video.
+        if (outputFormat === 'weba') {
+            console.info("Using libopus codec for WebM Audio (.weba) container with specified settings.");
+            cmd.push('-vn'); // Strictly audio-only, strip any video tracks
         }
         cmd.push(outputFilename);
 

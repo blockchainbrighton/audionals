@@ -38,7 +38,7 @@ const handleDownloadBatchZip = async () => {
         const url = URL.createObjectURL(zipBlob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `batch_converted_${selectedOutputFormat}_${new Date().toISOString().slice(0,10)}.zip`; // e.g., batch_converted_webm_2023-10-27.zip
+        a.download = `batch_converted_${selectedOutputFormat}_${new Date().toISOString().slice(0,10)}.zip`; // e.g., batch_converted_weba_2023-10-27.zip
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);

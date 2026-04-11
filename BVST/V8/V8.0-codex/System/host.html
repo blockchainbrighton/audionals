@@ -1,0 +1,3506 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>BVST Studio</title>
+    <style>
+        /* Combined Styles */
+        body { background: #1a1a1a; color: #eee; font-family: sans-serif; display: flex; flex-direction: column; align-items: center; min-height: 100vh; margin: 0; padding: 20px; box-sizing: border-box; }
+        
+        /* Launcher Styles */
+        .launcher-container { text-align: center; padding: 40px; background: #2a2a2a; border-radius: 12px; box-shadow: 0 4px 20px rgba(0,0,0,0.5); margin-top: 10vh; transition: opacity 0.5s; }
+        .launcher-container.hidden { display: none; opacity: 0; }
+        .launcher-container.daw-mode { margin-top: 10px; padding: 14px; width: 100%; max-width: 1024px; border-radius: 10px; }
+        .launcher-container.daw-mode h1 { font-size: 20px; margin-bottom: 8px; }
+        .launcher-container.daw-mode p { margin: 6px 0; }
+        
+        /* Host/Rack Styles */
+        .host-container { width: 100%; max-width: 1024px; text-align: center; display: none; opacity: 0; transition: opacity 0.5s; }
+        .host-container.visible { display: block; opacity: 1; }
+        
+        h1 { margin-top: 0; color: #0f0; margin-bottom: 10px; }
+        p { color: #aaa; margin-bottom: 20px; }
+        
+        /* Inputs & Buttons */
+        select { padding: 10px; font-size: 16px; width: 200px; border: none; border-radius: 4px; background: #333; color: white; outline: none; cursor: pointer; }
+        select:focus { background: #444; }
+        
+        button { padding: 10px 20px; font-size: 16px; background: #0f0; color: #000; border: none; border-radius: 4px; cursor: pointer; font-weight: bold; transition: background 0.2s, transform 0.1s; margin-left: 10px; }
+        button:hover { background: #4f4; transform: scale(1.05); }
+        button:active { transform: scale(0.95); }
+
+        /* Rack Area */
+        #rack { margin-top: 20px; }
+        #rack iframe { border: none; width: 100%; height: 500px; background: #222; border-radius: 8px; box-shadow: inset 0 0 20px rgba(0,0,0,0.5); }
+        #status { font-family: monospace; color: #888; margin-top: 10px; }
+
+        /* Drag Overlay */
+        #dropOverlay {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: rgba(0, 255, 0, 0.2);
+            border: 5px dashed #0f0;
+            display: none; justify-content: center; align-items: center;
+            font-size: 3rem; color: #0f0; pointer-events: none; z-index: 1000;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="dropOverlay">Drop Audio/MIDI Here</div>
+
+    <!-- LAUNCHER SECTION (deprecated; kept hidden) -->
+    <div class="launcher-container hidden daw-mode" id="launcher">
+        <h1>BVST Studio</h1>
+        <p>Use the per-slot menus in the rack to select an instrument and add inserts.</p>
+        <p id="launcherError" style="color: #f44; display: none; margin-top: 10px;"></p>
+    </div>
+
+    <!-- HOST SECTION -->
+    <div class="host-container visible" id="host">
+        <h1 id="hostTitle">BVST Rack</h1>
+
+        <!-- TRANSPORT + TRACKS -->
+        <div id="dawBar" style="display: flex; flex-wrap: wrap; gap: 12px; align-items: center; justify-content: center; margin: 10px auto; background: #222; padding: 10px; border-radius: 8px; border: 1px solid #333;">
+            <div style="display:flex; gap:8px; align-items:center;">
+                <button id="btnPlay" style="background:#444; color:#fff; padding:6px 14px; margin:0;">Play</button>
+                <button id="btnStop" style="background:#444; color:#fff; padding:6px 14px; margin:0;">Stop</button>
+                <button id="btnRec" style="background:#600; color:#fff; padding:6px 14px; margin:0;">Rec</button>
+                <label style="color:#aaa; font-size: 13px; display:flex; align-items:center; gap:6px; margin-left:6px;">
+                    <input type="checkbox" id="loopEnabled" checked> Loop (1 bar)
+                </label>
+                <label style="color:#aaa; font-size: 13px; display:flex; align-items:center; gap:6px; margin-left:6px;">
+                    <input type="checkbox" id="useMic"> Mic Input
+                </label>
+            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <label style="color:#aaa; font-size: 13px; display:flex; align-items:center; gap:6px;">
+                    BPM <input id="bpm" type="number" min="20" max="300" value="120" style="width:80px; padding:6px; border-radius:4px; border:none; background:#333; color:#fff;">
+                </label>
+                <label style="color:#aaa; font-size: 13px; display:flex; align-items:center; gap:6px;">
+                    Bars <input id="clipBars" type="number" min="1" max="16" value="1" style="width:60px; padding:6px; border-radius:4px; border:none; background:#333; color:#fff;">
+                </label>
+	                <label style="color:#aaa; font-size: 13px; display:flex; align-items:center; gap:6px;">
+	                    MIDI In
+	                    <select id="hostMidiIn" class="bvst-select" style="width:180px; padding:6px; background:#333; color:#fff; border:none; border-radius:4px;"></select>
+	                    <span id="hostMidiLed" style="width:10px; height:10px; background:#333; border-radius:50%; display:inline-block;"></span>
+	                    <span id="hostMidiStatus" style="color:#777; font-size:12px; min-width:120px;">No device</span>
+	                </label>
+	            </div>
+            <div style="display:flex; gap:10px; align-items:center;">
+                <button id="btnAddTrack" style="background:#444; color:#fff; padding:6px 14px; margin:0;">+ Track</button>
+                <button id="btnRemoveTrack" style="background:#444; color:#fff; padding:6px 14px; margin:0;">- Track</button>
+                <button id="btnSaveProject" style="background:#444; color:#fff; padding:6px 14px; margin:0;">Save</button>
+                <button id="btnLoadProject" style="background:#444; color:#fff; padding:6px 14px; margin:0;">Load</button>
+                <div id="trackList" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;"></div>
+            </div>
+        </div>
+        
+        <!-- MIDI PLAYER SECTION -->
+        <div id="midiPlayer" style="display: none; margin: 10px auto; background: #2a2a2a; padding: 10px; border-radius: 4px; width: fit-content; border: 1px solid #444;">
+            <span style="font-weight: bold; margin-right: 10px; color: #aaa;">MIDI File Loaded</span>
+            <button onclick="playMidi()" style="background: #444; color: #fff; padding: 5px 15px;">Play</button>
+            <button onclick="stopMidi()" style="background: #444; color: #fff; padding: 5px 15px;">Stop</button>
+        </div>
+
+        <div id="rack"></div>
+
+        <!-- PIANO ROLL -->
+        <div id="pianoRollWrap" style="margin-top: 14px; background:#222; border:1px solid #333; border-radius:8px; padding:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div id="pianoRollTitle" style="color:#aaa; font-size:13px;">Piano Roll - click to toggle notes</div>
+                <div style="display:flex; gap:8px; align-items:center;">
+                    <label style="color:#aaa; font-size: 13px; display:flex; align-items:center; gap:6px;">
+                        Quantize
+                        <select id="quantize" style="padding:6px; background:#333; color:#fff; border:none; border-radius:4px;">
+                            <option value="16" selected>1/16</option>
+                            <option value="8">1/8</option>
+                            <option value="4">1/4</option>
+                        </select>
+                    </label>
+                    <button id="btnClearClip" style="background:#444; color:#fff; padding:6px 14px; margin:0;">Clear Clip</button>
+                </div>
+            </div>
+            <canvas id="pianoRoll" width="980" height="260" style="width:100%; height:260px; display:block; margin-top:10px; background:#111; border-radius:6px;"></canvas>
+        </div>
+
+        <!-- AUTOMATION LANE -->
+        <div id="automationWrap" style="margin-top: 12px; background:#222; border:1px solid #333; border-radius:8px; padding:10px;">
+            <div style="display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;">
+                <div style="color:#aaa; font-size:13px;">Automation - select a plugin + parameter, then click/drag to draw</div>
+                <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+                    <label style="color:#aaa; font-size: 13px; display:flex; align-items:center; gap:6px;">
+                        Plugin
+                        <select id="autoPlugin" style="padding:6px; background:#333; color:#fff; border:none; border-radius:4px; width:220px;"></select>
+                    </label>
+                    <label style="color:#aaa; font-size: 13px; display:flex; align-items:center; gap:6px;">
+                        Param
+                        <select id="autoParam" style="padding:6px; background:#333; color:#fff; border:none; border-radius:4px; width:240px;"></select>
+                    </label>
+                    <button id="btnClearAutomation" style="background:#444; color:#fff; padding:6px 14px; margin:0;">Clear Lane</button>
+                </div>
+            </div>
+            <canvas id="automationLane" width="980" height="140" style="width:100%; height:140px; display:block; margin-top:10px; background:#111; border-radius:6px;"></canvas>
+        </div>
+
+        <input id="projectFileInput" type="file" accept="application/json" style="display:none;" />
+
+        <div id="status">Initializing...</div>
+        <button onclick="reset()" style="margin-top: 20px; background: #444; color: #ccc;">Reset Page</button>
+    </div>
+
+	        <script type="module">
+	        import { MidiParser } from './shared/midi_parser.js';
+	        // Cache-bust to avoid browsers serving an older, broken decoder module during rapid iteration.
+	        import { fetchAudionalAudioBytes, canonicalizeOrdinalContentUrl as canonicalizeOrdinalContentUrlShared } from './shared/audional_decoder.js?v=1';
+	        const DEBUG_DECODER = (() => {
+	            try { return new URLSearchParams(window.location.search).has('debugDecoder'); }
+	            catch (_) { return false; }
+	        })();
+	        const DEBUG_MIDI = (() => {
+	            try { return new URLSearchParams(window.location.search).has('debugMidi'); }
+	            catch (_) { return false; }
+	        })();
+
+		        let audioCtx = null;
+		        let workletModulesLoaded = false;
+
+	        // --- DAW / Project State ---
+	        const slotsByInstanceId = new Map(); // instanceId -> slot (across all tracks)
+
+	        const project = {
+	            bpm: 120,
+	            beatsPerBar: 4,
+	            stepsPerBar: 16, // 1 bar @ 1/16 grid
+	            clipBars: 1,
+	            loopEnabled: true,
+	            tracks: []
+	        };
+	        let isProjectLoading = false;
+	        let activeTrackId = null;
+	        let activeInstanceId = null; // active (focused) plugin instance in the rack UI
+
+	        const transport = {
+	            playing: false,
+	            recording: false,
+	            startAudioTime: 0,
+	            playStartStep: 0,
+	            stepDurSec: 0,
+	            nextScheduleStep: 0,
+	            nextScheduleTime: 0,
+	            scheduledTimeouts: [],
+	            rafId: null,
+	            activeNotes: new Set() // key `${trackId}:${note}`
+	        };
+	        let playheadStep = 0; // 0..stepsPerBar-1
+
+	        const recordState = {
+	            // key = `${trackId}:${note}` -> { step, audioTime }
+	            activeNotes: new Map(),
+	            lastAutomation: new Map() // key `${trackId}:${instanceId}:${paramId}:${step}` -> value
+	        };
+
+	        const pianoRoll = {
+	            canvas: null,
+	            ctx: null,
+	            pitchMin: 36,
+	            pitchMax: 84,
+	            isPointerDown: false,
+	            paintMode: null, // 'add' | 'erase'
+	            lastPaintKey: null
+	        };
+
+	        const automationUI = {
+	            canvas: null,
+	            ctx: null,
+	            isPointerDown: false,
+	            activeInstanceId: null,
+	            activeParamId: null,
+	            lastPaintKey: null
+	        };
+
+	        const pluginsByPath = new Map(); // pluginPath -> { name, path, type, category, subgroup, groupLabel }
+	        const pluginsCatalog = {
+	            instruments: [], // { name, path, groupLabel }
+	            inserts: [] // { name, path, groupLabel }
+	        };
+
+        const wasmCache = new Map(); // wasmUrl -> ArrayBuffer
+        const decodedSampleCache = new Map(); // url -> Float32Array (channel 0)
+
+        const LOCAL_DRAFT_KEY = 'bvst.project.draft/v2';
+        let _draftSaveTimer = null;
+        let _draftSaveQueued = false;
+
+        function scheduleDraftSave() {
+            _draftSaveQueued = true;
+            if (isProjectLoading) return;
+            if (_draftSaveTimer) clearTimeout(_draftSaveTimer);
+            _draftSaveTimer = setTimeout(() => {
+                _draftSaveTimer = null;
+                saveDraftNow();
+            }, 250);
+        }
+
+        function saveDraftNow() {
+            if (!_draftSaveQueued) return;
+            _draftSaveQueued = false;
+            try {
+                const doc = serializeProject();
+                localStorage.setItem(LOCAL_DRAFT_KEY, JSON.stringify(doc));
+            } catch (e) {
+                // localStorage may be unavailable/quota-limited; ignore.
+            }
+        }
+
+        function tryLoadDraftDoc() {
+            try {
+                const raw = localStorage.getItem(LOCAL_DRAFT_KEY);
+                if (!raw) return null;
+                const doc = JSON.parse(raw);
+                if (!doc || typeof doc !== 'object') return null;
+                if (typeof doc.schema !== 'string' || !doc.schema.startsWith('bvst.project/')) return null;
+                return doc;
+            } catch (_) {
+                return null;
+            }
+        }
+
+        const canonicalizeOrdinalContentUrl = canonicalizeOrdinalContentUrlShared;
+
+        function applySlotParamsToNode(slot, params) {
+            if (!slot || !slot.node || !slot.node.port) return;
+            if (!Array.isArray(params)) return;
+            for (const pair of params) {
+                if (!pair || pair.length < 2) continue;
+                const pid = Number(pair[0]);
+                const val = Number(pair[1]);
+                if (!Number.isFinite(pid) || pid < 0) continue;
+                if (!Number.isFinite(val)) continue;
+                try { slot.node.port.postMessage({ type: 'PARAM', id: pid, value: val }); } catch (_) {}
+            }
+        }
+
+        function maybeApplySlotNodeParams(slot) {
+            if (!slot || !slot.pendingNodeParams) return;
+            if (!slot.ready) return;
+            applySlotParamsToNode(slot, slot.pendingNodeParams);
+            slot.pendingNodeParams = null;
+        }
+
+        function setSlotParamMapFromArray(slot, params) {
+            if (!slot) return;
+            const m = new Map();
+            if (Array.isArray(params)) {
+                for (const pair of params) {
+                    if (!pair || pair.length < 2) continue;
+                    const pid = Number(pair[0]);
+                    const val = Number(pair[1]);
+                    if (!Number.isFinite(pid) || pid < 0) continue;
+                    if (!Number.isFinite(val)) continue;
+                    m.set(pid, val);
+                }
+            }
+            slot.paramValues = m;
+        }
+
+        function maybeApplySlotGuiParams(slot) {
+            if (!slot || !slot.pendingGuiParams) return;
+            if (!slot.ready || !slot.guiLoaded) return;
+            if (!slot.iframe || !slot.iframe.contentWindow) return;
+            try {
+                slot.iframe.contentWindow.postMessage({
+                    type: 'BVST_HOST_APPLY_PARAMS',
+                    instanceId: slot.instanceId,
+                    params: slot.pendingGuiParams
+                }, '*');
+                slot.pendingGuiParams = null;
+            } catch (_) {}
+        }
+
+	        async function decodeSampleUrl(url) {
+	            const key = canonicalizeOrdinalContentUrl(url);
+	            if (!key) return null;
+	            const cached = decodedSampleCache.get(key);
+	            if (cached) return cached;
+	            await ensureAudioContext();
+	            const result = await fetchAudionalAudioBytes(appendQuery(key, { t: Date.now() }), { debug: DEBUG_DECODER });
+	            const audioBuffer = await audioCtx.decodeAudioData(result.audioBytes.slice(0));
+	            const data = audioBuffer.getChannelData(0);
+	            decodedSampleCache.set(key, data);
+	            return data;
+	        }
+
+        async function loadSampleUrlIntoSlot(slot, url) {
+            const key = canonicalizeOrdinalContentUrl(url);
+            if (!slot || !slot.node || !key) return;
+            const data = await decodeSampleUrl(key);
+            if (!data) return;
+            try { slot.node.port.postMessage({ type: 'LOAD_SAMPLE', samples: data }); } catch (_) {}
+            if (slot.iframe && slot.iframe.contentWindow) {
+                try { slot.iframe.contentWindow.postMessage({ type: 'BVST_SAMPLE_DATA', instanceId: slot.instanceId, samples: data }, '*'); } catch (_) {}
+                try { slot.iframe.contentWindow.postMessage({ type: 'BVST_SAMPLE_SOURCE', instanceId: slot.instanceId, url: key }, '*'); } catch (_) {}
+            }
+            slot.sample = { url: key, sourceType: 'url', fileName: '' };
+        }
+
+	        let micStream = null;
+	        let micSource = null;
+	        let masterGain = null;
+
+	        let rafVisId = null;
+
+	        // MIDI State
+	        let midiEvents = [];
+	        let midiPPQ = 96;
+	        let midiPlaying = false;
+	        let midiTimeouts = [];
+
+		        // Host MIDI (WebMIDI) state
+		        let hostMidiAccess = null;
+		        let hostMidiInput = null;
+		        let hostMidiRefreshTimer = null;
+		        let hostMidiStatusTimer = null;
+		        let hostMidiFlashLed = null;
+		        let hostMidiLastMsgAt = 0;
+		        let hostMidiUserSelected = false;
+		        let hostMidiDebugLastSig = '';
+		        let hostMidiRefreshSig = '';
+		        let hostMidiBroadcastSig = '';
+
+		        function midiLog(...args) {
+		            if (!DEBUG_MIDI) return;
+		            try { console.log('BVST_MIDI_HOST', ...args); } catch (_) {}
+		        }
+
+		        function midiSummary(tag) {
+		            if (!DEBUG_MIDI) return;
+		            try {
+		                const snap = getHostMidiRuntimeSnapshot();
+		                const label = `${snap.manufacturer ? `${snap.manufacturer} ` : ''}${snap.name || ''}`.trim();
+		                midiLog('summary', {
+		                    tag,
+		                    hasDevices: snap.hasDevices,
+		                    selected: snap.selected,
+		                    selectedId: snap.selectedId,
+		                    inMap: snap.inMap,
+		                    connection: snap.connection,
+		                    connected: snap.connected,
+		                    verified: snap.verified,
+		                    active: snap.active,
+		                    device: label
+		                });
+		            } catch (_) {}
+		        }
+
+		        function midiSummaryLine(tag) {
+		            if (!DEBUG_MIDI) return;
+		            try {
+		                const s = getHostMidiRuntimeSnapshot();
+		                const label = `${s.manufacturer ? `${s.manufacturer} ` : ''}${s.name || ''}`.trim();
+		                console.log(
+		                    'BVST_MIDI_HOST_SUMMARY',
+		                    `tag=${tag}`,
+		                    `hasDevices=${!!s.hasDevices}`,
+		                    `selected=${!!s.selected}`,
+		                    `selectedId=${s.selectedId || ''}`,
+		                    `inMap=${!!s.inMap}`,
+		                    `connection=${s.connection || ''}`,
+		                    `connected=${!!s.connected}`,
+		                    `verified=${!!s.verified}`,
+		                    `active=${!!s.active}`,
+		                    `device="${label}"`
+		                );
+		            } catch (_) {}
+		        }
+
+		        function midiLogChanged(tag, payload) {
+		            if (!DEBUG_MIDI) return;
+		            let sig = '';
+		            try { sig = `${tag}:${JSON.stringify(payload)}`; } catch (_) { sig = `${tag}:<unserializable>`; }
+		            if (sig === hostMidiDebugLastSig) return;
+		            hostMidiDebugLastSig = sig;
+		            midiLog(tag, payload);
+		        }
+
+		        function getHostMidiRuntimeSnapshot() {
+		            const sel = document.getElementById('hostMidiIn');
+		            const selectedId = sel ? String(sel.value || '') : '';
+		            const input = hostMidiInput;
+		            const selected = hostMidiUserSelected && !!selectedId;
+		            const inMap = !!hostMidiAccess && selected && !!(hostMidiAccess.inputs && hostMidiAccess.inputs.get(selectedId));
+		            const connected =
+		                !!input &&
+		                inMap &&
+		                (input.id === selectedId) &&
+		                (input.state === 'connected') &&
+		                (input.connection === 'open');
+		            const name = connected ? String(input.name || input.id || '').trim() : '';
+		            const manufacturer = connected ? String(input.manufacturer || '').trim() : '';
+		            const connection = input ? String(input.connection || '') : '';
+		            const hasDevices = !!hostMidiAccess && Array.from(hostMidiAccess.inputs.values()).some((p) => p && p.state === 'connected');
+		            const active = connected && hostMidiLastMsgAt > 0 && (Date.now() - hostMidiLastMsgAt) < 2000;
+		            const verified = connected && hostMidiLastMsgAt > 0 && (Date.now() - hostMidiLastMsgAt) < 15000;
+		            return { connected, active, verified, name, manufacturer, connection, hasDevices, selectedId, selected, inMap };
+		        }
+
+		        function broadcastHostMidiStatus(targetWindow = null) {
+		            const snap = getHostMidiRuntimeSnapshot();
+		            const payload = {
+		                type: 'BVST_HOST_MIDI_STATUS',
+		                selected: snap.selected,
+		                connected: snap.connected,
+		                active: snap.active,
+		                verified: snap.verified,
+		                name: snap.name,
+		                manufacturer: snap.manufacturer,
+		                connection: snap.connection,
+		                hasDevices: snap.hasDevices
+		            };
+
+		            // Prevent needless UI churn: only broadcast when payload meaningfully changes.
+		            if (!targetWindow) {
+		                let sig = '';
+		                try { sig = JSON.stringify(payload); } catch (_) { sig = ''; }
+		                if (sig && sig === hostMidiBroadcastSig) return;
+		                hostMidiBroadcastSig = sig;
+		            }
+
+		            if (targetWindow) {
+		                try { targetWindow.postMessage(payload, '*'); } catch (_) {}
+		                return;
+		            }
+
+		            for (const slot of getAllSlots()) {
+		                const w = slot && slot.iframe && slot.iframe.contentWindow ? slot.iframe.contentWindow : null;
+		                if (!w) continue;
+		                try { w.postMessage(payload, '*'); } catch (_) {}
+		            }
+		            midiLogChanged('broadcast', payload);
+		            midiSummaryLine('broadcast');
+		        }
+
+        function setStatus(msg, color = '#888') {
+            const el = document.getElementById('status');
+            if (!el) return;
+            el.innerText = msg;
+            el.style.color = color;
+        }
+
+        async function populatePluginCatalog() {
+            try {
+                const res = await fetch('/api/synths');
+                if (!res.ok) throw new Error('Failed to fetch plugins');
+                const synths = await res.json();
+
+                const entries = Array.isArray(synths) ? synths : [];
+                pluginsByPath.clear();
+                pluginsCatalog.instruments = [];
+                pluginsCatalog.inserts = [];
+
+                for (const entry of entries) {
+                    const name = typeof entry === 'string' ? entry : entry.name;
+                    const path = typeof entry === 'string' ? `Synths/${entry}` : entry.path;
+                    const type = typeof entry === 'string' ? 'Synth' : (entry.type || 'Plugin');
+                    const category = typeof entry === 'string'
+                        ? 'Legacy'
+                        : (entry.category || (typeof path === 'string' && path.startsWith('Plugins/') ? path.split('/')[1] : 'Legacy'));
+                    const subgroup = typeof entry === 'string' ? 'Synths' : (entry.subgroup || '');
+
+                    const groupLabel =
+                        category === 'Instruments'
+                            ? (subgroup || 'Synths')
+                            : category;
+
+                    if (!name || !path) continue;
+                    const meta = { name, path, type, category, subgroup, groupLabel };
+                    pluginsByPath.set(path, meta);
+
+                    const catLower = String(category || '').toLowerCase();
+                    const typeLower = String(type || '').toLowerCase();
+                    const isInstrument =
+                        String(path || '').startsWith('Plugins/Instruments/') ||
+                        String(path || '').startsWith('Synths/') ||
+                        catLower === 'instruments' ||
+                        typeLower === 'instrument' ||
+                        typeLower === 'synth' ||
+                        subgroup === 'Synths' ||
+                        subgroup === 'Samplers' ||
+                        subgroup === 'Sequencers';
+                    if (isInstrument) pluginsCatalog.instruments.push(meta);
+                    else pluginsCatalog.inserts.push(meta);
+                }
+
+                pluginsCatalog.instruments.sort((a, b) => String(a.groupLabel).localeCompare(String(b.groupLabel)) || a.name.localeCompare(b.name));
+                pluginsCatalog.inserts.sort((a, b) => String(a.groupLabel).localeCompare(String(b.groupLabel)) || a.name.localeCompare(b.name));
+
+                // Re-render to populate per-slot menus once the catalog is ready.
+                renderRack();
+                populateAutomationSelectors();
+                drawAutomationLane();
+
+                // Optional deep-link: ?synth=<Name|Path> fills the instrument slot.
+                 const urlParams = new URLSearchParams(window.location.search);
+                 const urlSynth = urlParams.get('synth');
+                 if (urlSynth) {
+                    const found = Array.from(pluginsByPath.values()).find((it) => it.name === urlSynth || it.path === urlSynth);
+                    if (found) {
+                        const track = getActiveTrack();
+                        if (track) {
+                            ensureTrackSlots(track);
+                            const instSlot = track.slots.find((s) => s && (s.placeholder || isInstrumentSlot(s)));
+                            if (instSlot && instSlot.placeholder) {
+                                await fillPlaceholderSlot(instSlot.instanceId, found.path);
+                            } else if (instSlot) {
+                                await replaceSlotPlugin(instSlot.instanceId, found.path);
+                            }
+                        }
+                     }
+                 }
+
+                // Auto-restore the most recent in-progress project (local draft) unless disabled.
+                const skipDraft = urlParams.get('draft') === '0' || urlParams.get('nodraft') === '1';
+                if (!skipDraft && !urlSynth) {
+                    const draft = tryLoadDraftDoc();
+                    if (draft && Array.isArray(draft.tracks) && draft.tracks.length > 0) {
+                        await loadProjectDocument(draft);
+                        setStatus('Restored last session (draft)', '#0f0');
+                    }
+                }
+             } catch (e) {
+                 console.error(e);
+                 setStatus(`Plugin catalog load failed: ${e && e.message ? e.message : String(e)}`, '#f44');
+             }
+         }
+        populatePluginCatalog();
+
+		        // Initialize DAW model/UI (even before any plugin is added).
+		        ensureProjectDefaults();
+	        const bpmEl = document.getElementById('bpm');
+	        if (bpmEl) bpmEl.value = String(project.bpm);
+	        const barsEl = document.getElementById('clipBars');
+	        if (barsEl) barsEl.value = String(project.clipBars);
+	        const loopEl = document.getElementById('loopEnabled');
+	        if (loopEl) loopEl.checked = !!project.loopEnabled;
+		        renderTrackList();
+		        // Ensure empty instrument + insert slot are present on the active track at startup.
+		        if (getActiveTrack()) ensureTrackSlots(getActiveTrack());
+		        // Render immediately so the per-slot menus/slots are visible before the plugin catalog finishes loading.
+		        renderRack();
+		        initPianoRoll();
+		        drawPianoRoll();
+		        initAutomationUI();
+		        populateAutomationSelectors();
+	        drawAutomationLane();
+	        initHostMidi();
+
+	        document.getElementById('useMic')?.addEventListener('change', async (e) => {
+	            const checked = !!(e && e.target && e.target.checked);
+	            if (checked) {
+	                try {
+	                    await ensureMicSource();
+	                } catch (err) {
+	                    console.warn('Microphone access denied or failed:', err);
+	                    alert('Microphone access failed. Rack will run without input.');
+	                    e.target.checked = false;
+	                }
+	            }
+	            rebuildAudioGraph();
+	        });
+
+		        document.getElementById('btnAddTrack')?.addEventListener('click', () => {
+		            ensureProjectDefaults();
+		            const n = project.tracks.length + 1;
+		            const id = makeTrackId();
+		            project.tracks.push({
+		                id,
+		                name: `Track ${n}`,
+		                armed: false,
+		                muted: false,
+		                solo: false,
+		                gain: 1.0,
+		                slots: [],
+		                clip: { notes: [], automation: [] }
+		            });
+		            ensureTrackSlots(project.tracks[project.tracks.length - 1]);
+		            activeTrackId = id;
+		            activeInstanceId = null;
+		            const title = document.getElementById('hostTitle');
+			            if (title) title.innerText = `BVST Rack - Track ${n}`;
+		            renderTrackList();
+		            renderRack();
+		            drawPianoRoll();
+		            populateAutomationSelectors();
+		            drawAutomationLane();
+		            rebuildAudioGraph();
+                    scheduleDraftSave();
+		        });
+
+		        document.getElementById('btnRemoveTrack')?.addEventListener('click', () => {
+		            ensureProjectDefaults();
+		            if (project.tracks.length <= 1) return;
+		            if (transport.playing) stopTransport();
+		            const idx = project.tracks.findIndex((t) => t.id === activeTrackId);
+		            const track = idx >= 0 ? project.tracks[idx] : null;
+		            if (!track) return;
+
+	            // Remove and clean up slot instances.
+	            for (const slot of track.slots || []) {
+	                slotsByInstanceId.delete(slot.instanceId);
+	                try { slot.node.disconnect(); } catch (_) {}
+	                try { slot.analyser.disconnect(); } catch (_) {}
+	                try { slot.iframe.remove(); } catch (_) {}
+	            }
+
+		            project.tracks.splice(idx, 1);
+		            activeTrackId = project.tracks[Math.max(0, idx - 1)].id;
+		            activeInstanceId = null;
+		            const newTrack = getActiveTrack();
+		            if (newTrack) ensureTrackSlots(newTrack);
+		            const title = document.getElementById('hostTitle');
+			            if (title) title.innerText = newTrack ? `BVST Rack - ${newTrack.name}` : 'BVST Rack';
+		            renderTrackList();
+		            renderRack();
+		            drawPianoRoll();
+		            populateAutomationSelectors();
+		            drawAutomationLane();
+		            rebuildAudioGraph();
+                    scheduleDraftSave();
+		        });
+
+		        document.getElementById('btnSaveProject')?.addEventListener('click', () => {
+		            try {
+		                const doc = serializeProject();
+		                const name = `bvst_project_${new Date().toISOString().replace(/[:.]/g, '-')}.json`;
+		                downloadJson(name, doc);
+		                setStatus(`Saved ${name}`, '#0f0');
+		            } catch (e) {
+		                console.error(e);
+		                setStatus(`Save failed: ${e && e.message ? e.message : String(e)}`, '#f44');
+		            }
+		        });
+
+		        document.getElementById('btnLoadProject')?.addEventListener('click', () => {
+		            const input = document.getElementById('projectFileInput');
+		            if (!input) return;
+		            input.value = '';
+		            input.click();
+		        });
+
+		        document.getElementById('projectFileInput')?.addEventListener('change', async (e) => {
+		            const file = e && e.target && e.target.files ? e.target.files[0] : null;
+		            if (!file) return;
+		            try {
+		                const text = await file.text();
+		                const doc = JSON.parse(text);
+		                await loadProjectDocument(doc);
+		            } catch (err) {
+		                console.error(err);
+		                setStatus(`Load failed: ${err && err.message ? err.message : String(err)}`, '#f44');
+		                alert(`Load failed: ${err && err.message ? err.message : String(err)}`);
+		            }
+		        });
+
+	        document.getElementById('bpm')?.addEventListener('change', (e) => {
+	            const v = Number(e.target.value);
+	            if (!Number.isFinite(v) || v <= 0) return;
+	            project.bpm = v;
+	            if (transport.playing) stopTransport();
+	            setStatus(`BPM: ${v}`, '#888');
+                scheduleDraftSave();
+	        });
+
+	        document.getElementById('clipBars')?.addEventListener('change', (e) => {
+	            const v = Math.max(1, Math.min(16, Math.trunc(Number(e.target.value) || 1)));
+	            project.clipBars = v;
+	            e.target.value = String(v);
+	            if (transport.playing) stopTransport();
+
+	            // Clamp existing events to new length.
+	            const maxStep = getClipSteps() - 1;
+	            for (const track of project.tracks) {
+	                if (!track || !track.clip) continue;
+	                track.clip.notes = (track.clip.notes || []).filter((n) => n && Number(n.step) >= 0 && Number(n.step) <= maxStep);
+	                track.clip.automation = (track.clip.automation || []).filter((a) => a && Number(a.step) >= 0 && Number(a.step) <= maxStep);
+	                rebuildTrackIndexes(track);
+	            }
+
+	            playheadStep = Math.min(playheadStep, maxStep);
+	            drawPianoRoll();
+	            populateAutomationSelectors();
+	            drawAutomationLane();
+	            setStatus(`Clip length: ${v} bar${v === 1 ? '' : 's'}`, '#888');
+                scheduleDraftSave();
+	        });
+
+	        document.getElementById('loopEnabled')?.addEventListener('change', (e) => {
+	            project.loopEnabled = !!(e && e.target && e.target.checked);
+                scheduleDraftSave();
+	        });
+
+	        document.getElementById('btnPlay')?.addEventListener('click', async () => {
+	            if (transport.playing) return;
+	            try {
+	                await startTransport();
+	            } catch (e) {
+	                console.error(e);
+	                setStatus(`Play failed: ${e && e.message ? e.message : String(e)}`, '#f44');
+	            }
+	        });
+
+	        document.getElementById('btnStop')?.addEventListener('click', () => {
+	            stopTransport();
+	        });
+
+	        document.getElementById('btnRec')?.addEventListener('click', () => {
+	            toggleRecording();
+	        });
+
+	        document.getElementById('quantize')?.addEventListener('change', () => {
+	            drawPianoRoll();
+	        });
+
+		        document.getElementById('btnClearClip')?.addEventListener('click', () => {
+		            const clip = getActiveClip();
+		            if (!clip) return;
+		            clip.notes = [];
+		            clip.automation = [];
+		            const track = getActiveTrack();
+		            if (track) rebuildTrackIndexes(track);
+		            drawPianoRoll();
+		            drawAutomationLane();
+		            setStatus('Clip cleared', '#888');
+		        });
+
+		        document.getElementById('btnClearAutomation')?.addEventListener('click', () => {
+		            const target = getSelectedAutomationTarget();
+		            const track = getActiveTrack();
+		            if (!target || !track || !track.clip) return;
+		            track.clip.automation = (track.clip.automation || []).filter((a) => !(a && a.instanceId === target.instanceId && a.paramId === target.paramId));
+		            rebuildTrackIndexes(track);
+		            drawAutomationLane();
+		            setStatus('Automation lane cleared (shift-click also clears step)', '#888');
+		        });
+
+	        function makeInstanceId() {
+	            const a = Math.random().toString(36).slice(2, 8);
+	            const b = Date.now().toString(36);
+	            return `bvst_${b}_${a}`;
+	        }
+
+	        function makeTrackId() {
+	            const a = Math.random().toString(36).slice(2, 7);
+	            const b = Date.now().toString(36);
+	            return `trk_${b}_${a}`;
+	        }
+
+	        function getTrack(trackId) {
+	            return project.tracks.find((t) => t.id === trackId) || null;
+	        }
+
+	        function getActiveTrack() {
+	            if (!activeTrackId && project.tracks.length > 0) activeTrackId = project.tracks[0].id;
+	            return getTrack(activeTrackId);
+	        }
+
+	        function getActiveSlots() {
+	            const t = getActiveTrack();
+	            return t ? t.slots : [];
+	        }
+
+	        function getAllSlots() {
+	            const out = [];
+	            for (const t of project.tracks) {
+	                if (t && Array.isArray(t.slots)) out.push(...t.slots);
+	            }
+	            return out;
+	        }
+
+	        function isInstrumentSlot(slot) {
+	            if (slot && slot.isInstrument === true) return true;
+	            const t = String(slot?.type || '').toLowerCase();
+	            if (t === 'instrument' || t === 'synth') return true;
+	            const p = String(slot?.pluginPath || '');
+	            if (p.startsWith('Plugins/Instruments/') || p.startsWith('Synths/')) return true;
+	            const sg = String(slot?.subgroup || '');
+	            return sg === 'Synths' || sg === 'Samplers' || sg === 'Sequencers';
+	        }
+
+	        function isSamplerSlot(slot) {
+	            const sg = String(slot?.subgroup || '');
+	            return sg === 'Samplers';
+	        }
+
+	        function getSwapChoicesForSlot(slot, forcedRole = null) {
+	            // Main idea: instruments swap with instruments; inserts swap with non-instruments.
+	            const isInstr = forcedRole === 'instrument' ? true : forcedRole === 'insert' ? false : isInstrumentSlot(slot);
+	            const items = isInstr ? pluginsCatalog.instruments : pluginsCatalog.inserts;
+	            // Group by groupLabel for optgroups.
+	            const byGroup = new Map();
+	            for (const it of items) {
+	                const g = it.groupLabel || (isInstr ? 'Synths' : 'Effects');
+	                if (!byGroup.has(g)) byGroup.set(g, []);
+	                byGroup.get(g).push(it);
+	            }
+	            // Sort group names in a stable, friendly order.
+	            const groupOrder = isInstr
+	                ? ['Synths', 'Samplers', 'Sequencers', 'Legacy']
+	                : ['Effects', 'Dynamics', 'Modulation', 'Utility', 'Legacy', 'Instruments'];
+	            const groupNames = Array.from(byGroup.keys()).sort((a, b) => {
+	                const ia = groupOrder.indexOf(a);
+	                const ib = groupOrder.indexOf(b);
+	                if (ia !== -1 || ib !== -1) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+	                return String(a).localeCompare(String(b));
+	            });
+	            return { groupNames, byGroup };
+	        }
+
+	        function getInstrumentSlotForTrack(track) {
+	            if (!track) return null;
+	            return (track.slots || []).find((s) => s && !s.placeholder && isInstrumentSlot(s)) || null;
+	        }
+
+	        function getStepDurSec() {
+	            // 1/16 note @ 4/4: step = quarter/4
+	            const bpm = Number(project.bpm) || 120;
+	            return (60.0 / bpm) / 4.0;
+	        }
+
+	        function getClipSteps() {
+	            const bars = Math.max(1, Math.trunc(Number(project.clipBars) || 1));
+	            return bars * project.stepsPerBar;
+	        }
+
+	        function ensureProjectDefaults() {
+	            if (project.tracks.length > 0) return;
+	            project.clipBars = Math.max(1, Math.trunc(Number(project.clipBars) || 1));
+	            const id = makeTrackId();
+	            project.tracks.push({
+	                id,
+	                name: 'Track 1',
+	                armed: true,
+	                muted: false,
+	                solo: false,
+	                gain: 1.0,
+	                slots: [],
+	                clip: {
+	                    // steps are 0..stepsPerBar-1, repeats with loop
+	                    notes: [],
+	                    automation: [] // { step, instanceId, paramId, value }
+	                }
+	            });
+	            ensureTrackSlots(project.tracks[0]);
+	            activeTrackId = id;
+	        }
+
+	        function makePlaceholderSlot(trackId, role) {
+	            return {
+	                trackId,
+	                instanceId: makeInstanceId(),
+	                placeholder: true,
+	                role, // 'instrument' | 'insert'
+	                pluginPath: '',
+		                displayName: role === 'instrument' ? 'Select Instrument...' : 'Add Insert...',
+	                type: role === 'instrument' ? 'Instrument' : 'Effect',
+	                category: role === 'instrument' ? 'Instruments' : 'Inserts',
+	                subgroup: role === 'instrument' ? 'Synths' : 'Effects',
+	                isInstrument: role === 'instrument',
+	                bypass: false,
+	                expanded: role === 'instrument',
+	                ready: true,
+	                guiLoaded: false,
+	                visMode: 'off',
+	                paramMeta: new Map()
+	            };
+	        }
+
+	        function ensureTrackSlots(track) {
+	            if (!track) return;
+	            if (!Array.isArray(track.slots)) track.slots = [];
+
+	            // Remove any placeholder mapping that is no longer in the track.
+	            const slotIds = new Set(track.slots.map((s) => s && s.instanceId).filter(Boolean));
+	            for (const [id, s] of slotsByInstanceId.entries()) {
+	                if (s && s.trackId === track.id && s.placeholder && !slotIds.has(id)) slotsByInstanceId.delete(id);
+	            }
+
+	            // Ensure there is an instrument slot at index 0 (real instrument preferred).
+	            const firstRealInstrumentIdx = track.slots.findIndex((s) => s && !s.placeholder && isInstrumentSlot(s));
+	            const firstPlaceholderInstrumentIdx = track.slots.findIndex((s) => s && s.placeholder && s.role === 'instrument');
+	            if (firstRealInstrumentIdx >= 0) {
+	                if (firstRealInstrumentIdx !== 0) {
+	                    const [s] = track.slots.splice(firstRealInstrumentIdx, 1);
+	                    track.slots.unshift(s);
+	                }
+	            } else if (firstPlaceholderInstrumentIdx >= 0) {
+	                if (firstPlaceholderInstrumentIdx !== 0) {
+	                    const [s] = track.slots.splice(firstPlaceholderInstrumentIdx, 1);
+	                    track.slots.unshift(s);
+	                }
+	            } else {
+	                const ph = makePlaceholderSlot(track.id, 'instrument');
+	                track.slots.unshift(ph);
+	                slotsByInstanceId.set(ph.instanceId, ph);
+	            }
+
+	            // Ensure exactly one insert placeholder at the end.
+	            const insertPlaceholders = track.slots.filter((s) => s && s.placeholder && s.role === 'insert');
+	            if (insertPlaceholders.length === 0) {
+	                const ph = makePlaceholderSlot(track.id, 'insert');
+	                track.slots.push(ph);
+	                slotsByInstanceId.set(ph.instanceId, ph);
+	            } else {
+	                // Keep only the last one.
+	                const last = insertPlaceholders[insertPlaceholders.length - 1];
+	                track.slots = track.slots.filter((s) => !(s && s.placeholder && s.role === 'insert' && s !== last));
+	                // Ensure it is last.
+	                const lastIdx = track.slots.findIndex((s) => s === last);
+	                if (lastIdx !== track.slots.length - 1) {
+	                    track.slots.splice(lastIdx, 1);
+	                    track.slots.push(last);
+	                }
+	                slotsByInstanceId.set(last.instanceId, last);
+	            }
+
+	            // If the last non-placeholder slot was filled, ensure we still have a trailing placeholder.
+	            if (track.slots.length > 0) {
+	                const last = track.slots[track.slots.length - 1];
+	                if (last && !last.placeholder) {
+	                    const ph = makePlaceholderSlot(track.id, 'insert');
+	                    track.slots.push(ph);
+	                    slotsByInstanceId.set(ph.instanceId, ph);
+	                }
+	            }
+	        }
+
+	        async function fillPlaceholderSlot(placeholderInstanceId, newPluginPath) {
+	            const ph = slotsByInstanceId.get(placeholderInstanceId);
+	            if (!ph || !ph.placeholder) return;
+	            const track = ph.trackId ? getTrack(ph.trackId) : null;
+	            if (!track) return;
+	            const idx = (track.slots || []).findIndex((s) => s && s.instanceId === placeholderInstanceId);
+	            if (idx < 0) return;
+
+	            const meta = pluginsByPath.get(newPluginPath);
+	            if (!meta) throw new Error(`Unknown plugin: ${newPluginPath}`);
+
+	            // Remove placeholder first, then insert the real plugin at that index.
+	            track.slots.splice(idx, 1);
+	            slotsByInstanceId.delete(placeholderInstanceId);
+
+	            await addPluginToRack(newPluginPath, meta.name, {
+	                trackId: track.id,
+	                instanceId: placeholderInstanceId,
+	                insertIndex: idx,
+	                suppressUrlUpdate: true,
+	                expanded: ph.role === 'instrument'
+	            });
+
+	            ensureTrackSlots(track);
+	            renderRack();
+	            rebuildAudioGraph();
+	        }
+
+	        function rebuildTrackIndexes(track) {
+	            if (!track || !track.clip) return;
+	            const steps = getClipSteps();
+	            const notesByStep = Array.from({ length: steps }, () => []);
+	            const automationByStep = Array.from({ length: steps }, () => []);
+
+	            for (const n of track.clip.notes || []) {
+	                if (!n) continue;
+	                const s = Number(n.step);
+	                if (!Number.isFinite(s) || s < 0 || s >= steps) continue;
+	                notesByStep[s].push(n);
+	            }
+	            for (const a of track.clip.automation || []) {
+	                if (!a) continue;
+	                const s = Number(a.step);
+	                if (!Number.isFinite(s) || s < 0 || s >= steps) continue;
+	                automationByStep[s].push(a);
+	            }
+
+	            track._notesByStep = notesByStep;
+	            track._automationByStep = automationByStep;
+	        }
+
+	        function rebuildAllTrackIndexes() {
+	            for (const t of project.tracks) rebuildTrackIndexes(t);
+	        }
+
+	        function serializeProject() {
+                const encodeSlotParams = (slot) => {
+                    const m = slot && slot.paramValues;
+                    if (!m || typeof m.entries !== 'function') return [];
+                    const out = [];
+                    for (const [k, v] of m.entries()) {
+                        const pid = Number(k);
+                        const val = Number(v);
+                        if (!Number.isFinite(pid) || pid < 0) continue;
+                        if (!Number.isFinite(val)) continue;
+                        out.push([pid, val]);
+                    }
+                    out.sort((a, b) => a[0] - b[0]);
+                    return out;
+                };
+
+	            const doc = {
+	                schema: 'bvst.project/v2',
+	                savedAt: new Date().toISOString(),
+	                bpm: project.bpm,
+	                clipBars: project.clipBars,
+	                loopEnabled: !!project.loopEnabled,
+	                activeTrackId,
+	                playheadStep,
+	                tracks: project.tracks.map((t) => ({
+	                    id: t.id,
+	                    name: t.name,
+	                    armed: !!t.armed,
+	                    muted: !!t.muted,
+	                    solo: !!t.solo,
+	                    gain: Number.isFinite(Number(t.gain)) ? Number(t.gain) : 1.0,
+	                    clip: {
+	                        notes: Array.isArray(t.clip?.notes) ? t.clip.notes : [],
+	                        automation: Array.isArray(t.clip?.automation) ? t.clip.automation : []
+	                    },
+	                    slots: (t.slots || [])
+	                        .filter((s) => s && !s.placeholder && s.pluginPath)
+	                        .map((s) => ({
+	                        instanceId: s.instanceId,
+	                        pluginPath: s.pluginPath,
+	                        displayName: s.displayName,
+	                        bypass: !!s.bypass,
+	                        expanded: !!s.expanded,
+                            params: encodeSlotParams(s),
+                            sample: s && s.sample ? {
+                                url: s.sample.url || '',
+                                sourceType: s.sample.sourceType || '',
+                                fileName: s.sample.fileName || ''
+                            } : null
+	                    }))
+	                }))
+	            };
+	            return doc;
+	        }
+
+	        function downloadJson(filename, obj) {
+	            const json = JSON.stringify(obj, null, 2);
+	            const blob = new Blob([json], { type: 'application/json' });
+	            const url = URL.createObjectURL(blob);
+	            const a = document.createElement('a');
+	            a.href = url;
+	            a.download = filename;
+	            document.body.appendChild(a);
+	            a.click();
+	            a.remove();
+	            setTimeout(() => URL.revokeObjectURL(url), 500);
+	        }
+
+	        function destroyAllSlots() {
+	            for (const slot of getAllSlots()) {
+	                slotsByInstanceId.delete(slot.instanceId);
+	                try { slot.node.disconnect(); } catch (_) {}
+	                try { slot.analyser.disconnect(); } catch (_) {}
+	                try { slot.iframe.remove(); } catch (_) {}
+	            }
+	        }
+
+	        async function replaceSlotPlugin(instanceId, newPluginPath) {
+	            const slot = slotsByInstanceId.get(instanceId);
+	            if (!slot) return;
+	            if (!newPluginPath || newPluginPath === slot.pluginPath) return;
+
+	            const track = slot.trackId ? getTrack(slot.trackId) : null;
+	            const meta = pluginsByPath.get(newPluginPath);
+	            if (!meta) throw new Error(`Unknown plugin: ${newPluginPath}`);
+
+	            setStatus(`Replacing ${slot.displayName} → ${meta.name}...`, '#888');
+	            slot.isReplacing = true;
+	            renderRack();
+
+	            // Clear automation targeting this slot instance (param IDs may not match the new plugin).
+	            if (track && track.clip && Array.isArray(track.clip.automation)) {
+	                track.clip.automation = track.clip.automation.filter((a) => !(a && a.instanceId === slot.instanceId));
+	                rebuildTrackIndexes(track);
+	            }
+	            for (const k of Array.from(recordState.lastAutomation.keys())) {
+	                if (k.includes(`:${slot.instanceId}:`)) recordState.lastAutomation.delete(k);
+	            }
+
+	            // Tear down old resources.
+	            try { slot.node.disconnect(); } catch (_) {}
+	            try { slot.analyser.disconnect(); } catch (_) {}
+	            try { slot.iframe?.remove(); } catch (_) {}
+
+	            await ensureWorkletModules();
+	            const ctx = await ensureAudioContext();
+
+	            const synthPath = `../${newPluginPath}`;
+	            const manifestUrl = appendQuery(`${synthPath}/manifest.json`, { t: Date.now() });
+	            const manifestReq = await fetch(manifestUrl);
+	            if (!manifestReq.ok) throw new Error(`Manifest not found for '${meta.name}'`);
+	            const manifest = await manifestReq.json();
+
+	            const node = new AudioWorkletNode(ctx, 'bvst-processor', {
+	                numberOfInputs: 1,
+	                numberOfOutputs: 1,
+	                outputChannelCount: [2]
+	            });
+
+	            const wasmUrl = `${synthPath}/${manifest.components.audio_engine}`;
+	            const wasmBytes = await getWasmBytes(wasmUrl);
+	            node.port.postMessage({
+	                type: 'INIT_WASM',
+	                wasmBytes: wasmBytes.slice(0),
+	                pluginId: meta.name,
+	                manifestName: manifest.name
+	            });
+
+	            // Load patch.json for automation param discovery.
+	            let patchConfig = null;
+	            try {
+	                const patchReq = await fetch(appendQuery(`${synthPath}/patch.json`, { t: Date.now() }), { cache: 'no-store' });
+	                if (patchReq.ok) {
+	                    const patchDoc = await patchReq.json();
+	                    patchConfig = (patchDoc && patchDoc.config) ? patchDoc.config : patchDoc;
+	                }
+	            } catch (e) {
+	                console.warn('Patch load failed (automation params may be unavailable):', e);
+	            }
+	            const paramMeta = new Map();
+	            try {
+	                const modules = patchConfig && Array.isArray(patchConfig.modules) ? patchConfig.modules : [];
+	                for (const mod of modules) {
+	                    const controls = mod && Array.isArray(mod.controls) ? mod.controls : [];
+	                    for (const c of controls) {
+	                        const pid = Number(c && c.param);
+	                        if (!Number.isFinite(pid) || pid < 0) continue;
+	                        if (paramMeta.has(pid)) continue;
+	                        paramMeta.set(pid, {
+	                            paramId: pid,
+	                            controlId: c.id,
+	                            label: c.label,
+	                            type: c.type,
+	                            options: c.options,
+	                            min: c.min,
+	                            max: c.max,
+	                            curve: c.curve || 'linear'
+	                        });
+	                    }
+	                }
+	            } catch (_) {}
+
+	            const iframe = document.createElement('iframe');
+	            iframe.src = appendQuery(`${synthPath}/${manifest.components.ui_html}`, { t: Date.now(), instanceId: slot.instanceId, hostMidi: 1 });
+
+	            // Mutate the existing slot object to keep instanceId stable.
+	            slot.pluginPath = newPluginPath;
+	            slot.displayName = meta.name;
+	            slot.manifest = manifest;
+	            slot.type = meta.type || manifest.type;
+	            slot.category = meta.category;
+	            slot.subgroup = meta.subgroup;
+	            slot.isInstrument =
+	                (String(meta.category || '').toLowerCase() === 'instruments' ||
+	                 String(meta.subgroup || '') === 'Synths' ||
+	                 String(meta.subgroup || '') === 'Samplers' ||
+	                 String(meta.subgroup || '') === 'Sequencers' ||
+	                 String(newPluginPath || '').startsWith('Plugins/Instruments/') ||
+	                 String(newPluginPath || '').startsWith('Synths/') ||
+	                 String(manifest?.type || '').toLowerCase() === 'instrument');
+	            slot.node = node;
+	            slot.iframe = iframe;
+	            slot.analyser = ctx.createAnalyser();
+	            slot.analyser.fftSize = 2048;
+	            slot.paramMeta = paramMeta;
+                slot.paramValues = new Map();
+                slot.sample = null;
+	            slot.ready = false;
+	            slot.guiLoaded = false;
+	            slot.visMode = 'off';
+	            slot._visFloat = null;
+	            slot._visByte = null;
+	            // Keep expanded if it was expanded; otherwise default based on role.
+	            if (slot.expanded === undefined) slot.expanded = isInstrumentSlot(slot);
+	            if (isInstrumentSlot(slot)) slot.expanded = true;
+
+		            iframe.onload = () => {
+		                slot.guiLoaded = true;
+		                if (slot.ready && iframe.contentWindow) {
+		                    iframe.contentWindow.postMessage({ type: 'BVST_READY', instanceId: slot.instanceId }, '*');
+		                    broadcastHostMidiStatus(iframe.contentWindow);
+		                }
+	                    maybeApplySlotGuiParams(slot);
+		            };
+
+		            node.port.onmessage = (e) => {
+		                const data = e && e.data ? e.data : {};
+		                if (data.type === 'READY') {
+		                    slot.ready = true;
+		                    setStatus(`Running: ${slot.displayName}`, '#0f0');
+			                    if (slot.guiLoaded && slot.iframe.contentWindow) {
+			                        slot.iframe.contentWindow.postMessage({ type: 'BVST_READY', instanceId: slot.instanceId }, '*');
+			                        broadcastHostMidiStatus(slot.iframe.contentWindow);
+			                    }
+                            maybeApplySlotNodeParams(slot);
+                            maybeApplySlotGuiParams(slot);
+                            if (slot.pendingSampleUrl) {
+                                const url = String(slot.pendingSampleUrl || '').trim();
+                                slot.pendingSampleUrl = null;
+                                if (url) {
+                                    loadSampleUrlIntoSlot(slot, url)
+                                        .then(() => scheduleDraftSave())
+                                        .catch((e) => console.warn('Sample restore failed:', e));
+                                }
+                            }
+		                    requestRackRender();
+                            scheduleDraftSave();
+		                } else if (data.type === 'ERROR') {
+		                    setStatus(`Error (${slot.displayName}): ${data.error}`, '#f44');
+		                }
+		            };
+
+	            slot.isReplacing = false;
+	            if (!isProjectLoading) {
+	                rebuildAudioGraph();
+	                renderRack();
+	                populateAutomationSelectors();
+	                drawAutomationLane();
+                    scheduleDraftSave();
+	            }
+	            setStatus(`Replaced slot → ${slot.displayName}`, '#0f0');
+	        }
+
+	        async function loadProjectDocument(doc) {
+	            stopTransport();
+	            stopMidi();
+	            isProjectLoading = true;
+
+	            try {
+	                destroyAllSlots();
+	                slotsByInstanceId.clear();
+	                project.tracks = [];
+
+	                project.bpm = Number.isFinite(Number(doc?.bpm)) ? Number(doc.bpm) : 120;
+	                project.clipBars = Math.max(1, Math.min(16, Math.trunc(Number(doc?.clipBars) || 1)));
+	                project.loopEnabled = !!doc?.loopEnabled;
+
+	                const bpmEl = document.getElementById('bpm');
+	                if (bpmEl) bpmEl.value = String(project.bpm);
+	                const barsEl = document.getElementById('clipBars');
+	                if (barsEl) barsEl.value = String(project.clipBars);
+	                const loopEl = document.getElementById('loopEnabled');
+	                if (loopEl) loopEl.checked = !!project.loopEnabled;
+
+	                const trackDocs = Array.isArray(doc?.tracks) ? doc.tracks : [];
+	                if (trackDocs.length === 0) {
+	                    ensureProjectDefaults();
+	                } else {
+	                    for (const td of trackDocs) {
+	                        const id = (td && typeof td.id === 'string' && td.id) ? td.id : makeTrackId();
+	                        project.tracks.push({
+	                            id,
+	                            name: (td && typeof td.name === 'string' && td.name) ? td.name : 'Track',
+	                            armed: !!td?.armed,
+	                            muted: !!td?.muted,
+	                            solo: !!td?.solo,
+	                            gain: Number.isFinite(Number(td?.gain)) ? Number(td.gain) : 1.0,
+	                            gainNode: null,
+	                            slots: [],
+	                            clip: {
+	                                notes: Array.isArray(td?.clip?.notes) ? td.clip.notes : [],
+	                                automation: Array.isArray(td?.clip?.automation) ? td.clip.automation : []
+	                            }
+	                        });
+	                    }
+	                }
+
+	                activeTrackId =
+	                    (doc && typeof doc.activeTrackId === 'string' && getTrack(doc.activeTrackId))
+	                        ? doc.activeTrackId
+	                        : (project.tracks[0] ? project.tracks[0].id : null);
+
+	                playheadStep = Math.max(0, Math.trunc(Number(doc?.playheadStep) || 0));
+	                playheadStep = Math.min(playheadStep, Math.max(0, getClipSteps() - 1));
+
+	                rebuildAllTrackIndexes();
+	                renderTrackList();
+
+	                // Switch into DAW view.
+	                document.getElementById('launcher')?.classList.add('hidden');
+	                document.getElementById('host')?.classList.add('visible');
+
+	                // Load plugin chains (sequentially for stability), then restore placeholders.
+	                for (const td of trackDocs) {
+	                    const trackId = (td && typeof td.id === 'string' && td.id) ? td.id : null;
+	                    const track = trackId ? getTrack(trackId) : null;
+	                    if (!track) continue;
+	                    track.slots = [];
+	                    const slots = Array.isArray(td?.slots) ? td.slots : [];
+	                    let insertIndex = 0;
+	                    for (const sd of slots) {
+	                        if (!sd || !sd.pluginPath) continue;
+	                        const displayName = sd.displayName || sd.pluginPath;
+	                        const instanceId = (sd.instanceId && typeof sd.instanceId === 'string') ? sd.instanceId : undefined;
+	                        await addPluginToRack(sd.pluginPath, displayName, {
+	                            trackId: track.id,
+	                            instanceId,
+	                            bypass: !!sd.bypass,
+	                            expanded: !!sd.expanded,
+	                            insertIndex,
+	                            suppressUrlUpdate: true
+	                        });
+                            const liveSlot = instanceId ? slotsByInstanceId.get(instanceId) : null;
+                            if (liveSlot) {
+                                // Restore saved param state (v2+).
+                                const params = Array.isArray(sd.params) ? sd.params : [];
+                                if (params.length > 0) {
+                                    setSlotParamMapFromArray(liveSlot, params);
+                                    liveSlot.pendingNodeParams = params;
+                                    liveSlot.pendingGuiParams = params;
+                                    maybeApplySlotNodeParams(liveSlot);
+                                    maybeApplySlotGuiParams(liveSlot);
+                                }
+
+                                // Restore sampler source URL (v2+).
+                                const url = (sd.sample && typeof sd.sample.url === 'string') ? sd.sample.url.trim() : '';
+                                const canon = canonicalizeOrdinalContentUrl(url);
+                                if (canon) {
+                                    liveSlot.pendingSampleUrl = canon;
+                                    liveSlot.sample = { url: canon, sourceType: 'url', fileName: '' };
+                                }
+                            }
+	                        insertIndex += 1;
+	                    }
+	                    ensureTrackSlots(track);
+	                }
+
+	                const t = getActiveTrack();
+	                const title = document.getElementById('hostTitle');
+	                if (title) title.innerText = t ? `BVST Rack - ${t.name}` : 'BVST Rack';
+	            } finally {
+	                isProjectLoading = false;
+	            }
+
+	            renderRack();
+	            populateAutomationSelectors();
+	            drawPianoRoll();
+	            drawAutomationLane();
+	            rebuildAudioGraph();
+
+                // Apply any deferred GUI param updates and sampler URL loads once slots are ready.
+                try {
+                    const realSlots = getAllSlots().filter((s) => s && !s.placeholder && s.node);
+                    // Give the worklets a moment to become ready before we do a final graph rebuild.
+                    const waitUntil = Date.now() + 4000;
+                    while (Date.now() < waitUntil) {
+                        const allReady = realSlots.every((s) => s.ready);
+                        if (allReady) break;
+                        await new Promise((r) => setTimeout(r, 50));
+                    }
+
+                    // Load sampler sources (sequentially, avoids decode contention).
+                    for (const s of realSlots) {
+                        if (s && s.pendingSampleUrl) {
+                            const url = String(s.pendingSampleUrl || '').trim();
+                            s.pendingSampleUrl = null;
+                            if (url) {
+                                try { await loadSampleUrlIntoSlot(s, url); } catch (e) { console.warn('Sample restore failed:', e); }
+                            }
+                        }
+                    }
+
+                    for (const s of realSlots) {
+                        maybeApplySlotNodeParams(s);
+                        maybeApplySlotGuiParams(s);
+                    }
+                    rebuildAudioGraph();
+                } catch (e) {
+                    console.warn('Post-load restore phase failed:', e);
+                }
+
+                // Persist the loaded project as the current working draft.
+                scheduleDraftSave();
+                saveDraftNow();
+	            setStatus('Project loaded', '#0f0');
+	        }
+
+		        function renderTrackList() {
+		            const el = document.getElementById('trackList');
+		            if (!el) return;
+		            ensureProjectDefaults();
+		            el.replaceChildren();
+
+		            for (let i = 0; i < project.tracks.length; i++) {
+		                const track = project.tracks[i];
+		                const channelNumber = i + 1;
+		                const pill = document.createElement('button');
+		                pill.style.padding = '6px 10px';
+		                pill.style.fontSize = '12px';
+		                pill.style.borderRadius = '999px';
+		                pill.style.border = track.id === activeTrackId ? '1px solid #0f0' : '1px solid #444';
+		                pill.style.background = track.id === activeTrackId ? '#1f2a1f' : '#333';
+		                pill.style.color = '#fff';
+		                pill.style.display = 'flex';
+		                pill.style.alignItems = 'center';
+		                pill.style.gap = '8px';
+		                pill.style.cursor = 'pointer';
+
+		                const name = document.createElement('span');
+		                name.innerText = `Ch ${channelNumber} - ${track.name}`;
+		                pill.appendChild(name);
+
+	                const arm = document.createElement('span');
+	                arm.innerText = track.armed ? 'ARM' : 'arm';
+	                arm.style.fontSize = '11px';
+	                arm.style.padding = '2px 6px';
+	                arm.style.borderRadius = '6px';
+	                arm.style.background = track.armed ? '#0a0' : '#444';
+	                arm.style.color = '#000';
+	                arm.onclick = (e) => {
+	                    e.stopPropagation();
+	                    track.armed = !track.armed;
+	                    renderTrackList();
+	                };
+	                pill.appendChild(arm);
+
+	                const solo = document.createElement('span');
+	                solo.innerText = track.solo ? 'S' : 's';
+	                solo.style.fontSize = '11px';
+	                solo.style.padding = '2px 6px';
+	                solo.style.borderRadius = '6px';
+	                solo.style.background = track.solo ? '#ff0' : '#444';
+	                solo.style.color = '#000';
+	                solo.onclick = (e) => {
+	                    e.stopPropagation();
+	                    track.solo = !track.solo;
+	                    rebuildAudioGraph();
+	                    renderTrackList();
+	                };
+	                pill.appendChild(solo);
+
+	                const mute = document.createElement('span');
+	                mute.innerText = track.muted ? 'M' : 'm';
+	                mute.style.fontSize = '11px';
+	                mute.style.padding = '2px 6px';
+	                mute.style.borderRadius = '6px';
+	                mute.style.background = track.muted ? '#f44' : '#444';
+	                mute.style.color = '#000';
+	                mute.onclick = (e) => {
+	                    e.stopPropagation();
+	                    track.muted = !track.muted;
+	                    rebuildAudioGraph();
+	                    renderTrackList();
+	                };
+	                pill.appendChild(mute);
+
+	            pill.onclick = () => {
+	                activeTrackId = track.id;
+	                activeInstanceId = null;
+	                const title = document.getElementById('hostTitle');
+		                if (title) title.innerText = `BVST Rack - ${track.name}`;
+	                renderTrackList();
+	                renderRack();
+	                drawPianoRoll();
+	                populateAutomationSelectors();
+	                drawAutomationLane();
+	                rebuildAudioGraph();
+	            };
+
+	                el.appendChild(pill);
+	            }
+	        }
+
+        function appendQuery(url, params) {
+            try {
+                const u = new URL(url, window.location.href);
+                for (const [k, v] of Object.entries(params || {})) {
+                    if (v === undefined || v === null) continue;
+                    u.searchParams.set(k, String(v));
+                }
+                return u.toString();
+            } catch (_) {
+                const q = new URLSearchParams(params || {}).toString();
+                if (!q) return url;
+                return url.includes('?') ? `${url}&${q}` : `${url}?${q}`;
+            }
+        }
+
+	        async function ensureAudioContext() {
+	            if (!audioCtx) {
+	                audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+	            }
+	            if (audioCtx.state === 'suspended') {
+	                await audioCtx.resume();
+	            }
+	            if (!masterGain) {
+	                masterGain = audioCtx.createGain();
+	                masterGain.gain.value = 1.0;
+	                masterGain.connect(audioCtx.destination);
+	            }
+	            return audioCtx;
+	        }
+
+        async function ensureWorkletModules() {
+            const ctx = await ensureAudioContext();
+            if (workletModulesLoaded) return;
+
+            const shimUrl = `scripts/worklet_shim.js?t=${Date.now()}`;
+            const processorUrl = `shared/processor_unified.js?t=${Date.now()}`;
+
+            try {
+                await ctx.audioWorklet.addModule(shimUrl);
+                await ctx.audioWorklet.addModule(processorUrl);
+                workletModulesLoaded = true;
+            } catch (e) {
+                const msg = (e && e.message) ? e.message : String(e);
+                if (!msg.includes('already') && !msg.includes('exists')) {
+                    throw new Error(`Failed to load shared processor: ${msg}`);
+                }
+                workletModulesLoaded = true;
+            }
+        }
+
+        async function getWasmBytes(wasmUrl) {
+            const key = String(wasmUrl);
+            const cached = wasmCache.get(key);
+            if (cached) return cached;
+            const wasmReq = await fetch(appendQuery(key, { t: Date.now() }));
+            if (!wasmReq.ok) throw new Error(`WASM file not found: ${key}`);
+            const bytes = await wasmReq.arrayBuffer();
+            wasmCache.set(key, bytes);
+            return bytes;
+        }
+
+        async function ensureMicSource() {
+            const ctx = await ensureAudioContext();
+            if (micStream && micSource) return { stream: micStream, source: micSource };
+
+            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+            micStream = stream;
+            micSource = ctx.createMediaStreamSource(stream);
+            return { stream: micStream, source: micSource };
+        }
+
+	        function findSlotByContentWindow(win) {
+	            for (const slot of getAllSlots()) {
+	                if (slot.iframe && slot.iframe.contentWindow === win) return slot;
+	            }
+	            return null;
+	        }
+
+        function getSlotForMessage(event) {
+            const data = event && event.data ? event.data : {};
+            const instanceId = (data && typeof data.instanceId === 'string') ? data.instanceId : null;
+            if (instanceId && slotsByInstanceId.has(instanceId)) return slotsByInstanceId.get(instanceId);
+            return findSlotByContentWindow(event.source);
+        }
+
+        let hostMessageListenerInstalled = false;
+        function ensureHostMessageListener() {
+            if (hostMessageListenerInstalled) return;
+            hostMessageListenerInstalled = true;
+
+                window.addEventListener('message', (event) => {
+                const data = event && event.data ? event.data : null;
+                if (!data || typeof data.type !== 'string') return;
+
+                if (data.type === 'BVST_POWER') {
+                    if (audioCtx && audioCtx.state === 'suspended') {
+                        audioCtx.resume().catch(() => {});
+                    }
+                    return;
+                }
+
+                const slot = getSlotForMessage(event);
+	                if (!slot) return;
+
+	                if (data.type === 'BVST_PARAM') {
+	                    slot.node?.port?.postMessage({ type: 'PARAM', id: data.id, value: data.value });
+                        if (!slot.paramValues) slot.paramValues = new Map();
+                        slot.paramValues.set(Number(data.id), Number(data.value));
+	                    const t = audioCtx ? audioCtx.currentTime : 0;
+	                    recordAutomationParam(slot, Number(data.id), Number(data.value), t);
+                        scheduleDraftSave();
+	                } else if (data.type === 'NOTE_ON') {
+	                    slot.node?.port?.postMessage({ type: 'NOTE_ON', note: data.note, velocity: data.velocity });
+	                    const track = slot.trackId ? getTrack(slot.trackId) : null;
+	                    const t = audioCtx ? audioCtx.currentTime : 0;
+	                    if (track) recordNoteOn(track, Number(data.note), Number(data.velocity) || 1.0, t);
+                        scheduleDraftSave();
+	                } else if (data.type === 'NOTE_OFF') {
+	                    slot.node?.port?.postMessage({ type: 'NOTE_OFF', note: data.note });
+	                    const track = slot.trackId ? getTrack(slot.trackId) : null;
+	                    const t = audioCtx ? audioCtx.currentTime : 0;
+	                    if (track) recordNoteOff(track, Number(data.note), t);
+                        scheduleDraftSave();
+	                } else if (data.type === 'MIDI_CC') {
+	                    slot.node?.port?.postMessage({ type: 'MIDI_CC', cc: data.cc, value: data.value });
+                } else if (data.type === 'BVST_LOAD_SAMPLE_FROM_GUI') {
+                        const samples = data.samples;
+	                    slot.node?.port?.postMessage({ type: 'LOAD_SAMPLE', samples });
+                        slot.sample = {
+                            url: canonicalizeOrdinalContentUrl(data.sourceUrl || (slot.sample && slot.sample.url) || ''),
+                            sourceType: data.sourceUrl ? 'url' : (data.fileName ? 'file' : ((slot.sample && slot.sample.sourceType) || '')),
+                            fileName: data.fileName || (slot.sample && slot.sample.fileName) || ''
+                        };
+                    setStatus(`Sample loaded into ${slot.displayName}`, '#0f0');
+                        scheduleDraftSave();
+                } else if (data.type === 'BVST_VISUALIZER_MODE') {
+                    slot.visMode = data.mode || 'off';
+                    updateVisualizerLoop();
+                }
+            });
+        }
+
+	        function updateVisualizerLoop() {
+	            const anyActive = getAllSlots().some((s) => (s.visMode && s.visMode !== 'off'));
+	            if (anyActive && !rafVisId) {
+	                rafVisId = requestAnimationFrame(visualizerLoop);
+	            } else if (!anyActive && rafVisId) {
+	                cancelAnimationFrame(rafVisId);
+	                rafVisId = null;
+	            }
+	        }
+
+	        function visualizerLoop() {
+	            for (const slot of getAllSlots()) {
+	                const mode = slot.visMode || 'off';
+	                if (mode === 'off') continue;
+	                if (!slot.analyser || !slot.iframe || !slot.iframe.contentWindow) continue;
+	                if (slot.bypass) continue;
+
+                const analyser = slot.analyser;
+                if (mode === 'scope') {
+                    if (!slot._visFloat || slot._visFloat.length !== analyser.fftSize) {
+                        slot._visFloat = new Float32Array(analyser.fftSize);
+                    }
+                    analyser.getFloatTimeDomainData(slot._visFloat);
+                    slot.iframe.contentWindow.postMessage({ type: 'BVST_VIS_DATA', instanceId: slot.instanceId, mode: 'scope', data: slot._visFloat }, '*');
+                } else if (mode === 'spectrum') {
+                    const n = analyser.frequencyBinCount;
+                    if (!slot._visByte || slot._visByte.length !== n) {
+                        slot._visByte = new Uint8Array(n);
+                    }
+                    analyser.getByteFrequencyData(slot._visByte);
+                    slot.iframe.contentWindow.postMessage({ type: 'BVST_VIS_DATA', instanceId: slot.instanceId, mode: 'spectrum', data: slot._visByte }, '*');
+                }
+            }
+            rafVisId = requestAnimationFrame(visualizerLoop);
+        }
+
+	        function rebuildAudioGraph() {
+	            if (!audioCtx) return;
+
+	            const useMic = document.getElementById('useMic')?.checked;
+	            const allSlots = getAllSlots();
+
+	            // Disconnect everything first.
+	            for (const slot of allSlots) {
+	                try { slot.node.disconnect(); } catch (_) {}
+	                try { slot.analyser.disconnect(); } catch (_) {}
+	            }
+	            for (const t of project.tracks) {
+	                if (t && t.gainNode) {
+	                    try { t.gainNode.disconnect(); } catch (_) {}
+	                }
+	            }
+	            if (micSource) {
+	                try { micSource.disconnect(); } catch (_) {}
+	            }
+
+	            // Ensure master exists.
+	            if (!masterGain) {
+	                masterGain = audioCtx.createGain();
+	                masterGain.gain.value = 1.0;
+	                masterGain.connect(audioCtx.destination);
+	            }
+
+		            const anySolo = project.tracks.some((t) => t && t.solo);
+		            const audibleTrack = (t) => t && !t.muted && (!anySolo || t.solo);
+
+		            // Reconnect per-track chains into the master bus.
+		            for (const track of project.tracks) {
+		                if (!track) continue;
+
+	                if (!track.gainNode) track.gainNode = audioCtx.createGain();
+	                track.gainNode.gain.value = audibleTrack(track) ? (Number(track.gain) || 1.0) : 0.0;
+	                try { track.gainNode.connect(masterGain); } catch (_) {}
+
+		                const chainSlots = (track.slots || []).filter((s) => s && !s.placeholder && s.node && !s.bypass);
+		                if (chainSlots.length === 0) continue;
+
+	                let chainInput = null;
+	                if (useMic && micSource && track.id === activeTrackId) {
+	                    chainInput = micSource;
+	                }
+
+	                for (let i = 0; i < chainSlots.length; i++) {
+	                    const slot = chainSlots[i];
+
+	                    if (!slot.analyser) {
+	                        slot.analyser = audioCtx.createAnalyser();
+	                        slot.analyser.fftSize = 2048;
+	                    }
+
+	                    if (chainInput) {
+	                        try { chainInput.connect(slot.node); } catch (_) {}
+	                    }
+
+	                    try { slot.node.connect(slot.analyser); } catch (_) {}
+
+	                    const nextSlot = chainSlots[i + 1];
+	                    if (nextSlot) {
+	                        chainInput = slot.analyser;
+	                    } else {
+	                        try { slot.analyser.connect(track.gainNode); } catch (_) {}
+	                    }
+	                }
+		            }
+
+		            const realSlotCount = getAllSlots().filter((s) => s && !s.placeholder && s.pluginPath).length;
+		            if (realSlotCount === 0) {
+		                setStatus('Project is empty. Add a plugin to start.', '#888');
+		                return;
+		            }
+	        }
+
+	        function clearScheduledTimeouts() {
+	            for (const id of transport.scheduledTimeouts) {
+	                try { clearTimeout(id); } catch (_) {}
+	            }
+	            transport.scheduledTimeouts = [];
+	        }
+
+	        function postToSlot(slot, msg) {
+	            if (!slot || !slot.node || !slot.node.port) return;
+	            try { slot.node.port.postMessage(msg); } catch (_) {}
+	        }
+
+	        function sendNoteOnToTrack(track, note, velocity = 1.0) {
+	            const slot = getInstrumentSlotForTrack(track);
+	            if (!slot) return false;
+	            postToSlot(slot, { type: 'NOTE_ON', note, velocity });
+	            return true;
+	        }
+
+	        function sendNoteOffToTrack(track, note) {
+	            const slot = getInstrumentSlotForTrack(track);
+	            if (!slot) return false;
+	            postToSlot(slot, { type: 'NOTE_OFF', note });
+	            return true;
+	        }
+
+	        function sendParamToInstance(instanceId, paramId, value) {
+	            const slot = slotsByInstanceId.get(instanceId);
+	            if (!slot) return false;
+	            postToSlot(slot, { type: 'PARAM', id: paramId, value });
+	            return true;
+	        }
+
+	        function scheduleStep(stepIndex, stepTimeAudio) {
+	            if (!audioCtx) return;
+	            const stepDurSec = transport.stepDurSec || getStepDurSec();
+	            const delayMs = Math.max(0, (stepTimeAudio - audioCtx.currentTime) * 1000);
+
+	            const anySolo = project.tracks.some((t) => t && t.solo);
+	            const audibleTrack = (t) => t && !t.muted && (!anySolo || t.solo);
+
+	            for (const track of project.tracks) {
+	                if (!audibleTrack(track)) continue;
+	                const clip = track.clip;
+	                if (!clip) continue;
+	                if (!track._notesByStep || !track._automationByStep) rebuildTrackIndexes(track);
+
+	                // Automation at this step (best-effort, step-quantized).
+	                const autoList = (track._automationByStep && track._automationByStep[stepIndex]) ? track._automationByStep[stepIndex] : [];
+	                for (const evt of autoList) {
+	                    if (!evt) continue;
+	                    const tid = setTimeout(() => {
+	                        sendParamToInstance(evt.instanceId, evt.paramId, evt.value);
+	                    }, delayMs);
+	                    transport.scheduledTimeouts.push(tid);
+	                }
+
+	                // Notes at this step.
+	                const noteList = (track._notesByStep && track._notesByStep[stepIndex]) ? track._notesByStep[stepIndex] : [];
+	                for (const n of noteList) {
+	                    if (!n) continue;
+	                    const note = Number(n.note);
+	                    if (!Number.isFinite(note)) continue;
+	                    const velocity = Number.isFinite(Number(n.velocity)) ? Number(n.velocity) : 1.0;
+	                    const lenSteps = Math.max(1, Math.trunc(Number(n.lenSteps) || 1));
+
+	                    const onId = setTimeout(() => {
+	                        if (!transport.playing) return;
+	                        if (sendNoteOnToTrack(track, note, velocity)) {
+	                            transport.activeNotes.add(`${track.id}:${note}`);
+	                        }
+	                    }, delayMs);
+	                    transport.scheduledTimeouts.push(onId);
+
+	                    const offDelayMs = delayMs + (lenSteps * stepDurSec * 1000);
+	                    const offId = setTimeout(() => {
+	                        if (!transport.playing) return;
+	                        if (sendNoteOffToTrack(track, note)) {
+	                            transport.activeNotes.delete(`${track.id}:${note}`);
+	                        }
+	                    }, offDelayMs);
+	                    transport.scheduledTimeouts.push(offId);
+	                }
+	            }
+	        }
+
+	        async function startTransport() {
+	            await ensureAudioContext();
+	            transport.stepDurSec = getStepDurSec();
+	            clearScheduledTimeouts();
+	            transport.activeNotes.clear();
+
+	            transport.playing = true;
+	            transport.startAudioTime = audioCtx.currentTime + 0.05;
+	            transport.playStartStep = playheadStep;
+	            transport.nextScheduleStep = playheadStep;
+	            transport.nextScheduleTime = transport.startAudioTime;
+
+		            setStatus(transport.recording ? 'Recording...' : 'Playing...', '#0f0');
+	            updateTransportButtons();
+	            transportTick();
+	        }
+
+	        function stopTransport() {
+	            transport.playing = false;
+	            clearScheduledTimeouts();
+
+	            // Best-effort: turn off any notes we believe we turned on.
+	            for (const key of Array.from(transport.activeNotes)) {
+	                const [trackId, noteStr] = key.split(':');
+	                const track = getTrack(trackId);
+	                const note = Number(noteStr);
+	                if (track && Number.isFinite(note)) sendNoteOffToTrack(track, note);
+	            }
+	            transport.activeNotes.clear();
+	            recordState.activeNotes.clear();
+
+	            if (transport.rafId) cancelAnimationFrame(transport.rafId);
+	            transport.rafId = null;
+	            setStatus('Stopped', '#888');
+	            updateTransportButtons();
+	            drawPianoRoll();
+	        }
+
+	        function transportTick() {
+	            if (!transport.playing || !audioCtx) return;
+
+	            const lookaheadSec = 0.15;
+	            const stepDurSec = transport.stepDurSec || getStepDurSec();
+	            const now = audioCtx.currentTime;
+	            const loopSteps = getClipSteps();
+
+	            while (transport.nextScheduleTime < now + lookaheadSec) {
+	                scheduleStep(transport.nextScheduleStep, transport.nextScheduleTime);
+
+	                transport.nextScheduleStep += 1;
+	                if (project.loopEnabled && transport.nextScheduleStep >= loopSteps) {
+	                    transport.nextScheduleStep = 0;
+	                }
+	                transport.nextScheduleTime += stepDurSec;
+	            }
+
+	            // Update playhead (visual only) based on audio time.
+	            const elapsed = Math.max(0, now - transport.startAudioTime);
+	            const stepsElapsed = Math.floor(elapsed / stepDurSec);
+	            let newStep = transport.playStartStep + stepsElapsed;
+	            if (project.loopEnabled) newStep = ((newStep % loopSteps) + loopSteps) % loopSteps;
+	            else newStep = Math.min(loopSteps - 1, newStep);
+	            playheadStep = newStep;
+
+	            drawPianoRoll();
+	            transport.rafId = requestAnimationFrame(transportTick);
+	        }
+
+	        function toggleRecording() {
+	            transport.recording = !transport.recording;
+	            if (transport.recording) {
+	                recordState.activeNotes.clear();
+	                recordState.lastAutomation.clear();
+	            }
+	            updateTransportButtons();
+	            setStatus(transport.recording ? 'Record armed' : 'Record off', transport.recording ? '#f44' : '#888');
+	        }
+
+	        function updateTransportButtons() {
+	            const play = document.getElementById('btnPlay');
+	            const stop = document.getElementById('btnStop');
+	            const rec = document.getElementById('btnRec');
+	            if (play) play.style.background = transport.playing ? '#0a0' : '#444';
+	            if (stop) stop.style.background = transport.playing ? '#444' : '#222';
+	            if (rec) rec.style.background = transport.recording ? '#f44' : '#600';
+	        }
+
+	        function initPianoRoll() {
+	            const canvas = document.getElementById('pianoRoll');
+	            if (!canvas) return;
+	            pianoRoll.canvas = canvas;
+	            pianoRoll.ctx = canvas.getContext('2d');
+
+	            const resize = () => resizePianoRollCanvas();
+	            window.addEventListener('resize', resize);
+	            resize();
+
+	            canvas.addEventListener('mousedown', (e) => {
+	                pianoRoll.isPointerDown = true;
+	                handlePianoRollPointer(e, true);
+	            });
+	            window.addEventListener('mouseup', () => {
+	                pianoRoll.isPointerDown = false;
+	                pianoRoll.paintMode = null;
+	                pianoRoll.lastPaintKey = null;
+	            });
+	            canvas.addEventListener('mousemove', (e) => {
+	                if (!pianoRoll.isPointerDown) return;
+	                handlePianoRollPointer(e, false);
+	            });
+	        }
+
+	        function initAutomationUI() {
+	            const canvas = document.getElementById('automationLane');
+	            if (!canvas) return;
+	            automationUI.canvas = canvas;
+	            automationUI.ctx = canvas.getContext('2d');
+
+	            const resize = () => resizeAutomationCanvas();
+	            window.addEventListener('resize', resize);
+	            resize();
+
+	            canvas.addEventListener('mousedown', (e) => {
+	                automationUI.isPointerDown = true;
+	                handleAutomationPointer(e, true);
+	            });
+	            window.addEventListener('mouseup', () => {
+	                automationUI.isPointerDown = false;
+	                automationUI.lastPaintKey = null;
+	            });
+	            canvas.addEventListener('mousemove', (e) => {
+	                if (!automationUI.isPointerDown) return;
+	                handleAutomationPointer(e, false);
+	            });
+	        }
+
+	        function resizeAutomationCanvas() {
+	            if (!automationUI.canvas || !automationUI.ctx) return;
+	            const rect = automationUI.canvas.getBoundingClientRect();
+	            const dpr = window.devicePixelRatio || 1;
+	            const w = Math.max(300, Math.floor(rect.width * dpr));
+	            const h = Math.max(90, Math.floor(rect.height * dpr));
+	            if (automationUI.canvas.width !== w) automationUI.canvas.width = w;
+	            if (automationUI.canvas.height !== h) automationUI.canvas.height = h;
+	            drawAutomationLane();
+	        }
+
+	        function getSelectedAutomationTarget() {
+	            const pluginSel = document.getElementById('autoPlugin');
+	            const paramSel = document.getElementById('autoParam');
+	            const instanceId = pluginSel && pluginSel.value ? pluginSel.value : null;
+	            const paramId = paramSel && paramSel.value ? Number(paramSel.value) : null;
+	            if (!instanceId || !Number.isFinite(paramId)) return null;
+	            return { instanceId, paramId };
+	        }
+
+	        function getParamMeta(instanceId, paramId) {
+	            const slot = slotsByInstanceId.get(instanceId);
+	            if (!slot || !slot.paramMeta) return null;
+	            return slot.paramMeta.get(paramId) || null;
+	        }
+
+	        function valueFromNorm(norm, meta) {
+	            const t = Math.max(0, Math.min(1, norm));
+	            if (!meta) return t;
+	            const min = Number.isFinite(Number(meta.min)) ? Number(meta.min) : 0;
+	            const max = Number.isFinite(Number(meta.max)) ? Number(meta.max) : 1;
+	            if (meta.curve === 'log' && min > 0 && max > 0) {
+	                return min * Math.pow(max / min, t);
+	            }
+	            return min + (max - min) * t;
+	        }
+
+	        function normFromValue(value, meta) {
+	            if (!meta) return 0.5;
+	            const min = Number.isFinite(Number(meta.min)) ? Number(meta.min) : 0;
+	            const max = Number.isFinite(Number(meta.max)) ? Number(meta.max) : 1;
+	            if (meta.curve === 'log' && min > 0 && max > 0 && value > 0) {
+	                const ratio = max / min;
+	                if (ratio <= 0) return 0;
+	                return Math.max(0, Math.min(1, Math.log(value / min) / Math.log(ratio)));
+	            }
+	            if (max === min) return 0;
+	            return Math.max(0, Math.min(1, (value - min) / (max - min)));
+	        }
+
+	        function handleAutomationPointer(e, isDown) {
+	            if (!automationUI.canvas) return;
+	            const target = getSelectedAutomationTarget();
+	            const track = getActiveTrack();
+	            if (!target || !track || !track.clip) return;
+
+	            const rect = automationUI.canvas.getBoundingClientRect();
+	            const dpr = window.devicePixelRatio || 1;
+	            const x = (e.clientX - rect.left) * dpr;
+	            const y = (e.clientY - rect.top) * dpr;
+
+	            const steps = getClipSteps();
+	            const cellW = automationUI.canvas.width / steps;
+	            let step = Math.floor(x / cellW);
+	            step = Math.max(0, Math.min(steps - 1, step));
+	            const stepSize = getQuantizeStepSize();
+	            step = Math.floor(step / stepSize) * stepSize;
+
+	            // Normalized y (top=1, bottom=0)
+	            const norm = 1 - Math.max(0, Math.min(1, y / automationUI.canvas.height));
+	            const meta = getParamMeta(target.instanceId, target.paramId);
+	            const value = valueFromNorm(norm, meta);
+
+	            const key = `${step}`;
+	            if (!isDown && automationUI.lastPaintKey === key) return;
+	            automationUI.lastPaintKey = key;
+
+ 	            if (e.shiftKey) {
+ 	                // Clear at step
+ 	                track.clip.automation = (track.clip.automation || []).filter((a) => !(a && a.step === step && a.instanceId === target.instanceId && a.paramId === target.paramId));
+ 	                drawAutomationLane();
+                    scheduleDraftSave();
+ 	                return;
+ 	            }
+
+	            // Replace existing point at this step, else insert.
+	            const list = track.clip.automation || (track.clip.automation = []);
+	            const idx = list.findIndex((a) => a && a.step === step && a.instanceId === target.instanceId && a.paramId === target.paramId);
+	            if (idx >= 0) list[idx].value = value;
+	            else list.push({ step, instanceId: target.instanceId, paramId: target.paramId, value });
+
+	            // If playing, apply immediately for audible feedback.
+	            if (transport.playing) {
+	                sendParamToInstance(target.instanceId, target.paramId, value);
+	            }
+
+ 	            rebuildTrackIndexes(track);
+ 	            drawAutomationLane();
+                scheduleDraftSave();
+ 	        }
+
+	        function populateAutomationSelectors() {
+	            const track = getActiveTrack();
+	            const pluginSel = document.getElementById('autoPlugin');
+	            const paramSel = document.getElementById('autoParam');
+	            if (!pluginSel || !paramSel) return;
+
+	            pluginSel.replaceChildren();
+	            paramSel.replaceChildren();
+
+	            if (!track) {
+	                const o = document.createElement('option');
+	                o.value = '';
+	                o.innerText = 'No track';
+	                pluginSel.appendChild(o);
+	                pluginSel.disabled = true;
+	                paramSel.disabled = true;
+	                drawAutomationLane();
+	                return;
+	            }
+
+		            const slots = (track.slots || []).filter((s) => s && !s.placeholder);
+		            if (slots.length === 0) {
+		                const o = document.createElement('option');
+		                o.value = '';
+		                o.innerText = 'No plugins';
+		                pluginSel.appendChild(o);
+		                pluginSel.disabled = true;
+		                paramSel.disabled = true;
+		                drawAutomationLane();
+		                return;
+		            }
+
+	            for (const slot of slots) {
+	                const o = document.createElement('option');
+	                o.value = slot.instanceId;
+	                o.innerText = slot.displayName;
+	                pluginSel.appendChild(o);
+	            }
+	            pluginSel.disabled = false;
+
+	            const choosePlugin = (instanceId) => {
+	                const slot = slotsByInstanceId.get(instanceId);
+	                paramSel.replaceChildren();
+	                if (!slot || !slot.paramMeta || slot.paramMeta.size === 0) {
+	                    const o = document.createElement('option');
+	                    o.value = '';
+	                    o.innerText = 'No params';
+	                    paramSel.appendChild(o);
+	                    paramSel.disabled = true;
+	                    drawAutomationLane();
+	                    return;
+	                }
+	                const params = Array.from(slot.paramMeta.values()).slice().sort((a, b) => (a.paramId ?? 0) - (b.paramId ?? 0));
+	                for (const p of params) {
+	                    const o = document.createElement('option');
+	                    o.value = String(p.paramId);
+	                    o.innerText = `${p.label || p.controlId || 'Param'} (#${p.paramId})`;
+	                    paramSel.appendChild(o);
+	                }
+	                paramSel.disabled = false;
+	                if (!automationUI.activeInstanceId) automationUI.activeInstanceId = instanceId;
+	                automationUI.activeParamId = Number(paramSel.value);
+	                drawAutomationLane();
+	            };
+
+	            pluginSel.onchange = () => {
+	                automationUI.activeInstanceId = pluginSel.value;
+	                automationUI.activeParamId = null;
+	                choosePlugin(pluginSel.value);
+	            };
+	            paramSel.onchange = () => {
+	                automationUI.activeParamId = Number(paramSel.value);
+	                drawAutomationLane();
+	            };
+
+	            // Keep previous selection if possible.
+	            const prevInst = automationUI.activeInstanceId;
+	            const prevParam = automationUI.activeParamId;
+	            if (prevInst && Array.from(pluginSel.options).some((o) => o.value === prevInst)) {
+	                pluginSel.value = prevInst;
+	            }
+	            choosePlugin(pluginSel.value);
+	            if (prevParam !== null && Array.from(paramSel.options).some((o) => Number(o.value) === prevParam)) {
+	                paramSel.value = String(prevParam);
+	                automationUI.activeParamId = prevParam;
+	            }
+	            drawAutomationLane();
+	        }
+
+	        function drawAutomationLane() {
+	            if (!automationUI.canvas || !automationUI.ctx) return;
+	            const ctx = automationUI.ctx;
+	            const w = automationUI.canvas.width;
+	            const h = automationUI.canvas.height;
+	            const steps = getClipSteps();
+	            const cellW = w / steps;
+
+	            ctx.clearRect(0, 0, w, h);
+	            ctx.fillStyle = '#111';
+	            ctx.fillRect(0, 0, w, h);
+
+	            // Grid
+	            for (let s = 0; s <= steps; s++) {
+	                const x = Math.floor(s * cellW) + 0.5;
+	                const barStep = project.stepsPerBar;
+	                ctx.strokeStyle = (s % barStep === 0)
+	                    ? 'rgba(0,255,0,0.28)'
+	                    : (s % 4 === 0) ? 'rgba(0,255,0,0.18)' : 'rgba(255,255,255,0.08)';
+	                ctx.beginPath();
+	                ctx.moveTo(x, 0);
+	                ctx.lineTo(x, h);
+	                ctx.stroke();
+	            }
+
+	            const target = getSelectedAutomationTarget();
+	            const track = getActiveTrack();
+	            if (!target || !track || !track.clip) {
+	                // Playhead only
+	                const px = (playheadStep % steps) * cellW;
+	                ctx.fillStyle = transport.playing ? 'rgba(255,0,0,0.65)' : 'rgba(255,255,255,0.12)';
+	                ctx.fillRect(px, 0, Math.max(2, cellW * 0.05), h);
+	                return;
+	            }
+
+	            const meta = getParamMeta(target.instanceId, target.paramId);
+	            const points = (track.clip.automation || []).filter((a) => a && a.instanceId === target.instanceId && a.paramId === target.paramId);
+
+	            // Draw line (step points).
+	            ctx.strokeStyle = 'rgba(0,180,255,0.85)';
+	            ctx.lineWidth = 2;
+	            ctx.beginPath();
+	            let first = true;
+	            for (let s = 0; s < steps; s++) {
+	                const pt = points.find((p) => p.step === s);
+	                if (!pt) continue;
+	                const norm = normFromValue(Number(pt.value), meta);
+	                const x = (s + 0.5) * cellW;
+	                const y = (1 - norm) * h;
+	                if (first) { ctx.moveTo(x, y); first = false; }
+	                else ctx.lineTo(x, y);
+	            }
+	            ctx.stroke();
+
+	            // Draw points
+	            for (const pt of points) {
+	                const s = Number(pt.step);
+	                if (!Number.isFinite(s) || s < 0 || s >= steps) continue;
+	                const norm = normFromValue(Number(pt.value), meta);
+	                const x = (s + 0.5) * cellW;
+	                const y = (1 - norm) * h;
+	                ctx.fillStyle = 'rgba(0,180,255,0.95)';
+	                ctx.beginPath();
+	                ctx.arc(x, y, 4, 0, Math.PI * 2);
+	                ctx.fill();
+	            }
+
+	            // Playhead
+	            const px = (playheadStep % steps) * cellW;
+	            ctx.fillStyle = transport.playing ? 'rgba(255,0,0,0.65)' : 'rgba(255,255,255,0.12)';
+	            ctx.fillRect(px, 0, Math.max(2, cellW * 0.05), h);
+
+	            // Label (min/max)
+	            if (meta && Number.isFinite(Number(meta.min)) && Number.isFinite(Number(meta.max))) {
+	                ctx.fillStyle = 'rgba(255,255,255,0.35)';
+	                ctx.font = `${Math.max(10, Math.floor(h * 0.12))}px sans-serif`;
+		                ctx.fillText(`${meta.min} ... ${meta.max}${meta.curve === 'log' ? ' (log)' : ''}`, 8, 16);
+	            }
+	        }
+
+	        function resizePianoRollCanvas() {
+	            if (!pianoRoll.canvas || !pianoRoll.ctx) return;
+	            const rect = pianoRoll.canvas.getBoundingClientRect();
+	            const dpr = window.devicePixelRatio || 1;
+	            const w = Math.max(300, Math.floor(rect.width * dpr));
+	            const h = Math.max(160, Math.floor(rect.height * dpr));
+	            if (pianoRoll.canvas.width !== w) pianoRoll.canvas.width = w;
+	            if (pianoRoll.canvas.height !== h) pianoRoll.canvas.height = h;
+	            drawPianoRoll();
+	        }
+
+	        function getQuantizeStepsPerBar() {
+	            const sel = document.getElementById('quantize');
+	            const v = sel ? Number(sel.value) : 16;
+	            if (v === 4 || v === 8 || v === 16) return v;
+	            return 16;
+	        }
+
+	        function getQuantizeStepSize() {
+	            // project.stepsPerBar is fixed at 16; quantize=8 means step size 2, etc.
+	            const q = getQuantizeStepsPerBar();
+	            return Math.max(1, Math.floor(project.stepsPerBar / q));
+	        }
+
+	        function getActiveClip() {
+	            const t = getActiveTrack();
+	            return t ? t.clip : null;
+	        }
+
+	        function findNoteAt(clip, step, note) {
+	            if (!clip || !Array.isArray(clip.notes)) return -1;
+	            return clip.notes.findIndex((n) => n && n.step === step && n.note === note);
+	        }
+
+	        function handlePianoRollPointer(e, isDown) {
+	            if (!pianoRoll.canvas) return;
+	            const clip = getActiveClip();
+	            if (!clip) return;
+
+	            const rect = pianoRoll.canvas.getBoundingClientRect();
+	            const dpr = window.devicePixelRatio || 1;
+	            const x = (e.clientX - rect.left) * dpr;
+	            const y = (e.clientY - rect.top) * dpr;
+
+	            const steps = getClipSteps();
+	            const pitches = (pianoRoll.pitchMax - pianoRoll.pitchMin + 1);
+	            const cellW = pianoRoll.canvas.width / steps;
+	            const cellH = pianoRoll.canvas.height / pitches;
+
+	            let step = Math.floor(x / cellW);
+	            let row = Math.floor(y / cellH);
+	            step = Math.max(0, Math.min(steps - 1, step));
+	            row = Math.max(0, Math.min(pitches - 1, row));
+
+	            const note = pianoRoll.pitchMax - row;
+	            const stepSize = getQuantizeStepSize();
+	            step = Math.floor(step / stepSize) * stepSize;
+
+	            // Shift-click sets playhead (when not playing)
+	            if (e.shiftKey && !transport.playing) {
+	                playheadStep = step;
+	                drawPianoRoll();
+	                return;
+	            }
+
+	            const key = `${step}:${note}`;
+	            if (!isDown && pianoRoll.lastPaintKey === key) return;
+	            pianoRoll.lastPaintKey = key;
+
+	            const idx = findNoteAt(clip, step, note);
+	            if (isDown) {
+	                pianoRoll.paintMode = idx >= 0 ? 'erase' : 'add';
+	            }
+
+	            if (pianoRoll.paintMode === 'erase') {
+	                if (idx >= 0) clip.notes.splice(idx, 1);
+	            } else {
+	                if (idx < 0) {
+	                    clip.notes.push({ step, note, lenSteps: stepSize, velocity: 1.0 });
+	                }
+	            }
+
+	            const track = getActiveTrack();
+	            if (track) rebuildTrackIndexes(track);
+	            drawPianoRoll();
+                scheduleDraftSave();
+	        }
+
+	        function drawPianoRoll() {
+	            if (!pianoRoll.canvas || !pianoRoll.ctx) return;
+	            const ctx = pianoRoll.ctx;
+	            const w = pianoRoll.canvas.width;
+	            const h = pianoRoll.canvas.height;
+
+	            const steps = getClipSteps();
+	            const pitches = (pianoRoll.pitchMax - pianoRoll.pitchMin + 1);
+	            const cellW = w / steps;
+	            const cellH = h / pitches;
+
+	            // Background
+	            ctx.clearRect(0, 0, w, h);
+	            ctx.fillStyle = '#111';
+	            ctx.fillRect(0, 0, w, h);
+
+	            // Grid
+	            for (let s = 0; s <= steps; s++) {
+	                const x = Math.floor(s * cellW) + 0.5;
+	                const barStep = project.stepsPerBar;
+	                ctx.strokeStyle = (s % barStep === 0)
+	                    ? 'rgba(0,255,0,0.28)'
+	                    : (s % 4 === 0) ? 'rgba(0,255,0,0.18)' : 'rgba(255,255,255,0.08)';
+	                ctx.beginPath();
+	                ctx.moveTo(x, 0);
+	                ctx.lineTo(x, h);
+	                ctx.stroke();
+	            }
+	            for (let r = 0; r <= pitches; r++) {
+	                const y = Math.floor(r * cellH) + 0.5;
+	                ctx.strokeStyle = 'rgba(255,255,255,0.05)';
+	                ctx.beginPath();
+	                ctx.moveTo(0, y);
+	                ctx.lineTo(w, y);
+	                ctx.stroke();
+	            }
+
+	            // Notes
+	            const clip = getActiveClip();
+	            if (clip && Array.isArray(clip.notes)) {
+	                for (const n of clip.notes) {
+	                    if (!n) continue;
+	                    const step = Number(n.step);
+	                    const note = Number(n.note);
+	                    const lenSteps = Math.max(1, Math.trunc(Number(n.lenSteps) || 1));
+	                    if (!Number.isFinite(step) || !Number.isFinite(note)) continue;
+	                    if (note < pianoRoll.pitchMin || note > pianoRoll.pitchMax) continue;
+	                    if (step < 0 || step >= steps) continue;
+
+	                    const row = pianoRoll.pitchMax - note;
+	                    const x = step * cellW;
+	                    const y = row * cellH;
+	                    const ww = Math.min(w - x, lenSteps * cellW);
+	                    const hh = cellH;
+
+	                    ctx.fillStyle = 'rgba(0,255,0,0.65)';
+	                    ctx.fillRect(x + 1, y + 1, ww - 2, hh - 2);
+	                }
+	            }
+
+	            // Playhead
+	            const px = (playheadStep % steps) * cellW;
+	            ctx.fillStyle = transport.playing ? 'rgba(255,0,0,0.65)' : 'rgba(255,255,255,0.15)';
+	            ctx.fillRect(px, 0, Math.max(2, cellW * 0.05), h);
+
+	            const title = document.getElementById('pianoRollTitle');
+	            if (title) {
+	                const bars = Math.max(1, Math.trunc(Number(project.clipBars) || 1));
+		                title.innerText = `Piano Roll (${bars} bar${bars === 1 ? '' : 's'}, 1/16 grid) - click to toggle notes (shift-click sets playhead)`;
+	            }
+	        }
+
+	        function getArmedTracks() {
+	            return project.tracks.filter((t) => t && t.armed);
+	        }
+
+	        function getMidiTargetTracks() {
+	            const armed = getArmedTracks();
+	            const candidates = armed.length > 0 ? armed : [getActiveTrack()].filter(Boolean);
+	            // Only route to tracks that have an instrument in the chain.
+	            const withInstruments = candidates.filter((t) => !!getInstrumentSlotForTrack(t));
+	            return withInstruments.length > 0 ? withInstruments : candidates;
+	        }
+
+	        function getTransportAbsStepAt(audioTime) {
+	            const stepDurSec = transport.stepDurSec || getStepDurSec();
+	            if (!transport.playing) return 0;
+	            const elapsed = Math.max(0, audioTime - transport.startAudioTime);
+	            return Math.floor(elapsed / stepDurSec);
+	        }
+
+	        function getTransportStepAt(audioTime) {
+	            const abs = getTransportAbsStepAt(audioTime);
+	            const base = transport.playStartStep || 0;
+	            const loopSteps = getClipSteps();
+	            return ((base + abs) % loopSteps + loopSteps) % loopSteps;
+	        }
+
+	        function quantizeStep(step) {
+	            const stepSize = getQuantizeStepSize();
+	            return Math.floor(step / stepSize) * stepSize;
+	        }
+
+	        function recordNoteOn(track, note, velocity, audioTime) {
+	            if (!transport.recording || !transport.playing) return;
+	            if (!track || !track.clip) return;
+	            const absStep = getTransportAbsStepAt(audioTime);
+	            const step = quantizeStep(getTransportStepAt(audioTime));
+	            const key = `${track.id}:${note}`;
+	            recordState.activeNotes.set(key, { absStep, step, velocity });
+	        }
+
+	        function recordNoteOff(track, note, audioTime) {
+	            if (!transport.recording || !transport.playing) return;
+	            if (!track || !track.clip) return;
+	            const key = `${track.id}:${note}`;
+	            const start = recordState.activeNotes.get(key);
+	            if (!start) return;
+	            recordState.activeNotes.delete(key);
+
+	            const endAbsStep = getTransportAbsStepAt(audioTime);
+	            const lenAbs = Math.max(1, endAbsStep - start.absStep);
+	            const stepSize = getQuantizeStepSize();
+	            const lenSteps = Math.max(stepSize, Math.round(lenAbs / stepSize) * stepSize);
+
+	            // Remove existing note at this position (same pitch) before inserting, to avoid duplicates while recording.
+	            const idx = findNoteAt(track.clip, start.step, note);
+	            if (idx >= 0) track.clip.notes.splice(idx, 1);
+	            track.clip.notes.push({ step: start.step, note, lenSteps, velocity: start.velocity ?? 1.0 });
+	            rebuildTrackIndexes(track);
+	            drawPianoRoll();
+                scheduleDraftSave();
+	        }
+
+	        function recordAutomationParam(slot, paramId, value, audioTime) {
+	            if (!transport.recording || !transport.playing) return;
+	            if (!slot || !slot.trackId) return;
+	            const track = getTrack(slot.trackId);
+	            if (!track || !track.armed || !track.clip) return;
+
+	            const step = quantizeStep(getTransportStepAt(audioTime));
+	            const key = `${track.id}:${slot.instanceId}:${paramId}:${step}`;
+	            const prev = recordState.lastAutomation.get(key);
+	            if (prev !== undefined && Math.abs(prev - value) < 1e-6) return;
+	            recordState.lastAutomation.set(key, value);
+
+	            track.clip.automation.push({
+	                step,
+	                instanceId: slot.instanceId,
+	                paramId,
+	                value
+	            });
+	            rebuildTrackIndexes(track);
+                scheduleDraftSave();
+	        }
+
+		        async function initHostMidi() {
+		            const sel = document.getElementById('hostMidiIn');
+		            const led = document.getElementById('hostMidiLed');
+		            const statusEl = document.getElementById('hostMidiStatus');
+
+		            const renderFromSnapshot = () => {
+		                const snap = getHostMidiRuntimeSnapshot();
+		                let text = 'No device';
+		                let ledMode = 'off'; // off | ok | active
+
+		                if (!snap.hasDevices) {
+		                    text = 'No devices';
+		                    ledMode = 'off';
+		                } else if (!snap.selected) {
+		                    text = 'Select device';
+		                    ledMode = 'off';
+		                } else if (!snap.inMap) {
+		                    text = 'Selected device missing';
+		                    ledMode = 'off';
+		                } else if (snap.connection !== 'open') {
+		                    text = 'Selected device not open';
+		                    ledMode = 'off';
+		                } else {
+		                    const label = `${snap.manufacturer ? `${snap.manufacturer} ` : ''}${snap.name || 'device'}`.trim();
+		                    if (snap.active) {
+		                        text = `Active: ${label}`;
+		                        ledMode = 'active';
+		                    } else if (snap.verified) {
+		                        text = `Ready: ${label}`;
+		                        ledMode = 'ok';
+		                    } else {
+		                        // Conservative: don’t claim “connected” until we’ve seen recent MIDI from this device.
+		                        text = `Waiting for MIDI: ${label}`;
+		                        ledMode = 'off';
+		                    }
+		                }
+
+		                if (statusEl && statusEl.textContent !== text) statusEl.textContent = text;
+		                if (led) {
+		                    const prev = led.dataset.mode || '';
+		                    if (prev !== ledMode) {
+		                        led.dataset.mode = ledMode;
+		                        if (ledMode === 'active') {
+		                            led.style.background = '#00f0ff';
+		                            led.style.boxShadow = '0 0 8px rgba(0, 240, 255, 0.6)';
+		                        } else if (ledMode === 'ok') {
+		                            led.style.background = '#0f0';
+		                            led.style.boxShadow = 'none';
+		                        } else {
+		                            led.style.background = '#333';
+		                            led.style.boxShadow = 'none';
+		                        }
+		                    }
+		                }
+
+		                broadcastHostMidiStatus();
+		                midiLogChanged('status', { text, ledMode, snapshot: snap });
+		                midiSummary('status');
+		                midiSummaryLine('status');
+		            };
+
+		            const setMidiStatus = (text, { ok = false } = {}) => {
+		                if (statusEl) statusEl.textContent = text;
+		                if (led) {
+		                    led.style.background = ok ? '#0f0' : '#333';
+		                    led.style.boxShadow = 'none';
+		                }
+		                broadcastHostMidiStatus();
+		                midiLogChanged('status', { text, ok, snapshot: getHostMidiRuntimeSnapshot() });
+		            };
+
+		            hostMidiFlashLed = () => {
+		                // Keep instantaneous flash, but let renderFromSnapshot decide the stable state.
+		                if (led) {
+		                    led.style.background = '#00f0ff';
+		                    led.style.boxShadow = '0 0 8px rgba(0, 240, 255, 0.6)';
+		                }
+		                setTimeout(() => renderFromSnapshot(), 120);
+		            };
+
+		            const detach = () => {
+		                if (hostMidiInput) {
+		                    try { hostMidiInput.onmidimessage = null; } catch (_) {}
+		                    hostMidiInput = null;
+		                }
+		                hostMidiLastMsgAt = 0;
+		            };
+
+		            const listConnectedInputs = () => {
+		                if (!hostMidiAccess) return [];
+		                const all = Array.from(hostMidiAccess.inputs.values());
+		                // Filter out disconnected ports so the UI doesn't claim devices are attached when they're not.
+		                const connected = all.filter((p) => p && p.state === 'connected');
+		                connected.sort((a, b) => String(a?.name || '').localeCompare(String(b?.name || '')));
+		                return connected;
+		            };
+
+		            const attach = (input) => {
+		                if (!input) return;
+		                detach();
+		                hostMidiInput = input;
+		                hostMidiLastMsgAt = 0;
+		                try {
+		                    if (hostMidiInput.connection === 'closed' && typeof hostMidiInput.open === 'function') {
+		                        // Show "not open" until open completes.
+		                        renderFromSnapshot();
+		                        const before = { state: hostMidiInput.state, connection: hostMidiInput.connection };
+			                        hostMidiInput.open()
+			                            .then(() => {
+			                                midiLogChanged('open', { id: hostMidiInput.id, before, after: { state: hostMidiInput.state, connection: hostMidiInput.connection } });
+			                                midiSummary('open');
+			                                midiSummaryLine('open');
+			                                renderFromSnapshot();
+			                                broadcastHostMidiStatus();
+			                            })
+			                            .catch((e) => {
+			                                midiLogChanged('open_error', { id: hostMidiInput.id, error: e && e.message ? e.message : String(e), before, after: { state: hostMidiInput.state, connection: hostMidiInput.connection } });
+			                                midiSummary('open_error');
+			                                midiSummaryLine('open_error');
+			                                renderFromSnapshot();
+			                                broadcastHostMidiStatus();
+			                            });
+			                    }
+			                } catch (_) {}
+		                hostMidiInput.onmidimessage = onHostMidiMessage;
+		                renderFromSnapshot();
+		                midiLogChanged('attach', {
+			                    id: hostMidiInput.id,
+			                    name: hostMidiInput.name,
+			                    manufacturer: hostMidiInput.manufacturer,
+			                    state: hostMidiInput.state,
+			                    connection: hostMidiInput.connection
+		                });
+		                midiSummary('attach');
+		                midiSummaryLine('attach');
+		            };
+
+		            const buildSelect = () => {
+		                if (!sel) return;
+		                const inputs = listConnectedInputs();
+		                const prev = sel.value;
+		                const inputsSig = inputs
+		                    .map((i) => `${i.id}|${i.state}|${i.connection}|${i.manufacturer || ''}|${i.name || ''}`)
+		                    .join(',');
+		                const sig = `${inputsSig}|prev:${prev}|user:${hostMidiUserSelected}|active:${hostMidiInput ? `${hostMidiInput.id}|${hostMidiInput.state}|${hostMidiInput.connection}` : ''}`;
+		                if (sig === hostMidiRefreshSig) return;
+		                hostMidiRefreshSig = sig;
+
+		                midiLogChanged('refresh', {
+			                    inputs: inputs.map((i) => ({
+			                        id: i.id,
+			                        name: i.name,
+			                        manufacturer: i.manufacturer,
+			                        state: i.state,
+			                        connection: i.connection
+			                    })),
+			                    prev,
+			                    userSelected: hostMidiUserSelected,
+			                    selectedNow: sel.value,
+			                    currentHostInput: hostMidiInput ? { id: hostMidiInput.id, state: hostMidiInput.state, connection: hostMidiInput.connection } : null
+		                });
+		                midiSummary('refresh');
+		                midiSummaryLine('refresh');
+
+		                sel.replaceChildren();
+		                const none = document.createElement('option');
+		                none.value = '';
+		                none.innerText = 'None';
+		                sel.appendChild(none);
+
+		                for (const input of inputs) {
+		                    const o = document.createElement('option');
+		                    o.value = input.id;
+		                    o.innerText = input.name || input.id;
+		                    sel.appendChild(o);
+		                }
+		                sel.disabled = false;
+
+		                const hasPrev = hostMidiUserSelected && prev && Array.from(sel.options).some((o) => o.value === prev);
+		                if (hasPrev) sel.value = prev;
+		                else sel.value = '';
+
+		                // Never auto-select a device: require explicit user selection to avoid false positives.
+
+		                // Keep hostMidiInput consistent with selection + connectivity.
+		                if (sel.value) {
+		                    const chosen = inputs.find((i) => i.id === sel.value);
+		                    if (chosen) {
+		                        if (!hostMidiInput || hostMidiInput.id !== chosen.id) attach(chosen);
+		                    } else {
+		                        detach();
+		                        renderFromSnapshot();
+		                    }
+		                } else {
+		                    detach();
+		                    renderFromSnapshot();
+		                }
+		            };
+
+		            // Initial UI reset.
+		            if (sel) {
+		                sel.replaceChildren();
+		                const opt = document.createElement('option');
+		                opt.value = '';
+		                opt.innerText = 'None';
+		                sel.appendChild(opt);
+		                sel.disabled = true;
+		            }
+		            setMidiStatus('No device');
+
+		            if (!navigator.requestMIDIAccess) {
+		                if (sel) {
+		                    sel.disabled = true;
+		                    sel.options[0].innerText = 'WebMIDI unavailable';
+		                }
+		                setMidiStatus('WebMIDI unavailable');
+		                return;
+		            }
+
+		            try {
+		                hostMidiAccess = await navigator.requestMIDIAccess();
+		            } catch (e) {
+		                console.warn('WebMIDI request failed:', e);
+		                if (sel) {
+		                    sel.disabled = true;
+		                    sel.options[0].innerText = 'MIDI blocked';
+		                }
+		                setMidiStatus('MIDI blocked');
+		                return;
+		            }
+
+		            buildSelect();
+		            hostMidiAccess.onstatechange = buildSelect;
+		            midiLog('ready', {
+		                inputsAll: Array.from(hostMidiAccess.inputs.values()).map((i) => ({
+		                    id: i.id,
+		                    name: i.name,
+		                    manufacturer: i.manufacturer,
+		                    state: i.state,
+		                    connection: i.connection
+		                }))
+		            });
+
+		            sel?.addEventListener('change', () => {
+		                const id = sel.value;
+		                if (!id) {
+		                    hostMidiUserSelected = false;
+		                    detach();
+		                    renderFromSnapshot();
+		                    return;
+		                }
+		                const input = hostMidiAccess.inputs.get(id);
+		                if (!input || (input.state && input.state !== 'connected')) {
+		                    hostMidiUserSelected = false;
+		                    detach();
+		                    renderFromSnapshot();
+		                    return;
+		                }
+		                hostMidiUserSelected = true;
+		                attach(input);
+		                setStatus(`MIDI In: ${input.name || input.id}`, '#888');
+		            });
+
+		            // Fallback: some browsers miss onstatechange; rescan periodically.
+		            if (hostMidiRefreshTimer) clearInterval(hostMidiRefreshTimer);
+		            hostMidiRefreshTimer = setInterval(buildSelect, 2500);
+
+		            // Status tick: update Waiting/Ready/Active based on time since last MIDI message.
+		            if (hostMidiStatusTimer) clearInterval(hostMidiStatusTimer);
+		            hostMidiStatusTimer = setInterval(() => {
+		                // Only tick when the user has intentionally selected a device.
+		                if (!hostMidiUserSelected) return;
+		                renderFromSnapshot();
+		            }, 750);
+		        }
+
+		        function onHostMidiMessage(ev) {
+		            try { if (hostMidiFlashLed) hostMidiFlashLed(); } catch (_) {}
+		            const data = ev && ev.data ? ev.data : null;
+		            if (!data || data.length < 2) return;
+		            const status = data[0] & 0xf0;
+		            const note = data[1] & 0x7f;
+		            const vel = data.length > 2 ? (data[2] & 0x7f) : 0;
+		            const audioTime = audioCtx ? audioCtx.currentTime : 0;
+		            hostMidiLastMsgAt = Date.now();
+		            if (DEBUG_MIDI) {
+		                midiLogChanged('message', {
+			                    statusHex: `0x${status.toString(16)}`,
+			                    note,
+			                    vel,
+			                    selected: document.getElementById('hostMidiIn')?.value || '',
+			                    input: hostMidiInput ? { id: hostMidiInput.id, state: hostMidiInput.state, connection: hostMidiInput.connection } : null,
+			                    snap: getHostMidiRuntimeSnapshot()
+		                });
+		                midiSummary('message');
+		                midiSummaryLine('message');
+		            }
+		            // Update broadcast so plugin UIs show Active quickly.
+		            broadcastHostMidiStatus();
+
+		            // Note on/off
+		            if (status === 0x90 && vel > 0) {
+		                for (const track of getMidiTargetTracks()) {
+		                    sendNoteOnToTrack(track, note, vel / 127);
+	                    recordNoteOn(track, note, vel / 127, audioTime);
+	                }
+	            } else if (status === 0x80 || (status === 0x90 && vel === 0)) {
+	                for (const track of getMidiTargetTracks()) {
+	                    sendNoteOffToTrack(track, note);
+	                    recordNoteOff(track, note, audioTime);
+	                }
+	            }
+	        }
+
+	        var pendingRackRenderTimer = null;
+	        function requestRackRender() {
+	            if (isProjectLoading) return;
+	            // Avoid collapsing native <select> dropdowns during background updates (e.g. plugin READY).
+	            if (pendingRackRenderTimer) return;
+	            const startedAt = Date.now();
+	            const attempt = () => {
+	                pendingRackRenderTimer = null;
+	                if (isProjectLoading) return;
+	                const rackEl = document.getElementById('rack');
+	                const active = document.activeElement;
+	                const selectFocused =
+	                    !!rackEl &&
+	                    !!active &&
+	                    active.tagName === 'SELECT' &&
+	                    rackEl.contains(active);
+	                if (selectFocused && Date.now() - startedAt < 1500) {
+	                    pendingRackRenderTimer = setTimeout(attempt, 80);
+	                    return;
+	                }
+	                renderRack();
+	            };
+	            pendingRackRenderTimer = setTimeout(attempt, 0);
+	        }
+
+		        function renderRack() {
+		            const rackEl = document.getElementById('rack');
+		            if (!rackEl) return;
+		            rackEl.replaceChildren();
+
+			            const track = getActiveTrack();
+			            if (track && !isProjectLoading) ensureTrackSlots(track);
+			            const rackSlots = track ? (track.slots || []) : [];
+
+			            if (!track || rackSlots.length === 0) return;
+			            const channelNumber = Math.max(1, project.tracks.findIndex((t) => t && t.id === track.id) + 1);
+			            const channelLabel = `Ch ${channelNumber}`;
+
+			            // Main slot: reserved instrument slot at index 0 (instrument or placeholder).
+			            const mainSlot = rackSlots[0];
+			            if (mainSlot) mainSlot.expanded = true;
+
+	            // Layout: main (center/left) + stack (right)
+	            const layout = document.createElement('div');
+	            layout.style.display = 'flex';
+	            layout.style.gap = '12px';
+	            layout.style.alignItems = 'flex-start';
+	            layout.style.flexWrap = 'wrap';
+
+	            const mainCol = document.createElement('div');
+	            mainCol.style.flex = '1 1 620px';
+	            mainCol.style.minWidth = '320px';
+
+	            const stackCol = document.createElement('div');
+	            stackCol.style.flex = '0 0 340px';
+	            stackCol.style.minWidth = '280px';
+	            stackCol.style.display = 'flex';
+	            stackCol.style.flexDirection = 'column';
+	            stackCol.style.gap = '10px';
+
+	            const mkBtn = (label, onClick) => {
+	                const b = document.createElement('button');
+	                b.innerText = label;
+	                b.style.padding = '6px 10px';
+	                b.style.fontSize = '12px';
+	                b.style.background = '#444';
+	                b.style.color = '#fff';
+	                b.onclick = (e) => { e.stopPropagation(); onClick(); };
+	                return b;
+	            };
+
+		            const renderSlotCard = (slot, slotNumber, opts = {}) => {
+		                const expanded = !!(opts.forceExpanded || slot.expanded);
+		                const swapRole = opts.swapRole || null; // 'instrument' | 'insert' | null
+
+	                const wrap = document.createElement('div');
+	                wrap.style.background = slot.instanceId === activeInstanceId ? '#2d2d2d' : '#242424';
+	                wrap.style.border = slot.instanceId === activeInstanceId ? '1px solid #0f0' : '1px solid #444';
+	                wrap.style.borderRadius = '8px';
+	                wrap.style.padding = '10px';
+
+	                const header = document.createElement('div');
+	                header.style.display = 'flex';
+	                header.style.alignItems = 'center';
+	                header.style.justifyContent = 'space-between';
+	                header.style.gap = '10px';
+	                header.style.cursor = 'pointer';
+	                header.onclick = (ev) => {
+	                    // Avoid re-rendering (which collapses <select> dropdowns) when the user interacts with controls.
+	                    const t = ev && ev.target ? ev.target : null;
+	                    if (t && typeof t.closest === 'function' && t.closest('select,button,input,textarea,label,a')) return;
+	                    activeInstanceId = slot.instanceId;
+	                    renderRack();
+	                };
+
+	                const left = document.createElement('div');
+	                left.style.display = 'flex';
+	                left.style.flexDirection = 'column';
+	                left.style.alignItems = 'flex-start';
+
+	                const title = document.createElement('div');
+	                title.style.fontWeight = 'bold';
+	                title.style.color = '#eee';
+	                title.innerText = slot.displayName;
+
+		                const meta = document.createElement('div');
+		                meta.style.fontSize = '12px';
+		                meta.style.color = '#aaa';
+		                const slotLabel = Number.isFinite(Number(slotNumber)) ? `Slot ${slotNumber}` : 'Slot';
+		                const roleLabel = slot.subgroup || slot.category || slot.type || '';
+			                meta.innerText = `${channelLabel} ${slotLabel} - ${roleLabel} - ${slot.ready ? 'ready' : 'loading...'}`;
+
+	                left.appendChild(title);
+	                left.appendChild(meta);
+
+	                const right = document.createElement('div');
+	                right.style.display = 'flex';
+	                right.style.gap = '6px';
+	                right.style.flexWrap = 'wrap';
+	                right.style.justifyContent = 'flex-end';
+
+	                // Per-slot swap menu
+	                const swapSel = document.createElement('select');
+	                swapSel.className = 'bvst-select';
+	                swapSel.style.width = opts.swapWidth || '220px';
+	                swapSel.style.padding = '6px';
+	                swapSel.style.background = '#333';
+	                swapSel.style.color = '#fff';
+	                swapSel.style.border = 'none';
+	                swapSel.style.borderRadius = '4px';
+	                swapSel.disabled = !!slot.isReplacing || pluginsByPath.size === 0;
+
+		                const { groupNames, byGroup } = getSwapChoicesForSlot(slot, swapRole);
+		                if (slot.placeholder) {
+		                    const o = document.createElement('option');
+		                    o.value = '';
+		                    o.disabled = true;
+		                    o.selected = true;
+			                    o.innerText = slot.role === 'instrument' ? 'Select instrument...' : 'Add plugin...';
+		                    swapSel.appendChild(o);
+		                }
+		                for (const g of groupNames) {
+		                    const og = document.createElement('optgroup');
+		                    og.label = g;
+	                    const items = (byGroup.get(g) || []).slice().sort((a, b) => a.name.localeCompare(b.name));
+	                    for (const it of items) {
+	                        const o = document.createElement('option');
+	                        o.value = it.path;
+	                        o.innerText = it.name;
+	                        og.appendChild(o);
+	                    }
+	                    swapSel.appendChild(og);
+	                }
+	                // Ensure current plugin is selectable even if it doesn't match filter (edge cases)
+	                if (slot.pluginPath && !Array.from(swapSel.querySelectorAll('option')).some((o) => o.value === slot.pluginPath)) {
+	                    const og = document.createElement('optgroup');
+	                    og.label = 'Current';
+	                    const o = document.createElement('option');
+	                    o.value = slot.pluginPath;
+	                    o.innerText = slot.displayName;
+	                    og.appendChild(o);
+	                    swapSel.prepend(og);
+	                }
+		                if (!slot.placeholder) swapSel.value = slot.pluginPath || '';
+	                // Prevent click from bubbling to the slot header, which causes a re-render and closes the dropdown.
+	                const stop = (e) => { try { e.stopPropagation(); } catch (_) {} };
+	                swapSel.addEventListener('pointerdown', stop);
+	                swapSel.addEventListener('mousedown', stop);
+	                swapSel.addEventListener('click', stop);
+	                swapSel.addEventListener('keydown', stop);
+
+		                swapSel.onchange = async (e) => {
+		                    e.stopPropagation();
+		                    const nextPath = swapSel.value;
+		                    try {
+		                        if (slot.placeholder) {
+		                            await fillPlaceholderSlot(slot.instanceId, nextPath);
+		                        } else {
+		                            await replaceSlotPlugin(slot.instanceId, nextPath);
+		                        }
+		                    } catch (err) {
+		                        console.error(err);
+		                        setStatus(`Swap failed: ${err && err.message ? err.message : String(err)}`, '#f44');
+		                        // restore selection
+		                        if (!slot.placeholder) swapSel.value = slot.pluginPath || '';
+		                    }
+		                };
+	                right.appendChild(swapSel);
+
+		                if (!opts.hideExpand && !slot.placeholder) {
+		                    right.appendChild(mkBtn(expanded ? 'Collapse' : 'Expand', () => {
+		                        slot.expanded = !expanded;
+		                        renderRack();
+		                    }));
+		                }
+		                if (!slot.placeholder) {
+		                    right.appendChild(mkBtn('Up', () => moveSlot(slot.instanceId, -1)));
+		                    right.appendChild(mkBtn('Down', () => moveSlot(slot.instanceId, 1)));
+		                    right.appendChild(mkBtn(slot.bypass ? 'Enable' : 'Bypass', () => toggleBypass(slot.instanceId)));
+		                    right.appendChild(mkBtn('Remove', () => removeSlot(slot.instanceId)));
+		                }
+
+	                header.appendChild(left);
+	                header.appendChild(right);
+	                wrap.appendChild(header);
+
+		                if (expanded && slot.iframe) {
+		                    slot.iframe.style.marginTop = '10px';
+		                    slot.iframe.style.height = opts.iframeHeight || '520px';
+		                    wrap.appendChild(slot.iframe);
+		                } else if (expanded && slot.placeholder) {
+		                    const msg = document.createElement('div');
+		                    msg.style.marginTop = '10px';
+		                    msg.style.color = '#888';
+		                    msg.style.fontSize = '13px';
+		                    msg.innerText = slot.role === 'instrument'
+		                        ? 'Select an instrument from the menu. This slot stays visible for the keyboard/UI.'
+		                        : 'Select a plugin to add it to the insert chain.';
+		                    wrap.appendChild(msg);
+		                }
+
+	                return wrap;
+	            };
+
+	            // Main instrument always expanded and visible.
+		            mainCol.appendChild(renderSlotCard(mainSlot, 1, { forceExpanded: true, hideExpand: true, iframeHeight: '560px', swapWidth: '260px', swapRole: 'instrument' }));
+
+		            // Stack: everything else collapsed by default, expandable.
+		            const stackSlots = rackSlots.slice(1);
+	            if (stackSlots.length === 0) {
+	                const hint = document.createElement('div');
+	                hint.style.color = '#888';
+	                hint.style.fontSize = '13px';
+	                hint.style.padding = '8px';
+	                hint.innerText = 'Add effects/utilities to build an insert chain.';
+	                stackCol.appendChild(hint);
+	            } else {
+			                for (let i = 0; i < stackSlots.length; i++) {
+			                    const slot = stackSlots[i];
+			                    if (slot.expanded === undefined) slot.expanded = false;
+			                    stackCol.appendChild(renderSlotCard(slot, i + 2, { iframeHeight: '360px', swapRole: slot.placeholder ? 'insert' : (isInstrumentSlot(slot) ? 'instrument' : 'insert') }));
+			                }
+			            }
+
+	            layout.appendChild(mainCol);
+	            layout.appendChild(stackCol);
+	            rackEl.appendChild(layout);
+
+	            populateAutomationSelectors();
+	            drawAutomationLane();
+	            return;
+
+	        }
+
+        function moveSlot(instanceId, delta) {
+	            const slots = getActiveSlots();
+	            const idx = slots.findIndex((s) => s.instanceId === instanceId);
+	            if (idx < 0) return;
+	            const next = idx + delta;
+	            if (next < 0 || next >= slots.length) return;
+	            const [slot] = slots.splice(idx, 1);
+	            slots.splice(next, 0, slot);
+	            rebuildAudioGraph();
+	            renderRack();
+	            populateAutomationSelectors();
+	            drawAutomationLane();
+                scheduleDraftSave();
+	        }
+
+	        function toggleBypass(instanceId) {
+	            const slot = slotsByInstanceId.get(instanceId);
+	            if (!slot) return;
+	            slot.bypass = !slot.bypass;
+	            rebuildAudioGraph();
+	            renderRack();
+	            populateAutomationSelectors();
+	            drawAutomationLane();
+                scheduleDraftSave();
+	        }
+
+	        function removeSlot(instanceId) {
+	            const slots = getActiveSlots();
+	            const idx = slots.findIndex((s) => s.instanceId === instanceId);
+	            if (idx < 0) return;
+	            const [slot] = slots.splice(idx, 1);
+	            slotsByInstanceId.delete(instanceId);
+	            if (activeInstanceId === instanceId) {
+	                activeInstanceId = slots.length > 0 ? slots[0].instanceId : null;
+	            }
+	            try { slot.node.disconnect(); } catch (_) {}
+	            try { slot.analyser.disconnect(); } catch (_) {}
+	            try { slot.iframe.remove(); } catch (_) {}
+	            rebuildAudioGraph();
+	            renderRack();
+	            populateAutomationSelectors();
+	            drawAutomationLane();
+                scheduleDraftSave();
+	        }
+
+	        async function addPluginToRack(pluginPath, displayName, options = {}) {
+            setStatus(`Adding ${displayName}...`, '#888');
+            await ensureWorkletModules();
+            ensureHostMessageListener();
+
+            const synthPath = `../${pluginPath}`;
+
+            const manifestUrl = appendQuery(`${synthPath}/manifest.json`, { t: Date.now() });
+            const manifestReq = await fetch(manifestUrl);
+            if (!manifestReq.ok) throw new Error(`Manifest not found for '${displayName}'`);
+            const manifest = await manifestReq.json();
+
+	            const instanceId =
+	                (options && typeof options.instanceId === 'string' && options.instanceId.trim())
+	                    ? options.instanceId.trim()
+	                    : makeInstanceId();
+            const ctx = await ensureAudioContext();
+
+            const node = new AudioWorkletNode(ctx, 'bvst-processor', {
+                numberOfInputs: 1,
+                numberOfOutputs: 1,
+                outputChannelCount: [2]
+            });
+
+            const wasmUrl = `${synthPath}/${manifest.components.audio_engine}`;
+            const wasmBytes = await getWasmBytes(wasmUrl);
+
+            node.port.postMessage({
+                type: 'INIT_WASM',
+                wasmBytes: wasmBytes.slice(0),
+                pluginId: displayName,
+                manifestName: manifest.name
+            });
+
+	            const iframe = document.createElement('iframe');
+	            iframe.src = appendQuery(`${synthPath}/${manifest.components.ui_html}`, { t: Date.now(), instanceId, hostMidi: 1 });
+
+		            ensureProjectDefaults();
+		            const track =
+		                (options && typeof options.trackId === 'string' && options.trackId && getTrack(options.trackId))
+		                    ? getTrack(options.trackId)
+		                    : getActiveTrack();
+		            if (!track) throw new Error('No active track');
+
+	            const meta = pluginsByPath.get(pluginPath) || {};
+
+	            // Load patch.json to derive automatable params (best-effort).
+	            let patchConfig = null;
+	            try {
+	                const patchReq = await fetch(appendQuery(`${synthPath}/patch.json`, { t: Date.now() }), { cache: 'no-store' });
+	                if (patchReq.ok) {
+	                    const patchDoc = await patchReq.json();
+	                    patchConfig = (patchDoc && patchDoc.config) ? patchDoc.config : patchDoc;
+	                }
+	            } catch (e) {
+	                console.warn('Patch load failed (automation params may be unavailable):', e);
+	            }
+
+	            const paramMeta = new Map(); // paramId -> { paramId, label, min, max, curve, ... }
+	            try {
+	                const modules = patchConfig && Array.isArray(patchConfig.modules) ? patchConfig.modules : [];
+	                for (const mod of modules) {
+	                    const controls = mod && Array.isArray(mod.controls) ? mod.controls : [];
+	                    for (const c of controls) {
+	                        const pid = Number(c && c.param);
+	                        if (!Number.isFinite(pid) || pid < 0) continue;
+	                        if (paramMeta.has(pid)) continue;
+	                        paramMeta.set(pid, {
+	                            paramId: pid,
+	                            controlId: c.id,
+	                            label: c.label,
+	                            type: c.type,
+	                            options: c.options,
+	                            min: c.min,
+	                            max: c.max,
+	                            curve: c.curve || 'linear'
+	                        });
+	                    }
+	                }
+	            } catch (_) {}
+
+	            const isInstrument =
+	                (meta && (String(meta.category || '').toLowerCase() === 'instruments' ||
+	                          String(meta.subgroup || '') === 'Synths' ||
+	                          String(meta.subgroup || '') === 'Samplers' ||
+	                          String(meta.subgroup || '') === 'Sequencers')) ||
+	                String(pluginPath || '').startsWith('Plugins/Instruments/') ||
+	                String(pluginPath || '').startsWith('Synths/') ||
+	                String(manifest?.type || '').toLowerCase() === 'instrument';
+
+	            const slot = {
+	                trackId: track.id,
+	                instanceId,
+	                pluginPath,
+	                displayName,
+	                manifest,
+	                type: meta.type || manifest.type,
+	                category: meta.category,
+	                subgroup: meta.subgroup,
+	                isInstrument,
+	                node,
+	                iframe,
+	                analyser: ctx.createAnalyser(),
+	                paramMeta,
+                    paramValues: new Map(),
+                    sample: null,
+	                bypass: !!(options && options.bypass),
+	                expanded: options && options.expanded !== undefined ? !!options.expanded : undefined,
+	                ready: false,
+		                guiLoaded: false,
+	                visMode: 'off',
+	                _visFloat: null,
+	                _visByte: null
+	            };
+	            slot.analyser.fftSize = 2048;
+	            if (slot.expanded === undefined) {
+	                // Default: instruments expanded, inserts collapsed.
+	                slot.expanded = isInstrumentSlot(slot);
+	            }
+
+		            slotsByInstanceId.set(instanceId, slot);
+		            if (options && Number.isFinite(Number(options.insertIndex))) {
+		                const insertIndex = Math.max(0, Math.min(track.slots.length, Math.trunc(Number(options.insertIndex))));
+		                track.slots.splice(insertIndex, 0, slot);
+		            } else {
+		                track.slots.push(slot);
+		            }
+		            activeInstanceId = instanceId;
+
+            iframe.onload = () => {
+                slot.guiLoaded = true;
+                if (slot.ready && iframe.contentWindow) {
+                    iframe.contentWindow.postMessage({ type: 'BVST_READY', instanceId }, '*');
+                }
+                maybeApplySlotGuiParams(slot);
+            };
+
+	            node.port.onmessage = (e) => {
+	                const data = e && e.data ? e.data : {};
+	                if (data.type === 'READY') {
+	                    slot.ready = true;
+	                    setStatus(`Running: ${slot.displayName}`, '#0f0');
+	                    if (slot.guiLoaded && slot.iframe.contentWindow) {
+	                        slot.iframe.contentWindow.postMessage({ type: 'BVST_READY', instanceId }, '*');
+	                    }
+                        maybeApplySlotNodeParams(slot);
+                        maybeApplySlotGuiParams(slot);
+                        if (slot.pendingSampleUrl) {
+                            const url = String(slot.pendingSampleUrl || '').trim();
+                            slot.pendingSampleUrl = null;
+                            if (url) {
+                                loadSampleUrlIntoSlot(slot, url)
+                                    .then(() => scheduleDraftSave())
+                                    .catch((e) => console.warn('Sample restore failed:', e));
+                            }
+                        }
+	                    requestRackRender();
+                        scheduleDraftSave();
+	                } else if (data.type === 'ERROR') {
+	                    setStatus(`Error (${slot.displayName}): ${data.error}`, '#f44');
+	                }
+	            };
+
+            // Optional mic input connection
+            const useMic = document.getElementById('useMic')?.checked;
+            if (useMic) {
+                try {
+                    await ensureMicSource();
+                } catch (e) {
+                    console.warn('Microphone access denied or failed:', e);
+                    alert('Microphone access failed. Rack will run without input.');
+                }
+            }
+
+	            if (!isProjectLoading) {
+	                rebuildAudioGraph();
+	                renderRack();
+	                populateAutomationSelectors();
+	                drawAutomationLane();
+	            }
+
+	            if (!(options && options.suppressUrlUpdate)) {
+	                const newUrl = new URL(window.location);
+	                newUrl.searchParams.set('synth', displayName);
+	                window.history.pushState({}, '', newUrl);
+	            }
+	        }
+
+        // Deprecated: plugin selection is now per-slot in the rack.
+        window.launch = async function() {
+            setStatus('Use the per-slot dropdowns to select plugins.', '#888');
+        };
+
+	        window.clearRack = function() {
+	            stopTransport();
+	            stopMidi();
+	            const track = getActiveTrack();
+	            if (!track) return;
+	            while (track.slots.length > 0) {
+	                const slot = track.slots.pop();
+	                if (!slot) continue;
+	                slotsByInstanceId.delete(slot.instanceId);
+	                try { slot.node.disconnect(); } catch (_) {}
+	                try { slot.analyser.disconnect(); } catch (_) {}
+	                try { slot.iframe.remove(); } catch (_) {}
+	            }
+	            activeInstanceId = null;
+	            renderRack();
+	            rebuildAudioGraph();
+                scheduleDraftSave();
+	        };
+
+        window.reset = function() {
+            const newUrl = new URL(window.location);
+            newUrl.searchParams.delete('synth');
+            window.location.href = newUrl.toString();
+        };
+
+	        function getMidiTargetSlot() {
+	            if (activeInstanceId) {
+	                const active = slotsByInstanceId.get(activeInstanceId);
+	                if (active && isInstrumentSlot(active)) return active;
+	            }
+	            const track = getActiveTrack();
+	            const slots = track ? (track.slots || []) : [];
+	            return slots.find(isInstrumentSlot) || slots[0] || null;
+	        }
+
+	        function getSampleTargetSlot() {
+	            if (activeInstanceId) {
+	                const active = slotsByInstanceId.get(activeInstanceId);
+	                if (active && isSamplerSlot(active)) return active;
+	            }
+	            const track = getActiveTrack();
+	            const slots = track ? (track.slots || []) : [];
+	            return slots.find(isSamplerSlot) || slots[0] || null;
+	        }
+
+        async function playMidi() {
+            if (!midiEvents || midiEvents.length === 0) return alert("No MIDI loaded");
+            const target = getMidiTargetSlot();
+            if (!target || !target.node) return alert("Add a plugin to the rack first");
+            await ensureAudioContext();
+
+            stopMidi();
+            midiPlaying = true;
+
+            const now = audioCtx.currentTime;
+            const secondsPerTick = 60.0 / (120.0 * midiPPQ);
+
+            midiEvents.forEach(evt => {
+                const time = now + (evt.ticks * secondsPerTick);
+                const delayMs = (time - now) * 1000;
+                if (delayMs < 0) return;
+
+                const id = setTimeout(() => {
+                    if (!midiPlaying) return;
+                    if (evt.type === 'note_on') {
+                        target.node.port.postMessage({ type: 'NOTE_ON', note: evt.note, velocity: evt.velocity });
+                    } else if (evt.type === 'note_off') {
+                        target.node.port.postMessage({ type: 'NOTE_OFF', note: evt.note });
+                    }
+                }, delayMs);
+                midiTimeouts.push(id);
+            });
+
+            setStatus(`Playing MIDI → ${target.displayName}`, '#0f0');
+        }
+
+        function stopMidi() {
+            midiPlaying = false;
+            midiTimeouts.forEach(id => clearTimeout(id));
+            midiTimeouts = [];
+            setStatus("MIDI stopped", '#888');
+        }
+
+        window.playMidi = playMidi;
+        window.stopMidi = stopMidi;
+
+        // --- DRAG AND DROP ---
+        const dropOverlay = document.getElementById('dropOverlay');
+        let dragCounter = 0;
+
+        function preventDefaults(e) { e.preventDefault(); e.stopPropagation(); }
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            window.addEventListener(eventName, preventDefaults, false);
+            document.body.addEventListener(eventName, preventDefaults, false);
+        });
+
+        window.addEventListener('dragenter', (e) => {
+            dragCounter++;
+            dropOverlay.style.display = 'flex';
+        });
+
+        window.addEventListener('dragleave', (e) => {
+            dragCounter--;
+            if (dragCounter === 0) dropOverlay.style.display = 'none';
+        });
+
+        window.addEventListener('drop', async (e) => {
+            dragCounter = 0;
+            dropOverlay.style.display = 'none';
+
+            const dt = e.dataTransfer;
+            const files = dt.files;
+
+            if (!files || files.length === 0) return;
+	            if (getActiveSlots().length === 0) {
+	                alert("Please add a plugin to the rack first (on the active track).");
+	                return;
+	            }
+
+	            const file = files[0];
+	            if (file.name.match(/\.mid$/i)) {
+	                try {
+	                    const buffer = await file.arrayBuffer();
+	                    const parsed = MidiParser.parse(buffer);
+	                    console.log("MIDI Parsed:", parsed);
+
+	                    const track = getActiveTrack();
+	                    if (!track || !track.clip) {
+	                        setStatus('No active track to import MIDI into.', '#f44');
+	                        return;
+	                    }
+
+	                    const ppq = Number(parsed.timeDivision) || 96;
+	                    const ticksPerStep = Math.max(1, Math.round(ppq / 4)); // 1/16
+	                    const barTicks = ppq * 4;
+
+	                    const noteOns = new Map(); // note -> { tick, vel }
+	                    const notes = [];
+	                    for (const evt of parsed.events || []) {
+	                        if (!evt) continue;
+	                        const t = Number(evt.ticks) || 0;
+	                        const tick = ((t % barTicks) + barTicks) % barTicks;
+	                        if (evt.type === 'note_on') {
+	                            noteOns.set(evt.note, { tick, vel: (evt.velocity ?? 1.0) });
+	                        } else if (evt.type === 'note_off') {
+	                            const on = noteOns.get(evt.note);
+	                            if (!on) continue;
+	                            noteOns.delete(evt.note);
+	                            const startStep = Math.max(0, Math.min(project.stepsPerBar - 1, Math.floor(on.tick / ticksPerStep)));
+	                            const durTicks = Math.max(1, tick - on.tick);
+	                            const lenSteps = Math.max(1, Math.min(project.stepsPerBar, Math.round(durTicks / ticksPerStep)));
+	                            notes.push({ step: startStep, note: evt.note, lenSteps, velocity: on.vel });
+	                        }
+	                    }
+
+	                    track.clip.notes = notes;
+	                    rebuildTrackIndexes(track);
+	                    drawPianoRoll();
+	                    document.getElementById('midiPlayer').style.display = 'none';
+	                    setStatus(`MIDI imported → ${track.name}: ${file.name} (${notes.length} notes in bar 1)`, '#0f0');
+	                } catch (err) {
+	                    alert("Error parsing MIDI: " + err.message);
+	                }
+	                return;
+	            }
+
+            if (file.type.startsWith('audio/') || file.name.match(/\.(mp3|wav|ogg|m4a)$/i)) {
+                const target = getSampleTargetSlot();
+                if (!target || !target.node) {
+                    alert("No plugin available to receive the sample.");
+                    return;
+                }
+
+                setStatus(`Loading sample → ${target.displayName}...`, '#888');
+                try {
+                    await ensureAudioContext();
+                    const arrayBuffer = await file.arrayBuffer();
+                    const audioBuffer = await audioCtx.decodeAudioData(arrayBuffer);
+                    const channelData = audioBuffer.getChannelData(0);
+
+                    target.node.port.postMessage({ type: 'LOAD_SAMPLE', samples: channelData });
+                    if (target.iframe && target.iframe.contentWindow) {
+                        target.iframe.contentWindow.postMessage({ type: 'BVST_SAMPLE_DATA', instanceId: target.instanceId, samples: channelData }, '*');
+                    }
+                    target.sample = { url: '', sourceType: 'file', fileName: file.name };
+                    scheduleDraftSave();
+                    setStatus(`Sample Loaded → ${target.displayName}: ${file.name} (${audioBuffer.duration.toFixed(2)}s)`, '#0f0');
+                } catch (err) {
+                    setStatus("Error Loading Sample: " + err.message, '#f44');
+                    alert("Error loading sample: " + err.message);
+                }
+                return;
+            }
+
+            alert("Unsupported file type: " + (file.type || file.name));
+        });
+    </script>
+</body>
+</html>

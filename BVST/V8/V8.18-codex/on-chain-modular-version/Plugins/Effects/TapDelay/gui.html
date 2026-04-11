@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Tap Delay</title>
+  <style>
+    body { margin: 0; padding: 20px; background: #111; color: #eee; display: flex; justify-content: center; }
+    #app-container { width: 100%; max-width: 800px; }
+  </style>
+</head>
+<body>
+  <div id="app-container"></div>
+  <script type="module">
+    (async () => {
+      const t = new URLSearchParams(location.search).get('t') || String(Date.now());
+      const { runPatch } = await import(`../../../System/shared/patch_runtime.js?t=${encodeURIComponent(t)}`);
+
+      const tapState = { lastMs: 0, intervals: [] };
+      const onControlChange = (id, val, ctx) => {
+        if (id !== 'tap' || val !== 1) return;
+
+        const now = performance.now();
+        if (tapState.lastMs > 0) {
+          const dt = (now - tapState.lastMs) / 1000.0;
+
+          // Ignore accidental double-clicks and long gaps.
+          if (dt >= 0.12 && dt <= 2.0) {
+            tapState.intervals.push(dt);
+            if (tapState.intervals.length > 4) tapState.intervals.shift();
+            const avg = tapState.intervals.reduce((a, b) => a + b, 0) / tapState.intervals.length;
+            const secs = Math.max(0, Math.min(1.0, avg)); // UniversalFX time param range is 0..1s
+            ctx.controls.setValue('time', secs);
+            ctx.bvst.sendParam(5, secs);
+          } else {
+            tapState.intervals = [];
+          }
+        }
+        tapState.lastMs = now;
+      };
+
+      runPatch({
+        patchUrl: `./patch.json?t=${encodeURIComponent(t)}`,
+        containerId: 'app-container',
+        overrides: { onControlChange }
+      });
+    })();
+  </script>
+</body>
+</html>

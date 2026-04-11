@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <title>Shard Timeline Map (1899–1983)</title>
+
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <style>
+    html, body { height: 100%; margin: 0; }
+    #map { height: 100%; width: 100%; }
+
+    .ui {
+      position: absolute;
+      top: 14px;
+      left: 14px;
+      z-index: 1000;
+      width: 380px;
+      max-width: calc(100vw - 28px);
+      background: rgba(255,255,255,0.95);
+      border-radius: 12px;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.18);
+      padding: 14px 14px 12px;
+      font: 14px/1.3 system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+    }
+
+    .ui h1 {
+      font-size: 14px;
+      margin: 0 0 8px;
+      color: #1f2d3d;
+    }
+
+    .row { display: flex; gap: 10px; align-items: center; margin: 8px 0; flex-wrap: wrap; }
+    button {
+      border: 0;
+      border-radius: 10px;
+      padding: 8px 10px;
+      cursor: pointer;
+      background: #1f2d3d;
+      color: #fff;
+      font-weight: 600;
+    }
+    button.secondary { background: #556; }
+    button.ghost { background: #eef1f6; color: #1f2d3d; }
+    button:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    input[type="range"] { width: 100%; }
+    .meta {
+      margin-top: 8px;
+      padding-top: 8px;
+      border-top: 1px solid rgba(0,0,0,0.08);
+      color: #243447;
+    }
+    .label { font-weight: 700; color: #1f2d3d; margin-right: 6px; }
+    .small { font-size: 12px; color: #556; }
+    .toggle { display: inline-flex; align-items: center; gap: 8px; user-select: none; }
+    .toggle input { transform: translateY(1px); }
+    .pill {
+      display:inline-block;
+      padding: 2px 8px;
+      border-radius: 999px;
+      background:#eef1f6;
+      font-size: 12px;
+      color:#1f2d3d;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="map"></div>
+
+  <div class="ui">
+    <h1>Shard Movement Timeline <span class="pill" id="yearPill">—</span></h1>
+
+    <div class="row">
+      <button id="playBtn">Play</button>
+      <button id="pauseBtn" class="secondary" disabled>Pause</button>
+      <button id="resetBtn" class="ghost">Reset</button>
+    </div>
+
+    <div class="row">
+      <div style="flex:1; min-width: 260px;">
+        <input id="scrub" type="range" min="0" max="0" step="1" value="0" />
+        <div class="small">Scrub the timeline</div>
+      </div>
+    </div>
+
+    <div class="row">
+      <label class="label" for="speed">Speed</label>
+      <input id="speed" type="range" min="0.25" max="10" step="0.25" value="3" style="flex:1; min-width: 200px;" />
+      <span class="pill"><span id="speedVal">3</span>x</span>
+    </div>
+
+    <div class="row">
+      <label class="toggle">
+        <input id="follow" type="checkbox" checked />
+        Follow shard (auto-pan)
+      </label>
+    </div>
+
+    <div class="meta">
+      <div><span class="label">Location:</span><span id="locName">—</span></div>
+      <div class="small" id="locDesc">—</div>
+    </div>
+
+    <div class="small" style="margin-top:10px;">
+      This version is structured to <b>zip around Symi (1900–1905)</b> and <b>jump fast</b> on travel years (1906, 1983).
+    </div>
+  </div>
+
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo="
+    crossorigin=""
+  ></script>
+
+  <script>
+    // ============================================================
+    // Timeline keyframes
+    // ============================================================
+    // Structure:
+    // - 1899: Antikythera wreck vicinity
+    // - 1900–1905: rapid hops around Symi (daily life)
+    // - 1906: jump to Athens museum
+    // - 1906–1983: mostly stationary (museum)
+    // - 1983: fast jumps Athens -> London -> CERN
+    //
+    // Symi pins are approximate. Replace with your preferred micro-locations if you like.
+    const EVENTS = [
+      // --- Antikythera (find) ---
+      { year: 1899.85, name: "Antikythera (wreck vicinity)", lat: 35.89, lon: 23.33,
+        desc: "Eleni finds the shard near the wreck while hiding on Antikythera." },
+
+      // --- Travel to Symi (fast-ish jump; she returns home) ---
+      { year: 1900.05, name: "Symi (arrives by boat)", lat: 36.6167, lon: 27.8333,
+        desc: "Eleni returns to Symi and keeps the shard close." },
+
+      // --- Symi: 1900–1905 (quick hops around the island) ---
+      // Daily-life pattern ideas:
+      // - harbour/market errands
+      // - collecting water
+      // - visiting chapel / festival days
+      // - helping with nets/boat work (shoreline)
+      // - olive/fig terraces, grazing routes
+      // - a quiet cove for solitude / hiding
+      { year: 1900.20, name: "Symi (Gialos harbour/market)", lat: 36.6169, lon: 27.8366,
+        desc: "Harbour-side chores: market, gossip, supplies. The shard is hidden under clothes." },
+      { year: 1900.45, name: "Symi (Ano Symi – upper town)", lat: 36.6158, lon: 27.8350,
+        desc: "Up the steps into the upper town: family ties, concealment, routines." },
+      { year: 1900.70, name: "Symi (water source / cistern area)", lat: 36.6129, lon: 27.8315,
+        desc: "Fetching water. Quiet time alone: she hears things she can’t explain." },
+
+      { year: 1901.10, name: "Symi (small shoreline work cove)", lat: 36.6205, lon: 27.8420,
+        desc: "Nearshore work: nets, rope, repairs. Salt, tar, and wind." },
+      { year: 1901.35, name: "Symi (chapel / feast day stop)", lat: 36.6075, lon: 27.8260,
+        desc: "A chapel day. The shard stays hidden, but the noise in her head swells and fades." },
+      { year: 1901.65, name: "Symi (terraces / fields)", lat: 36.6008, lon: 27.8308,
+        desc: "Walking inland terraces: olives, goats, long views. She tests whether distance quiets the voices." },
+
+      { year: 1902.05, name: "Symi (quiet cove / hiding place)", lat: 36.5928, lon: 27.8465,
+        desc: "A secluded cove: she can breathe. She keeps the shard wrapped, never far from skin." },
+      { year: 1902.40, name: "Symi (hill lookout)", lat: 36.6055, lon: 27.8478,
+        desc: "A high point to watch the sea lanes. She learns patterns of boats and storms." },
+      { year: 1902.80, name: "Symi (back to harbour)", lat: 36.6169, lon: 27.8366,
+        desc: "Back among people. Normality as camouflage." },
+
+      { year: 1903.20, name: "Symi (north side path)", lat: 36.6265, lon: 27.8200,
+        desc: "A longer walk away from town. She tries to outrun the sensation of being ‘listened to’." },
+      { year: 1903.55, name: "Symi (shoreline again)", lat: 36.6205, lon: 27.8420,
+        desc: "Shore work again. The shard pulls her attention to the sea even in calm weather." },
+      { year: 1903.95, name: "Symi (upper town)", lat: 36.6158, lon: 27.8350,
+        desc: "Family pressures and expectations. She keeps her secret." },
+
+      { year: 1904.30, name: "Symi (remote inland track)", lat: 36.5965, lon: 27.8225,
+        desc: "Remote inland route: she has moments of clarity, then sudden intrusion—like distant shouting." },
+      { year: 1904.70, name: "Symi (quiet cove)", lat: 36.5928, lon: 27.8465,
+        desc: "Back to the cove. She tries to decide if the shard is a gift or a curse." },
+
+      { year: 1905.00, name: "Symi (final months)", lat: 36.6167, lon: 27.8333,
+        desc: "1905 — Eleni dies. The shard changes hands soon after." },
+
+      // --- 1906: Athens museum (fast jump) ---
+      { year: 1906.00, name: "Athens (museum)", lat: 37.9890, lon: 23.7317,
+        desc: "1906 — the shard is transported to Athens and enters museum custody." },
+
+      // Stay in Athens museum for decades (keep mostly stationary but you can add tiny wiggles if you want)
+      { year: 1950.00, name: "Athens (museum storage)", lat: 37.9890, lon: 23.7317,
+        desc: "Stored, catalogued, largely forgotten in the museum system." },
+
+      { year: 1983.00, name: "Athens (museum)", lat: 37.9890, lon: 23.7317,
+        desc: "1983 — removed from the museum for transfer abroad." },
+
+      // --- 1983: fast flight jumps ---
+      { year: 1983.05, name: "London", lat: 51.5074, lon: -0.1278,
+        desc: "A quick transfer by air: Athens → London." },
+
+      { year: 1983.10, name: "CERN (Switzerland)", lat: 46.2330, lon: 6.0550,
+        desc: "A second quick transfer by air: London → CERN." }
+    ];
+
+    // ============================================================
+    // Map setup
+    // ============================================================
+    const map = L.map("map", { zoomControl: true });
+
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 18,
+      attribution: "&copy; OpenStreetMap contributors"
+    }).addTo(map);
+
+    map.setView([36.6, 25.5], 6);
+
+    // Path through event points (for context)
+    const pathLatLngs = EVENTS.map(e => [e.lat, e.lon]);
+    const pathLine = L.polyline(pathLatLngs, { weight: 3, opacity: 0.35 }).addTo(map);
+
+    // Fit to full extent: Antikythera -> Symi -> Athens -> London -> CERN
+    map.fitBounds(pathLine.getBounds().pad(0.25));
+
+    // Show waypoint markers (light touch)
+    EVENTS.forEach((e, idx) => {
+      L.circleMarker([e.lat, e.lon], {
+        radius: (idx === 0 || idx === EVENTS.length - 1) ? 6 : 4,
+        weight: 1,
+        fillOpacity: 0.5
+      }).addTo(map).bindPopup(`<b>${e.name}</b><br/>Year: ${e.year}`);
+    });
+
+    // Shard marker
+    const shardIcon = L.divIcon({
+      className: "shard-icon",
+      html: `
+        <div style="
+          width:18px;height:18px;border-radius:50%;
+          background:#111;border:3px solid #fff;
+          box-shadow:0 8px 18px rgba(0,0,0,0.35);
+        "></div>`,
+      iconSize: [18,18],
+      iconAnchor: [9,9]
+    });
+
+    const shardMarker = L.marker([EVENTS[0].lat, EVENTS[0].lon], { icon: shardIcon }).addTo(map);
+
+    // Tail line
+    let tailLatLngs = [[EVENTS[0].lat, EVENTS[0].lon]];
+    const tailLine = L.polyline(tailLatLngs, { weight: 4, opacity: 0.9 }).addTo(map);
+
+    // ============================================================
+    // Timeline engine
+    // ============================================================
+    const scrub = document.getElementById("scrub");
+    const playBtn = document.getElementById("playBtn");
+    const pauseBtn = document.getElementById("pauseBtn");
+    const resetBtn = document.getElementById("resetBtn");
+    const follow = document.getElementById("follow");
+    const yearPill = document.getElementById("yearPill");
+    const locName = document.getElementById("locName");
+    const locDesc = document.getElementById("locDesc");
+    const speed = document.getElementById("speed");
+    const speedVal = document.getElementById("speedVal");
+
+    // Smooth enough to see Symi "zipping", but not too heavy.
+    const STEPS_PER_YEAR = 36;
+
+    const minYear = Math.min(...EVENTS.map(e => e.year));
+    const maxYear = Math.max(...EVENTS.map(e => e.year));
+    const totalSteps = Math.round((maxYear - minYear) * STEPS_PER_YEAR);
+
+    scrub.min = 0;
+    scrub.max = totalSteps;
+    scrub.value = 0;
+
+    speed.addEventListener("input", () => speedVal.textContent = speed.value);
+
+    const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+    const lerp  = (a,b,t) => a + (b - a) * t;
+
+    function yearFromStep(step) {
+      return minYear + (step / STEPS_PER_YEAR);
+    }
+
+    function findSegment(tYear) {
+      for (let i = 0; i < EVENTS.length - 1; i++) {
+        if (tYear >= EVENTS[i].year && tYear <= EVENTS[i+1].year) return i;
+      }
+      return EVENTS.length - 2;
+    }
+
+    function updateUI(tYear, segIndex) {
+      yearPill.textContent = tYear.toFixed(2);
+
+      const a = EVENTS[segIndex];
+      const b = EVENTS[segIndex + 1];
+      const pick = (Math.abs(tYear - a.year) < Math.abs(tYear - b.year)) ? a : b;
+
+      locName.textContent = pick.name;
+      locDesc.textContent = pick.desc || "";
+    }
+
+    function setShardAtYear(tYear, alsoBuildTail = true) {
+      const i = findSegment(tYear);
+      const a = EVENTS[i];
+      const b = EVENTS[i + 1];
+      const span = (b.year - a.year) || 1e-9;
+      const t = clamp((tYear - a.year) / span, 0, 1);
+
+      const lat = lerp(a.lat, b.lat, t);
+      const lon = lerp(a.lon, b.lon, t);
+
+      shardMarker.setLatLng([lat, lon]);
+
+      if (alsoBuildTail) {
+        tailLatLngs.push([lat, lon]);
+        if (tailLatLngs.length > 2500) tailLatLngs = tailLatLngs.slice(-2500);
+        tailLine.setLatLngs(tailLatLngs);
+      }
+
+      if (follow.checked) {
+        map.panTo([lat, lon], { animate: true, duration: 0.25 });
+      }
+
+      updateUI(tYear, i);
+    }
+
+    // Initialize
+    setShardAtYear(minYear, false);
+
+    // Playback loop
+    let raf = null;
+    let lastTs = null;
+    let playing = false;
+
+    function setButtons() {
+      playBtn.disabled = playing;
+      pauseBtn.disabled = !playing;
+    }
+
+    function tick(ts) {
+      if (!playing) return;
+
+      if (lastTs == null) lastTs = ts;
+      const dt = (ts - lastTs) / 1000;
+      lastTs = ts;
+
+      const currentStep = Number(scrub.value);
+
+      // This makes travel years feel like "zips" automatically:
+      // higher speed -> faster stepping through time.
+      const stepPerSec = Number(speed.value) * STEPS_PER_YEAR;
+
+      const nextStep = currentStep + dt * stepPerSec;
+
+      if (nextStep >= totalSteps) {
+        scrub.value = totalSteps;
+        setShardAtYear(maxYear);
+        playing = false;
+        lastTs = null;
+        setButtons();
+        return;
+      }
+
+      scrub.value = nextStep;
+      setShardAtYear(yearFromStep(nextStep));
+      raf = requestAnimationFrame(tick);
+    }
+
+    function play() {
+      if (playing) return;
+      playing = true;
+      setButtons();
+      lastTs = null;
+      raf = requestAnimationFrame(tick);
+    }
+
+    function pause() {
+      playing = false;
+      setButtons();
+      lastTs = null;
+      if (raf) cancelAnimationFrame(raf);
+      raf = null;
+    }
+
+    function reset() {
+      pause();
+      scrub.value = 0;
+      tailLatLngs = [[EVENTS[0].lat, EVENTS[0].lon]];
+      tailLine.setLatLngs(tailLatLngs);
+      setShardAtYear(minYear, false);
+      map.fitBounds(pathLine.getBounds().pad(0.25));
+    }
+
+    playBtn.addEventListener("click", play);
+    pauseBtn.addEventListener("click", pause);
+    resetBtn.addEventListener("click", reset);
+
+    scrub.addEventListener("input", (e) => {
+      const step = Number(e.target.value);
+      const tYear = yearFromStep(step);
+      rebuildTailToYear(tYear);
+      setShardAtYear(tYear, false);
+    });
+
+    function rebuildTailToYear(tYear) {
+      const samples = 220;
+      tailLatLngs = [];
+      for (let s = 0; s <= samples; s++) {
+        const yy = lerp(minYear, tYear, s / samples);
+        const i = findSegment(yy);
+        const a = EVENTS[i], b = EVENTS[i+1];
+        const span = (b.year - a.year) || 1e-9;
+        const t = clamp((yy - a.year) / span, 0, 1);
+        tailLatLngs.push([lerp(a.lat, b.lat, t), lerp(a.lon, b.lon, t)]);
+      }
+      tailLine.setLatLngs(tailLatLngs);
+    }
+
+    shardMarker.on("click", () => {
+      const step = Number(scrub.value);
+      const y = yearFromStep(step);
+      const ll = shardMarker.getLatLng();
+      shardMarker.bindPopup(
+        `<b>Shard</b><br/>Year: ${y.toFixed(2)}<br/><code>${ll.lat.toFixed(4)}, ${ll.lng.toFixed(4)}</code>`
+      ).openPopup();
+    });
+  </script>
+</body>
+</html>

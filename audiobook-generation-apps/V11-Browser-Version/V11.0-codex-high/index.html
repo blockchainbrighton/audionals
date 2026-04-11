@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audiobook Studio // Browser Edition</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="js/vendor/ffmpeg.js"></script>
+    <script src="js/vendor/ffmpeg-util.js"></script>
+</head>
+<body>
+    <div class="app-container">
+        <!-- HEADER -->
+        <header>
+            <div class="logo">Audiobook Studio <span class="version-tag">V11 LOCAL</span></div>
+            <div class="header-controls">
+                <button id="btn-theme-toggle" class="icon-btn">☀</button>
+            </div>
+        </header>
+
+        <!-- MAIN CONTENT -->
+        <main>
+            <!-- SIDEBAR -->
+            <aside class="sidebar">
+                <div class="sidebar-item active" onclick="switchTab('project')" id="tab-btn-project">
+                    <span class="icon">📂</span> Project
+                </div>
+                <div class="sidebar-item" onclick="switchTab('models')" id="tab-btn-models">
+                    <span class="icon">🧠</span> Local AI
+                </div>
+                <div class="spacer"></div>
+                <div class="storage-info" id="storage-info">
+                    Storage: Checking...
+                </div>
+            </aside>
+
+            <!-- TAB: PROJECT -->
+            <section id="tab-project" class="tab-content active">
+                <div class="toolbar">
+                    <button class="btn primary" id="btn-new-project">+ New</button>
+                    <button class="btn secondary" id="btn-save-project">Save (JSON)</button>
+                    <button class="btn secondary" id="btn-load-project">Load (JSON)</button>
+                    <div class="divider"></div>
+                    <button class="btn accent" id="btn-export-all" disabled>Export Zip</button>
+                </div>
+
+                <div class="editor-layout">
+                    <!-- LEFT: MANUSCRIPT -->
+                    <div class="panel left-panel">
+                        <div class="panel-header">
+                            <span>Manuscript</span>
+                            <span class="status-indicator" id="parse-status">Ready</span>
+                        </div>
+                        <textarea id="manuscript" placeholder="Paste your text here...
+Use # Chapter Name for chapters.
+Use * * * for dual voice breaks."></textarea>
+                        <div class="panel-footer">
+                            <button class="btn full-width" id="btn-analyze">1. Analyze Text</button>
+                        </div>
+                    </div>
+
+                    <!-- RIGHT: SETTINGS & TIMELINE -->
+                    <div class="panel right-panel">
+                        
+                        <!-- Voice Setup -->
+                        <div class="settings-box">
+                            <div class="setting-row">
+                                <label>Mode</label>
+                                <select id="project-mode" onchange="toggleDualMode()">
+                                    <option value="single">Single Voice</option>
+                                    <option value="dual">Dual Voice (Dialogue)</option>
+                                </select>
+                            </div>
+
+                            <div class="voice-config-grid">
+                                <!-- Voice 1 -->
+                                <div class="voice-slot">
+                                    <label>Narrator / Voice 1</label>
+                                    <div class="voice-select-group">
+                                        <button id="voice-select-btn-1" class="voice-select-btn" onclick="openVoiceDropdown(1, event)">
+                                            <span>Select Voice...</span>
+                                            <small>▼</small>
+                                        </button>
+                                        <input type="text" id="voice-name-1" placeholder="Name (e.g. John)" class="voice-name-input">
+                                    </div>
+                                </div>
+
+                                <!-- Voice 2 -->
+                                <div class="voice-slot" id="group-voice-2" style="display:none">
+                                    <label>Voice 2</label>
+                                    <div class="voice-select-group">
+                                        <button id="voice-select-btn-2" class="voice-select-btn" onclick="openVoiceDropdown(2, event)">
+                                            <span>Select Voice...</span>
+                                            <small>▼</small>
+                                        </button>
+                                        <input type="text" id="voice-name-2" placeholder="Name (e.g. Mary)" class="voice-name-input">
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="setting-row">
+                                <label>Speed</label>
+                                <input id="voice-speed" type="range" min="0.75" max="1.35" step="0.05" value="1">
+                            </div>
+                            <div class="setting-row">
+                                <label>Emotion</label>
+                                <input id="voice-emotion" type="range" min="0" max="1" step="0.05" value="0.4">
+                                <small class="hint-text">Currently applies to Chatterbox (exaggeration).</small>
+                            </div>
+                            
+                            <!-- Dropdown Portal -->
+                            <div id="voice-dropdown" class="voice-dropdown-menu"></div>
+                        </div>
+
+                        <!-- Timeline -->
+                        <div class="timeline-wrapper">
+                            <div class="panel-header">
+                                <span>Timeline</span>
+                                <div class="timeline-actions">
+                                    <button class="sm-btn" id="btn-play-all">▶ Play All</button>
+                                    <button class="sm-btn accent" id="btn-generate-all" disabled>2. Generate All</button>
+                                    <button class="sm-btn stop" id="btn-halt" style="display:none">⏹ Stop</button>
+                                </div>
+                            </div>
+                            <div id="timeline-container" class="timeline-container">
+                                <div class="empty-state">No chapters generated yet.</div>
+                            </div>
+                        </div>
+
+                    </div>
+                </div>
+            </section>
+
+            <!-- TAB: MODELS -->
+            <section id="tab-models" class="tab-content">
+                <div class="panel narrow-panel">
+                    <h2>Local AI Models</h2>
+                    <p class="desc-text">The browser will download these models once and run them offline.</p>
+                    
+                    <div class="model-card">
+                        <div class="model-header">
+                            <strong>SpeechT5 (TTS)</strong>
+                            <span class="tag" id="status-tts">Not Loaded</span>
+                        </div>
+                        <div class="progress-bar"><div class="fill" id="progress-tts" style="width:0%"></div></div>
+                        <p class="model-info">Standard English multispeaker model (~150MB).</p>
+                        <button class="btn secondary sm-btn" id="btn-load-tts">Load Model</button>
+                    </div>
+
+                    <div class="model-card">
+                        <div class="model-header">
+                            <strong>FFmpeg (Merger)</strong>
+                            <span class="tag" id="status-ffmpeg">Not Loaded</span>
+                        </div>
+                        <div class="progress-bar"><div class="fill" id="progress-ffmpeg" style="width:0%"></div></div>
+                        <p class="model-info">Wasm binary for audio processing (~30MB).</p>
+                         <button class="btn secondary sm-btn" id="btn-load-ffmpeg">Load Model</button>
+                    </div>
+
+                    <div class="model-card">
+                        <div class="model-header">
+                            <strong>Kokoro (Local Server)</strong>
+                            <span class="tag" id="status-kokoro">Not Running</span>
+                        </div>
+                        <p class="model-info">Optional: multi-voice US/UK presets. Start `python local-tts-engines/kokoro-tts/server_kokoro.py`.</p>
+                        <button class="btn secondary sm-btn" id="btn-refresh-engines">Refresh Status</button>
+                    </div>
+
+                    <div class="model-card">
+                        <div class="model-header">
+                            <strong>Chatterbox (Local Server)</strong>
+                            <span class="tag" id="status-chatterbox">Not Running</span>
+                        </div>
+                        <p class="model-info">Optional: cloned voices + emotion control. Start `python local-tts-engines/ChatterBox/server_chatterbox.py`.</p>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- FOOTER: PLAYER -->
+        <footer>
+            <div class="player-controls">
+                <canvas id="audio-visualizer" width="200" height="50"></canvas>
+                <div class="playback-info">
+                    <span id="player-status">Idle</span>
+                    <input type="range" id="master-progress" value="0" step="0.1" disabled>
+                </div>
+            </div>
+            <div id="console-panel" class="console-panel">
+                <!-- Logs go here -->
+            </div>
+        </footer>
+    </div>
+
+    <!-- Hidden Input for File Loading -->
+    <input type="file" id="file-upload" accept=".json" style="display: none;">
+
+    <script type="module" src="js/script.js"></script>
+</body>
+</html>
